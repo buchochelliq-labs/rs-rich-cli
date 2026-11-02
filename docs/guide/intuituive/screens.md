@@ -91,6 +91,45 @@ let picked: Option<usize> = App::new(|| {
   with `?` like any other. What the builder made is dropped, and its
   `latest` threads never start.
 
+### Screens that hand back a value
+
+```rust
+cx.push_for::<Choice>(|| picker(), |choice: Option<Choice>, cx| { /* .. */ });
+cx.modal_for::<Choice>(Size::Auto, Size::Auto, || picker(), |choice, cx| { /* .. */ });
+// inside the picker:
+.on_key("enter", move |cx| cx.dismiss(Choice::A))
+```
+
+- **`cx.dismiss(value)`** closes the top screen and hands `value` to the
+  callback it was opened with, as Textual's `dismiss` does. A plain pop
+  (`cx.pop()`, Esc on a pop-up) calls it with `None`, and so does a value
+  of another type.
+- The callback gets a `Ctx`: it can open another screen, toast, or quit.
+  `cx.replace(..)` of such a screen hands the callback on to the screen
+  that takes its place, so a wizard's last step dismisses for all of them.
+
+### Modes
+
+Several stacks of screens, each with its own history, as Textual's
+`App.MODES` are:
+
+```rust
+App::new(home)
+    .mode("chat", chat_screen)
+    .mode("settings", settings_screen);
+
+cx.switch_mode("settings");           // built on first use, then kept
+cx.switch_mode(intuituive::DEFAULT_MODE);  // the stack App::new built
+cx.mode()                             // "settings"
+```
+
+- The stack left keeps its screens, their state and their focus; switching
+  back shows it as it was, the screen pushed last still on top.
+- A stashed mode's timers do not fire while another mode shows. One that
+  came due fires once on the way back, then goes on in step. One-shot
+  `cx.after` timers and watches belong to the app and keep running.
+- An unknown name does nothing.
+
 ### Maximizing a pane
 
 A pane can take the whole screen for a while, as Textual's

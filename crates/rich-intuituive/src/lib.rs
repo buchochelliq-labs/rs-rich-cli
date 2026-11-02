@@ -190,6 +190,7 @@ pub use rich_interact as interact;
 pub use rich_interact::dates;
 
 pub use actions::{Action, action_overlay};
+pub use app::DEFAULT_MODE;
 pub use app::{
     Anchor, App, Ctx, Driver, Easing, FrameStats, Handoff, Holds, ModalOptions, Placement,
     StatsHandle, Theme, Timer, after, every, fixed_step, held_keys, plain_key, rate,

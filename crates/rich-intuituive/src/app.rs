@@ -96,6 +96,8 @@ pub struct Ctx {
     pub(crate) passed: bool,
     /// A node is maximized on the top screen.
     maximized: bool,
+    /// The mode showing.
+    mode: String,
 }
 
 /// The user's editor: `$VISUAL` (a program and its arguments), else
@@ -292,6 +294,38 @@ enum Nav {
     /// the focus.
     Maximize(Option<NodeId>),
     Minimize,
+    /// What the top screen just opened hands its result to.
+    Then(OnClose),
+    /// Close the top screen, handing it a value.
+    Dismiss(Box<dyn std::any::Any>),
+    /// Show another mode's stack of screens.
+    SwitchMode(String),
+}
+
+/// What a screen opened with [`Ctx::push_for`] calls when it closes: the
+/// value it was [dismissed](Ctx::dismiss) with, or `None`.
+type OnClose = Box<dyn FnOnce(Option<Box<dyn std::any::Any>>, &mut Ctx)>;
+
+/// A named stack of screens ([`App::mode`]): built on first use, kept while
+/// another shows.
+struct Mode {
+    name: String,
+    build: Option<Build>,
+    /// Its screens while another mode shows.
+    stash: Option<Vec<Layer>>,
+}
+
+/// The mode an app starts in ([`Ctx::mode`]).
+pub const DEFAULT_MODE: &str = "default";
+
+/// A typed result callback as the stack keeps it.
+fn on_close<T: 'static>(then: impl FnOnce(Option<T>, &mut Ctx) + 'static) -> OnClose {
+    Box::new(move |value, cx| {
+        let value = value
+            .and_then(|value| value.downcast::<T>().ok())
+            .map(|value| *value);
+        then(value, cx)
+    })
 }
 
 /// Whether a screen is open over the first one, as a binding's condition
@@ -326,6 +360,7 @@ impl Ctx {
             layers: 1,
             passed: false,
             maximized: false,
+            mode: DEFAULT_MODE.to_string(),
         }
     }
 
@@ -897,6 +932,75 @@ impl Ctx {
     /// handler was called).
     pub fn is_maximized(&self) -> bool {
         self.maximized
+    }
+
+    /// [`push`](Self::push) a screen that hands back a value: `then` is
+    /// called with what the screen [dismisses](Self::dismiss) itself with,
+    /// or `None` when it is popped otherwise (Esc on a pop-up, `cx.pop()`)
+    /// or dismissed with a value of another type. A
+    /// [`replace`](Self::replace) of the screen hands the call on to the
+    /// screen that takes its place.
+    ///
+    /// ```
+    /// use intuituive::prelude::*;
+    ///
+    /// let app = App::new(|| {
+    ///     let picked = signal(0u32);
+    ///     text!("picked {picked}").on_key("p", move |cx| {
+    ///         cx.push_for::<u32>(
+    ///             || label("pick").on_key("7", |cx| cx.dismiss(7u32)),
+    ///             move |value, _| picked.set(value.unwrap_or(0)),
+    ///         )
+    ///     })
+    /// });
+    /// let mut driver = app.driver(10, 1);
+    /// driver.press("p 7");
+    /// assert_eq!(driver.screen().plain()[0].trim_end(), "picked 7");
+    /// ```
+    pub fn push_for<T: 'static>(
+        &mut self,
+        build: impl FnOnce() -> Node + 'static,
+        then: impl FnOnce(Option<T>, &mut Ctx) + 'static,
+    ) {
+        self.nav.push(Nav::Push(Box::new(build)));
+        self.nav.push(Nav::Then(on_close(then)));
+    }
+
+    /// A [`modal`](Self::modal) that hands back a value, as
+    /// [`push_for`](Self::push_for) does.
+    pub fn modal_for<T: 'static>(
+        &mut self,
+        width: Size,
+        height: Size,
+        build: impl FnOnce() -> Node + 'static,
+        then: impl FnOnce(Option<T>, &mut Ctx) + 'static,
+    ) {
+        self.modal(width, height, build);
+        self.nav.push(Nav::Then(on_close(then)));
+    }
+
+    /// Close the top screen as [`pop`](Self::pop) does, handing `value`
+    /// to what opened it with [`push_for`](Self::push_for) or
+    /// [`modal_for`](Self::modal_for). On a screen opened otherwise it is a
+    /// plain pop.
+    pub fn dismiss<T: 'static>(&mut self, value: T) {
+        self.nav.push(Nav::Dismiss(Box::new(value)));
+    }
+
+    /// Show the stack of screens of mode `name` (an [`App::mode`], or
+    /// [`DEFAULT_MODE`] for the one the app started with), building its
+    /// first screen on first use. The stack left keeps its screens, their
+    /// state and their focus, and comes back as it was; its timers do not
+    /// fire while another mode shows (one that came due fires once on the
+    /// way back, then goes on in step). An unknown name does nothing.
+    pub fn switch_mode(&mut self, name: &str) {
+        self.nav.push(Nav::SwitchMode(name.to_string()));
+    }
+
+    /// The mode showing when the handler was called ([`DEFAULT_MODE`] until
+    /// a [`switch_mode`](Self::switch_mode)).
+    pub fn mode(&self) -> String {
+        self.mode.clone()
     }
 
     /// Replace the top screen with the one `build` makes.
@@ -1583,6 +1687,8 @@ struct Layer {
     /// The node drawn over the whole screen instead of the root
     /// ([`Ctx::maximize`]).
     maximized: Option<NodeId>,
+    /// What it hands its result to when it closes ([`Ctx::push_for`]).
+    on_close: Option<OnClose>,
 }
 
 thread_local! {
@@ -1889,6 +1995,10 @@ pub struct App {
     palette_key: Vec<Key>,
     /// Maximizes the focused pane, or restores it ([`App::maximize_key`]).
     maximize_key: Vec<Key>,
+    /// The named stacks of screens ([`App::mode`]), the first app's among
+    /// them, and the one showing.
+    modes: Vec<Mode>,
+    mode: String,
     help_key: Vec<Key>,
     /// Read keys as a legacy terminal sends them, even where the kitty
     /// keyboard protocol could be on.
@@ -2244,6 +2354,7 @@ impl App {
                 order: Vec::new(),
                 fallback: false,
                 maximized: None,
+                on_close: None,
             }],
             restack: false,
             floats_drawn: Vec::new(),
@@ -2270,6 +2381,12 @@ impl App {
             placements: Vec::new(),
             palette_key: Vec::new(),
             maximize_key: Vec::new(),
+            modes: vec![Mode {
+                name: DEFAULT_MODE.to_string(),
+                build: None,
+                stash: None,
+            }],
+            mode: DEFAULT_MODE.to_string(),
             help_key: Vec::new(),
             legacy_keys: false,
             synchronized_output: None,
@@ -2903,6 +3020,39 @@ impl App {
     #[must_use]
     pub fn palette_key(mut self, keys: &str) -> App {
         self.palette_key = crate::node::parse_keys(keys);
+        self
+    }
+
+    /// Add a mode: a stack of screens of its own, whose first screen
+    /// `build` makes the first time [`Ctx::switch_mode`] shows it, as
+    /// Textual's `App.MODES` do (a dashboard, its settings, its help, each
+    /// with its own history). The app starts in [`DEFAULT_MODE`], the
+    /// stack `App::new`'s closure built.
+    ///
+    /// ```
+    /// use intuituive::prelude::*;
+    ///
+    /// let app = App::new(|| label("home").on_key("s", |cx| cx.switch_mode("settings")))
+    ///     .mode("settings", || {
+    ///         label("settings").on_key("h", |cx| cx.switch_mode(intuituive::DEFAULT_MODE))
+    ///     });
+    /// let mut driver = app.driver(10, 1);
+    /// driver.press("s");
+    /// assert_eq!(driver.screen().plain()[0].trim_end(), "settings");
+    /// driver.press("h");
+    /// assert_eq!(driver.screen().plain()[0].trim_end(), "home");
+    /// ```
+    #[must_use]
+    pub fn mode(mut self, name: &str, build: impl FnOnce() -> Node + 'static) -> App {
+        self.modes
+            .retain(|mode| mode.name != name || name == DEFAULT_MODE);
+        if name != DEFAULT_MODE {
+            self.modes.push(Mode {
+                name: name.to_string(),
+                build: Some(Box::new(build)),
+                stash: None,
+            });
+        }
         self
     }
 
@@ -4394,6 +4544,7 @@ impl App {
         cx.layers = self.layers.len();
         cx.releases = self.releases;
         cx.maximized = self.top().maximized.is_some();
+        cx.mode.clone_from(&self.mode);
         cx
     }
 
@@ -4504,7 +4655,9 @@ impl App {
             Nav::Replace(_) => Some("screen replaced"),
             Nav::Palette => Some("command palette opened"),
             Nav::Help(_) => Some("help opened"),
-            Nav::Run(..) | Nav::Maximize(_) | Nav::Minimize => None,
+            Nav::Dismiss(_) => (self.layers.len() > 1).then_some("screen closed"),
+            Nav::SwitchMode(_) => Some("mode switched"),
+            Nav::Run(..) | Nav::Maximize(_) | Nav::Minimize | Nav::Then(_) => None,
         };
         if let Some(what) = what {
             self.runtime.tracer.push(Traced::Screen(what));
@@ -4521,20 +4674,38 @@ impl App {
                 top.anchor = Some((anchor, placement));
                 top.look = look;
             }
-            Nav::Pop => {
+            Nav::Pop | Nav::Dismiss(_) => {
                 if self.layers.len() > 1 {
-                    self.close();
+                    let then = self.close();
                     let focus = self.focus();
                     self.set_focus(focus);
+                    if let Some(then) = then {
+                        let value = match nav {
+                            Nav::Dismiss(value) => Some(value),
+                            _ => None,
+                        };
+                        let mut cx = self.ctx();
+                        let runtime = self.runtime.clone();
+                        runtime.enter(|| then(value, &mut cx));
+                        return self.apply(cx);
+                    }
                 }
             }
+            Nav::Then(then) => {
+                if self.layers.len() > 1 {
+                    self.top_mut().on_close = Some(then);
+                }
+            }
+            Nav::SwitchMode(name) => self.switch_mode(&name),
             Nav::Replace(build) => {
                 let (modal, anchor) = (self.top().modal, self.top().anchor);
                 let origin = self.top().origin;
                 let look = self.top().look.clone();
                 if self.layers.len() > 1 {
-                    self.close();
+                    // The result goes to the screen taking its place.
+                    let then = self.close();
                     self.open(build, modal);
+                    self.top_mut().on_close = then;
                     self.top_mut().anchor = anchor;
                     self.top_mut().origin = origin;
                     self.top_mut().look = look;
@@ -4925,6 +5096,7 @@ impl App {
             order: Vec::new(),
             fallback: false,
             maximized: None,
+            on_close: None,
         });
         self.restack = true;
         self.runtime.layers.set(self.layers.len());
@@ -4934,10 +5106,48 @@ impl App {
         self.focus_first();
     }
 
-    /// Take the top screen off, forgetting its subscriptions.
-    fn close(&mut self) {
+    /// Show mode `name`'s stack, keeping the one showing.
+    fn switch_mode(&mut self, name: &str) {
+        if name == self.mode {
+            return;
+        }
+        let Some(to) = self.modes.iter().position(|mode| mode.name == name) else {
+            return;
+        };
+        let from = self
+            .modes
+            .iter()
+            .position(|mode| mode.name == self.mode)
+            .expect("the mode showing is listed");
         self.pending = None;
-        let layer = self.layers.pop().expect("an app always has a screen");
+        self.hide_tip();
+        let showing = std::mem::take(&mut self.layers);
+        self.modes[from].stash = Some(showing);
+        self.mode = name.to_string();
+        match self.modes[to].stash.take() {
+            Some(layers) => {
+                self.layers = layers;
+                self.restack = true;
+                self.runtime.layers.set(self.layers.len());
+                let focus = self.focus();
+                self.set_focus(focus);
+            }
+            None => {
+                let build = self.modes[to]
+                    .build
+                    .take()
+                    .expect("a mode not yet shown has its builder");
+                self.open(build, None);
+            }
+        }
+    }
+
+    /// Take the top screen off, forgetting its subscriptions; what it hands
+    /// its result to, if anything.
+    fn close(&mut self) -> Option<OnClose> {
+        self.pending = None;
+        let mut layer = self.layers.pop().expect("an app always has a screen");
+        let then = layer.on_close.take();
         for ticker in &layer.timers {
             ticker.timer.release();
         }
@@ -4948,6 +5158,7 @@ impl App {
         }
         self.restack = true;
         self.runtime.layers.set(self.layers.len());
+        then
     }
 
     /// The theme in code with the theme file's last good styles over it.

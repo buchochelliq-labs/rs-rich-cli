@@ -37,6 +37,13 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   state but neither draws nor takes clicks, and Tab stays inside. Esc that
   nothing used restores it. The inspector marks it, and assistive
   technology hears "maximized" and "restored".
+- **Modes and screen results** (#808): `App::mode(name, build)`,
+  `Ctx::switch_mode(name)` and `Ctx::mode()` keep several stacks of
+  screens, each built on first use and kept with its state while another
+  shows (its timers wait); `DEFAULT_MODE` names the first.
+  `Ctx::push_for::<T>(build, then)`, `modal_for::<T>(..)` and
+  `Ctx::dismiss(value)` hand a value back from a screen of your own:
+  `Some(value)` on a dismiss, `None` on a plain pop.
 
 ### The docs on Zensical
 
