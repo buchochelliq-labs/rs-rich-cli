@@ -763,7 +763,8 @@ fn play(art: &AnimatedBanner, console: &Console, looping: bool) -> std::io::Resu
 mod keys {
     use std::time::Duration;
 
-    /// What was pressed.
+    /// What was pressed. Only unix reads keys; elsewhere none is made.
+    #[cfg_attr(not(unix), allow(dead_code))]
     pub(super) enum Pressed {
         Key,
         /// Ctrl+C: read as a byte, since signals are off while it plays.

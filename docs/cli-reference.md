@@ -2233,7 +2233,7 @@ rich banner --font slant --fit plain Release
 
 Glowing letters over a wave, specks of light rising; still when piped
 
-```sh
+```sh { .rich-playground data-kind="cli" }
 rich banner --wave --specks Noctiluca
 ```
 
