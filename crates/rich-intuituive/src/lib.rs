@@ -248,7 +248,7 @@ pub use node::{
     repeating, row, scroll, scroll_both, scroll_both_with, scroll_with, scroll_x, switch, text,
 };
 pub use node::{described, drawn, drawn_described};
-pub use node_list::list_of;
+pub use node_list::{list_of, list_of_virtual};
 pub use notify::{Corner, Level};
 pub use palette::Palette;
 pub use parity::{

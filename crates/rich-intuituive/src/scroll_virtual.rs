@@ -570,6 +570,52 @@ impl Widget for VirtualScroll {
 }
 
 impl VirtualScroll {
+    /// Key the items by `key` ([`Node::item_key`]).
+    pub(crate) fn set_key(&mut self, key: Box<dyn Fn(usize) -> u64>) {
+        self.key = Some(key);
+    }
+
+    /// Item `index`'s rows: as drawn, else its estimate.
+    pub(crate) fn rows_of(&self, index: usize) -> u16 {
+        self.height(index).min(u16::MAX as u64) as u16
+    }
+
+    /// Scroll so item `index`, and `pad` items either side where they fit,
+    /// are in view, of `len` items ([`list_of_virtual`](crate::list_of_virtual)'s
+    /// cursor). Heights not drawn yet are estimates, corrected by the
+    /// layout that follows.
+    pub(crate) fn reveal(&mut self, index: usize, pad: usize, len: usize) {
+        if len == 0 {
+            return;
+        }
+        if self.chunks.is_empty() || self.counted != len {
+            self.recount(self.counted.min(len) / CHUNK, len);
+        }
+        let index = index.min(len - 1);
+        let view = u64::from(self.view.1.max(1));
+        let total: u64 = self.chunks.iter().sum();
+        let max_top = total.saturating_sub(view);
+        let offset = self.offset.get_untracked();
+        let from = if self.derived.is_some_and(|d| d != offset) {
+            offset.min(max_top)
+        } else {
+            self.top
+        };
+        let at = self.top_of(index);
+        let top = self.top_of(index.saturating_sub(pad));
+        let last = (index + pad).min(len - 1);
+        let bottom = self.top_of(last) + self.height(last);
+        let next = if top < from {
+            top
+        } else if bottom > from + view {
+            // Its top stays in view when it is taller than the view.
+            (bottom - view).min(at)
+        } else {
+            return;
+        };
+        self.offset.set(next.min(max_top));
+    }
+
     /// Call the near-end hook when the view is within its threshold of the
     /// end, once until `len` grows.
     fn near(&mut self, len: usize, top: u64) {
