@@ -256,6 +256,10 @@ workflow, and how to sync a new upstream release — is in
 [AGENTS.md](AGENTS.md) and [CONTRIBUTING.md](CONTRIBUTING.md). There are two
 skills to drive the common flows: `sync-upstream` and `port-module`.
 
+To report a vulnerability, see [SECURITY.md](SECURITY.md); the
+[threat model](docs/design/threat-model.md) covers what runs other code or
+serves a network.
+
 ## License
 
 MIT — matching upstream `rich`. See [LICENSE](LICENSE).

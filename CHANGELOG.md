@@ -44,6 +44,15 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   the built sites. Six anchors to em-dash headings, broken under MkDocs
   too, are fixed.
 
+### A threat model and a security policy (docs, wave 1, WS9)
+
+- [`docs/design/threat-model.md`](docs/design/threat-model.md) sets out the
+  assets, trust boundaries, entry points, threats, mitigations and gaps of
+  the plugins, the marketplace and its signer, `rich serve`, Noctiluca and
+  Chrome, the embed PTY, TLS and redirects, and Cornacai's ACP agents, and
+  ends with the checklist stage 4's security review works through. A root
+  [`SECURITY.md`](SECURITY.md) says how to report a vulnerability privately.
+
 ### intuiTUIve: Cornacai's parity items (wave 1, WS2)
 
 - **`Node::follow_end` and `follow_end_with(signal)`** (#798), on `scroll`
