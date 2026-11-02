@@ -182,6 +182,7 @@ nav:
           - guide/cli/index.md
           - Walkthrough: guide/cli/walkthrough.md
           - Smoke test: guide/cli/smoke.md
+      - Write a plugin: guide/write-a-plugin.md
   - intuiTUIve:
       - guide/intuituive/index.md
       - "Tutorial: a to-do app": guide/intuituive/tutorial.md

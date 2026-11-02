@@ -23,6 +23,7 @@ real output, exported to SVG by the library itself.
 | ![](../assets/rs-rich/data.svg){ .rs-icon width="20" } [Data and schemas](data/index.md) | `rs-rich-data` | CSV, JSON Lines and Arrow sources, profiles and schemas |
 | ![](../assets/rs-rich/micro.svg){ .rs-icon width="20" } [Micro assets](micro/index.md) | `rs-rich-micro` | Emoji-sized inline images |
 | ![](../assets/rs-rich/cli.svg){ .rs-icon width="20" } [The rich CLI](cli/index.md) | `rs-rich-cli` | The `rich` command |
+| ![](../assets/rs-rich/contributing.svg){ .rs-icon width="20" } [Write a plugin](write-a-plugin.md) | `rs-rich-plugin-api` | A sandboxed WASM plugin, from the template to the marketplace |
 
 <div class="rs-subsite" markdown>
 
