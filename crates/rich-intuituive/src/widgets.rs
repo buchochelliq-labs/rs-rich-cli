@@ -1,8 +1,8 @@
 //! Ready-made widgets, built on the public [`Widget`] trait as an app's own
 //! would be: a [`table`] with a selectable row and sized columns, a
 //! [`virtual_list`] of any length, a [`tabs`] strip, a [`tree`], [`split`]
-//! panes, a [`calendar`], a [`time_picker`], a [`datetime_picker`] and a
-//! [`hex_view`].
+//! panes, a [`calendar`], a [`time_picker`], a [`datetime_picker`], a
+//! [`hex_view`] and an interactive [`diff_view`].
 //!
 //! [`scroll`](crate::scroll) and anchored pop-ups
 //! ([`Ctx::popup`](crate::Ctx::popup)) are part of the framework itself,
@@ -34,6 +34,7 @@ pub use crate::calendar::{
 pub use crate::datetime::{
     DateTimeOptions, TimeOptions, datetime_picker, time_picker, time_picker_with,
 };
+pub use crate::diff_view::{Decision, DiffOptions, accepted_text, diff_view, diff_view_with};
 pub use crate::help::KeyHintsOptions;
 pub use crate::hex::hex_view;
 pub use crate::list::{

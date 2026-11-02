@@ -108,6 +108,7 @@ pub mod complete;
 mod controls;
 mod datetime;
 mod dialog;
+mod diff_view;
 mod digits;
 mod effect;
 mod facts;

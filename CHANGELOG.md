@@ -53,6 +53,20 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   ends with the checklist stage 4's security review works through. A root
   [`SECURITY.md`](SECURITY.md) says how to report a vulnerability privately.
 
+### intuiTUIve: a diff to review, themes, keymaps (wave 2)
+
+- **`widgets::diff_view(old, new)` and `diff_view_with(.., DiffOptions)`**
+  (#799): an interactive diff of two `Signal<String>`s on rs-rich-ext's
+  line diff, unified or side by side (`side_by_side_at(columns)` switches
+  by width), highlighted with `.language(..)`. Unchanged runs fold to
+  `context` lines around each hunk (Enter or a click opens them), `]` `[`
+  (`n` `p`) move the hunk cursor, and with `.decide(signal)` `a` `r` `A`
+  `R` accept or reject a hunk or all of them, a status row counting what
+  is decided; `.on_done(..)` runs when none is pending.
+  `accepted_text(old, new, decisions)` applies the accepted hunks. Only
+  the rows in view are rendered, so a 10,000-line diff scrolls as a short
+  one does.
+
 ### intuiTUIve: Cornacai's parity items (wave 1, WS2)
 
 - **`Node::follow_end` and `follow_end_with(signal)`** (#798), on `scroll`
