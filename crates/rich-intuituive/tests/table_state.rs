@@ -350,11 +350,11 @@ fn frozen_rows_stay_under_the_header() {
     driver.settle();
     assert_eq!(plain(&driver)[1], "row 0");
     assert_eq!(plain(&driver)[2], "row 1");
-    driver.press("pagedown");
+    driver.press("pagedown pagedown");
     let shown = plain(&driver);
     assert_eq!(shown[1], "row 0", "{shown:?}");
     assert_ne!(shown[2], "row 1", "{shown:?}");
-    assert!(shown.iter().any(|row| row.starts_with("row 4")), "{shown:?}");
+    assert!(shown.iter().any(|row| row.starts_with("row 8")), "{shown:?}");
     // Back to the top: the frozen row is selected, and the view returns.
     driver.press("home");
     assert_eq!(plain(&driver)[6], "at 0");

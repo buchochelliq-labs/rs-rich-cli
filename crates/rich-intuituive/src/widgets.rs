@@ -1997,10 +1997,10 @@ impl Widget for Table {
         };
         // The first scrolled row, the frozen ones aside.
         let scrolled = |height: &mut dyn FnMut(usize) -> usize| -> usize {
-            let after = |i: usize| i.checked_sub(frozen);
             let mut height = |i: usize| height(i + frozen);
             let from = self.first.get().saturating_sub(frozen);
-            let selected = selected.and_then(after);
+            // A frozen row selected brings the rest back to their start.
+            let selected = selected.map(|s| s.saturating_sub(frozen));
             frozen
                 + crate::list::first_in_view(
                     len - frozen,

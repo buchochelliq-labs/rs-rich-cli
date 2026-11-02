@@ -1018,7 +1018,8 @@ impl List {
                     len - frozen,
                     view,
                     first.saturating_sub(frozen),
-                    selected.and_then(|s| s.checked_sub(frozen)),
+                    // A frozen item selected brings the rest back to their start.
+                    selected.map(|s| s.saturating_sub(frozen)),
                     padding,
                     &mut height_of,
                 )
