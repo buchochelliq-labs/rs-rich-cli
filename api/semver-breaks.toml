@@ -77,3 +77,10 @@ version = "0.0.9"
 lint = "enum_marked_non_exhaustive"
 items = ["enum Easing"]
 why = "Textual's easings join Easing (#814, 0.0.24 plan), which is #[non_exhaustive] from this release so later ones are not breaks; the variants it gains are not reported apart"
+
+[[break]]
+crate = "rs-rich-intuituive"
+version = "0.0.9"
+lint = "constructible_struct_adds_field"
+items = ["field TableOptions.freeze_rows"]
+why = "frozen rows in tables, Textual's fixed_rows, are a TableOptions field like the rest of its options (#814, 0.0.24 plan)"

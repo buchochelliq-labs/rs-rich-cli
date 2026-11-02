@@ -1963,11 +1963,13 @@ impl core::marker::Unpin for noctiluca::ssh::TunnelLink
 impl core::marker::UnsafeUnpin for noctiluca::ssh::TunnelLink
 impl core::panic::unwind_safe::RefUnwindSafe for noctiluca::ssh::TunnelLink
 impl core::panic::unwind_safe::UnwindSafe for noctiluca::ssh::TunnelLink
+pub const noctiluca::ssh::TUNNEL_PORTS: core::ops::range::RangeInclusive<u16>
 pub fn noctiluca::ssh::check_host(&str) -> core::result::Result<(), alloc::string::String>
 pub fn noctiluca::ssh::chrome_switches(u16) -> alloc::vec::Vec<alloc::string::String>
 pub fn noctiluca::ssh::explain(&str, &[alloc::string::String]) -> alloc::string::String
 pub fn noctiluca::ssh::listener_uid(u16) -> core::option::Option<u32>
 pub fn noctiluca::ssh::listener_uid_in(&str, u16) -> core::option::Option<u32>
+pub fn noctiluca::ssh::random_port() -> u16
 pub fn noctiluca::ssh::socks_greets(u16, core::time::Duration) -> bool
 pub fn noctiluca::ssh::tunnel_args(&noctiluca::ssh::SshOptions, u16, bool) -> alloc::vec::Vec<alloc::string::String>
 pub mod noctiluca::start

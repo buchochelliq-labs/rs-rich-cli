@@ -3156,6 +3156,7 @@ pub fn intuituive::node::Node::crumb_suffix(self, impl core::ops::function::Fn()
 impl intuituive::node::Node
 pub fn intuituive::node::Node::cursor_by<K: core::cmp::PartialEq + core::clone::Clone + 'static>(self, impl core::ops::function::Fn(usize) -> K + 'static) -> intuituive::node::Node
 pub fn intuituive::node::Node::direction(self, intuituive::widgets::ListDirection) -> intuituive::node::Node
+pub fn intuituive::node::Node::freeze_rows(self, usize) -> intuituive::node::Node
 pub fn intuituive::node::Node::highlight_layer(self, intuituive::widgets::HighlightLayer) -> intuituive::node::Node
 pub fn intuituive::node::Node::highlight_spacing(self, intuituive::widgets::HighlightSpacing) -> intuituive::node::Node
 pub fn intuituive::node::Node::marker(self, impl core::ops::function::Fn(usize) -> core::option::Option<alloc::string::String> + 'static) -> intuituive::node::Node
@@ -3172,6 +3173,9 @@ pub fn intuituive::node::Node::selected_style_for(self, impl core::ops::function
 pub fn intuituive::node::Node::symbol(self, &str) -> intuituive::node::Node
 pub fn intuituive::node::Node::trailing(self, impl core::ops::function::Fn(usize) -> alloc::string::String + 'static) -> intuituive::node::Node
 pub fn intuituive::node::Node::wheel_step(self, usize) -> intuituive::node::Node
+impl intuituive::node::Node
+pub fn intuituive::node::Node::editor_theme(self, intuituive::EditorTheme) -> intuituive::node::Node
+pub fn intuituive::node::Node::match_brackets(self) -> intuituive::node::Node
 impl intuituive::node::Node
 pub fn intuituive::node::Node::follow_end(self) -> intuituive::node::Node
 pub fn intuituive::node::Node::follow_end_with(self, intuituive::reactive::Signal<bool>) -> intuituive::node::Node
@@ -4494,6 +4498,7 @@ pub fn intuituive::node::Node::crumb_suffix(self, impl core::ops::function::Fn()
 impl intuituive::node::Node
 pub fn intuituive::node::Node::cursor_by<K: core::cmp::PartialEq + core::clone::Clone + 'static>(self, impl core::ops::function::Fn(usize) -> K + 'static) -> intuituive::node::Node
 pub fn intuituive::node::Node::direction(self, intuituive::widgets::ListDirection) -> intuituive::node::Node
+pub fn intuituive::node::Node::freeze_rows(self, usize) -> intuituive::node::Node
 pub fn intuituive::node::Node::highlight_layer(self, intuituive::widgets::HighlightLayer) -> intuituive::node::Node
 pub fn intuituive::node::Node::highlight_spacing(self, intuituive::widgets::HighlightSpacing) -> intuituive::node::Node
 pub fn intuituive::node::Node::marker(self, impl core::ops::function::Fn(usize) -> core::option::Option<alloc::string::String> + 'static) -> intuituive::node::Node
@@ -4510,6 +4515,9 @@ pub fn intuituive::node::Node::selected_style_for(self, impl core::ops::function
 pub fn intuituive::node::Node::symbol(self, &str) -> intuituive::node::Node
 pub fn intuituive::node::Node::trailing(self, impl core::ops::function::Fn(usize) -> alloc::string::String + 'static) -> intuituive::node::Node
 pub fn intuituive::node::Node::wheel_step(self, usize) -> intuituive::node::Node
+impl intuituive::node::Node
+pub fn intuituive::node::Node::editor_theme(self, intuituive::EditorTheme) -> intuituive::node::Node
+pub fn intuituive::node::Node::match_brackets(self) -> intuituive::node::Node
 impl intuituive::node::Node
 pub fn intuituive::node::Node::follow_end(self) -> intuituive::node::Node
 pub fn intuituive::node::Node::follow_end_with(self, intuituive::reactive::Signal<bool>) -> intuituive::node::Node
@@ -6632,6 +6640,7 @@ pub intuituive::widgets::TableOptions::column_spacing: core::option::Option<u16>
 pub intuituive::widgets::TableOptions::columns_with: core::option::Option<alloc::boxed::Box<dyn core::ops::function::Fn() -> alloc::vec::Vec<intuituive::widgets::Column>>>
 pub intuituive::widgets::TableOptions::footer: core::option::Option<alloc::boxed::Box<dyn core::ops::function::Fn() -> alloc::vec::Vec<alloc::string::String>>>
 pub intuituive::widgets::TableOptions::freeze: usize
+pub intuituive::widgets::TableOptions::freeze_rows: usize
 pub intuituive::widgets::TableOptions::freeze_with: core::option::Option<alloc::boxed::Box<dyn core::ops::function::Fn() -> usize>>
 pub intuituive::widgets::TableOptions::header_gap: u16
 pub intuituive::widgets::TableOptions::hide_header: bool
@@ -6667,6 +6676,7 @@ pub fn intuituive::widgets::TableOptions::columns_with(self, impl core::ops::fun
 pub fn intuituive::widgets::TableOptions::footer(self, impl core::ops::function::Fn() -> alloc::vec::Vec<alloc::string::String> + 'static) -> intuituive::widgets::TableOptions
 pub fn intuituive::widgets::TableOptions::freeze_columns(self, usize) -> intuituive::widgets::TableOptions
 pub fn intuituive::widgets::TableOptions::freeze_columns_with(self, impl core::ops::function::Fn() -> usize + 'static) -> intuituive::widgets::TableOptions
+pub fn intuituive::widgets::TableOptions::freeze_rows(self, usize) -> intuituive::widgets::TableOptions
 pub fn intuituive::widgets::TableOptions::header(self, bool) -> intuituive::widgets::TableOptions
 pub fn intuituive::widgets::TableOptions::header_gap(self, u16) -> intuituive::widgets::TableOptions
 pub fn intuituive::widgets::TableOptions::highlight_layer(self, intuituive::widgets::HighlightLayer) -> intuituive::widgets::TableOptions
@@ -8100,6 +8110,35 @@ impl core::marker::Unpin for intuituive::app::Driver
 impl core::marker::UnsafeUnpin for intuituive::app::Driver
 impl !core::panic::unwind_safe::RefUnwindSafe for intuituive::app::Driver
 impl !core::panic::unwind_safe::UnwindSafe for intuituive::app::Driver
+#[non_exhaustive] pub struct intuituive::EditorTheme
+pub intuituive::EditorTheme::base: core::option::Option<rich::style::Style>
+pub intuituive::EditorTheme::bracket: core::option::Option<rich::style::Style>
+pub intuituive::EditorTheme::cursor: core::option::Option<rich::style::Style>
+pub intuituive::EditorTheme::cursor_line: core::option::Option<rich::style::Style>
+pub intuituive::EditorTheme::gutter: core::option::Option<rich::style::Style>
+pub intuituive::EditorTheme::selection: core::option::Option<rich::style::Style>
+impl intuituive::EditorTheme
+pub fn intuituive::EditorTheme::apply(&self, intuituive::app::Theme) -> intuituive::app::Theme
+pub fn intuituive::EditorTheme::named(&str) -> core::option::Option<intuituive::EditorTheme>
+pub fn intuituive::EditorTheme::names() -> &'static [&'static str]
+pub fn intuituive::EditorTheme::new() -> intuituive::EditorTheme
+pub fn intuituive::EditorTheme::styles(&self) -> alloc::vec::Vec<(alloc::string::String, rich::style::Style)>
+impl core::clone::Clone for intuituive::EditorTheme
+pub fn intuituive::EditorTheme::clone(&self) -> intuituive::EditorTheme
+impl core::cmp::PartialEq for intuituive::EditorTheme
+pub fn intuituive::EditorTheme::eq(&self, &intuituive::EditorTheme) -> bool
+impl core::default::Default for intuituive::EditorTheme
+pub fn intuituive::EditorTheme::default() -> intuituive::EditorTheme
+impl core::fmt::Debug for intuituive::EditorTheme
+pub fn intuituive::EditorTheme::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for intuituive::EditorTheme
+impl core::marker::Freeze for intuituive::EditorTheme
+impl core::marker::Send for intuituive::EditorTheme
+impl core::marker::Sync for intuituive::EditorTheme
+impl core::marker::Unpin for intuituive::EditorTheme
+impl core::marker::UnsafeUnpin for intuituive::EditorTheme
+impl core::panic::unwind_safe::RefUnwindSafe for intuituive::EditorTheme
+impl core::panic::unwind_safe::UnwindSafe for intuituive::EditorTheme
 pub struct intuituive::Feed<T: 'static>
 impl<T: 'static> intuituive::Feed<T>
 pub fn intuituive::Feed<T>::is_live(&self) -> bool
@@ -8778,6 +8817,7 @@ pub fn intuituive::node::Node::crumb_suffix(self, impl core::ops::function::Fn()
 impl intuituive::node::Node
 pub fn intuituive::node::Node::cursor_by<K: core::cmp::PartialEq + core::clone::Clone + 'static>(self, impl core::ops::function::Fn(usize) -> K + 'static) -> intuituive::node::Node
 pub fn intuituive::node::Node::direction(self, intuituive::widgets::ListDirection) -> intuituive::node::Node
+pub fn intuituive::node::Node::freeze_rows(self, usize) -> intuituive::node::Node
 pub fn intuituive::node::Node::highlight_layer(self, intuituive::widgets::HighlightLayer) -> intuituive::node::Node
 pub fn intuituive::node::Node::highlight_spacing(self, intuituive::widgets::HighlightSpacing) -> intuituive::node::Node
 pub fn intuituive::node::Node::marker(self, impl core::ops::function::Fn(usize) -> core::option::Option<alloc::string::String> + 'static) -> intuituive::node::Node
@@ -8794,6 +8834,9 @@ pub fn intuituive::node::Node::selected_style_for(self, impl core::ops::function
 pub fn intuituive::node::Node::symbol(self, &str) -> intuituive::node::Node
 pub fn intuituive::node::Node::trailing(self, impl core::ops::function::Fn(usize) -> alloc::string::String + 'static) -> intuituive::node::Node
 pub fn intuituive::node::Node::wheel_step(self, usize) -> intuituive::node::Node
+impl intuituive::node::Node
+pub fn intuituive::node::Node::editor_theme(self, intuituive::EditorTheme) -> intuituive::node::Node
+pub fn intuituive::node::Node::match_brackets(self) -> intuituive::node::Node
 impl intuituive::node::Node
 pub fn intuituive::node::Node::follow_end(self) -> intuituive::node::Node
 pub fn intuituive::node::Node::follow_end_with(self, intuituive::reactive::Signal<bool>) -> intuituive::node::Node
@@ -9711,6 +9754,7 @@ pub fn intuituive::leaf(impl core::ops::function::Fn(&rich::console::Console, u1
 pub fn intuituive::link(impl core::convert::Into<alloc::string::String>, impl core::convert::Into<alloc::string::String>) -> intuituive::node::Node
 pub fn intuituive::list(impl core::ops::function::Fn() -> alloc::vec::Vec<alloc::string::String> + 'static, intuituive::reactive::Signal<usize>) -> intuituive::node::Node
 pub fn intuituive::list_of(impl core::ops::function::Fn() -> usize + 'static, impl core::ops::function::Fn(usize) -> intuituive::node::Node + 'static, intuituive::reactive::Signal<usize>) -> intuituive::node::Node
+pub fn intuituive::list_of_virtual(impl core::ops::function::Fn() -> usize + 'static, impl core::ops::function::Fn(usize) -> u16 + 'static, impl core::ops::function::Fn(usize) -> intuituive::node::Node + 'static, intuituive::reactive::Signal<usize>) -> intuituive::node::Node
 pub fn intuituive::list_optional(impl core::ops::function::Fn() -> alloc::vec::Vec<alloc::string::String> + 'static, intuituive::reactive::Signal<core::option::Option<usize>>) -> intuituive::node::Node
 pub fn intuituive::list_search(impl core::ops::function::Fn() -> alloc::string::String + 'static, impl core::ops::function::Fn() -> alloc::vec::Vec<alloc::string::String> + 'static, intuituive::reactive::Signal<usize>) -> intuituive::select::ListSearch
 pub fn intuituive::markdown(intuituive::reactive::Signal<alloc::string::String>) -> intuituive::node::Node
