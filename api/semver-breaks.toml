@@ -42,3 +42,38 @@ version = "0.0.3"
 lint = "enum_variant_added"
 items = ["variant Rule:CollapseGaps"]
 why = "the collapse-gaps adaptation collapses rows blank in every column (#786, #789, 0.0.24 plan)"
+
+[[break]]
+crate = "rs-rich-interact"
+version = "0.0.12"
+lint = "constructible_struct_adds_field"
+items = ["field Mouse.pixel"]
+why = "a mouse event says where in its cell the pointer was, from a terminal that reports pixels (SGR-Pixels, #819, 0.0.24 plan)"
+
+[[break]]
+crate = "noctiluca"
+version = "0.0.3"
+lint = "enum_variant_added"
+items = ["variant PageAction:ClickAt", "variant Command:ClickAt"]
+why = "a click on a picture, a canvas, a drawing or a frame reaches the page at that point of it, to the pixel where the terminal reports pixels (#819, 0.0.24 plan)"
+
+[[break]]
+crate = "noctiluca"
+version = "0.0.3"
+lint = "constructible_struct_adds_field"
+items = ["field ChromeOptions.switches", "field Args.ssh", "field Args.ssh_args", "field Options.tunnel"]
+why = "--ssh HOST runs Chrome here with its network through an SSH tunnel: the proxy's switches, the host and ssh's options, and the tunnel the app watches (#817, 0.0.24 plan)"
+
+[[break]]
+crate = "noctiluca"
+version = "0.0.3"
+lint = "constructible_struct_adds_field"
+items = ["field Args.split"]
+why = "--split DIR opens Noctiluca in a new pane beside this one through the terminal host client (#820, 0.0.24 plan)"
+
+[[break]]
+crate = "rs-rich-intuituive"
+version = "0.0.9"
+lint = "enum_marked_non_exhaustive"
+items = ["enum Easing"]
+why = "Textual's easings join Easing (#814, 0.0.24 plan), which is #[non_exhaustive] from this release so later ones are not breaks; the variants it gains are not reported apart"

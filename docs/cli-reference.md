@@ -307,7 +307,7 @@ Choose at most one; the default auto-detects .md/.rst/.json/.csv/.tsv/.ipynb, .m
 | --- | --- |
 | `--no-color` | Disable colored output (as does a non-empty NO_COLOR) Environment: `NO_COLOR`. Config: `no_color`. |
 | `--color` | Override a config no_color setting (pipes remain plain) |
-| `--sanitize`, `--no-sanitize` | Replace input terminal controls, JSON/notebook strings, titles and captions with visible inert text. On by default for `rich view`, `rich schema`, `rich log` and text `rich diff`; --no-sanitize turns it off there. Config: `sanitize`. |
+| `--sanitize`, `--no-sanitize` | Replace input terminal controls, JSON/notebook strings, titles and captions with visible inert text. On by default for content fetched from a URL, and for `rich view`, `rich schema`, `rich log` and text `rich diff`; --no-sanitize turns it off there. Config: `sanitize`. |
 | `--report <F>` | Emit a result/error envelope on stderr. Default: `human`. Possible values: `human`, `json`. |
 | `--machine-json` | Alias for --report json. |
 
@@ -384,6 +384,7 @@ Self-contained examples; ignores config; accepts --no-color.
 | `banner` | Draw TEXT as a FIGlet banner: a font, a style or colour gradient, alignment and width fitting. Built with the `art` feature |
 | `shell` | Shell integration: `init` prints a script with completions, OSC 133 prompt marks, OSC 7 and a status line after each command; `status` and `link` are its helpers |
 | `spin` | Run a command with a spinner and a title until it exits, and exit with its status (like gum spin); without a terminal it just runs the command |
+| `console` | Print the tracing events an intuiTUIve app sends from another terminal (like textual console): run the app with INTUITUIVE_CONSOLE=1 |
 | `record` | Run tapes (scripted terminal sessions: type, press and hold keys, wait for screen text, take screenshots) in a real terminal and write PNG, SVG and text screenshots, an asciinema cast, a GIF, an animated PNG (when asked), an MP4 (with FFmpeg) and an HTML page with a player; video has every screen update at the tape's frame rate, and Kitty, Sixel and iTerm2 images; --audio records the program's sound too; --check compares screenshots with committed ones instead |
 | `plugins` | List the plugins this build has — built in, linked, and any --plugin PATH loads — with their source, version, ABI and capabilities |
 | `plugin` | Find, install, update and check plugins and asset packs from the plugin marketplace: a signed index, every file checked by SHA-256; an installed, enabled WASM plugin loads on every run without --plugin, after its file is checked against the lockfile |
@@ -637,7 +638,7 @@ rich log [OPTIONS] [RESOURCE]
 
 | Option | Description |
 | --- | --- |
-| `--sanitize`, `--no-sanitize` | Replace input terminal controls, JSON/notebook strings, titles and captions with visible inert text. On by default for `rich view`, `rich schema`, `rich log` and text `rich diff`; --no-sanitize turns it off there. |
+| `--sanitize`, `--no-sanitize` | Replace input terminal controls, JSON/notebook strings, titles and captions with visible inert text. On by default for content fetched from a URL, and for `rich view`, `rich schema`, `rich log` and text `rich diff`; --no-sanitize turns it off there. |
 
 #### Layout
 
@@ -696,7 +697,7 @@ rich diff [OPTIONS] [RESOURCE]
 
 | Option | Description |
 | --- | --- |
-| `--sanitize`, `--no-sanitize` | Replace input terminal controls, JSON/notebook strings, titles and captions with visible inert text. On by default for `rich view`, `rich schema`, `rich log` and text `rich diff`; --no-sanitize turns it off there. |
+| `--sanitize`, `--no-sanitize` | Replace input terminal controls, JSON/notebook strings, titles and captions with visible inert text. On by default for content fetched from a URL, and for `rich view`, `rich schema`, `rich log` and text `rich diff`; --no-sanitize turns it off there. |
 
 #### Arguments
 
@@ -819,7 +820,7 @@ rich view [OPTIONS] [RESOURCE]
 
 | Option | Description |
 | --- | --- |
-| `--sanitize`, `--no-sanitize` | Replace input terminal controls, JSON/notebook strings, titles and captions with visible inert text. On by default for `rich view`, `rich schema`, `rich log` and text `rich diff`; --no-sanitize turns it off there. |
+| `--sanitize`, `--no-sanitize` | Replace input terminal controls, JSON/notebook strings, titles and captions with visible inert text. On by default for content fetched from a URL, and for `rich view`, `rich schema`, `rich log` and text `rich diff`; --no-sanitize turns it off there. |
 
 #### Paging
 
@@ -962,7 +963,7 @@ rich capture [OPTIONS] [RESOURCE]
 
 | Option | Description |
 | --- | --- |
-| `--sanitize`, `--no-sanitize` | Replace input terminal controls, JSON/notebook strings, titles and captions with visible inert text. On by default for `rich view`, `rich schema`, `rich log` and text `rich diff`; --no-sanitize turns it off there. |
+| `--sanitize`, `--no-sanitize` | Replace input terminal controls, JSON/notebook strings, titles and captions with visible inert text. On by default for content fetched from a URL, and for `rich view`, `rich schema`, `rich log` and text `rich diff`; --no-sanitize turns it off there. |
 
 #### Layout
 
@@ -2412,6 +2413,39 @@ The moon spinner, then the page
 rich spin --spinner moon --show-output -- curl -sS https://example.com
 ```
 
+### rich console
+
+Print the tracing events an intuiTUIve app sends from another terminal (like textual console): run the app with INTUITUIVE_CONSOLE=1
+
+#### Usage
+
+```text
+rich console [--socket PATH] [--trace] [-v] [-x TARGET]...
+```
+
+#### Options
+
+| Option | Description |
+| --- | --- |
+| `--socket <PATH>` | The Unix socket to listen on (default console.sock in intuiTUIve's state directory) |
+| `--trace` | Show the app's inspector trace too: keys, focus, screens and signal writes. |
+| `-v`, `--verbose` | Show every event's fields on lines of their own. |
+| `-x`, `--exclude <TARGET>...` | Leave out events whose target starts with TARGET (repeatable) |
+
+#### Examples
+
+Listen on the default socket; then INTUITUIVE_CONSOLE=1 cargo run --example demo
+
+```sh
+rich console
+```
+
+The app's trace too, without hyper's events
+
+```sh
+rich console --trace -x hyper
+```
+
 ### rich record
 
 Run tapes (scripted terminal sessions: type, press and hold keys, wait for screen text, take screenshots) in a real terminal and write PNG, SVG and text screenshots, an asciinema cast, a GIF, an animated PNG (when asked), an MP4 (with FFmpeg) and an HTML page with a player; video has every screen update at the tape's frame rate, and Kitty, Sixel and iTerm2 images; --audio records the program's sound too; --check compares screenshots with committed ones instead
@@ -2907,7 +2941,7 @@ Settings are read from these sources, lowest precedence first; a later source ov
 | `plugins` | list of paths | | | `--plugin` | Load a runtime plugin: a WASM module (.wasm, sandboxed; the default wasm-plugins feature) or a native library (.so, .dylib, .dll, which runs its own code; a build with the dylib-plugins feature); repeatable. `rich plugins list` shows what is loaded |
 | `micro_project` | bool | | | `--micro-project` | Load micro assets from the project's .rich/micro/ (off by default: a project's assets load only when you trust it; ./rich.toml cannot turn this on) |
 | `no_color` | bool | | `NO_COLOR` | `--no-color` | Disable colored output (as does a non-empty NO_COLOR) |
-| `sanitize` | bool | | | `--sanitize` | Replace input terminal controls, JSON/notebook strings, titles and captions with visible inert text. On by default for `rich view`, `rich schema`, `rich log` and text `rich diff`; --no-sanitize turns it off there |
+| `sanitize` | bool | | | `--sanitize` | Replace input terminal controls, JSON/notebook strings, titles and captions with visible inert text. On by default for content fetched from a URL, and for `rich view`, `rich schema`, `rich log` and text `rich diff`; --no-sanitize turns it off there |
 
 `rich` writes diagnostics to stderr and rendered output to stdout, so
 `rich --csv data.csv > table.txt` keeps the two apart.

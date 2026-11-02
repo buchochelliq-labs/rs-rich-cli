@@ -55,6 +55,7 @@ fn options(view: View) -> Options {
         url: Some(URL.into()),
         view: Some(view),
         images: Some(Images::Ansi),
+        tunnel: None,
     }
 }
 

@@ -241,6 +241,13 @@ pub(crate) fn chart(cli: &Cli) -> Result<Box<dyn Renderable>, Failure> {
             (ExitClass::Input, format!("cannot read {name}: {err}"))
         })?
     };
+    // `--sanitize` (the default for a URL): column names and labels show
+    // terminal controls instead of sending them.
+    let content = if cli.sanitize {
+        rich_ext::sanitize_terminal_controls(&content)
+    } else {
+        content
+    };
     let name = if resource == "-" { "<stdin>" } else { resource };
     let data =
         parse(&content, resource).map_err(|err| (ExitClass::Data, format!("{name}: {err}")))?;

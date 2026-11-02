@@ -139,6 +139,11 @@ pub enum MediaOp {
 pub enum PageAction {
     /// A real mouse click at the middle of the node, scrolled into view.
     Click(NodeId),
+    /// A real mouse click at a point of the node: `x` and `y` CSS pixels
+    /// from its box's top left corner, scrolled into view. A click on a
+    /// picture, a canvas or a frame lands where the terminal's pointer
+    /// was, to the pixel when the terminal reports pixels (#819).
+    ClickAt { node: NodeId, x: f64, y: f64 },
     /// Move the page's focus to the node.
     Focus(NodeId),
     /// Type `text` into what has the focus (`Input.insertText`).

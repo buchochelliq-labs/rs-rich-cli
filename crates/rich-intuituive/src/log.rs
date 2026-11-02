@@ -47,9 +47,11 @@
 //! With the off-by-default `tracing` feature, `tracing_layer` feeds a
 //! log from `tracing`, so an app shows its own `tracing::info!` lines.
 
+use std::cell::RefCell;
 use std::collections::VecDeque;
+use std::rc::Rc;
 
-use rich::{Segment, Style};
+use rich::{Renderable, Segment, Style};
 use rich_interact::{Key, KeyCode};
 
 use crate::node::{Axis, Node};
@@ -59,9 +61,18 @@ use crate::screen::Rect;
 use crate::widget::{Canvas, DrawCx, EventCx, MeasureCx, MouseExt, Used, Widget, WidgetEvent};
 
 #[cfg(feature = "tracing")]
+mod console;
+#[cfg(feature = "tracing")]
 mod from_tracing;
 mod targets;
 
+#[cfg(feature = "tracing")]
+pub use console::{
+    CONSOLE_VAR, TRACE_TARGET, console_layer, console_socket, default_console_socket,
+    install_console,
+};
+#[cfg(feature = "tracing")]
+pub(crate) use console::{console_tracing, send_trace};
 #[cfg(feature = "tracing")]
 pub use from_tracing::{TracingFeed, install_tracing, tracing_layer};
 /// How serious a line is, from rs-rich-ext's events: `Trace` up to
@@ -141,15 +152,37 @@ pub(crate) struct Line {
     pub plain: std::cell::OnceCell<String>,
     /// Whether it passes the filters.
     pub pass: bool,
+    /// A renderable written with [`Log::write`], drawn below the markup
+    /// (and the level and target), and its rows at the width it was last
+    /// drawn at.
+    pub body: Option<Rc<dyn Renderable>>,
+    pub rendered: RefCell<Option<(u16, Vec<Vec<Segment>>)>>,
 }
+
+/// How wide a renderable entry is laid out for its plain text: what the
+/// filter's words and a screen reader read.
+const PLAIN_WIDTH: usize = 100;
 
 impl Line {
     fn plain(&self) -> &str {
-        self.plain
-            .get_or_init(|| match rich::Text::from_markup(&self.markup) {
+        self.plain.get_or_init(|| {
+            let mut plain = match rich::Text::from_markup(&self.markup) {
                 Ok(text) => text.plain().to_string(),
                 Err(_) => self.markup.clone(),
-            })
+            };
+            if let Some(body) = &self.body {
+                let console = rich::Console::builder()
+                    .width(PLAIN_WIDTH)
+                    .no_color(true)
+                    .build();
+                let text = console.render_to_string(&**body);
+                if !plain.is_empty() {
+                    plain.push('\n');
+                }
+                plain.push_str(text.trim_end());
+            }
+            plain
+        })
     }
 }
 
@@ -231,6 +264,9 @@ pub(crate) struct LogData {
     pub moved: u64,
     pub show_level: bool,
     pub show_target: bool,
+    /// How many kept lines hold a renderable, which may take more than a
+    /// row: while any do, a view draws its rows in full.
+    pub tall: usize,
 }
 
 impl LogData {
@@ -316,6 +352,32 @@ impl LogData {
         }
     }
 
+    /// The view's newest line after moving `by` lines from the line at
+    /// index `newest` (back when negative), counting lines, not rows: how
+    /// a view of tall lines scrolls.
+    fn scrolled_from(&self, newest: usize, by: isize) -> Option<Option<u64>> {
+        let len = self.lines.len();
+        let to = if by < 0 {
+            let back = self
+                .passing_in(0..newest.min(len))
+                .rev()
+                .take(by.unsigned_abs())
+                .last()?;
+            Some(self.number(back))
+        } else if by > 0 {
+            match self
+                .passing_in((newest + 1).min(len)..len)
+                .nth(by.unsigned_abs() - 1)
+            {
+                Some(i) => self.bottom_at(i),
+                None => None,
+            }
+        } else {
+            return None;
+        };
+        (to != self.bottom).then_some(to)
+    }
+
     /// Lines that pass and came after the newest in view.
     fn unseen(&self) -> usize {
         let Some(number) = self.bottom else {
@@ -342,7 +404,49 @@ impl LogData {
     fn drop_oldest(&mut self) {
         if let Some(old) = self.lines.pop_front() {
             self.passing -= usize::from(old.pass);
+            self.tall -= usize::from(old.body.is_some());
         }
+    }
+
+    /// The kept lines a view `height` rows tall shows, oldest first, when
+    /// line `i` takes `rows(i)` rows; and how many rows of the first are
+    /// above the view (the end in view, a tall line cut at the top).
+    fn window_rows(&self, height: usize, rows: impl Fn(usize) -> usize) -> (Vec<usize>, usize) {
+        let len = self.lines.len();
+        let end = match self.bottom {
+            None => len,
+            Some(number) => {
+                let first = self.total - len as u64;
+                if number < first {
+                    0
+                } else {
+                    ((number - first) as usize + 1).min(len)
+                }
+            }
+        };
+        let mut shown = Vec::new();
+        let mut filled = 0;
+        for i in self.passing_in(0..end).rev() {
+            if filled >= height {
+                break;
+            }
+            filled += rows(i);
+            shown.push(i);
+        }
+        shown.reverse();
+        // Scrolled back past what is kept: the view fills from the top,
+        // and the rows over are at the bottom.
+        let mut from_top = false;
+        for i in self.passing_in(end..len) {
+            if filled >= height {
+                break;
+            }
+            filled += rows(i);
+            shown.push(i);
+            from_top = true;
+        }
+        let over = filled.saturating_sub(height);
+        (shown, if from_top { 0 } else { over })
     }
 }
 
@@ -380,6 +484,7 @@ impl Log {
                 moved: 0,
                 show_level: true,
                 show_target: true,
+                tall: 0,
             }),
         }
     }
@@ -396,13 +501,66 @@ impl Log {
             level,
             target,
         } = line.into();
-        let mut line = Line {
+        self.add(Line {
             markup,
             level,
             target,
             plain: std::cell::OnceCell::new(),
             pass: true,
-        };
+            body: None,
+            rendered: RefCell::new(None),
+        });
+    }
+
+    /// Add any rich renderable at the bottom: a `Table`, highlighted code
+    /// (`Syntax`), a `Panel`, a diff. It is laid out at the view's width
+    /// when it is drawn, and again when the width changes, only while it
+    /// is in view; the capacity counts it as one line, and the filter
+    /// matches the words of its plain text.
+    ///
+    /// ```
+    /// use intuituive::prelude::*;
+    ///
+    /// let app = App::new(|| {
+    ///     let log = Log::new(100);
+    ///     log.push("[b]ran[/] ls");
+    ///     let mut table = rich::Table::new();
+    ///     table.add_column("name");
+    ///     table.add_row(&["Cargo.toml"]);
+    ///     log.write(table);
+    ///     log.view()
+    /// });
+    /// let mut driver = app.driver(20, 6);
+    /// driver.settle();
+    /// let rows = driver.screen().plain();
+    /// assert_eq!(rows[0].trim_end(), "ran ls");
+    /// assert!(rows[1].starts_with("┏━"), "{rows:?}");
+    /// assert!(rows[4].contains("Cargo.toml"), "{rows:?}");
+    /// ```
+    pub fn write(&self, renderable: impl Renderable + 'static) {
+        self.write_with(renderable, LogLine::new(""));
+    }
+
+    /// [`write`](Self::write), with a level and a target (and markup shown
+    /// above it, when the line has any): `LogLine::new("").level(..)`.
+    pub fn write_with(&self, renderable: impl Renderable + 'static, line: impl Into<LogLine>) {
+        let LogLine {
+            markup,
+            level,
+            target,
+        } = line.into();
+        self.add(Line {
+            markup,
+            level,
+            target,
+            plain: std::cell::OnceCell::new(),
+            pass: true,
+            body: Some(Rc::new(renderable)),
+            rendered: RefCell::new(None),
+        });
+    }
+
+    fn add(&self, mut line: Line) {
         self.data.update(|data| {
             if let Some(target) = &line.target {
                 match data.targets.iter_mut().find(|(name, _)| name == target) {
@@ -415,6 +573,7 @@ impl Log {
                 data.drop_oldest();
             }
             data.passing += usize::from(line.pass);
+            data.tall += usize::from(line.body.is_some());
             data.lines.push_back(line);
             data.total += 1;
         });
@@ -425,6 +584,7 @@ impl Log {
         self.data.update(|data| {
             data.lines.clear();
             data.passing = 0;
+            data.tall = 0;
             data.bottom = None;
             // A total that jumps past the view's makes it draw everything.
             data.total += u32::MAX as u64;
@@ -570,6 +730,7 @@ impl Log {
                 barred: false,
                 bar_at: None,
                 said: None,
+                newest: None,
             }),
             "log",
         )
@@ -620,6 +781,9 @@ pub(crate) struct LogView {
     /// The number of the newest line in view at the last draw: what a
     /// screen reader reads.
     pub said: Option<u64>,
+    /// With tall lines: the index of the newest line in view at the last
+    /// draw, which scrolling moves from.
+    pub newest: Option<usize>,
 }
 
 /// A level as the view shows it, the theme name of its style, and the
@@ -644,6 +808,16 @@ struct Looks {
 }
 
 impl Looks {
+    /// Unstyled looks, for counting rows.
+    fn plain(show_level: bool, show_target: bool) -> Looks {
+        Looks {
+            levels: Default::default(),
+            target: Style::new(),
+            show_level,
+            show_target,
+        }
+    }
+
     fn new(cx: &DrawCx, show_level: bool, show_target: bool) -> Looks {
         let style = |level| {
             let (_, name, fallback) = level_look(level);
@@ -692,12 +866,20 @@ impl Widget for LogView {
         })
     }
 
-    fn measure(&mut self, _cx: &MeasureCx, axis: Axis, width: u16, _height: u16) -> u16 {
+    fn measure(&mut self, cx: &MeasureCx, axis: Axis, width: u16, _height: u16) -> u16 {
         match axis {
             Axis::Vertical => self
                 .log
                 .data
-                .with(|data| data.passing)
+                .with(|data| {
+                    if data.tall == 0 {
+                        return data.passing;
+                    }
+                    let looks = Looks::plain(data.show_level, data.show_target);
+                    data.passing_in(0..data.lines.len())
+                        .map(|i| entry_rows(cx.console(), &looks, &data.lines[i], width).len())
+                        .sum()
+                })
                 .min(u16::MAX as usize) as u16,
             Axis::Horizontal => width,
         }
@@ -714,7 +896,7 @@ impl Widget for LogView {
             (
                 Looks::new(cx, data.show_level, data.show_target),
                 data.passing,
-                data.bottom.is_none() && data.passing == data.lines.len(),
+                data.bottom.is_none() && data.passing == data.lines.len() && data.tall == 0,
             )
         });
         // The bar keeps a column once the lines do not all fit; taking it or
@@ -737,6 +919,7 @@ impl Widget for LogView {
         let shown = self.shown;
         let mut first = 0;
         let mut said = None;
+        let mut newest = None;
         self.log.data.with_untracked(|data| {
             let render = |indices: &mut dyn Iterator<Item = usize>| -> Vec<Vec<Segment>> {
                 indices
@@ -744,6 +927,28 @@ impl Widget for LogView {
                     .collect()
             };
             let len = data.lines.len();
+            if data.tall > 0 {
+                // Lines that may be taller than a row: the rows of those
+                // in view, laid out at this width.
+                let (window, cut) = data.window_rows(height, |i| {
+                    entry_rows(console, &looks, &data.lines[i], width).len()
+                });
+                if let (Some(_), Some(&top)) = (bar, window.first()) {
+                    first = data.passing_in(0..top).count();
+                }
+                if let Some(&last) = window.last() {
+                    said = Some(data.number(last));
+                }
+                newest = window.last().copied();
+                let mut lines: Vec<Vec<Segment>> = window
+                    .iter()
+                    .flat_map(|&i| entry_rows(console, &looks, &data.lines[i], width))
+                    .collect();
+                lines.drain(..cut.min(lines.len()));
+                lines.truncate(height);
+                canvas.lines_at(x, 0, width, height as u16, &lines);
+                return;
+            }
             if !fast {
                 // Scrolled back or filtered: the lines in view, all of them.
                 let window = data.window(height);
@@ -797,6 +1002,7 @@ impl Widget for LogView {
             self.bar_at = Some((at, first, passing));
         }
         self.fast = fast;
+        self.newest = newest;
         self.drawn_total = Some(total);
         self.drawn_moved = moved;
         self.said = said;
@@ -845,7 +1051,10 @@ impl LogView {
         let to = self
             .log
             .data
-            .with_untracked(|data| data.scrolled(by, height));
+            .with_untracked(|data| match (data.tall, self.newest) {
+                (0, _) | (_, None) => data.scrolled(by, height),
+                (_, Some(newest)) => data.scrolled_from(newest, by),
+            });
         self.log.move_to(to)
     }
 
@@ -872,6 +1081,9 @@ impl LogView {
 
     fn top(&self, height: usize) -> Used {
         let to = self.log.data.with_untracked(|data| {
+            // Tall lines: the first line at the bottom, which fills the
+            // view from the top.
+            let height = if data.tall > 0 { 1 } else { height };
             let bottom = data.at_rank(0, height);
             (bottom != data.bottom).then_some(bottom)
         });
@@ -885,6 +1097,35 @@ impl LogView {
             .with_untracked(|data| data.bottom.is_some().then_some(None));
         self.log.move_to(to)
     }
+}
+
+/// The rows of a kept line at `width`: one for a line of markup; for a
+/// written renderable, a row of its level, target and markup when it has
+/// any, then its own rows, laid out at `width` once and kept until the
+/// width changes.
+fn entry_rows(
+    console: &rich::Console,
+    looks: &Looks,
+    line: &Line,
+    width: u16,
+) -> Vec<Vec<Segment>> {
+    let Some(body) = &line.body else {
+        return vec![render_line(console, looks, line, width)];
+    };
+    let mut rows = Vec::new();
+    if !line.markup.is_empty()
+        || (looks.show_level && line.level.is_some())
+        || (looks.show_target && line.target.is_some())
+    {
+        rows.push(render_line(console, looks, line, width));
+    }
+    let mut kept = line.rendered.borrow_mut();
+    if kept.as_ref().map(|(w, _)| *w) != Some(width) {
+        let options = console.options().update_width(width.max(1) as usize);
+        *kept = Some((width, console.render_lines(&**body, &options, false)));
+    }
+    rows.extend(kept.as_ref().map(|(_, r)| r.clone()).unwrap_or_default());
+    rows
 }
 
 /// One log line rendered to one row at `width` (cropped, never wrapped):

@@ -1034,6 +1034,7 @@ pub fn rich_marketplace::check_pack_json(&[u8], &str, &str) -> core::result::Res
 pub fn rich_marketplace::check_theme(&[u8]) -> core::result::Result<(), rich_marketplace::CheckError>
 pub fn rich_marketplace::check_wasm_header(&[u8]) -> core::result::Result<(), rich_marketplace::CheckError>
 pub fn rich_marketplace::compare_wasm_manifest(&rich_plugin_api::abi::PluginAbi, &rich_marketplace::WasmExpectation<'_>) -> core::result::Result<(), rich_marketplace::CheckError>
+pub fn rich_marketplace::create_private_dir_all(&std::path::Path) -> std::io::error::Result<()>
 pub fn rich_marketplace::require_https(&str) -> core::result::Result<(), rich_marketplace::FetchError>
 pub fn rich_marketplace::resolve<'a>(&'a rich_marketplace::Listing, &rich_marketplace::Host, &rich_marketplace::Request) -> core::result::Result<&'a rich_marketplace::ListedVersion, rich_marketplace::ResolveError>
 pub fn rich_marketplace::verify_index(&rich_marketplace::KeySet, &[u8], &str, core::option::Option<&rich_marketplace::AcceptedIndex>, std::time::SystemTime) -> core::result::Result<rich_marketplace::VerifiedIndex, rich_marketplace::IndexError>

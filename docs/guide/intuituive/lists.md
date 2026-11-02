@@ -235,6 +235,33 @@ previews its keys), so the plain arrows still only select. Call it on the
 list itself, before `.panel(..)`: on a node that is not a `list` (a
 `virtual_list`, a table, a panel), `.reorderable` does nothing.
 
+### Rows that are nodes
+
+`list` and `list_rows` draw markup rows. `list_of` takes rows made of any
+nodes (a card, a row with a label and a button), as Textual's `ListView`
+does, with the list's cursor:
+
+```rust
+list_of(move || sessions.with(Vec::len), move |i| session_card(i), selected)
+    .item_key(move |i| sessions.with(|s| s[i].id))      // rows keep their state by key
+    .separator_after(move |i| i + 1 == pinned.get())     // a rule under item i
+    .item_disabled_when(move |i| sessions.with(|s| s[i].closed))
+    .on_highlight(|i, cx| { /* the cursor moved to i */ })
+    .on_select(|i, cx| { /* Enter, or a click on row i */ })
+    .on_context(|i, cx| { /* a right click on row i */ })
+    .scroll_padding(1)
+```
+
+- ↑/↓, Home/End and PgUp/PgDn move the cursor and keep it in view;
+  separators and disabled rows are skipped, and disabled rows draw dim and
+  match `:disabled`. The wheel scrolls the view.
+- A click on a row selects it, unless a node inside the row took the
+  click: a card's button runs the button.
+- The selected row matches `:selected`, so a stylesheet styles its
+  children: `:selected .title { text-style: bold; }`.
+- All rows are built and laid out, as a `scroll`'s content is; for long
+  lists, use `virtual_list` or `scroll_virtual`.
+
 ## Trees, split panes and virtual lists
 
 ```rust
@@ -407,6 +434,28 @@ below the view) are what a status line shows.
 Keys reach the log while it has the focus, so make it
 `log.view().focusable()`. A key it cannot use (↑ in a log that fits) goes
 on to its ancestors' bindings.
+
+### Tables, code and panels in a log
+
+New in 0.0.24: `log.write(renderable)` adds any rich renderable, as
+Textual's `RichLog.write` does: a tool's table, an excerpt of a file as
+highlighted code, a panel, a diff.
+
+```rust
+log.write(rich::Syntax::new(code, "rust"));
+log.write_with(table, LogLine::new("").level(Severity::Info).target("tool"));
+```
+
+- An entry is laid out at the view's width when it is drawn, and again
+  when the width changes, only while it is in view. A level, target or
+  markup given with `write_with` goes on a row above it.
+- The capacity counts it as one line, and a filter matches the words of
+  its plain text (laid out 100 columns wide).
+- While the log holds one, the view draws its rows in full rather than
+  moving them up, and the keys scroll by entries: ↑ shows the entry
+  before at the bottom, Home the first at the top. A tall entry arriving
+  at the end is followed, its top cut off when it is taller than the
+  view.
 
 ### Levels, targets and filters
 

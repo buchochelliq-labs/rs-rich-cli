@@ -197,3 +197,28 @@ fn stopping_the_server_ends_its_sessions() {
     server.stop();
     read_close(&mut socket);
 }
+
+#[test]
+fn bound_to_every_interface_the_host_is_still_checked() {
+    let server = Server::bind("0.0.0.0:0", app)
+        .unwrap()
+        .isolation(Isolation::Threads)
+        .token(TOKEN)
+        .allow_host("box.lan")
+        .spawn()
+        .unwrap();
+    let port = server.local_addr().port();
+    let addr: std::net::SocketAddr = format!("127.0.0.1:{port}").parse().unwrap();
+    let ok =
+        |host: &str| upgrade(addr, TOKEN, Some(&format!("http://{host}")), host).contains("101");
+    // The address the connection arrived on, localhost, a name allowed.
+    assert!(ok(&format!("127.0.0.1:{port}")));
+    assert!(ok(&format!("localhost:{port}")));
+    assert!(ok(&format!("box.lan:{port}")));
+    // A name someone else's DNS points here, though origin and host agree.
+    assert!(!ok(&format!("evil.example:{port}")));
+    assert!(!ok(&format!("other.lan:{port}")));
+    // The allowed name on another port is another server.
+    assert!(!ok("box.lan:1"));
+    server.stop();
+}

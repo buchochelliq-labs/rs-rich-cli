@@ -96,6 +96,29 @@ readable only by you, and safe to delete once no Noctiluca runs. See
 minute for the page to load and stay still. A page that never stops
 changing (a ticking clock, an animation in the DOM) does not finish.
 
+## Over SSH
+
+**"no ssh found (install OpenSSH's client)".** `--ssh` runs the `ssh`
+on your `PATH`. Install OpenSSH's client.
+
+**"SSH refused the login to HOST".** ssh said `Permission denied`: the
+user, the key or the password was refused. Try `ssh HOST` on its own;
+whatever makes that work (`~/.ssh/config`, an agent, `--ssh-arg=-i
+--ssh-arg=KEY`) makes `--ssh` work.
+
+**"the tunnel's port was taken" or "port … is another user's".** Another
+program took the port Noctiluca chose before ssh could. Noctiluca tries
+two more ports by itself; the second message means another user's program
+holds it, and Chrome is not started. Run again.
+
+**"ssh to HOST dropped" on the status bar.** The tunnel ended. Noctiluca
+reconnects by itself, without prompting; reload reconnects at once. If the
+login needs a password, quit and run again.
+
+**`localhost` opens my own machine's server, not the remote's.** Check
+the status bar says `via ssh HOST`: without `--ssh`, `localhost` is this
+machine.
+
 ## FAQ
 
 **Is it a real browser?** Yes: Chrome loads and runs every page, with its
@@ -105,8 +128,10 @@ scripts. Noctiluca is the screen and the keyboard.
 `--profile NAME` keeps you signed in between runs. Sign-in forms are not
 tested yet; they come in the forms and tables phase.
 
-**Does it work over SSH?** Yes. The page, its text and its pictures reach
-your terminal like any other program's. Sound plays on the server.
+**Does it work over SSH?** Yes, two ways. Run it on the server, and the
+page, its text and its pictures reach your terminal like any other
+program's (sound plays on the server). Or run it here with `--ssh HOST`,
+and Chrome makes its requests through the server. See [Over SSH](ssh.md).
 
 **Can I use the mouse?** Yes: click a link or a control, turn the wheel
 to scroll, and click the header's `◀ ▶ ↻`, the address, the keys in the

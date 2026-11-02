@@ -66,6 +66,25 @@ columns.navigation(columns.view())
   runs.
 
 
+### A directory tree
+
+`files::dir_tree(root)` is Textual's `DirectoryTree`: `root` as one item,
+each folder read when it is first opened, on a worker thread, folders
+first, then by name.
+
+```rust
+use intuituive::files::dir_tree;
+
+dir_tree(".")
+    .filter(|path| !path.file_name().is_some_and(|n| n.to_string_lossy().starts_with('.')))
+    .on_open(|path, cx| cx.toast(format!("open {}", path.display())))
+    .view()
+```
+
+`.filter(..)` runs on the worker thread, as Textual's `filter_paths` does;
+`.on_open(..)` runs on Enter on a file; `.selected()` is the selected
+path.
+
 ### Jobs with progress
 
 ```rust

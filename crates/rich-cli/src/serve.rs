@@ -35,7 +35,7 @@ pub(super) fn command() -> CommandSpec {
         )
         .usage(
             "serve [--bind ADDR] [--port N] [--max-sessions N] [--allow-origin ORIGIN]... \
-             [--compress] -- PROGRAM [ARGS...]",
+             [--allow-host HOST]... [--compress] -- PROGRAM [ARGS...]",
         )
         .arg(ArgSpec::option("bind").value_name("ADDR").help(
             "The address to listen on (default 127.0.0.1, this computer only). Anything \
@@ -61,6 +61,17 @@ pub(super) fn command() -> CommandSpec {
                      a reverse proxy serves it. The token is still required",
                 ),
         )
+        .arg(
+            ArgSpec::option("allow-host")
+                .value_name("HOST")
+                .multiple(true)
+                .help(
+                    "Also answer to HOST, such as box.lan (the port is added unless given): a \
+                     name this computer is reached by. Bound to every interface, the server \
+                     otherwise answers only to its addresses, localhost and this computer's \
+                     name, against DNS rebinding",
+                ),
+        )
         .arg(ArgSpec::flag("compress").help(
             "Compress frames of 1 KiB or more with deflate, for pages that can undo it: worth \
              it over a slow link, extra work on this computer",
@@ -84,6 +95,7 @@ struct Args {
     port: u16,
     max_sessions: Option<usize>,
     origins: Vec<String>,
+    hosts: Vec<String>,
     compress: bool,
     command: Vec<String>,
 }
@@ -95,6 +107,7 @@ fn parse_args(args: &[String]) -> Result<Args, String> {
         port: DEFAULT_PORT,
         max_sessions: None,
         origins: Vec::new(),
+        hosts: Vec::new(),
         compress: false,
         command: Vec::new(),
     };
@@ -156,6 +169,21 @@ fn parse_args(args: &[String]) -> Result<Args, String> {
                     ));
                 }
                 parsed.origins.push(origin);
+            }
+            "--allow-host" => {
+                let host = value()?;
+                if host.is_empty()
+                    || host.contains("://")
+                    || !host
+                        .bytes()
+                        .all(|b| b.is_ascii_alphanumeric() || b".-:[]".contains(&b))
+                {
+                    return Err(format!(
+                        "--allow-host takes a host name or address such as box.lan or \
+                         192.168.1.5:8080, not {host:?}"
+                    ));
+                }
+                parsed.hosts.push(host);
             }
             "--compress" => parsed.compress = true,
             "--help" => parsed.help = true,
@@ -220,6 +248,9 @@ pub(super) fn dispatch(args: &[String]) -> ExitCode {
     }
     for origin in args.origins {
         server = server.allow_origin(origin);
+    }
+    for host in args.hosts {
+        server = server.allow_host(host);
     }
     if args.compress {
         server = server.compress(Some(COMPRESS_FROM));
@@ -301,6 +332,8 @@ mod tests {
             "--allow-origin",
             "https://a.example",
             "--allow-origin=https://b.example",
+            "--allow-host",
+            "box.lan",
             "--compress",
             "--",
             "htop",
@@ -316,6 +349,7 @@ mod tests {
                 port: 9000,
                 max_sessions: Some(2),
                 origins: vec!["https://a.example".into(), "https://b.example".into()],
+                hosts: vec!["box.lan".into()],
                 compress: true,
                 command: args(&["htop", "-d", "10"]),
             }
@@ -351,6 +385,14 @@ mod tests {
                 "--allow-origin takes",
             ),
             (
+                &["serve", "--allow-host", "https://box.lan", "--", "x"][..],
+                "--allow-host takes",
+            ),
+            (
+                &["serve", "--allow-host", "box lan", "--", "x"][..],
+                "--allow-host takes",
+            ),
+            (
                 &["serve", "--frobnicate", "--", "x"][..],
                 "unknown option --frobnicate",
             ),
@@ -383,6 +425,7 @@ mod tests {
             "--port",
             "--max-sessions",
             "--allow-origin",
+            "--allow-host",
             "--compress",
             "PROGRAM",
             "rich serve -- htop",

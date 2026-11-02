@@ -15,8 +15,11 @@
 //!   `%LOCALAPPDATA%\rich\plugins` on Windows). The crate's lockfile
 //!   (`marketplace.lock.json`) is there, and this module's own state
 //!   (`marketplace.state.json`): the disabled packages, the last index each
-//!   marketplace served (to refuse a rollback), the newest key generation
-//!   verified, and the yank reasons last seen for what is installed.
+//!   marketplace served (to refuse a rollback), the key generations
+//!   verified from each trust root (re-verified from that root whenever
+//!   they are read, so the file cannot add a key), and the yank reasons last
+//!   seen for what is installed. On Unix the directory is created private
+//!   (mode 700).
 //! - **The marketplace** is `--marketplace LOCATION`, else
 //!   `RICH_MARKETPLACE`, else [`DEFAULT_MARKETPLACE`]: an `https://` base
 //!   URL, or a local directory (a path or `file://` URL) laid out as the
@@ -26,7 +29,11 @@
 //! - **The trust root** is `--marketplace-keys FILE` (a `keys-N.json`), else
 //!   `RICH_MARKETPLACE_KEYS`, else the keys compiled into
 //!   rs-rich-marketplace. Later generations are fetched from the
-//!   marketplace's `keys/` and accepted one at a time.
+//!   marketplace's `keys/` and accepted one at a time. The generations a
+//!   root has reached are kept per root, not per location, so a location
+//!   that withholds a newer `keys-N.json` (a stale mirror, a
+//!   `RICH_MARKETPLACE` someone else chose) cannot bring back a key
+//!   another location's chain has revoked.
 use super::*;
 
 use std::collections::BTreeMap;
@@ -711,9 +718,26 @@ fn require_dir(options: &Options) -> Outcome<PathBuf> {
 #[derive(Clone, Debug, Default, PartialEq)]
 struct MarketState {
     accepted: Option<AcceptedIndex>,
-    /// The newest key generation verified, as its `keys-N.json` value, and
-    /// the main key id of the trust root it was walked from.
-    keys: Option<(Value, String)>,
+}
+
+/// One key generation accepted after a trust root, as fetched: its
+/// `keys-N.json` and its signatures, so it is verified again (from the
+/// root, in order) each time it is read back.
+#[derive(Clone, Debug, PartialEq)]
+struct CachedRotation {
+    keys_json: String,
+    main_signature: Option<String>,
+    backup_signature: String,
+}
+
+impl CachedRotation {
+    fn rotation(&self) -> Rotation<'_> {
+        Rotation {
+            keys_json: self.keys_json.as_bytes(),
+            main_signature: self.main_signature.as_deref(),
+            backup_signature: &self.backup_signature,
+        }
+    }
 }
 
 /// `marketplace.state.json`.
@@ -721,6 +745,9 @@ struct MarketState {
 pub(crate) struct State {
     disabled: Vec<String>,
     markets: BTreeMap<String, MarketState>,
+    /// The generations accepted after each trust root, by the root's main
+    /// key id, whatever location served them.
+    chains: BTreeMap<String, Vec<CachedRotation>>,
     /// The yank reason last seen for an installed version: `(version, reason)`.
     yanked: BTreeMap<String, (String, String)>,
 }
@@ -769,18 +796,35 @@ impl State {
                     }),
                     _ => None,
                 };
-                let keys = match (
-                    market.get("keys"),
-                    market.get("root").and_then(Value::as_str),
-                ) {
-                    (Some(keys), Some(root)) if keys.is_object() => {
-                        Some((keys.clone(), root.to_string()))
-                    }
-                    _ => None,
-                };
+                // A `keys` value here (before 0.0.24) cannot be verified
+                // again, so it is not read: the chain is fetched once more.
                 state
                     .markets
-                    .insert(location.clone(), MarketState { accepted, keys });
+                    .insert(location.clone(), MarketState { accepted });
+            }
+        }
+        if let Some(chains) = value.get("key_chains").and_then(Value::as_object) {
+            for (root, chain) in chains {
+                let Some(chain) = chain.as_array() else {
+                    continue;
+                };
+                // Read as written; `open` verifies it from the root.
+                let chain: Option<Vec<CachedRotation>> = chain
+                    .iter()
+                    .map(|entry| {
+                        Some(CachedRotation {
+                            keys_json: entry.get("keys")?.as_str()?.to_string(),
+                            main_signature: match entry.get("main_signature") {
+                                None | Some(Value::Null) => None,
+                                Some(v) => Some(v.as_str()?.to_string()),
+                            },
+                            backup_signature: entry.get("backup_signature")?.as_str()?.to_string(),
+                        })
+                    })
+                    .collect();
+                if let Some(chain) = chain {
+                    state.chains.insert(root.clone(), chain);
+                }
             }
         }
         if let Some(yanked) = value.get("yanked").and_then(Value::as_object) {
@@ -806,12 +850,25 @@ impl State {
                 entry.insert("serial".into(), json!(accepted.serial));
                 entry.insert("sha256".into(), json!(accepted.sha256));
             }
-            if let Some((keys, root)) = &market.keys {
-                entry.insert("keys".into(), keys.clone());
-                entry.insert("root".into(), json!(root));
-            }
             markets.insert(location.clone(), Value::Object(entry));
         }
+        let chains: serde_json::Map<String, Value> = self
+            .chains
+            .iter()
+            .map(|(root, chain)| {
+                let entries = chain
+                    .iter()
+                    .map(|c| {
+                        json!({
+                            "keys": c.keys_json,
+                            "main_signature": c.main_signature,
+                            "backup_signature": c.backup_signature,
+                        })
+                    })
+                    .collect();
+                (root.clone(), Value::Array(entries))
+            })
+            .collect();
         let yanked: serde_json::Map<String, Value> = self
             .yanked
             .iter()
@@ -823,6 +880,7 @@ impl State {
             "schema_version": STATE_SCHEMA_VERSION,
             "disabled": self.disabled,
             "marketplaces": markets,
+            "key_chains": chains,
             "yanked": yanked,
         });
         serde_json::to_string_pretty(&value).unwrap_or_default() + "\n"
@@ -866,10 +924,12 @@ impl State {
     }
 }
 
-/// Write `bytes` to `path` through a temporary file beside it.
+/// Write `bytes` to `path` through a temporary file beside it. A directory
+/// it creates is private on Unix (mode 700): the install directory holds
+/// the lockfile and this state, which say what is trusted.
 fn write_atomically(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
     let dir = path.parent().unwrap_or(Path::new("."));
-    std::fs::create_dir_all(dir)?;
+    rich_marketplace::create_private_dir_all(dir)?;
     let name = path
         .file_name()
         .map(|n| n.to_string_lossy().into_owned())
@@ -1131,14 +1191,22 @@ pub(crate) fn open(options: &Options, dir: &Path, state: &mut State) -> Outcome<
     let root = trust_root(options)?;
     let root_id = root.main().id().to_string();
     let market = state.markets.get(&key).cloned().unwrap_or_default();
-    // The newest generation verified from this same root, if any.
-    let mut keys = match &market.keys {
-        Some((value, from)) if *from == root_id => serde_json::to_vec(value)
-            .ok()
-            .and_then(|bytes| KeySet::from_json(&bytes).ok())
-            .filter(|cached| cached.generation() >= root.generation())
-            .unwrap_or_else(|| root.clone()),
-        _ => root.clone(),
+    // The generations already accepted after this root, from any location,
+    // verified again from the root: the state file can only take the walk
+    // back to the root, never add a key.
+    let (mut keys, mut chain) = match replay(&root, state.chains.get(&root_id)) {
+        Ok(replayed) => replayed,
+        Err(why) => {
+            eprintln!(
+                "rich: warning: the key chain cached in {} does not verify from the trust \
+                 root ({why}); it is ignored and fetched again",
+                State::path(dir).display()
+            );
+            // Dropped now, whatever the index below turns out to be.
+            state.chains.remove(&root_id);
+            let _ = state.save(dir);
+            (root.clone(), Vec::new())
+        }
     };
     let mut notices = Vec::new();
     for _ in 0..MAX_ROTATIONS {
@@ -1167,6 +1235,15 @@ pub(crate) fn open(options: &Options, dir: &Path, state: &mut State) -> Outcome<
             ));
         }
         keys = set;
+        // Kept only as the exact bytes verified; keys files are JSON, so
+        // UTF-8.
+        if let Ok(keys_json) = String::from_utf8(keys_json) {
+            chain.push(CachedRotation {
+                keys_json,
+                main_signature: main,
+                backup_signature: backup,
+            });
+        }
     }
 
     let index = location
@@ -1193,15 +1270,19 @@ pub(crate) fn open(options: &Options, dir: &Path, state: &mut State) -> Outcome<
         market.accepted.as_ref(),
         SystemTime::now(),
     )
-    .map_err(index_failure)?;
-    let keys_value: Value = serde_json::from_str(&keys.to_json()).unwrap_or(Value::Null);
+    .map_err(|error| stale_keys_hint(error, &keys, &location))?;
     state.markets.insert(
         key,
         MarketState {
             accepted: Some(verified.accepted()),
-            keys: Some((keys_value, root_id)),
         },
     );
+    if chain.is_empty() {
+        // Nothing past the root (or a cached chain that did not verify).
+        state.chains.remove(&root_id);
+    } else {
+        state.chains.insert(root_id, chain);
+    }
     // Without this, a rollback could not be noticed next time; a directory
     // that cannot be written is still searched.
     if let Err(failure) = state.save(dir) {
@@ -1214,6 +1295,52 @@ pub(crate) fn open(options: &Options, dir: &Path, state: &mut State) -> Outcome<
         location,
         index: verified,
     })
+}
+
+/// Walk `cached` from `root`, verifying each generation's signatures as a
+/// fetched one is: the newest generation reached and the rotations kept.
+/// Generations the root already includes (a newer root compiled in) are
+/// skipped.
+fn replay(
+    root: &KeySet,
+    cached: Option<&Vec<CachedRotation>>,
+) -> Result<(KeySet, Vec<CachedRotation>), KeyChainError> {
+    let mut keys = root.clone();
+    let mut kept = Vec::new();
+    for rotation in cached.into_iter().flatten() {
+        let generation = KeySet::from_json(rotation.keys_json.as_bytes())?.generation();
+        if generation <= keys.generation() {
+            continue;
+        }
+        keys = keys.rotate(rotation.rotation())?.0;
+        kept.push(rotation.clone());
+    }
+    Ok((keys, kept))
+}
+
+/// An index refused for its key: say when that key is one the chain
+/// revoked, or when the location may be missing the next `keys-N.json`.
+fn stale_keys_hint(error: IndexError, keys: &KeySet, location: &Location) -> Failure {
+    let found = match &error {
+        IndexError::Signature(rich_marketplace::SignatureError::WrongKeyId { found, .. }) => *found,
+        _ => return index_failure(error),
+    };
+    let mut failure = index_failure(error);
+    let generation = keys.generation();
+    if keys.revoked().contains(&found) {
+        failure.message.push_str(&format!(
+            "; key {found} was revoked by keys generation {generation} or earlier, so the \
+             marketplace at {} is stale or is withholding newer keys",
+            location.shown()
+        ));
+    } else {
+        failure.message.push_str(&format!(
+            "; if the marketplace rotated its keys, {} may be missing keys/keys-{}.json",
+            location.shown(),
+            generation + 1
+        ));
+    }
+    failure
 }
 
 impl Market {
@@ -2675,12 +2802,19 @@ mod tests {
                     serial: 3,
                     sha256: "0".repeat(64),
                 }),
-                keys: None,
             },
         );
         state
             .yanked
             .insert("shout".into(), ("0.2.1".into(), "bad".into()));
+        state.chains.insert(
+            "057D5BF5EBC4B734".into(),
+            vec![CachedRotation {
+                keys_json: "{\"generation\": 2}".into(),
+                main_signature: None,
+                backup_signature: "sig".into(),
+            }],
+        );
         let dir = tempfile::tempdir().unwrap();
         state.save(dir.path()).unwrap();
         assert_eq!(State::load(dir.path()).unwrap(), state);

@@ -1,0 +1,27 @@
+[package]
+name = "{{project-name}}"
+version = "0.1.0"
+edition = "2024"
+# The manifest's `description` line: one line, at most 1024 bytes.
+description = "A WASM plugin for rich: a title-case transform, a TODO highlighter and a callout fence"
+license = "MIT OR Apache-2.0"
+publish = false
+
+[lib]
+# A `.wasm` module for wasm32-unknown-unknown, and the unit tests natively.
+crate-type = ["cdylib"]
+
+# No dependencies: the plugin ABI is four exports and UTF-8 text
+# (rich_plugin_api::abi), and std alone writes them. A dependency that
+# imports anything (WASI, wasm-bindgen, a clock, randomness) makes the host
+# refuse the module.
+[dependencies]
+
+[profile.release]
+# Small and deterministic: the marketplace's `reviewed` tier rebuilds the
+# file from `source_revision` and compares hashes.
+opt-level = "s"
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true

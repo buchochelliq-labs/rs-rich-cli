@@ -92,6 +92,12 @@ gets a short label of home-row letters. Type a label to use it:
   or in a box over the page in the projection (Esc closes the box).
 
 A click with the mouse on a link or a control does the same as its label.
+A click on a picture, a canvas, a drawing or a frame is sent to the page
+at that point of it, so a map or a game in a `<canvas>` gets its click
+where you made it. In a terminal that reports the mouse in pixels (kitty,
+WezTerm, foot, Ghostty, xterm; see
+[the mouse to the pixel](../intuituive/input.md#to-the-pixel)) it lands
+on the exact pixel; elsewhere, on the middle of the cell.
 Backspace takes back a letter, and Esc puts the hints away. A letter that
 starts no label puts them away too, and says so.
 

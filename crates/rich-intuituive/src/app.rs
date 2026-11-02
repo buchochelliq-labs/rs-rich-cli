@@ -50,6 +50,8 @@ use crate::reactive::{Memo, NodeId, Proxy, Runtime, Signal, signal};
 use crate::screen::{PaintStats, PaintStrategy, Painter, Rect, Screen};
 use crate::widget::{Used, WidgetEvent};
 
+mod keymap;
+
 /// The theme style a pop-up's title is drawn in: the palette's, the
 /// help's, a modal's or pop-up's panel, a [confirm](Ctx::confirm) dialog's.
 /// The theme's `title` when it does not name it.
@@ -94,6 +96,16 @@ pub struct Ctx {
     layers: usize,
     /// The handler passed its key on ([`pass_key`](Ctx::pass_key)).
     pub(crate) passed: bool,
+    /// A new keymap, or a reload of the keys file.
+    keymap: Option<keymap::Request>,
+    /// A node is maximized on the top screen.
+    maximized: bool,
+    /// The mode showing, unless it is [`DEFAULT_MODE`].
+    mode: Option<Rc<str>>,
+    /// Screenshots asked for ([`Ctx::screenshot`]).
+    screenshots: Vec<Option<std::path::PathBuf>>,
+    /// A subtitle for the screen the handler ran on ([`Ctx::set_subtitle`]).
+    subtitle: Option<String>,
 }
 
 /// The user's editor: `$VISUAL` (a program and its arguments), else
@@ -215,28 +227,179 @@ impl From<Rect> for Anchor {
     }
 }
 
-/// How an [animation](Ctx::animate) moves between its two values.
+/// How an [animation](Ctx::animate) moves between its two values: the
+/// standard easings (easings.net's, as Textual names them), each in, out
+/// and in-out. `EaseIn`, `EaseOut` and `EaseInOut` are the cubic ones.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum Easing {
     Linear,
     EaseIn,
     EaseOut,
     #[default]
     EaseInOut,
+    InSine,
+    OutSine,
+    InOutSine,
+    InQuad,
+    OutQuad,
+    InOutQuad,
+    InCubic,
+    OutCubic,
+    InOutCubic,
+    InQuart,
+    OutQuart,
+    InOutQuart,
+    InQuint,
+    OutQuint,
+    InOutQuint,
+    InExpo,
+    OutExpo,
+    InOutExpo,
+    InCirc,
+    OutCirc,
+    InOutCirc,
+    InBack,
+    OutBack,
+    InOutBack,
+    InElastic,
+    OutElastic,
+    InOutElastic,
+    InBounce,
+    OutBounce,
+    InOutBounce,
+}
+
+/// easings.net's `easeOutBounce`.
+fn out_bounce(x: f64) -> f64 {
+    const N: f64 = 7.5625;
+    const D: f64 = 2.75;
+    if x < 1.0 / D {
+        N * x * x
+    } else if x < 2.0 / D {
+        let x = x - 1.5 / D;
+        N * x * x + 0.75
+    } else if x < 2.5 / D {
+        let x = x - 2.25 / D;
+        N * x * x + 0.9375
+    } else {
+        let x = x - 2.625 / D;
+        N * x * x + 0.984375
+    }
 }
 
 impl Easing {
-    /// The share of the way at time `t` (0 to 1).
+    /// The share of the way at time `t` (0 to 1): 0 at 0 and 1 at 1, as
+    /// Textual's `_easing.py` computes it (back and elastic go past both
+    /// ends between).
     pub fn at(self, t: f64) -> f64 {
-        let t = t.clamp(0.0, 1.0);
+        use std::f64::consts::PI;
+        let x = t.clamp(0.0, 1.0);
+        // Back's and elastic's constants.
+        const C1: f64 = 1.70158;
+        const C2: f64 = C1 * 1.525;
+        const C3: f64 = C1 + 1.0;
+        const C4: f64 = 2.0 * PI / 3.0;
+        const C5: f64 = 2.0 * PI / 4.5;
+        let half = x < 0.5;
+        // An in-out made of an in for the first half and an out after.
+        let in_out = |n: i32| {
+            if half {
+                2f64.powi(n - 1) * x.powi(n)
+            } else {
+                1.0 - (-2.0 * x + 2.0).powi(n) / 2.0
+            }
+        };
+        let ends = x == 0.0 || x == 1.0;
         match self {
-            Easing::Linear => t,
-            Easing::EaseIn => t * t * t,
-            Easing::EaseOut => 1.0 - (1.0 - t).powi(3),
-            Easing::EaseInOut if t < 0.5 => 4.0 * t * t * t,
-            Easing::EaseInOut => 1.0 - (-2.0 * t + 2.0).powi(3) / 2.0,
+            Easing::Linear => x,
+            Easing::EaseIn | Easing::InCubic => x * x * x,
+            Easing::EaseOut | Easing::OutCubic => 1.0 - (1.0 - x).powi(3),
+            Easing::EaseInOut | Easing::InOutCubic => in_out(3),
+            Easing::InSine => 1.0 - (x * PI / 2.0).cos(),
+            Easing::OutSine => (x * PI / 2.0).sin(),
+            Easing::InOutSine => -((x * PI).cos() - 1.0) / 2.0,
+            Easing::InQuad => x * x,
+            Easing::OutQuad => 1.0 - (1.0 - x).powi(2),
+            Easing::InOutQuad => in_out(2),
+            Easing::InQuart => x.powi(4),
+            Easing::OutQuart => 1.0 - (1.0 - x).powi(4),
+            Easing::InOutQuart => in_out(4),
+            Easing::InQuint => x.powi(5),
+            Easing::OutQuint => 1.0 - (1.0 - x).powi(5),
+            Easing::InOutQuint => in_out(5),
+            Easing::InExpo if x == 0.0 => 0.0,
+            Easing::InExpo => 2f64.powf(10.0 * x - 10.0),
+            Easing::OutExpo if x == 1.0 => 1.0,
+            Easing::OutExpo => 1.0 - 2f64.powf(-10.0 * x),
+            Easing::InOutExpo if ends => x,
+            Easing::InOutExpo if half => 2f64.powf(20.0 * x - 10.0) / 2.0,
+            Easing::InOutExpo => (2.0 - 2f64.powf(-20.0 * x + 10.0)) / 2.0,
+            Easing::InCirc => 1.0 - (1.0 - x * x).sqrt(),
+            Easing::OutCirc => (1.0 - (x - 1.0).powi(2)).sqrt(),
+            Easing::InOutCirc if half => (1.0 - (1.0 - (2.0 * x).powi(2)).sqrt()) / 2.0,
+            Easing::InOutCirc => ((1.0 - (-2.0 * x + 2.0).powi(2)).sqrt() + 1.0) / 2.0,
+            Easing::InBack => C3 * x.powi(3) - C1 * x * x,
+            Easing::OutBack => 1.0 + C3 * (x - 1.0).powi(3) + C1 * (x - 1.0).powi(2),
+            Easing::InOutBack if half => (2.0 * x).powi(2) * ((C2 + 1.0) * 2.0 * x - C2) / 2.0,
+            Easing::InOutBack => {
+                ((2.0 * x - 2.0).powi(2) * ((C2 + 1.0) * (x * 2.0 - 2.0) + C2) + 2.0) / 2.0
+            }
+            Easing::InElastic if ends => x,
+            Easing::InElastic => -2f64.powf(10.0 * x - 10.0) * ((x * 10.0 - 10.75) * C4).sin(),
+            Easing::OutElastic if ends => x,
+            Easing::OutElastic => 2f64.powf(-10.0 * x) * ((x * 10.0 - 0.75) * C4).sin() + 1.0,
+            Easing::InOutElastic if ends => x,
+            Easing::InOutElastic if half => {
+                -(2f64.powf(20.0 * x - 10.0) * ((20.0 * x - 11.125) * C5).sin()) / 2.0
+            }
+            Easing::InOutElastic => {
+                2f64.powf(-20.0 * x + 10.0) * ((20.0 * x - 11.125) * C5).sin() / 2.0 + 1.0
+            }
+            Easing::InBounce => 1.0 - out_bounce(1.0 - x),
+            Easing::OutBounce => out_bounce(x),
+            Easing::InOutBounce if half => (1.0 - out_bounce(1.0 - 2.0 * x)) / 2.0,
+            Easing::InOutBounce => (1.0 + out_bounce(2.0 * x - 1.0)) / 2.0,
         }
     }
+
+    /// Every easing, in the order declared.
+    pub const ALL: [Easing; 34] = [
+        Easing::Linear,
+        Easing::EaseIn,
+        Easing::EaseOut,
+        Easing::EaseInOut,
+        Easing::InSine,
+        Easing::OutSine,
+        Easing::InOutSine,
+        Easing::InQuad,
+        Easing::OutQuad,
+        Easing::InOutQuad,
+        Easing::InCubic,
+        Easing::OutCubic,
+        Easing::InOutCubic,
+        Easing::InQuart,
+        Easing::OutQuart,
+        Easing::InOutQuart,
+        Easing::InQuint,
+        Easing::OutQuint,
+        Easing::InOutQuint,
+        Easing::InExpo,
+        Easing::OutExpo,
+        Easing::InOutExpo,
+        Easing::InCirc,
+        Easing::OutCirc,
+        Easing::InOutCirc,
+        Easing::InBack,
+        Easing::OutBack,
+        Easing::InOutBack,
+        Easing::InElastic,
+        Easing::OutElastic,
+        Easing::InOutElastic,
+        Easing::InBounce,
+        Easing::OutBounce,
+        Easing::InOutBounce,
+    ];
 }
 
 enum FocusMove {
@@ -286,6 +449,47 @@ enum Nav {
     /// Run binding `index` of node `id` (a key sequence's, if `true`), as
     /// its key would.
     Run(NodeId, usize, bool),
+    /// Maximize a node, or (`None`) the nearest maximizable ancestor of
+    /// the focus.
+    Maximize(Option<NodeId>),
+    Minimize,
+    /// What the top screen just opened hands its result to.
+    Then(OnClose),
+    /// Close the top screen, handing it a value.
+    Dismiss(Box<dyn std::any::Any>),
+    /// Show another mode's stack of screens.
+    SwitchMode(String),
+}
+
+/// What a screen opened with [`Ctx::push_for`] calls when it closes: the
+/// value it was [dismissed](Ctx::dismiss) with, or `None`.
+type OnClose = Box<dyn FnOnce(Option<Box<dyn std::any::Any>>, &mut Ctx)>;
+
+/// A named stack of screens ([`App::mode`]): built on first use, kept while
+/// another shows.
+struct Mode {
+    name: String,
+    build: Option<Build>,
+    /// Its screens while another mode shows.
+    stash: Option<Vec<Layer>>,
+}
+
+/// The command palette's *Screenshot* (Textual's name for it; not "Save
+/// screenshot", which an app's own "Save" would have to share a search
+/// with).
+const SCREENSHOT_COMMAND: &str = "app.screenshot";
+
+/// The mode an app starts in ([`Ctx::mode`]).
+pub const DEFAULT_MODE: &str = "default";
+
+/// A typed result callback as the stack keeps it.
+fn on_close<T: 'static>(then: impl FnOnce(Option<T>, &mut Ctx) + 'static) -> OnClose {
+    Box::new(move |value, cx| {
+        let value = value
+            .and_then(|value| value.downcast::<T>().ok())
+            .map(|value| *value);
+        then(value, cx)
+    })
 }
 
 /// Whether a screen is open over the first one, as a binding's condition
@@ -319,6 +523,11 @@ impl Ctx {
             releases: Releases::None,
             layers: 1,
             passed: false,
+            keymap: None,
+            maximized: false,
+            mode: None,
+            screenshots: Vec::new(),
+            subtitle: None,
         }
     }
 
@@ -865,6 +1074,125 @@ impl Ctx {
         self.nav.push(Nav::Pop);
     }
 
+    /// Draw the nearest [maximizable](crate::Node::maximizable) node on
+    /// the focus's path (the focused node itself, or a pane round it) over
+    /// the whole screen, keeping its state and its focus. The rest of the
+    /// tree keeps its state but does not draw; [`minimize`](Self::minimize)
+    /// or Esc that nothing used restores it. Nothing when no node on the
+    /// path is maximizable.
+    pub fn maximize(&mut self) {
+        self.nav.push(Nav::Maximize(None));
+    }
+
+    /// [`maximize`](Self::maximize) node `id`, maximizable or not.
+    pub fn maximize_node(&mut self, id: NodeId) {
+        self.nav.push(Nav::Maximize(Some(id)));
+    }
+
+    /// Restore the maximized node, if any: the layout is back, with the
+    /// focus where it was.
+    pub fn minimize(&mut self) {
+        self.nav.push(Nav::Minimize);
+    }
+
+    /// Whether a node is maximized on the top screen (as it was when the
+    /// handler was called).
+    pub fn is_maximized(&self) -> bool {
+        self.maximized
+    }
+
+    /// [`push`](Self::push) a screen that hands back a value: `then` is
+    /// called with what the screen [dismisses](Self::dismiss) itself with,
+    /// or `None` when it is popped otherwise (Esc on a pop-up, `cx.pop()`)
+    /// or dismissed with a value of another type. A
+    /// [`replace`](Self::replace) of the screen hands the call on to the
+    /// screen that takes its place.
+    ///
+    /// ```
+    /// use intuituive::prelude::*;
+    ///
+    /// let app = App::new(|| {
+    ///     let picked = signal(0u32);
+    ///     text!("picked {picked}").on_key("p", move |cx| {
+    ///         cx.push_for::<u32>(
+    ///             || label("pick").on_key("7", |cx| cx.dismiss(7u32)),
+    ///             move |value, _| picked.set(value.unwrap_or(0)),
+    ///         )
+    ///     })
+    /// });
+    /// let mut driver = app.driver(10, 1);
+    /// driver.press("p 7");
+    /// assert_eq!(driver.screen().plain()[0].trim_end(), "picked 7");
+    /// ```
+    pub fn push_for<T: 'static>(
+        &mut self,
+        build: impl FnOnce() -> Node + 'static,
+        then: impl FnOnce(Option<T>, &mut Ctx) + 'static,
+    ) {
+        self.nav.push(Nav::Push(Box::new(build)));
+        self.nav.push(Nav::Then(on_close(then)));
+    }
+
+    /// A [`modal`](Self::modal) that hands back a value, as
+    /// [`push_for`](Self::push_for) does.
+    pub fn modal_for<T: 'static>(
+        &mut self,
+        width: Size,
+        height: Size,
+        build: impl FnOnce() -> Node + 'static,
+        then: impl FnOnce(Option<T>, &mut Ctx) + 'static,
+    ) {
+        self.modal(width, height, build);
+        self.nav.push(Nav::Then(on_close(then)));
+    }
+
+    /// Close the top screen as [`pop`](Self::pop) does, handing `value`
+    /// to what opened it with [`push_for`](Self::push_for) or
+    /// [`modal_for`](Self::modal_for). On a screen opened otherwise it is a
+    /// plain pop.
+    pub fn dismiss<T: 'static>(&mut self, value: T) {
+        self.nav.push(Nav::Dismiss(Box::new(value)));
+    }
+
+    /// Show the stack of screens of mode `name` (an [`App::mode`], or
+    /// [`DEFAULT_MODE`] for the one the app started with), building its
+    /// first screen on first use. The stack left keeps its screens, their
+    /// state and their focus, and comes back as it was; its timers do not
+    /// fire while another mode shows (one that came due fires once on the
+    /// way back, then goes on in step). An unknown name does nothing.
+    pub fn switch_mode(&mut self, name: &str) {
+        self.nav.push(Nav::SwitchMode(name.to_string()));
+    }
+
+    /// The mode showing when the handler was called ([`DEFAULT_MODE`] until
+    /// a [`switch_mode`](Self::switch_mode)).
+    pub fn mode(&self) -> String {
+        self.mode.as_deref().unwrap_or(DEFAULT_MODE).to_string()
+    }
+
+    /// Save the screen as an SVG picture to `path` once the next frame is
+    /// drawn, as Textual's `save_screenshot` does. A failure is a toast.
+    /// The command palette's *Screenshot* does the same into the
+    /// [screenshot directory](App::screenshot_dir).
+    pub fn screenshot(&mut self, path: impl Into<std::path::PathBuf>) {
+        self.screenshots.push(Some(path.into()));
+    }
+
+    /// Set the subtitle a [`header`](crate::header) shows under the app's
+    /// [title](App::title) while the screen this handler ran on is on top
+    /// (each screen has its own, as Textual's `Screen.sub_title`).
+    pub fn set_subtitle(&mut self, subtitle: impl Into<String>) {
+        self.subtitle = Some(subtitle.into());
+    }
+
+    /// Show the [`key_panel`](crate::key_panel)s if they are hidden, or
+    /// hide them.
+    pub fn toggle_key_panel(&mut self) {
+        if let Some(shown) = Runtime::current().key_panel.get() {
+            shown.update(|on| *on = !*on);
+        }
+    }
+
     /// Replace the top screen with the one `build` makes.
     pub fn replace(&mut self, build: impl FnOnce() -> Node + 'static) {
         self.nav.push(Nav::Replace(Box::new(build)));
@@ -873,6 +1201,31 @@ impl Ctx {
     /// Switch the app to `theme`; everything is drawn again in it.
     pub fn set_theme(&mut self, theme: Theme) {
         self.theme = Some(theme);
+    }
+
+    /// Switch the app to the built-in theme `name` ([`Theme::named`]):
+    /// `nord`, `gruvbox`, `textual-light`, …; `false`, and no change, for a
+    /// name it does not know.
+    ///
+    /// ```
+    /// use intuituive::prelude::*;
+    ///
+    /// let app = App::new(|| {
+    ///     label("[accent]hi[/]").on_key("t", |cx| assert!(cx.set_theme_named("dracula")))
+    /// });
+    /// let mut driver = app.driver(4, 1);
+    /// driver.press("t");
+    /// let styled = intuituive::testing::styled(&driver);
+    /// assert!(styled.contains("[#ff79c6]hi[/]"), "{styled}");
+    /// ```
+    pub fn set_theme_named(&mut self, name: &str) -> bool {
+        match Theme::named(name) {
+            Some(theme) => {
+                self.set_theme(theme);
+                true
+            }
+            None => false,
+        }
     }
 
     /// End the app after this event.
@@ -1118,6 +1471,166 @@ impl Theme {
         )
     }
 
+    /// A theme generated from `palette`'s semantic colours, as Textual's
+    /// `ColorSystem` generates them (see [`Palette`](crate::Palette)).
+    ///
+    /// Every generated colour is a named style, by Textual's name: a
+    /// foreground (`primary`, `primary-lighten-2`, `text-primary`,
+    /// `primary-muted`, `text-muted`, `border`, …) or, for the grounds,
+    /// a background (`background`, `surface`, `panel`, `boost`, their
+    /// shades, `primary-background`, `surface-active`, …). So they work in
+    /// markup (`[primary-muted]…[/]`, `[text on surface]`) and as `$name`
+    /// in a stylesheet (`background: $surface;`). The names the presets
+    /// have come from the palette too, so an app written for them follows:
+    /// `accent` is the accent colour, `muted` is `text-muted`, `good`,
+    /// `warn` and `bad` are `text-success`, `text-warning` and bold
+    /// `text-error`, `selected` is the block cursor (bold text on
+    /// `block-cursor-background`), the buttons sit on the panel, primary
+    /// and error colours, `border.focused` is `border` and `border` the
+    /// foreground at 38%. `screen` is the foreground on the background:
+    /// `.style("screen")` on the root paints the whole screen in it.
+    ///
+    /// ```
+    /// use intuituive::prelude::*;
+    /// use intuituive::Palette;
+    /// use rich::Color;
+    ///
+    /// let palette = Palette::new(Color::parse("#0178D4").unwrap())
+    ///     .accent(Color::parse("#ffa62b").unwrap())
+    ///     .dark(true);
+    /// let app = App::new(|| label("[primary-muted]hi[/] [accent]there[/]"))
+    ///     .theme(Theme::from_palette(palette));
+    /// let mut driver = app.driver(10, 1);
+    /// driver.settle();
+    /// let styled = intuituive::testing::styled(&driver);
+    /// assert!(styled.contains("[#0c304c]hi[/]"), "{styled}");
+    /// ```
+    pub fn from_palette(palette: crate::Palette) -> Theme {
+        let solid = palette.solid();
+        let color = |name: &str| -> String {
+            solid
+                .iter()
+                .find(|(n, _, _)| n == name)
+                .map(|(_, c, dim)| if *dim { format!("dim {c}") } else { c.clone() })
+                .expect("a generated colour")
+        };
+        let mut styles: Vec<(String, Style)> = solid
+            .iter()
+            .map(|(name, c, dim)| {
+                let definition = if crate::palette::is_ground(name) {
+                    format!("on {c}")
+                } else if *dim {
+                    format!("dim {c}")
+                } else {
+                    c.clone()
+                };
+                (name.clone(), style(&definition))
+            })
+            .collect();
+        let ansi = palette.colors().iter().all(|(_, c)| !c.starts_with('#'));
+        let preset = if palette.is_dark() {
+            Theme::dark()
+        } else {
+            Theme::light()
+        };
+        let mut named = vec![
+            ("muted".to_string(), color("text-muted")),
+            ("good".to_string(), color("text-success")),
+            ("warn".to_string(), color("text-warning")),
+            ("bad".to_string(), format!("bold {}", color("text-error"))),
+            (
+                "screen".to_string(),
+                format!("{} on {}", color("foreground"), color("background")),
+            ),
+        ];
+        if ansi {
+            // Terminal colours have no shades to build faces from: the
+            // presets' faces, which use terminal colours too.
+            for name in ["selected", "button", "button.primary", "button.danger"] {
+                if let Some((_, s)) = preset.styles.iter().find(|(n, _)| n == name) {
+                    styles.push((name.to_string(), s.clone()));
+                }
+            }
+        } else {
+            let on = |name: &str| {
+                format!(
+                    "{} on {}",
+                    crate::palette::contrast_on(&color(name)),
+                    color(name)
+                )
+            };
+            named.extend([
+                (
+                    "selected".to_string(),
+                    format!(
+                        "bold {} on {}",
+                        color("text"),
+                        color("block-cursor-background")
+                    ),
+                ),
+                (
+                    "button".to_string(),
+                    format!("{} on {}", color("text"), color("panel-lighten-1")),
+                ),
+                ("button.primary".to_string(), on("primary")),
+                ("button.danger".to_string(), on("error")),
+                (
+                    "tooltip".to_string(),
+                    format!("{} on {}", color("text"), color("panel")),
+                ),
+            ]);
+        }
+        let mut theme = Theme {
+            border: style(&color("foreground-disabled")),
+            border_focused: style(&color("border")),
+            title: style("bold"),
+            styles: Vec::new(),
+        };
+        for (name, definition) in named {
+            styles.retain(|(n, _)| *n != name);
+            styles.push((name, style(&definition)));
+        }
+        theme.styles = styles;
+        theme
+    }
+
+    /// The built-in theme `name`: `dark`, `light` or `mono` (the presets),
+    /// or one of Textual's themes made [from its palette](Self::from_palette)
+    /// (`textual-dark`, `nord`, `gruvbox`, `dracula`, `tokyo-night`, …;
+    /// see [`Palette::named`](crate::Palette::named)).
+    ///
+    /// ```
+    /// use intuituive::Theme;
+    ///
+    /// assert!(Theme::named("nord").is_some());
+    /// assert!(Theme::named("no-such-theme").is_none());
+    /// assert_eq!(Theme::builtin_names()[..3], ["dark", "light", "mono"]);
+    /// ```
+    pub fn named(name: &str) -> Option<Theme> {
+        match name {
+            "dark" => Some(Theme::dark()),
+            "light" => Some(Theme::light()),
+            "mono" => Some(Theme::mono()),
+            _ => crate::Palette::named(name).map(Theme::from_palette),
+        }
+    }
+
+    /// The names [`named`](Self::named) knows: the presets, then Textual's
+    /// themes in Textual's order.
+    pub fn builtin_names() -> Vec<&'static str> {
+        let mut names = vec!["dark", "light", "mono"];
+        names.extend(crate::Palette::names());
+        names
+    }
+
+    /// Every built-in theme with its name, for a theme picker.
+    pub fn builtin() -> Vec<(&'static str, Theme)> {
+        Theme::builtin_names()
+            .into_iter()
+            .filter_map(|name| Some((name, Theme::named(name)?)))
+            .collect()
+    }
+
     /// Add (or replace) the named style `name`, for markup: `[name]…[/]`.
     #[must_use]
     pub fn style(mut self, name: &str, style: Style) -> Theme {
@@ -1164,7 +1677,7 @@ impl Theme {
     }
 
     /// The named style `name`, or `fallback` when the theme has none.
-    pub(crate) fn named(&self, name: &str, fallback: &str) -> Style {
+    pub(crate) fn named_style(&self, name: &str, fallback: &str) -> Style {
         self.styles
             .iter()
             .find(|(n, _)| n == name)
@@ -1546,6 +2059,14 @@ struct Layer {
     /// The focus went to the first focusable node because no node asked
     /// for it; an `autofocus` node built later takes it over.
     fallback: bool,
+    /// The node drawn over the whole screen instead of the root
+    /// ([`Ctx::maximize`]).
+    maximized: Option<NodeId>,
+    /// What it hands its result to when it closes ([`Ctx::push_for`]).
+    on_close: Option<OnClose>,
+    /// What a [`header`](crate::header) shows under the title while it is
+    /// on top ([`Ctx::set_subtitle`]).
+    subtitle: Option<String>,
 }
 
 thread_local! {
@@ -1850,6 +2371,18 @@ pub struct App {
     placements: Vec<rich_ext::frame::Placement>,
     /// Keys that open the command palette and the help, if any.
     palette_key: Vec<Key>,
+    /// Maximizes the focused pane, or restores it ([`App::maximize_key`]).
+    maximize_key: Vec<Key>,
+    /// The named stacks of screens ([`App::mode`]), the first app's among
+    /// them, and the one showing.
+    modes: Vec<Mode>,
+    mode: Rc<str>,
+    /// Screenshots to write after the next frame: a path, or `None` for a
+    /// new file in `screenshot_dir`.
+    screenshots: Vec<Option<std::path::PathBuf>>,
+    screenshot_dir: Option<std::path::PathBuf>,
+    /// The app's title ([`App::title`]).
+    title: Option<String>,
     help_key: Vec<Key>,
     /// Read keys as a legacy terminal sends them, even where the kitty
     /// keyboard protocol could be on.
@@ -1923,6 +2456,8 @@ pub struct App {
     /// The theme set in code, before any theme file's styles.
     theme_base: Theme,
     theme_file: Option<ThemeFile>,
+    /// The user keymap ([`App::keymap`], [`App::keymap_file`]).
+    keymap: keymap::KeymapState,
     sheet: Option<SheetSource>,
     /// For assistive technology: whether to draw for it, or write lines
     /// for it (linear mode), where announcements go, those not yet taken,
@@ -2204,6 +2739,9 @@ impl App {
                 watches,
                 order: Vec::new(),
                 fallback: false,
+                maximized: None,
+                on_close: None,
+                subtitle: None,
             }],
             restack: false,
             floats_drawn: Vec::new(),
@@ -2229,6 +2767,16 @@ impl App {
             graphics: None,
             placements: Vec::new(),
             palette_key: Vec::new(),
+            maximize_key: Vec::new(),
+            modes: vec![Mode {
+                name: DEFAULT_MODE.to_string(),
+                build: None,
+                stash: None,
+            }],
+            mode: Rc::from(DEFAULT_MODE),
+            screenshots: Vec::new(),
+            screenshot_dir: None,
+            title: None,
             help_key: Vec::new(),
             legacy_keys: false,
             synchronized_output: None,
@@ -2260,6 +2808,7 @@ impl App {
                 .map(|_| Inspector::new(true)),
             theme_base: Theme::default(),
             theme_file: None,
+            keymap: Default::default(),
             sheet: None,
             accessible,
             linear,
@@ -2862,6 +3411,66 @@ impl App {
     #[must_use]
     pub fn palette_key(mut self, keys: &str) -> App {
         self.palette_key = crate::node::parse_keys(keys);
+        self
+    }
+
+    /// Add a mode: a stack of screens of its own, whose first screen
+    /// `build` makes the first time [`Ctx::switch_mode`] shows it, as
+    /// Textual's `App.MODES` do (a dashboard, its settings, its help, each
+    /// with its own history). The app starts in [`DEFAULT_MODE`], the
+    /// stack `App::new`'s closure built.
+    ///
+    /// ```
+    /// use intuituive::prelude::*;
+    ///
+    /// let app = App::new(|| label("home").on_key("s", |cx| cx.switch_mode("settings")))
+    ///     .mode("settings", || {
+    ///         label("settings").on_key("h", |cx| cx.switch_mode(intuituive::DEFAULT_MODE))
+    ///     });
+    /// let mut driver = app.driver(10, 1);
+    /// driver.press("s");
+    /// assert_eq!(driver.screen().plain()[0].trim_end(), "settings");
+    /// driver.press("h");
+    /// assert_eq!(driver.screen().plain()[0].trim_end(), "home");
+    /// ```
+    #[must_use]
+    pub fn mode(mut self, name: &str, build: impl FnOnce() -> Node + 'static) -> App {
+        self.modes
+            .retain(|mode| mode.name != name || name == DEFAULT_MODE);
+        if name != DEFAULT_MODE {
+            self.modes.push(Mode {
+                name: name.to_string(),
+                build: Some(Box::new(build)),
+                stash: None,
+            });
+        }
+        self
+    }
+
+    /// Where the command palette's *Screenshot* puts its files
+    /// (`screenshot-1.svg`, then the next free number): the current
+    /// directory unless set.
+    #[must_use]
+    pub fn screenshot_dir(mut self, dir: impl Into<std::path::PathBuf>) -> App {
+        self.screenshot_dir = Some(dir.into());
+        self
+    }
+
+    /// The app's title: a screenshot's window title, and what a
+    /// [`header`](crate::header) shows.
+    #[must_use]
+    pub fn title(mut self, title: impl Into<String>) -> App {
+        self.title = Some(title.into());
+        self
+    }
+
+    /// Maximize the focused pane (the nearest
+    /// [maximizable](crate::Node::maximizable) node on the focus's path)
+    /// with `keys` (say `"ctrl+m"`), or restore it, when no binding of the
+    /// app used them. Off unless set; Esc that nothing used restores too.
+    #[must_use]
+    pub fn maximize_key(mut self, keys: &str) -> App {
+        self.maximize_key = crate::node::parse_keys(keys);
         self
     }
 
@@ -3573,6 +4182,9 @@ impl App {
     /// the runtime notes nothing.
     fn sync_tracer(&self) {
         let on = !self.linear && self.inspector.as_ref().is_some_and(Inspector::tracing);
+        // A log console takes the trace while no inspector shows it.
+        #[cfg(feature = "tracing")]
+        let on = on || crate::log::console_tracing();
         self.runtime.tracer.set_on(on);
     }
 
@@ -3893,6 +4505,7 @@ impl App {
 
     /// Draw what changed; returns the damage.
     fn frame(&mut self, console: &Console, screen: &mut Screen, full: bool) -> Vec<Rect> {
+        self.check_keymap();
         crate::a11y::set_text_mode(self.text_mode());
         // What the inspector drew over the app comes off first, so the
         // app's cells are its own again before anything draws.
@@ -3954,6 +4567,17 @@ impl App {
             .iter()
             .zip(&rects)
             .any(|(layer, rect)| layer.modal.is_some() && layer.drawn.is_some_and(|d| d != *rect));
+        // A maximized node that left the tree: the layout is back.
+        for layer in &mut self.layers[base..] {
+            if let Some(id) = layer.maximized {
+                let mut found = false;
+                with_node(&layer.root, id, &mut |_| found = true);
+                if !found {
+                    layer.maximized = None;
+                    self.restack = true;
+                }
+            }
+        }
         let mut full = full || moved || std::mem::take(&mut self.restack);
         // The stylesheet as it applies at this size: crossing an `@media`
         // rule's bounds matches every node again and draws everything.
@@ -4069,10 +4693,22 @@ impl App {
                 if let Some(sheet) = &frame.sheet {
                     layer.root.resolve(sheet, &mut frame.chain);
                 }
-                layer.root.draw(&mut frame, *rect, screen, force);
+                // A maximized node draws in the root's place, over its
+                // whole rectangle.
+                let mut painted = Vec::new();
+                match layer.maximized {
+                    Some(id) => with_node(&layer.root, id, &mut |node| {
+                        node.draw(&mut frame, *rect, screen, force);
+                        painted = crate::float::paint(&runtime, node, screen, area);
+                    }),
+                    None => {
+                        layer.root.draw(&mut frame, *rect, screen, force);
+                        painted = crate::float::paint(&runtime, &layer.root, screen, area);
+                    }
+                }
                 layer.drawn = Some(*rect);
                 // What the screen's widgets draw over their neighbours.
-                for (id, at) in crate::float::paint(&runtime, &layer.root, screen, area) {
+                for (id, at) in painted {
                     frame.damage.push(at);
                     floats_now.push((id, at));
                 }
@@ -4124,7 +4760,11 @@ impl App {
                 frame.damage.push(rect);
             }
             if let Some(rect) = drag.target.and_then(|id| anchor_rect(root, id)) {
-                restyle_rect(screen, rect, &self.theme.named("drop.target", "reverse"));
+                restyle_rect(
+                    screen,
+                    rect,
+                    &self.theme.named_style("drop.target", "reverse"),
+                );
                 frame.damage.push(rect);
             }
         }
@@ -4167,7 +4807,7 @@ impl App {
         }
         // A tooltip, over the toasts too.
         if let Some(tip) = self.tip.as_ref().filter(|tip| tip.shown && !self.linear) {
-            let look = self.theme.named("tooltip", "reverse");
+            let look = self.theme.named_style("tooltip", "reverse");
             frame
                 .damage
                 .push(draw_tip(console, screen, area, tip, &look));
@@ -4215,9 +4855,11 @@ impl App {
         if let (Some(panel), Some(drawn)) = (panel, frame.drawn_ids) {
             let theme = self.theme_status();
             let looks = crate::inspect::Looks {
-                selected: self.theme.named("inspector.selected", "reverse magenta"),
-                cursor: self.theme.named("inspector.cursor", "reverse yellow"),
-                flash: self.theme.named("inspector.flash", "on dark_green"),
+                selected: self
+                    .theme
+                    .named_style("inspector.selected", "reverse magenta"),
+                cursor: self.theme.named_style("inspector.cursor", "reverse yellow"),
+                flash: self.theme.named_style("inspector.flash", "on dark_green"),
             };
             let focus_path = self.focus_path.get_untracked();
             let hover = self.hover_path.get_untracked();
@@ -4245,6 +4887,7 @@ impl App {
                 damage: &damage,
                 focus: all.last().and_then(|layer| layer.focus),
                 focus_path: &focus_path,
+                maximized: all.last().and_then(|layer| layer.maximized),
                 hover: &hover,
                 stats: FrameStats {
                     bytes: self.bytes_before,
@@ -4297,7 +4940,62 @@ impl App {
         {
             damage.extend(self.frame(console, screen, true));
         }
+        self.write_screenshots(screen);
         damage
+    }
+
+    /// Send the trace no inspector shows to a log console.
+    #[cfg(feature = "tracing")]
+    fn send_console_trace(&self) {
+        if crate::log::console_tracing() && !self.inspector.as_ref().is_some_and(Inspector::tracing)
+        {
+            let (events, gone) = self.runtime.tracer.take();
+            if !events.is_empty() {
+                let names = Names::of(self.layers.iter().map(|layer| &layer.root)).with(&gone);
+                crate::log::send_trace(crate::inspect::described(&events, &names));
+            }
+        }
+    }
+
+    /// Write the screenshots asked for since the last frame: `screen` as an
+    /// SVG, to the path asked, or (`None`) to a new file in the
+    /// [screenshot directory](App::screenshot_dir), toasting its name.
+    fn write_screenshots(&mut self, screen: &Screen) {
+        if self.screenshots.is_empty() {
+            return;
+        }
+        let title = self
+            .title
+            .clone()
+            .unwrap_or_else(|| "intuiTUIve".to_string());
+        let svg = screen.to_svg(&rich_ext::frame::SvgOptions::default().title(&title));
+        for path in std::mem::take(&mut self.screenshots) {
+            let told = path.is_none();
+            let path = path.unwrap_or_else(|| {
+                let dir = self
+                    .screenshot_dir
+                    .clone()
+                    .unwrap_or_else(|| std::path::PathBuf::from("."));
+                (1u32..)
+                    .map(|n| dir.join(format!("screenshot-{n}.svg")))
+                    .find(|path| !path.exists())
+                    .expect("a free file name")
+            });
+            let shown = rich::markup::escape(&path.display().to_string());
+            let note = match std::fs::write(&path, &svg) {
+                Ok(()) if told => Some(Note::plain(format!("Saved {shown}"))),
+                Ok(()) => None,
+                Err(error) => Some(Note {
+                    markup: format!("{shown}: {}", rich::markup::escape(&error.to_string())),
+                    notice: Some((Level::Error, "Screenshot".to_string())),
+                }),
+            };
+            if let Some(note) = note {
+                self.push_toast(note, self.now + Duration::from_secs(3));
+                // Drawn in the next frame.
+                self.poke = true;
+            }
+        }
     }
 
     /// Put the one-shot timers [`after`] made since the last turn on the
@@ -4318,6 +5016,8 @@ impl App {
         cx.pointer = self.pointer;
         cx.layers = self.layers.len();
         cx.releases = self.releases;
+        cx.maximized = self.top().maximized.is_some();
+        cx.mode = (*self.mode != *DEFAULT_MODE).then(|| self.mode.clone());
         cx
     }
 
@@ -4356,6 +5056,14 @@ impl App {
         }
         self.copies.extend(cx.copies);
         self.handoffs.extend(cx.handoffs);
+        if let Some(subtitle) = cx.subtitle {
+            let layer = cx.layers.clamp(1, self.layers.len()) - 1;
+            self.layers[layer].subtitle = Some(subtitle);
+        }
+        if !cx.screenshots.is_empty() {
+            self.screenshots.extend(cx.screenshots);
+            self.poke = true;
+        }
         for (note, duration) in cx.toasts {
             self.push_toast(note, self.now + duration);
         }
@@ -4388,6 +5096,9 @@ impl App {
         let later = navs.split_off(cx.focus_after.min(navs.len()));
         for nav in navs {
             quit |= self.navigate(nav);
+        }
+        if let Some(request) = cx.keymap {
+            self.keymap_request(request);
         }
         if let Some(theme) = cx.theme {
             self.theme_base = theme;
@@ -4428,7 +5139,9 @@ impl App {
             Nav::Replace(_) => Some("screen replaced"),
             Nav::Palette => Some("command palette opened"),
             Nav::Help(_) => Some("help opened"),
-            Nav::Run(..) => None,
+            Nav::Dismiss(_) => (self.layers.len() > 1).then_some("screen closed"),
+            Nav::SwitchMode(_) => Some("mode switched"),
+            Nav::Run(..) | Nav::Maximize(_) | Nav::Minimize | Nav::Then(_) => None,
         };
         if let Some(what) = what {
             self.runtime.tracer.push(Traced::Screen(what));
@@ -4445,20 +5158,38 @@ impl App {
                 top.anchor = Some((anchor, placement));
                 top.look = look;
             }
-            Nav::Pop => {
+            Nav::Pop | Nav::Dismiss(_) => {
                 if self.layers.len() > 1 {
-                    self.close();
+                    let then = self.close();
                     let focus = self.focus();
                     self.set_focus(focus);
+                    if let Some(then) = then {
+                        let value = match nav {
+                            Nav::Dismiss(value) => Some(value),
+                            _ => None,
+                        };
+                        let mut cx = self.ctx();
+                        let runtime = self.runtime.clone();
+                        runtime.enter(|| then(value, &mut cx));
+                        return self.apply(cx);
+                    }
                 }
             }
+            Nav::Then(then) => {
+                if self.layers.len() > 1 {
+                    self.top_mut().on_close = Some(then);
+                }
+            }
+            Nav::SwitchMode(name) => self.switch_mode(&name),
             Nav::Replace(build) => {
                 let (modal, anchor) = (self.top().modal, self.top().anchor);
                 let origin = self.top().origin;
                 let look = self.top().look.clone();
                 if self.layers.len() > 1 {
-                    self.close();
+                    // The result goes to the screen taking its place.
+                    let then = self.close();
                     self.open(build, modal);
+                    self.top_mut().on_close = then;
                     self.top_mut().anchor = anchor;
                     self.top_mut().origin = origin;
                     self.top_mut().look = look;
@@ -4482,8 +5213,64 @@ impl App {
                 top.look = look;
             }
             Nav::Run(id, index, sequence) => return self.run_binding(id, index, sequence),
+            Nav::Maximize(id) => self.maximize(id),
+            Nav::Minimize => self.minimize(),
         }
         false
+    }
+
+    /// Maximize node `target`, or with `None` the nearest
+    /// [maximizable](crate::Node::maximizable) node on the focus's path,
+    /// on the top screen. Nothing when there is none.
+    fn maximize(&mut self, target: Option<NodeId>) {
+        let id = match target {
+            Some(id) => (!self.path_to(id).is_empty()).then_some(id),
+            None => {
+                let path = self.focus().map(|f| self.path_to(f)).unwrap_or_default();
+                let root = &self.top().root;
+                path.iter().rev().copied().find(|&id| {
+                    let mut can = false;
+                    with_node(root, id, &mut |node| can = node.can_maximize());
+                    can
+                })
+            }
+        };
+        let Some(id) = id else { return };
+        if self.top().maximized == Some(id) {
+            return;
+        }
+        let top = self.top_mut();
+        top.maximized = Some(id);
+        // Nothing of the rest of the tree is shown or clicked: it keeps its
+        // state, and draws afresh on restore.
+        top.root.hide();
+        self.restack = true;
+        self.announce(
+            crate::a11y::Announcement {
+                text: "maximized".into(),
+                urgent: false,
+            },
+            true,
+        );
+        // The focus stays inside it, or goes to its first focusable node.
+        let inside = self.focus().is_some_and(|f| self.path_to(f).contains(&id));
+        if !inside {
+            self.focus_inside(id);
+        }
+    }
+
+    /// Restore the maximized node of the top screen, if any.
+    fn minimize(&mut self) {
+        if self.top_mut().maximized.take().is_some() {
+            self.restack = true;
+            self.announce(
+                crate::a11y::Announcement {
+                    text: "restored".into(),
+                    urgent: false,
+                },
+                true,
+            );
+        }
     }
 
     /// The described bindings of the focused node and its ancestors,
@@ -4537,13 +5324,18 @@ impl App {
     /// or not they apply now, each with what decides it: what the help and
     /// the palette list, read again as they are drawn.
     fn candidates_of(&self, ids: &[NodeId], palette: bool) -> Vec<crate::actions::Listed> {
+        self.remap_nodes(ids);
         use crate::actions::Listed;
         let mut out = Vec::new();
         for &id in ids {
             with_node(&self.top().root, id, &mut |node| {
                 let name = node.group_name();
                 for (index, bound) in node.keys.borrow().iter().enumerate() {
-                    if bound.description.is_empty() || (bound.hidden && !palette) {
+                    // A keymap's `none` unbinds it: neither listed nor run.
+                    if bound.description.is_empty()
+                        || bound.keys.is_empty()
+                        || (bound.hidden && !palette)
+                    {
                         continue;
                     }
                     let binding = rich_interact::keymap::Binding::new(
@@ -4583,7 +5375,10 @@ impl App {
                     });
                 }
                 for (index, bound) in node.sequences.borrow().iter().enumerate() {
-                    if bound.description.is_empty() || (bound.hidden && !palette) {
+                    if bound.description.is_empty()
+                        || bound.keys.is_empty()
+                        || (bound.hidden && !palette)
+                    {
                         continue;
                     }
                     let binding = rich_interact::keymap::Binding::sequence(
@@ -4611,6 +5406,23 @@ impl App {
     /// ancestors, innermost first, each keys once. Nothing without one.
     /// Those whose condition does not hold come too, marked disabled, for
     /// a footer that greys them.
+    /// What a [`header`](crate::header) shows: the app's title and the
+    /// top screen's subtitle.
+    fn refresh_heading(&self) {
+        let Some(heading) = self.runtime.heading.get() else {
+            return;
+        };
+        let now = (
+            self.title.clone().unwrap_or_default(),
+            self.top().subtitle.clone().unwrap_or_default(),
+        );
+        self.runtime.enter(|| {
+            if heading.with_untracked(|old| *old != now) {
+                heading.set(now);
+            }
+        });
+    }
+
     fn refresh_hints(&self) {
         let Some(hints) = self.runtime.hints.get() else {
             return;
@@ -4620,11 +5432,13 @@ impl App {
             .map(|id| self.path_to(id))
             .filter(|p| !p.is_empty())
             .unwrap_or_else(|| vec![self.top().root.id()]);
+        self.remap_nodes(&path);
         let mut shown: Vec<crate::help::Hint> = Vec::new();
         for &id in path.iter().rev() {
             with_node(&self.top().root, id, &mut |node| {
                 for bound in node.keys.borrow().iter() {
-                    if bound.description.is_empty() || bound.hidden {
+                    // One a keymap unbound has no key to show.
+                    if bound.description.is_empty() || bound.hidden || bound.keys.is_empty() {
                         continue;
                     }
                     let keys = bound.shown.clone().unwrap_or_else(|| bound.keys.clone());
@@ -4695,15 +5509,22 @@ impl App {
                 let palette = crate::actions::LivePalette::new(
                     rich_interact::overlay::Palette::new(Vec::new()),
                     Box::new(move || {
-                        crate::actions::listed_now(&listed)
+                        let mut commands: Vec<_> = crate::actions::listed_now(&listed)
                             .iter()
                             .map(rich_interact::overlay::Command::from_binding)
-                            .collect()
+                            .collect();
+                        commands.push(rich_interact::overlay::Command::new(
+                            SCREENSHOT_COMMAND,
+                            "Screenshot",
+                        ));
+                        commands
                     }),
                 );
                 crate::node::component(palette, move |command, cx| {
                     cx.pop();
-                    if let Some((_, id, index, sequence)) =
+                    if command.id == SCREENSHOT_COMMAND {
+                        cx.screenshots.push(None);
+                    } else if let Some((_, id, index, sequence)) =
                         targets.iter().find(|t| t.0 == command.id)
                     {
                         cx.nav.push(Nav::Run(*id, *index, *sequence));
@@ -4741,9 +5562,11 @@ impl App {
                 };
                 // One that stopped applying, or became unavailable, since
                 // it was listed (in the palette, say) does not run.
-                if let Some(bound) = list.get_mut(index).filter(|bound| bound.active()) {
+                // One a keymap unbound has no key to run as.
+                if let Some(bound) = list.get_mut(index).filter(|bound| bound.active())
+                    && let Some(key) = key.or_else(|| bound.keys.first().copied())
+                {
                     // As its first key would, unless told the key.
-                    let key = key.unwrap_or(bound.keys[0]);
                     cx.key = Some(key);
                     (bound.handler)(&mut cx, key);
                 }
@@ -4792,6 +5615,9 @@ impl App {
             watches,
             order: Vec::new(),
             fallback: false,
+            maximized: None,
+            on_close: None,
+            subtitle: None,
         });
         self.restack = true;
         self.runtime.layers.set(self.layers.len());
@@ -4801,10 +5627,48 @@ impl App {
         self.focus_first();
     }
 
-    /// Take the top screen off, forgetting its subscriptions.
-    fn close(&mut self) {
+    /// Show mode `name`'s stack, keeping the one showing.
+    fn switch_mode(&mut self, name: &str) {
+        if *name == *self.mode {
+            return;
+        }
+        let Some(to) = self.modes.iter().position(|mode| mode.name == name) else {
+            return;
+        };
+        let from = self
+            .modes
+            .iter()
+            .position(|mode| *mode.name == *self.mode)
+            .expect("the mode showing is listed");
         self.pending = None;
-        let layer = self.layers.pop().expect("an app always has a screen");
+        self.hide_tip();
+        let showing = std::mem::take(&mut self.layers);
+        self.modes[from].stash = Some(showing);
+        self.mode = Rc::from(name);
+        match self.modes[to].stash.take() {
+            Some(layers) => {
+                self.layers = layers;
+                self.restack = true;
+                self.runtime.layers.set(self.layers.len());
+                let focus = self.focus();
+                self.set_focus(focus);
+            }
+            None => {
+                let build = self.modes[to]
+                    .build
+                    .take()
+                    .expect("a mode not yet shown has its builder");
+                self.open(build, None);
+            }
+        }
+    }
+
+    /// Take the top screen off, forgetting its subscriptions; what it hands
+    /// its result to, if anything.
+    fn close(&mut self) -> Option<OnClose> {
+        self.pending = None;
+        let mut layer = self.layers.pop().expect("an app always has a screen");
+        let then = layer.on_close.take();
         for ticker in &layer.timers {
             ticker.timer.release();
         }
@@ -4815,6 +5679,7 @@ impl App {
         }
         self.restack = true;
         self.runtime.layers.set(self.layers.len());
+        then
     }
 
     /// The theme in code with the theme file's last good styles over it.
@@ -4904,7 +5769,12 @@ impl App {
     /// [hidden](crate::Node::access_hidden) from assistive technology.
     fn focusable(&self) -> Vec<NodeId> {
         let mut ids = Vec::new();
-        self.top().root.walk_accessible(&mut |node, _| {
+        // While a node is maximized, only what is inside it.
+        let maximized = self.top().maximized;
+        self.top().root.walk_accessible(&mut |node, path| {
+            if maximized.is_some_and(|m| !path.contains(&m)) {
+                return;
+            }
             // A wrapper whose focus passes inside is not a stop of its own.
             if node.takes_focus() && node.focus_target().is_none() {
                 ids.push(node.id);
@@ -5265,7 +6135,9 @@ impl App {
     /// [claims](crate::Widget::claims_key) it.
     fn binds(&self, key: Key) -> bool {
         let mut bound = false;
-        for id in self.key_path() {
+        let path = self.key_path();
+        self.remap_nodes(&path);
+        for id in path {
             with_node(&self.top().root, id, &mut |node| {
                 bound |= crate::node::pick_binding(key, &node.keys.borrow(), &[]).is_some()
                     || node
@@ -5313,6 +6185,7 @@ impl App {
     }
 
     fn key(&mut self, key: Key) -> bool {
+        self.remap_nodes(&self.key_path());
         self.repeating_key = self.press_held(key);
         self.hide_tip();
         if key.code == KeyCode::Escape && self.drag.as_ref().is_some_and(|drag| drag.active) {
@@ -5437,6 +6310,14 @@ impl App {
         if key.matches_any(&self.palette_key) {
             return self.navigate(Nav::Palette);
         }
+        if key.matches_any(&self.maximize_key) {
+            if self.top().maximized.is_some() {
+                self.minimize();
+            } else {
+                self.maximize(None);
+            }
+            return false;
+        }
         if key.matches_any(&self.help_key) {
             return self.navigate(Nav::Help(crate::help::HelpOptions::new()));
         }
@@ -5446,6 +6327,7 @@ impl App {
                 self.move_focus(key.code == KeyCode::Tab);
             }
             KeyCode::Escape if self.top().is_popup() => return self.navigate(Nav::Pop),
+            KeyCode::Escape if self.top().maximized.is_some() => self.minimize(),
             _ => {}
         }
         false
@@ -6362,6 +7244,7 @@ impl Driver {
         let app = &mut self.app;
         app.reload_theme();
         app.reload_sheet();
+        app.reload_keymap_file(false);
         app.now = now;
         app.runtime.tracer.set_now(now);
         app.runtime.now.set(now);
@@ -6556,6 +7439,9 @@ impl Driver {
             return None;
         }
         self.app.refresh_hints();
+        self.app.refresh_heading();
+        #[cfg(feature = "tracing")]
+        self.app.send_console_trace();
         let out = self.needs_render().then(|| {
             let mut out = String::new();
             if !self.started {
@@ -6956,6 +7842,47 @@ impl Driver {
         self.settle();
     }
 
+    /// Click the left button at pixel `x`, `y` of the screen (0-based) in
+    /// cells of `cell` pixels (width, height), as a terminal reporting the
+    /// mouse in pixels (SGR-Pixels, mode 1016) sends it, then
+    /// [`settle`](Self::settle): each event's column and row are the cell
+    /// the pixel is in, and its [`pixel`](rich_interact::Mouse::pixel)
+    /// where in that cell (#819). Nothing for a cell size of 0.
+    ///
+    /// ```
+    /// use intuituive::prelude::*;
+    ///
+    /// let app = App::new(|| {
+    ///     let at = signal(String::new());
+    ///     column([
+    ///         label("here").on_mouse(move |_, mouse| {
+    ///             let (x, y) = mouse.precise();
+    ///             at.set(format!("{x:.2} {y:.2}"));
+    ///             true
+    ///         }),
+    ///         text!("{at}"),
+    ///     ])
+    /// });
+    /// let mut driver = app.driver(10, 2);
+    /// // Cells of 10 by 20 pixels: pixel (25, 5) is a quarter of the way
+    /// // down column 2 of row 0.
+    /// driver.click_pixel(25, 5, (10, 20));
+    /// assert_eq!(driver.screen().plain()[1].trim_end(), "2.50 0.25");
+    /// ```
+    pub fn click_pixel(&mut self, x: u32, y: u32, cell: (u16, u16)) {
+        self.settle();
+        for kind in [MouseKind::Down(Button::Left), MouseKind::Up(Button::Left)] {
+            if self.done {
+                return;
+            }
+            let Some(mouse) = rich_interact::Mouse::from_pixels(kind, x, y, cell) else {
+                return;
+            };
+            self.event(Event::Mouse(mouse));
+        }
+        self.settle();
+    }
+
     /// Click the first cell of the first place `text` shows on the screen
     /// (reading rows top to bottom), then [`settle`](Self::settle).
     /// Whether it was found.
@@ -7014,6 +7941,232 @@ impl Driver {
             self.event(Event::Mouse(rich_interact::Mouse::new(kind, column, row)));
         }
         self.settle();
+    }
+
+    /// The node a test names: the one shown whose [name](crate::Node::name)
+    /// is `name`, else the one whose accessible name is, as
+    /// [`assert_focused`](Self::assert_focused) finds it. An error listing
+    /// the named nodes when none or several match.
+    fn named(&self, name: &str) -> Result<NodeId, String> {
+        let mut given: Vec<NodeId> = Vec::new();
+        let mut all: Vec<String> = Vec::new();
+        for layer in shown_layers(&self.app.layers) {
+            crate::node::walk_screen(&layer.root, &mut |node, _, _, _| {
+                if let Some(own) = node.given_name() {
+                    if own == name {
+                        given.push(node.id());
+                    }
+                    all.push(own.to_string());
+                }
+            });
+        }
+        let listed = |all: &mut Vec<String>| {
+            all.sort();
+            all.dedup();
+            if all.is_empty() {
+                "no node is named".to_string()
+            } else {
+                format!("the named nodes are: {}", all.join(", "))
+            }
+        };
+        match given[..] {
+            [id] => return Ok(id),
+            [] => {}
+            _ => {
+                return Err(format!(
+                    "`{name}` names {} nodes shown; name one of them apart",
+                    given.len()
+                ));
+            }
+        }
+        let access: Vec<NodeId> = self
+            .accessibility()
+            .into_iter()
+            .filter(|node| node.name == name)
+            .map(|node| node.id)
+            .collect();
+        match access[..] {
+            [id] => Ok(id),
+            [] => Err(format!(
+                "no node shown is named `{name}`; {}",
+                listed(&mut all)
+            )),
+            _ => Err(format!(
+                "`{name}` is the accessible name of {} nodes shown; give the one meant a `.name(..)`; {}",
+                access.len(),
+                listed(&mut all)
+            )),
+        }
+    }
+
+    /// Where the node named `name` is on the screen (found as
+    /// [`click_on`](Self::click_on) finds it); `None` when no node or
+    /// several are named so, or it is not shown.
+    pub fn rect_of(&self, name: &str) -> Option<Rect> {
+        let id = self.named(name).ok()?;
+        node_rect(&self.app.layers, id)
+    }
+
+    /// Where on the screen to point at the node named `name`: `offset`
+    /// from its top left corner, or its centre.
+    #[track_caller]
+    fn point_at(&mut self, name: &str, offset: Option<(u16, u16)>) -> (u16, u16) {
+        self.settle();
+        let id = match self.named(name) {
+            Ok(id) => id,
+            Err(message) => panic!("{message}"),
+        };
+        let Some(rect) = node_rect(&self.app.layers, id) else {
+            panic!("`{name}` is not shown on the screen");
+        };
+        match offset {
+            Some((dx, dy)) => (
+                rect.x.saturating_add(dx.min(rect.width.saturating_sub(1))),
+                rect.y.saturating_add(dy.min(rect.height.saturating_sub(1))),
+            ),
+            None => (rect.x + rect.width / 2, rect.y + rect.height / 2),
+        }
+    }
+
+    /// Click the centre of the node named `name` (its
+    /// [`name`](crate::Node::name), else its accessible name), then
+    /// [`settle`](Self::settle): a click that still lands when the layout
+    /// moves. A sibling of [`click`](Self::click), which takes a cell.
+    ///
+    /// # Panics
+    /// When no node shown is named `name`, or several are, listing the
+    /// named nodes; or when it is not on the screen.
+    ///
+    /// ```
+    /// use intuituive::prelude::*;
+    ///
+    /// let app = App::new(|| {
+    ///     let n = signal(0);
+    ///     column([
+    ///         text!("{n}"),
+    ///         label("add").name("add").on_click(move |_| n.update(|n| *n += 1)),
+    ///     ])
+    /// });
+    /// let mut driver = app.driver(10, 2);
+    /// driver.click_on("add");
+    /// assert_eq!(driver.screen().plain()[0].trim_end(), "1");
+    /// ```
+    #[track_caller]
+    pub fn click_on(&mut self, name: &str) {
+        let (column, row) = self.point_at(name, None);
+        self.click(column, row);
+    }
+
+    /// Click the node named `name` at `offset` (column, row) from its top
+    /// left corner, kept inside it.
+    ///
+    /// # Panics
+    /// As [`click_on`](Self::click_on).
+    #[track_caller]
+    pub fn click_on_at(&mut self, name: &str, offset: (u16, u16)) {
+        let (column, row) = self.point_at(name, Some(offset));
+        self.click(column, row);
+    }
+
+    /// Click the centre of the node named `name` twice, at once: a double
+    /// click.
+    ///
+    /// # Panics
+    /// As [`click_on`](Self::click_on).
+    #[track_caller]
+    pub fn double_click_on(&mut self, name: &str) {
+        let (column, row) = self.point_at(name, None);
+        self.click(column, row);
+        self.click(column, row);
+    }
+
+    /// Move the pointer to the centre of the node named `name`, then
+    /// [`settle`](Self::settle): it is hovered, and its
+    /// [tooltip](crate::Node::tooltip) shows once the delay has passed
+    /// ([`advance`](Self::advance)).
+    ///
+    /// # Panics
+    /// As [`click_on`](Self::click_on).
+    #[track_caller]
+    pub fn hover_on(&mut self, name: &str) {
+        let (column, row) = self.point_at(name, None);
+        self.send(Event::Mouse(rich_interact::Mouse::new(
+            MouseKind::Moved,
+            column,
+            row,
+        )));
+    }
+
+    /// Turn the mouse wheel `steps` notches over the node named `name`
+    /// (down when positive), as [`wheel`](Self::wheel) does at a cell.
+    ///
+    /// # Panics
+    /// As [`click_on`](Self::click_on).
+    #[track_caller]
+    pub fn scroll_on(&mut self, name: &str, steps: i32) {
+        let (column, row) = self.point_at(name, None);
+        self.wheel(column, row, steps);
+    }
+
+    /// Drag from the centre of the node named `name` by `by` (columns,
+    /// rows) with the left button: a press there, a move a cell at a time,
+    /// a release at the end; then [`settle`](Self::settle).
+    ///
+    /// # Panics
+    /// As [`click_on`](Self::click_on).
+    #[track_caller]
+    pub fn drag_on(&mut self, name: &str, by: (i32, i32)) {
+        let (column, row) = self.point_at(name, None);
+        let area = self.screen.area();
+        let end = (
+            (column as i32 + by.0).clamp(0, area.width.saturating_sub(1) as i32),
+            (row as i32 + by.1).clamp(0, area.height.saturating_sub(1) as i32),
+        );
+        let mouse = |kind, x: i32, y: i32| {
+            Event::Mouse(rich_interact::Mouse::new(kind, x as u16, y as u16))
+        };
+        self.event(mouse(
+            MouseKind::Down(Button::Left),
+            column as i32,
+            row as i32,
+        ));
+        let steps = (end.0 - column as i32)
+            .abs()
+            .max((end.1 - row as i32).abs());
+        for step in 1..=steps {
+            if self.done {
+                return;
+            }
+            let x = column as i32 + (end.0 - column as i32) * step / steps;
+            let y = row as i32 + (end.1 - row as i32) * step / steps;
+            self.event(mouse(MouseKind::Drag(Button::Left), x, y));
+            self.settle();
+        }
+        self.event(mouse(MouseKind::Up(Button::Left), end.0, end.1));
+        self.settle();
+    }
+
+    /// Advance the app's clock a frame at a time until no
+    /// [animation](Ctx::animate) runs and no [effect](crate::fx) waits for
+    /// its next frame (at most 30 seconds of the app's time, so an endless
+    /// effect does not hang a test).
+    pub fn wait_for_animations(&mut self) {
+        let end = self.app.now + Duration::from_secs(30);
+        self.settle();
+        while !self.done && self.app.now < end {
+            let now = self.app.now;
+            let busy = !self.app.animations.is_empty()
+                || self.app.timeouts.iter().any(|timeout| {
+                    timeout
+                        .timer
+                        .left(now)
+                        .is_some_and(|left| left <= Duration::from_millis(50))
+                });
+            if !busy {
+                break;
+            }
+            self.advance(Duration::from_millis(16));
+        }
     }
 
     /// Press keys by name, separated by spaces (`"down down enter"`,

@@ -37,6 +37,7 @@ fn options(view: View, url: &str) -> Options {
         url: Some(url.to_string()),
         view: Some(view),
         images: Some(Images::Ansi),
+        tunnel: None,
     }
 }
 

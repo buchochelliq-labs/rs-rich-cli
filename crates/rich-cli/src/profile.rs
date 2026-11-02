@@ -158,8 +158,12 @@ pub(crate) fn profile(cli: &Cli) -> Result<Profile, Failure> {
     // Files and stdin stream; a URL's body (already bounded by the fetch
     // limit) and text in another `--encoding` are decoded whole first.
     let mut reader: Box<dyn BufRead> = if is_url(resource) {
-        let (text, _) =
+        let (mut text, _) =
             fetch_url(resource, cli.extensions.encoding).map_err(|err| (ExitClass::Input, err))?;
+        // Sanitized by default, as every URL's content is.
+        if cli.sanitize {
+            text = rich_ext::sanitize_terminal_controls(&text);
+        }
         Box::new(std::io::Cursor::new(text.into_bytes()))
     } else if cli.extensions.encoding.is_some() {
         let text = read_resource(Some(resource), cli.extensions.encoding).map_err(input_error)?;

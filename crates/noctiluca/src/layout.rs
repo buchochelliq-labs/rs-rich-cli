@@ -1888,6 +1888,42 @@ pub fn hint_labels(count: usize) -> Vec<String> {
         .collect()
 }
 
+/// Where a click lands in a media box `width` by `height` CSS pixels drawn
+/// in `cols` by `rows` cells: `at` is the pointer in fractional cells from
+/// the drawing's top left (a terminal reporting pixels gives the fraction,
+/// one reporting cells the cell's centre; see
+/// [`Mouse::precise`](rich_intuituive::interact::Mouse::precise)). In CSS
+/// pixels from the box's top left, kept inside it (#819).
+pub fn point_in(width: f64, height: f64, cols: usize, rows: usize, at: (f32, f32)) -> (f64, f64) {
+    let along = |at: f32, cells: usize, size: f64| {
+        if cells == 0 || size <= 0.0 {
+            return 0.0;
+        }
+        (f64::from(at) / cells as f64).clamp(0.0, 1.0) * size
+    };
+    inside(
+        0.0,
+        0.0,
+        width,
+        height,
+        along(at.0, cols, width),
+        along(at.1, rows, height),
+    )
+}
+
+/// `left + x`, `top + y` kept inside the box from `left`, `top` to
+/// `right`, `bottom` (half a pixel in from its edges, so a click on the
+/// last pixel is still the box's).
+pub fn inside(left: f64, top: f64, right: f64, bottom: f64, x: f64, y: f64) -> (f64, f64) {
+    let keep = |from: f64, to: f64, at: f64| {
+        if to - from < 1.0 {
+            return (from + to) / 2.0;
+        }
+        (from + at).clamp(from + 0.5, to - 0.5)
+    };
+    (keep(left, right, x), keep(top, bottom, y))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1983,5 +2019,19 @@ mod tests {
         let unique: std::collections::HashSet<_> = labels.iter().collect();
         assert_eq!(unique.len(), 40);
         assert_eq!(hint_labels(3), ["a", "s", "d"]);
+    }
+
+    #[test]
+    fn a_click_lands_where_the_pointer_was_in_the_box() {
+        // A 300 by 150 canvas drawn in 30 by 8 cells.
+        assert_eq!(point_in(300.0, 150.0, 30, 8, (15.0, 4.0)), (150.0, 75.0));
+        // A cell's centre: column 2, row 0.
+        assert_eq!(point_in(300.0, 150.0, 30, 8, (2.5, 0.5)), (25.0, 9.375));
+        // Outside the drawing: kept half a pixel inside the box.
+        assert_eq!(point_in(300.0, 150.0, 30, 8, (31.0, -1.0)), (299.5, 0.5));
+        // An empty drawing or box: its middle, or its corner.
+        assert_eq!(point_in(300.0, 150.0, 0, 0, (3.0, 3.0)), (0.5, 0.5));
+        assert_eq!(point_in(0.0, 0.0, 30, 8, (3.0, 3.0)), (0.0, 0.0));
+        assert_eq!(inside(10.0, 20.0, 110.0, 70.0, 50.0, 25.0), (60.0, 45.0));
     }
 }

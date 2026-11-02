@@ -243,8 +243,9 @@ to polling at `--watch-interval`. Idle watching does not busy-loop in either
 mode. Recursive directory and glob watching are not supported; name each file.
 
 URLs can be watched when the default `fetch` feature is enabled (a fetched
-`https://` URL trusts the system's certificate store first and the roots
-built into `rich` as the fallback, so a company proxy's root CA works). A
+`https://` URL trusts the system's certificate store, so a company proxy's
+root CA works, and the roots built into `rich` only when that store cannot
+be used; a certificate the system refuses stays refused). A
 URL is always polled, and must be the only watched resource:
 
 ```bash
@@ -286,8 +287,9 @@ their existing behavior where the mode supports them.
 ## Neutralize terminal controls in input
 
 By default, the upstream modes (`rich FILE`, `--print`, `--markdown`, `--json`,
-`--csv`, …) keep ESC bytes in input, matching upstream `rich` behavior. Use
-`--sanitize` when displaying content you do not trust:
+`--csv`, …) keep ESC bytes in local files and stdin, matching upstream `rich`
+behavior. Content fetched from a URL is sanitized by default in every mode
+(below). Use `--sanitize` when displaying other content you do not trust:
 
 ```bash { .rich-playground data-kind="cli" }
 rich --sanitize suspicious.txt
@@ -312,6 +314,13 @@ let such a file's escapes reach the terminal. With sanitizing on, `rich diff`
 also shows controls in file names and the summary line, and two ANSI captures
 are still compared by their colours: only their SGR styles are kept, and OSC
 strings, C1 controls such as U+009B and stray ESC bytes are removed or shown.
+
+Content fetched from a URL (`rich https://…`, in any mode) is sanitized by
+default too, since the server chose those bytes; `--no-sanitize` lets its
+escapes through. A URL's redirects are followed, but not from `https://` to
+`http://`: that is refused with an error, and an `http://` address has to be
+given as such (both differ from upstream rich-cli; see
+[DIVERGENCES §50](DIVERGENCES.md#50-rich-url-no-https-downgrade-and-fetched-content-is-sanitized)).
 
 `rich capture --sanitize` does the same to the captured output (keeping its
 colours) before it is shown, exported, recorded with `--cast` or reported. The

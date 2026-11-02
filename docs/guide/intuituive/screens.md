@@ -91,6 +91,68 @@ let picked: Option<usize> = App::new(|| {
   with `?` like any other. What the builder made is dropped, and its
   `latest` threads never start.
 
+### Screens that hand back a value
+
+```rust
+cx.push_for::<Choice>(|| picker(), |choice: Option<Choice>, cx| { /* .. */ });
+cx.modal_for::<Choice>(Size::Auto, Size::Auto, || picker(), |choice, cx| { /* .. */ });
+// inside the picker:
+.on_key("enter", move |cx| cx.dismiss(Choice::A))
+```
+
+- **`cx.dismiss(value)`** closes the top screen and hands `value` to the
+  callback it was opened with, as Textual's `dismiss` does. A plain pop
+  (`cx.pop()`, Esc on a pop-up) calls it with `None`, and so does a value
+  of another type.
+- The callback gets a `Ctx`: it can open another screen, toast, or quit.
+  `cx.replace(..)` of such a screen hands the callback on to the screen
+  that takes its place, so a wizard's last step dismisses for all of them.
+
+### Modes
+
+Several stacks of screens, each with its own history, as Textual's
+`App.MODES` are:
+
+```rust
+App::new(home)
+    .mode("chat", chat_screen)
+    .mode("settings", settings_screen);
+
+cx.switch_mode("settings");           // built on first use, then kept
+cx.switch_mode(intuituive::DEFAULT_MODE);  // the stack App::new built
+cx.mode()                             // "settings"
+```
+
+- The stack left keeps its screens, their state and their focus; switching
+  back shows it as it was, the screen pushed last still on top.
+- A stashed mode's timers do not fire while another mode shows. One that
+  came due fires once on the way back, then goes on in step. One-shot
+  `cx.after` timers and watches belong to the app and keep running.
+- An unknown name does nothing.
+
+### Maximizing a pane
+
+A pane can take the whole screen for a while, as Textual's
+`Screen.maximize` does:
+
+```rust
+row([files_pane(), diff_pane().maximizable()])
+App::new(build).maximize_key("ctrl+m")   // off unless set
+```
+
+- **`.maximizable()`** (or `.maximizable_when(|| ..)`) says which nodes may
+  be maximized. **`cx.maximize()`** maximizes the nearest maximizable node
+  on the focus's path (the focused node, or the pane round it);
+  `cx.maximize_node(id)` maximizes that node; `cx.minimize()` restores.
+  `cx.is_maximized()` says whether one is.
+- The node draws over the whole screen, keeping its state and its focus.
+  The rest of the tree keeps its state but does not draw: clicks miss it,
+  and Tab stays inside the maximized node. Signals written meanwhile redraw
+  the hidden panes when the layout is restored.
+- Esc that nothing used restores it, and so does the `maximize_key` again.
+  The inspector marks the node *maximized*, and assistive technology hears
+  "maximized" and "restored".
+
 ### Pop-ups
 
 `cx.popup(anchor, placement, width, height, build)` opens a box like a
@@ -241,8 +303,11 @@ the room and the answers at the bottom) and styles its title.
   one-line error stay on one line.
 - **`cx.animate(signal, to, duration, easing)`** moves a `Signal<f64>` to
   `to` over `duration`, setting it every frame, so whatever reads it moves
-  with it: a split's ratio, a gauge, a scroll offset. `Easing` is `Linear`,
-  `EaseIn`, `EaseOut` or `EaseInOut`. A new animation of the same signal
+  with it: a split's ratio, a gauge, a scroll offset. `Easing` is
+  `Linear`, `EaseIn`, `EaseOut` or `EaseInOut` (the cubic ones), or one of
+  Textual's: sine, quad, cubic, quart, quint, expo, circ, back, elastic and
+  bounce, each `In…`, `Out…` and `InOut…` (`Easing::OutBounce`,
+  `Easing::InOutBack`); `Easing::ALL` lists them. A new animation of the same signal
   takes over from where it is. While one runs, the app draws at about 60
   frames a second, and it goes back to waiting for input when they end.
 

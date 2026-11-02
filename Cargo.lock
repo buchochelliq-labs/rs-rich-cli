@@ -2274,10 +2274,12 @@ name = "noctiluca"
 version = "0.0.3"
 dependencies = [
  "image",
+ "libc",
  "portable-pty",
  "rs-rich",
  "rs-rich-art",
  "rs-rich-embed",
+ "rs-rich-interact",
  "rs-rich-intuituive",
  "rs-rich-record",
  "serde_json",
@@ -3197,6 +3199,7 @@ dependencies = [
  "rs-rich-micro",
  "rs-rich-record",
  "rs-rich-web",
+ "rustls",
  "same-file",
  "serde_json",
  "sha2 0.11.0",
@@ -3297,6 +3300,7 @@ dependencies = [
  "rs-rich-ext",
  "rs-rich-micro",
  "rs-rich-plugin-api",
+ "serde_json",
  "signal-hook 0.4.5",
  "tempfile",
  "termion",

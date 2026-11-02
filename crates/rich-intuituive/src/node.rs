@@ -94,6 +94,12 @@ pub(crate) struct KeyBinding {
     /// ([`repeat`](Node::repeat)).
     pub repeat: Option<(std::time::Duration, std::time::Duration)>,
     pub handler: KeyHandler,
+    /// What a keymap remaps it by ([`binding_id`](Node::binding_id)).
+    pub id: Option<Rc<str>>,
+    /// Its own keys and shown keys, kept once a keymap remaps it.
+    pub declared: Option<(Vec<Key>, Option<Vec<Key>>)>,
+    /// The keymap generation its keys are from.
+    pub keymap_generation: u64,
 }
 
 /// When a binding applies: read untracked, as a key comes and as the help
@@ -121,6 +127,9 @@ impl KeyBinding {
             hidden: false,
             repeat: None,
             handler,
+            id: None,
+            declared: None,
+            keymap_generation: 0,
         }
     }
 
@@ -285,6 +294,9 @@ pub struct Node {
     /// all hold for it to be shown ([`hide_below`](Node::hide_below) and
     /// the like), each with the rule the inspector names it by.
     shown_when: Vec<(String, Condition)>,
+    /// Whether it may be [maximized](crate::Ctx::maximize), and while
+    /// what holds.
+    maximizable: Option<Condition>,
     /// Whether it was last drawn in the theme's error look.
     error_lit: Cell<bool>,
     /// What the stylesheet decided for it.
@@ -554,6 +566,7 @@ impl Node {
             error_when: None,
             error_message: None,
             shown_when: Vec::new(),
+            maximizable: None,
             error_lit: Cell::new(false),
             sheet: RefCell::new(SheetNode::default()),
             inner: Cell::new(Rect::default()),
@@ -1365,6 +1378,42 @@ impl Node {
     /// ```
     pub fn shown_when(self, shown: impl Fn() -> bool + 'static) -> Node {
         self.shown_if("shown_when", shown)
+    }
+
+    /// Let this node be [maximized](crate::Ctx::maximize): drawn over the
+    /// whole screen, keeping its state and its focus, while the rest of
+    /// the tree keeps its state but does not draw. Esc restores it.
+    ///
+    /// ```
+    /// use intuituive::prelude::*;
+    ///
+    /// let app = App::new(|| {
+    ///     row([
+    ///         label("left").fixed(10),
+    ///         label("diff").focusable().maximizable(),
+    ///     ])
+    /// })
+    /// .maximize_key("ctrl+m");
+    /// let mut driver = app.driver(20, 2);
+    /// driver.press("ctrl+m");
+    /// assert_eq!(driver.screen().plain()[0].trim_end(), "diff");
+    /// driver.press("esc");
+    /// assert_eq!(driver.screen().plain()[0].trim_end(), "left      diff");
+    /// ```
+    pub fn maximizable(self) -> Node {
+        self.maximizable_when(|| true)
+    }
+
+    /// [`maximizable`](Self::maximizable) while `when` holds (read when a
+    /// maximize is asked for).
+    pub fn maximizable_when(mut self, when: impl Fn() -> bool + 'static) -> Node {
+        self.maximizable = Some(Box::new(when));
+        self
+    }
+
+    /// Whether it may be maximized now.
+    pub(crate) fn can_maximize(&self) -> bool {
+        self.maximizable.as_ref().is_some_and(|when| when())
     }
 
     /// Hide this node while `hidden` holds: [`shown_when`](Self::shown_when)

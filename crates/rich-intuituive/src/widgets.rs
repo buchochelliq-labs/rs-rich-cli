@@ -1,8 +1,8 @@
 //! Ready-made widgets, built on the public [`Widget`] trait as an app's own
 //! would be: a [`table`] with a selectable row and sized columns, a
 //! [`virtual_list`] of any length, a [`tabs`] strip, a [`tree`], [`split`]
-//! panes, a [`calendar`], a [`time_picker`], a [`datetime_picker`] and a
-//! [`hex_view`].
+//! panes, a [`calendar`], a [`time_picker`], a [`datetime_picker`], a
+//! [`hex_view`] and an interactive [`diff_view`].
 //!
 //! [`scroll`](crate::scroll) and anchored pop-ups
 //! ([`Ctx::popup`](crate::Ctx::popup)) are part of the framework itself,
@@ -34,6 +34,7 @@ pub use crate::calendar::{
 pub use crate::datetime::{
     DateTimeOptions, TimeOptions, datetime_picker, time_picker, time_picker_with,
 };
+pub use crate::diff_view::{Decision, DiffOptions, accepted_text, diff_view, diff_view_with};
 pub use crate::help::KeyHintsOptions;
 pub use crate::hex::hex_view;
 pub use crate::list::{
@@ -2877,7 +2878,14 @@ impl Node {
     /// assert_eq!(driver.screen().plain()[1].trim_end(), "1 after 1");
     /// ```
     pub fn on_select(self, handler: impl FnMut(usize, &mut crate::app::Ctx) + 'static) -> Node {
-        self.widget_mut(|tabs: &mut Tabs| tabs.on_select = Some(Box::new(handler)));
+        let mut handler = Some(handler);
+        self.widget_mut(|tabs: &mut Tabs| {
+            tabs.on_select = handler.take().map(|h| Box::new(h) as _)
+        });
+        if let Some(handler) = handler.take() {
+            // A [`list_of`](crate::list_of): Enter or a click on a row.
+            self.node_list(|list| list.set_on_select(Box::new(handler)));
+        }
         self
     }
 }

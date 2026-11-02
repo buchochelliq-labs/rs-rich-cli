@@ -131,6 +131,7 @@ pub mod engine;
 pub mod layout;
 pub mod model;
 pub mod pictures;
+pub mod ssh;
 pub mod start;
 pub mod tab;
 pub mod testing;

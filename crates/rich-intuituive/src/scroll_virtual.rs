@@ -763,7 +763,12 @@ impl Node {
     /// another index than the one it was built for: what it draws should
     /// follow its key (or the item it was built from), not the index.
     pub fn item_key(self, key: impl Fn(usize) -> u64 + 'static) -> Node {
-        self.widget_mut(|view: &mut VirtualScroll| view.key = Some(Box::new(key)));
+        let mut key = Some(key);
+        self.widget_mut(|view: &mut VirtualScroll| view.key = key.take().map(|k| Box::new(k) as _));
+        if let Some(key) = key {
+            // A [`list_of`](crate::list_of): its rows are kept by key.
+            self.node_list(|list| list.set_key(Box::new(key)));
+        }
         self
     }
 

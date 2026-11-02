@@ -73,6 +73,7 @@ fn translate(event: InputEvent, held: &mut HeldButton, exact: bool) -> Option<Ev
                 column: x.saturating_sub(1),
                 row: y.saturating_sub(1),
                 modifiers: self::modifiers(modifiers),
+                pixel: None,
             })
         }
         InputEvent::Resized { cols, rows } => Event::Resize {

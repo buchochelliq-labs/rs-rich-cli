@@ -87,7 +87,7 @@ const OVERALL_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(60);
 /// Downloads with ureq (rustls): HTTPS only, redirects included, a
 /// 60-second overall timeout for the whole chain, and the body read to at
 /// most `max_bytes` after any content decoding. The system's certificate
-/// store is trusted first and Mozilla's bundled roots are the fallback
+/// store is trusted, and Mozilla's bundled roots only when it cannot be used
 /// ([`crate::tls`]); redirects (at most five) are followed by
 /// [`crate::redirect`], not by ureq.
 #[cfg(feature = "http")]

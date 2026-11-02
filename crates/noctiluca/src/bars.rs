@@ -154,6 +154,10 @@ pub fn status(b: Browser) -> Node {
             );
         }
         let mut parts = vec![b.view.get().name().to_string()];
+        // `--ssh`: where the network goes, and a dropped tunnel.
+        if let Some(tunnel) = b.tunnel.get() {
+            parts.push(tunnel);
+        }
         // A page with more than the model reads says so.
         if b.page.with(|p| p.as_ref().is_some_and(|p| p.truncated)) {
             parts.push("[yellow]page cut: too long to read whole[/]".into());

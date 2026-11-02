@@ -1,0 +1,22 @@
+ [cyan]@@ -2 +2 @@[/]
+ [dim] 1  1 [/]  line 1
+ [dim] 2    [/][red]-[/] [red]line [/][bold underline red]2[/]
+ [dim]    2 [/][green]+[/] [green]line [/][bold underline green]two[/]
+ [dim] 3  3 [/]  line 3
+ [dim] 4  4 [/]  line 4
+       [dim]⋯ 3 unchanged lines[/]
+ [cyan]@@ -10 +10,2 @@[/]
+ [dim] 8  8 [/]  line 8
+ [dim] 9  9 [/]  line 9
+ [dim]10    [/][red]-[/] [red]line [/][bold underline red]10[/]
+ [dim]   10 [/][green]+[/] [green]line [/][bold underline green]ten[/]
+ [dim]   11 [/][green]+[/] [green]line ten and a half[/]
+ [dim]11 12 [/]  line 11
+ [dim]12 13 [/]  line 12
+       [dim]⋯ 6 unchanged lines[/]
+ [cyan]@@ -20,0 +22 @@[/]
+ [dim]19 20 [/]  line 19
+ [dim]20 21 [/]  line 20
+ [dim]   22 [/][green]+[/] [green]line 21[/]
+
+

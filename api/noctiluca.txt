@@ -186,6 +186,7 @@ pub noctiluca::app::Browser::pixels: intuituive::reactive::Memo<rich_art::pictur
 pub noctiluca::app::Browser::scroll: intuituive::reactive::Signal<u64>
 pub noctiluca::app::Browser::start: intuituive::reactive::Signal<bool>
 pub noctiluca::app::Browser::state: intuituive::reactive::Signal<rich_embed::web::PageState>
+pub noctiluca::app::Browser::tunnel: intuituive::reactive::Signal<core::option::Option<alloc::string::String>>
 pub noctiluca::app::Browser::videos: intuituive::reactive::Signal<alloc::rc::Rc<std::collections::hash::map::HashMap<noctiluca::engine::NodeId, noctiluca::pictures::Live>>>
 pub noctiluca::app::Browser::view: intuituive::reactive::Signal<noctiluca::config::View>
 pub noctiluca::app::Browser::viewport: intuituive::reactive::Memo<(u16, u16)>
@@ -246,6 +247,7 @@ pub struct noctiluca::app::Options
 pub noctiluca::app::Options::bookmarks: noctiluca::bookmarks::Bookmarks
 pub noctiluca::app::Options::config: noctiluca::config::Config
 pub noctiluca::app::Options::images: core::option::Option<noctiluca::config::Images>
+pub noctiluca::app::Options::tunnel: core::option::Option<noctiluca::ssh::TunnelLink>
 pub noctiluca::app::Options::url: core::option::Option<alloc::string::String>
 pub noctiluca::app::Options::view: core::option::Option<noctiluca::config::View>
 impl core::clone::Clone for noctiluca::app::Options
@@ -337,6 +339,9 @@ pub noctiluca::args::Args::no_adapt: bool
 pub noctiluca::args::Args::no_js: bool
 pub noctiluca::args::Args::no_mouse: bool
 pub noctiluca::args::Args::profile: core::option::Option<alloc::string::String>
+pub noctiluca::args::Args::split: core::option::Option<rich_interact::host::Direction>
+pub noctiluca::args::Args::ssh: core::option::Option<alloc::string::String>
+pub noctiluca::args::Args::ssh_args: alloc::vec::Vec<alloc::string::String>
 pub noctiluca::args::Args::target: alloc::vec::Vec<alloc::string::String>
 pub noctiluca::args::Args::transparent: bool
 pub noctiluca::args::Args::view: core::option::Option<noctiluca::config::View>
@@ -360,6 +365,7 @@ impl core::panic::unwind_safe::UnwindSafe for noctiluca::args::Args
 pub const noctiluca::args::USAGE: &str
 pub fn noctiluca::args::adapt_of(&noctiluca::args::Args, noctiluca::adapt::Adapt) -> core::result::Result<noctiluca::adapt::Adapt, alloc::string::String>
 pub fn noctiluca::args::parse_args(&[alloc::string::String]) -> core::result::Result<noctiluca::args::Run, alloc::string::String>
+pub fn noctiluca::args::without_split(&[alloc::string::String]) -> alloc::vec::Vec<alloc::string::String>
 pub mod noctiluca::bars
 pub fn noctiluca::bars::clock(f64) -> alloc::string::String
 pub fn noctiluca::bars::header(noctiluca::app::Browser) -> intuituive::node::Node
@@ -455,6 +461,7 @@ pub noctiluca::cdp::ChromeOptions::no_js: bool
 pub noctiluca::cdp::ChromeOptions::profile: core::option::Option<std::path::PathBuf>
 pub noctiluca::cdp::ChromeOptions::quarantine: core::option::Option<std::path::PathBuf>
 pub noctiluca::cdp::ChromeOptions::rows: u16
+pub noctiluca::cdp::ChromeOptions::switches: alloc::vec::Vec<alloc::string::String>
 pub noctiluca::cdp::ChromeOptions::transparent: bool
 impl core::clone::Clone for noctiluca::cdp::ChromeOptions
 pub fn noctiluca::cdp::ChromeOptions::clone(&self) -> noctiluca::cdp::ChromeOptions
@@ -878,6 +885,10 @@ impl core::panic::unwind_safe::RefUnwindSafe for noctiluca::engine::MediaOp
 impl core::panic::unwind_safe::UnwindSafe for noctiluca::engine::MediaOp
 pub enum noctiluca::engine::PageAction
 pub noctiluca::engine::PageAction::Click(noctiluca::engine::NodeId)
+pub noctiluca::engine::PageAction::ClickAt
+pub noctiluca::engine::PageAction::ClickAt::node: noctiluca::engine::NodeId
+pub noctiluca::engine::PageAction::ClickAt::x: f64
+pub noctiluca::engine::PageAction::ClickAt::y: f64
 pub noctiluca::engine::PageAction::Focus(noctiluca::engine::NodeId)
 pub noctiluca::engine::PageAction::InsertText(alloc::string::String)
 pub noctiluca::engine::PageAction::Media
@@ -1306,9 +1317,11 @@ pub fn noctiluca::layout::face(&noctiluca::model::Control) -> alloc::string::Str
 pub fn noctiluca::layout::face_in(&noctiluca::model::Control, noctiluca::adapt::Adapt, usize) -> alloc::string::String
 pub fn noctiluca::layout::hint_labels(usize) -> alloc::vec::Vec<alloc::string::String>
 pub fn noctiluca::layout::inline_cells(&str, f64) -> alloc::string::String
+pub fn noctiluca::layout::inside(f64, f64, f64, f64, f64, f64) -> (f64, f64)
 pub fn noctiluca::layout::log_lines(&noctiluca::model::Log, usize, usize, &noctiluca::model::Page, &noctiluca::layout::Marks) -> alloc::vec::Vec<noctiluca::layout::Line>
 pub fn noctiluca::layout::matches(&str, &str) -> alloc::vec::Vec<(usize, usize)>
 pub fn noctiluca::layout::play_mark(&noctiluca::model::Media, usize) -> core::option::Option<noctiluca::layout::Line>
+pub fn noctiluca::layout::point_in(f64, f64, usize, usize, (f32, f32)) -> (f64, f64)
 pub fn noctiluca::layout::project(&noctiluca::model::Page, u16, (f64, f64), &noctiluca::layout::Marks) -> noctiluca::layout::Projection
 pub fn noctiluca::layout::projection(&noctiluca::model::Page, u16, (f64, f64), &noctiluca::layout::Marks) -> alloc::vec::Vec<noctiluca::layout::Line>
 pub fn noctiluca::layout::reader(&noctiluca::model::Page, u16, &noctiluca::layout::Marks) -> alloc::vec::Vec<noctiluca::layout::Piece>
@@ -1873,6 +1886,90 @@ pub fn noctiluca::pictures::on_backdrop(alloc::vec::Vec<rich::segment::Segment>,
 pub fn noctiluca::pictures::pixels(noctiluca::config::Images) -> rich_art::picture::Pixels
 pub fn noctiluca::pictures::splice(&rich::console::Console, &noctiluca::pictures::Cells, alloc::vec::Vec<rich::segment::Segment>, usize, usize, &[noctiluca::layout::Region], impl core::ops::function::Fn(&noctiluca::layout::Region) -> core::option::Option<(rich_art::picture::Picture, rich_art::picture::Pixels)>) -> alloc::vec::Vec<rich::segment::Segment>
 pub fn noctiluca::pictures::view(rich_art::picture::Pixels) -> rich_art::picture::ImageView
+pub mod noctiluca::ssh
+pub enum noctiluca::ssh::TunnelState
+pub noctiluca::ssh::TunnelState::Connecting
+pub noctiluca::ssh::TunnelState::Down(alloc::string::String)
+pub noctiluca::ssh::TunnelState::Up
+impl core::clone::Clone for noctiluca::ssh::TunnelState
+pub fn noctiluca::ssh::TunnelState::clone(&self) -> noctiluca::ssh::TunnelState
+impl core::cmp::Eq for noctiluca::ssh::TunnelState
+impl core::cmp::PartialEq for noctiluca::ssh::TunnelState
+pub fn noctiluca::ssh::TunnelState::eq(&self, &noctiluca::ssh::TunnelState) -> bool
+impl core::fmt::Debug for noctiluca::ssh::TunnelState
+pub fn noctiluca::ssh::TunnelState::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for noctiluca::ssh::TunnelState
+impl core::marker::Freeze for noctiluca::ssh::TunnelState
+impl core::marker::Send for noctiluca::ssh::TunnelState
+impl core::marker::Sync for noctiluca::ssh::TunnelState
+impl core::marker::Unpin for noctiluca::ssh::TunnelState
+impl core::marker::UnsafeUnpin for noctiluca::ssh::TunnelState
+impl core::panic::unwind_safe::RefUnwindSafe for noctiluca::ssh::TunnelState
+impl core::panic::unwind_safe::UnwindSafe for noctiluca::ssh::TunnelState
+pub struct noctiluca::ssh::SshOptions
+pub noctiluca::ssh::SshOptions::args: alloc::vec::Vec<alloc::string::String>
+pub noctiluca::ssh::SshOptions::host: alloc::string::String
+pub noctiluca::ssh::SshOptions::program: std::path::PathBuf
+impl noctiluca::ssh::SshOptions
+pub fn noctiluca::ssh::SshOptions::new(impl core::convert::Into<alloc::string::String>) -> noctiluca::ssh::SshOptions
+impl core::clone::Clone for noctiluca::ssh::SshOptions
+pub fn noctiluca::ssh::SshOptions::clone(&self) -> noctiluca::ssh::SshOptions
+impl core::cmp::Eq for noctiluca::ssh::SshOptions
+impl core::cmp::PartialEq for noctiluca::ssh::SshOptions
+pub fn noctiluca::ssh::SshOptions::eq(&self, &noctiluca::ssh::SshOptions) -> bool
+impl core::fmt::Debug for noctiluca::ssh::SshOptions
+pub fn noctiluca::ssh::SshOptions::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for noctiluca::ssh::SshOptions
+impl core::marker::Freeze for noctiluca::ssh::SshOptions
+impl core::marker::Send for noctiluca::ssh::SshOptions
+impl core::marker::Sync for noctiluca::ssh::SshOptions
+impl core::marker::Unpin for noctiluca::ssh::SshOptions
+impl core::marker::UnsafeUnpin for noctiluca::ssh::SshOptions
+impl core::panic::unwind_safe::RefUnwindSafe for noctiluca::ssh::SshOptions
+impl core::panic::unwind_safe::UnwindSafe for noctiluca::ssh::SshOptions
+pub struct noctiluca::ssh::Tunnel
+impl noctiluca::ssh::Tunnel
+pub fn noctiluca::ssh::Tunnel::check(&mut self) -> noctiluca::ssh::TunnelState
+pub fn noctiluca::ssh::Tunnel::chrome_switches(&self) -> alloc::vec::Vec<alloc::string::String>
+pub fn noctiluca::ssh::Tunnel::host(&self) -> &str
+pub fn noctiluca::ssh::Tunnel::open(noctiluca::ssh::SshOptions, core::time::Duration) -> std::io::error::Result<noctiluca::ssh::Tunnel>
+pub fn noctiluca::ssh::Tunnel::port(&self) -> u16
+pub fn noctiluca::ssh::Tunnel::reconnect(&mut self) -> std::io::error::Result<()>
+impl core::fmt::Debug for noctiluca::ssh::Tunnel
+pub fn noctiluca::ssh::Tunnel::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::ops::drop::Drop for noctiluca::ssh::Tunnel
+pub fn noctiluca::ssh::Tunnel::drop(&mut self)
+impl core::marker::Freeze for noctiluca::ssh::Tunnel
+impl core::marker::Send for noctiluca::ssh::Tunnel
+impl core::marker::Sync for noctiluca::ssh::Tunnel
+impl core::marker::Unpin for noctiluca::ssh::Tunnel
+impl core::marker::UnsafeUnpin for noctiluca::ssh::Tunnel
+impl !core::panic::unwind_safe::RefUnwindSafe for noctiluca::ssh::Tunnel
+impl !core::panic::unwind_safe::UnwindSafe for noctiluca::ssh::Tunnel
+pub struct noctiluca::ssh::TunnelLink(pub alloc::sync::Arc<std::sync::poison::mutex::Mutex<noctiluca::ssh::Tunnel>>)
+impl noctiluca::ssh::TunnelLink
+pub fn noctiluca::ssh::TunnelLink::check(&self) -> noctiluca::ssh::TunnelState
+pub fn noctiluca::ssh::TunnelLink::host(&self) -> alloc::string::String
+pub fn noctiluca::ssh::TunnelLink::new(noctiluca::ssh::Tunnel) -> noctiluca::ssh::TunnelLink
+pub fn noctiluca::ssh::TunnelLink::reconnect(&self) -> std::io::error::Result<()>
+impl core::clone::Clone for noctiluca::ssh::TunnelLink
+pub fn noctiluca::ssh::TunnelLink::clone(&self) -> noctiluca::ssh::TunnelLink
+impl core::fmt::Debug for noctiluca::ssh::TunnelLink
+pub fn noctiluca::ssh::TunnelLink::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Freeze for noctiluca::ssh::TunnelLink
+impl core::marker::Send for noctiluca::ssh::TunnelLink
+impl core::marker::Sync for noctiluca::ssh::TunnelLink
+impl core::marker::Unpin for noctiluca::ssh::TunnelLink
+impl core::marker::UnsafeUnpin for noctiluca::ssh::TunnelLink
+impl core::panic::unwind_safe::RefUnwindSafe for noctiluca::ssh::TunnelLink
+impl core::panic::unwind_safe::UnwindSafe for noctiluca::ssh::TunnelLink
+pub fn noctiluca::ssh::check_host(&str) -> core::result::Result<(), alloc::string::String>
+pub fn noctiluca::ssh::chrome_switches(u16) -> alloc::vec::Vec<alloc::string::String>
+pub fn noctiluca::ssh::explain(&str, &[alloc::string::String]) -> alloc::string::String
+pub fn noctiluca::ssh::listener_uid(u16) -> core::option::Option<u32>
+pub fn noctiluca::ssh::listener_uid_in(&str, u16) -> core::option::Option<u32>
+pub fn noctiluca::ssh::socks_greets(u16, core::time::Duration) -> bool
+pub fn noctiluca::ssh::tunnel_args(&noctiluca::ssh::SshOptions, u16, bool) -> alloc::vec::Vec<alloc::string::String>
 pub mod noctiluca::start
 pub enum noctiluca::start::FishPlace
 pub noctiluca::start::FishPlace::Above
@@ -1931,6 +2028,11 @@ pub noctiluca::tab::Command::Activate
 pub noctiluca::tab::Command::Activate::name: alloc::string::String
 pub noctiluca::tab::Command::Activate::nth: usize
 pub noctiluca::tab::Command::Activate::role: alloc::string::String
+pub noctiluca::tab::Command::ClickAt
+pub noctiluca::tab::Command::ClickAt::document: u64
+pub noctiluca::tab::Command::ClickAt::node: noctiluca::engine::NodeId
+pub noctiluca::tab::Command::ClickAt::x: f64
+pub noctiluca::tab::Command::ClickAt::y: f64
 pub noctiluca::tab::Command::History(noctiluca::engine::HistoryStep)
 pub noctiluca::tab::Command::LoadMore
 pub noctiluca::tab::Command::Media
@@ -2051,6 +2153,7 @@ impl core::panic::unwind_safe::RefUnwindSafe for noctiluca::tab::Tab
 impl core::panic::unwind_safe::UnwindSafe for noctiluca::tab::Tab
 pub const noctiluca::tab::DEBOUNCE: core::time::Duration
 pub const noctiluca::tab::SETTLE_MAX: core::time::Duration
+pub const noctiluca::tab::SETTLE_MIN: core::time::Duration
 pub const noctiluca::tab::SETTLE_STEP: core::time::Duration
 pub fn noctiluca::tab::describe(&noctiluca::model::Control) -> alloc::string::String
 pub fn noctiluca::tab::stop_all(core::time::Duration)

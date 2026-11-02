@@ -108,6 +108,7 @@ pub mod complete;
 mod controls;
 mod datetime;
 mod dialog;
+mod diff_view;
 mod digits;
 mod effect;
 mod facts;
@@ -136,7 +137,10 @@ pub mod menu;
 pub mod micro_sprite;
 pub mod miller;
 pub mod node;
+mod node_list;
 mod notify;
+mod palette;
+mod parity;
 pub mod pixels;
 mod place;
 pub mod preview;
@@ -190,6 +194,7 @@ pub use rich_interact as interact;
 pub use rich_interact::dates;
 
 pub use actions::{Action, action_overlay};
+pub use app::DEFAULT_MODE;
 pub use app::{
     Anchor, App, Ctx, Driver, Easing, FrameStats, Handoff, Holds, ModalOptions, Placement,
     StatsHandle, Theme, Timer, after, every, fixed_step, held_keys, plain_key, rate,
@@ -241,7 +246,12 @@ pub use node::{
     repeating, row, scroll, scroll_both, scroll_both_with, scroll_with, scroll_x, switch, text,
 };
 pub use node::{described, drawn, drawn_described};
+pub use node_list::list_of;
 pub use notify::{Corner, Level};
+pub use palette::Palette;
+pub use parity::{
+    PlaceholderVariant, header, key_panel, link, masked_input, placeholder, progress_bar,
+};
 pub use place::{Offset, Origin, RectHandle};
 pub use preview::{PreviewOfOptions, preview_of, preview_of_with};
 pub use reactive::{Memo, Proxy, Signal, memo, on_write, on_write_ref, signal, viewport, watch};

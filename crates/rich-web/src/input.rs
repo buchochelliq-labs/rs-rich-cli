@@ -247,6 +247,7 @@ fn sgr_mouse(params: &str, pressed: bool) -> Option<Mouse> {
             alt: code & 8 != 0,
             ctrl: code & 16 != 0,
         },
+        pixel: None,
     })
 }
 

@@ -54,6 +54,9 @@ pub const DEBOUNCE: Duration = Duration::from_millis(100);
 pub const SETTLE_STEP: Duration = Duration::from_millis(250);
 /// How long a new document is watched for its layout to settle.
 pub const SETTLE_MAX: Duration = Duration::from_secs(3);
+/// How long a new document is watched at least: a quiet step sooner does
+/// not settle it, since a script's first move can come after one.
+pub const SETTLE_MIN: Duration = Duration::from_secs(1);
 /// How often the tab looks at its engine when nothing happens.
 const TICK: Duration = Duration::from_millis(25);
 /// At most this many stills are captured per reading.
@@ -119,6 +122,15 @@ pub enum Command {
         document: u64,
         node: NodeId,
         op: MediaOp,
+    },
+    /// Click the media box `node` (a picture, a canvas, a frame) of the
+    /// document `document` at `x`, `y` CSS pixels from its top left
+    /// corner ([`PageAction::ClickAt`]).
+    ClickAt {
+        document: u64,
+        node: NodeId,
+        x: f64,
+        y: f64,
     },
     Resize(u16, u16),
     /// Read the page again now.
@@ -450,6 +462,10 @@ impl Worker<'_> {
             Some((_, end, last)) if last != key && now < end => Some((now + SETTLE_STEP, end, key)),
             // Read early (a ping): the step still counts from the move.
             Some((next, end, last)) if now < next && now < end => Some((next, end, last)),
+            // A step with no move, but too soon after the document came.
+            Some((_, end, _)) if now + SETTLE_MAX < end + SETTLE_MIN => {
+                Some((now + SETTLE_STEP, end, key))
+            }
             // A step with no move: settled.
             _ => None,
         };
@@ -938,6 +954,27 @@ impl Worker<'_> {
                     .act(TabId(0), &PageAction::Media { node, op })
                     .map_err(failed)
             }
+            Command::ClickAt {
+                document,
+                node,
+                x,
+                y,
+            } => {
+                let page = self
+                    .read()
+                    .ok_or_else(|| Refusal::Stale("The page is not ready.".into()))?;
+                if page.document != document {
+                    return Err(Refusal::Stale(
+                        "Stale document: the tab went to another page.".into(),
+                    ));
+                }
+                if !page.media.iter().any(|m| m.node == node) {
+                    return Err(Refusal::Stale("That picture is gone from the page.".into()));
+                }
+                self.engine
+                    .act(TabId(0), &PageAction::ClickAt { node, x, y })
+                    .map_err(failed)
+            }
             Command::Act { binding, intent } => {
                 let page = self
                     .read()
@@ -1105,6 +1142,7 @@ fn run(
                         | Command::Activate { .. }
                         | Command::Scroll(_)
                         | Command::Media { .. }
+                        | Command::ClickAt { .. }
                 );
                 let result = worker.run_command(command);
                 update(Update::Done(id, result));

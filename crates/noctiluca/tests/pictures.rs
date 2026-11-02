@@ -29,6 +29,7 @@ fn options_with(url: &str, images: Images, config: Config) -> Options {
         url: Some(url.to_string()),
         view: Some(View::Projection),
         images: Some(images),
+        tunnel: None,
     }
 }
 
