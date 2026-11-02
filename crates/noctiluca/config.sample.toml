@@ -6,7 +6,8 @@
 [startup]
 # The first page, when none is named on the command line.
 home = "https://docs.rs"
-# projection (Chrome's layout in cells), reader (one column), or raster.
+# projection (Chrome's layout in cells), reader (one column), pixels
+# (Chrome's pixels in Kitty graphics, sent where they change), or raster.
 view = "projection"
 # Where a page sets no background of its own, let the terminal's own
 # background show (a translucent or themed terminal): in the faithful
@@ -33,7 +34,7 @@ preset = "vim"
 # Any action, by its id (`noctiluca keys` lists them): keys separated by
 # spaces are alternatives; `none` (or "") unbinds. A line with a key
 # name Noctiluca does not know is a warning, and only that line is skipped.
-# hints = "f ctrl+g"
+# hints = "f alt+f"
 
 [media]
 # Pages' sound plays on the machine Chrome runs on. Off by default.
@@ -49,6 +50,19 @@ images = "auto"
 # blocks. Unset: 4M on this machine, 256K over SSH, then what the terminal
 # is measured taking (here up to 32M; over SSH only ever lower).
 # bandwidth = "4M"
+
+[agent]
+# A control socket for scripts and coding agents of your own user
+# (`noctiluca ls`, `noctiluca action …`): in a private directory under
+# $XDG_RUNTIME_DIR, no network listener. Off unless turned on here or with
+# --control. Unix only for now.
+control = false
+# Refuse every action that changes anything (open, click, type, …): an
+# agent can only read. --read-only sets it for one run.
+read_only = false
+# Where Ctrl+G sends the element you pick: clipboard, pane (the pane beside
+# this one, through the terminal's API), or pane:ID.
+send = "clipboard"
 
 [adapt]
 # Terminal adaptations: named rules about constructs, never about a site.

@@ -321,6 +321,7 @@ fn the_status_bar_says_where_the_network_goes_and_when_it_drops() {
             view: None,
             images: None,
             tunnel: Some(tunnel),
+            control: None,
         };
         let mut driver = app(Box::new(engine), options).driver(100, 20);
         if drops {

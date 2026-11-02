@@ -42,6 +42,7 @@ fn options(config: Config, url: &str) -> Options {
         view: Some(View::Reader),
         images: Some(noctiluca::config::Images::Ansi),
         tunnel: None,
+        control: None,
     }
 }
 

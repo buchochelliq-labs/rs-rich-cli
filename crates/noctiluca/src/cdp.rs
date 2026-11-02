@@ -650,6 +650,13 @@ impl Engine for ChromeBackend {
         match action {
             PageAction::Click(node) => self.click(*node),
             PageAction::ClickAt { node, x, y } => self.click_at(*node, *x, *y),
+            PageAction::ClickPoint { x, y } => self.mouse_click(*x, *y),
+            PageAction::Key(key) => {
+                for event in rich_embed::chrome::key_events(*key) {
+                    self.call("Input.dispatchKeyEvent", event)?;
+                }
+                Ok(())
+            }
             PageAction::Focus(node) => self
                 .call("DOM.focus", json!({"backendNodeId": node}))
                 .map(drop),

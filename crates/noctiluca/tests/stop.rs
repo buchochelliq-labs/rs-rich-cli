@@ -74,6 +74,7 @@ fn stopping_the_tabs_drops_their_engines_while_the_app_still_holds_them() {
             view: Some(View::Reader),
             images: None,
             tunnel: None,
+            control: None,
         },
     )
     .driver(80, 20);

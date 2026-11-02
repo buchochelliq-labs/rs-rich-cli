@@ -36,6 +36,10 @@ pub enum View {
     Reader,
     /// Chrome's own pixels, in half blocks: a debug view.
     Raster,
+    /// Chrome's own pixels in Kitty graphics, sent as tiles only where
+    /// they changed (#818): pixel-perfect, for terminals with Kitty
+    /// graphics. Elsewhere the projection shows, and says why.
+    Pixels,
 }
 
 impl View {
@@ -44,6 +48,7 @@ impl View {
             "projection" => Some(View::Projection),
             "reader" => Some(View::Reader),
             "raster" => Some(View::Raster),
+            "pixels" => Some(View::Pixels),
             _ => None,
         }
     }
@@ -53,6 +58,7 @@ impl View {
             View::Projection => "projection",
             View::Reader => "reader",
             View::Raster => "raster",
+            View::Pixels => "pixels",
         }
     }
 }
@@ -200,10 +206,51 @@ pub struct Config {
     /// `[startup] transparent`: where a page sets no background of its
     /// own, the terminal's own background shows (see `--transparent`).
     pub transparent: bool,
+    /// `[agent]`: the control socket and "send to agent".
+    pub agent: Agent,
     /// What was not understood, for the user.
     pub warnings: Vec<String>,
     /// The file it came from, which edits go to.
     pub path: Option<PathBuf>,
+}
+
+/// Where "send to agent" (`agent.send`, Ctrl+G) sends what was picked.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub enum SendTo {
+    /// The clipboard (OSC 52 where the terminal takes it).
+    #[default]
+    Clipboard,
+    /// The pane beside this one, through the terminal's API
+    /// (`rich_interact::host`): an agent's pane in a split.
+    Neighbor,
+    /// The terminal's pane with this id (tmux's `%3`, WezTerm's `12`).
+    Pane(String),
+}
+
+impl SendTo {
+    /// `clipboard`, `pane` (the neighbour) or `pane:ID`.
+    pub fn parse(text: &str) -> Option<SendTo> {
+        match text {
+            "clipboard" => Some(SendTo::Clipboard),
+            "pane" => Some(SendTo::Neighbor),
+            _ => text
+                .strip_prefix("pane:")
+                .filter(|id| !id.is_empty())
+                .map(|id| SendTo::Pane(id.to_string())),
+        }
+    }
+}
+
+/// `[agent]`: the control socket and "send to agent" (#816).
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Agent {
+    /// `control`: listen on the control socket (`--control`).
+    pub control: bool,
+    /// `read_only`: the socket refuses every verb that changes anything
+    /// (`--read-only`).
+    pub read_only: bool,
+    /// `send`: where Ctrl+G sends.
+    pub send: SendTo,
 }
 
 /// A byte count: a number, or a string with `K` or `M` (1024s) after it.
@@ -278,6 +325,7 @@ impl Default for Config {
             sites: Vec::new(),
             adapt: Adapt::default(),
             transparent: false,
+            agent: Agent::default(),
             warnings: Vec::new(),
             path: None,
         }
@@ -380,6 +428,7 @@ impl Config {
         let mut profile = None;
         let mut sites = Vec::new();
         let mut adapt = Adapt::default();
+        let mut agent = Agent::default();
         for (section, value) in &table {
             let Some(body) = value.as_table() else {
                 warn(format!("{section}: expected a table"));
@@ -479,7 +528,7 @@ impl Config {
                             ("view", Some(v)) => match View::parse(v) {
                                 Some(v) => view = v,
                                 None => warn(format!(
-                                    "startup.view: {v:?} is not projection, reader or raster"
+                                    "startup.view: {v:?} is not projection, reader, pixels or raster"
                                 )),
                             },
                             _ => warn(format!("startup.{key}: unknown key")),
@@ -532,6 +581,21 @@ impl Config {
                         }
                     }
                 }
+                "agent" => {
+                    for (key, value) in body {
+                        match (key.as_str(), value) {
+                            ("control", toml::Value::Boolean(on)) => agent.control = *on,
+                            ("read_only", toml::Value::Boolean(on)) => agent.read_only = *on,
+                            ("send", toml::Value::String(s)) => match SendTo::parse(s) {
+                                Some(to) => agent.send = to,
+                                None => warn(format!(
+                                    "agent.send: {s:?} is not clipboard, pane or pane:ID"
+                                )),
+                            },
+                            _ => warn(format!("agent.{key}: unknown key or value")),
+                        }
+                    }
+                }
                 "site" => {
                     for (pattern, value) in body {
                         match value.as_table() {
@@ -557,6 +621,7 @@ impl Config {
         config.sites = sites;
         config.adapt = adapt;
         config.transparent = transparent;
+        config.agent = agent;
         Ok(config)
     }
 
@@ -1011,6 +1076,23 @@ mod tests {
         assert!(config.shortcuts.contains_key("wiki"));
         // The sample spells out the defaults.
         assert_eq!(config.adapt, Adapt::default());
+    }
+
+    #[test]
+    fn the_agent_table_turns_the_socket_on_and_names_where_ctrl_g_sends() {
+        let config = Config::parse(
+            "[agent]\ncontrol = true\nread_only = true\nsend = \"pane:%3\"\n[startup]\nview = \"pixels\"\n",
+        )
+        .unwrap();
+        assert!(config.warnings.is_empty(), "{:?}", config.warnings);
+        assert!(config.agent.control && config.agent.read_only);
+        assert_eq!(config.agent.send, SendTo::Pane("%3".into()));
+        assert_eq!(config.view, View::Pixels);
+        assert_eq!(SendTo::parse("pane"), Some(SendTo::Neighbor));
+        assert_eq!(SendTo::parse("pane:"), None);
+        let config = Config::parse("[agent]\nsend = \"mail\"\n").unwrap();
+        assert!(config.warnings[0].contains("agent.send"));
+        assert_eq!(Config::default().agent, Agent::default());
     }
 
     #[test]
