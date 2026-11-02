@@ -7374,6 +7374,232 @@ impl Driver {
         self.settle();
     }
 
+    /// The node a test names: the one shown whose [name](crate::Node::name)
+    /// is `name`, else the one whose accessible name is, as
+    /// [`assert_focused`](Self::assert_focused) finds it. An error listing
+    /// the named nodes when none or several match.
+    fn named(&self, name: &str) -> Result<NodeId, String> {
+        let mut given: Vec<NodeId> = Vec::new();
+        let mut all: Vec<String> = Vec::new();
+        for layer in shown_layers(&self.app.layers) {
+            crate::node::walk_screen(&layer.root, &mut |node, _, _, _| {
+                if let Some(own) = node.given_name() {
+                    if own == name {
+                        given.push(node.id());
+                    }
+                    all.push(own.to_string());
+                }
+            });
+        }
+        let listed = |all: &mut Vec<String>| {
+            all.sort();
+            all.dedup();
+            if all.is_empty() {
+                "no node is named".to_string()
+            } else {
+                format!("the named nodes are: {}", all.join(", "))
+            }
+        };
+        match given[..] {
+            [id] => return Ok(id),
+            [] => {}
+            _ => {
+                return Err(format!(
+                    "`{name}` names {} nodes shown; name one of them apart",
+                    given.len()
+                ));
+            }
+        }
+        let access: Vec<NodeId> = self
+            .accessibility()
+            .into_iter()
+            .filter(|node| node.name == name)
+            .map(|node| node.id)
+            .collect();
+        match access[..] {
+            [id] => Ok(id),
+            [] => Err(format!(
+                "no node shown is named `{name}`; {}",
+                listed(&mut all)
+            )),
+            _ => Err(format!(
+                "`{name}` is the accessible name of {} nodes shown; give the one meant a `.name(..)`; {}",
+                access.len(),
+                listed(&mut all)
+            )),
+        }
+    }
+
+    /// Where the node named `name` is on the screen (found as
+    /// [`click_on`](Self::click_on) finds it); `None` when no node or
+    /// several are named so, or it is not shown.
+    pub fn rect_of(&self, name: &str) -> Option<Rect> {
+        let id = self.named(name).ok()?;
+        node_rect(&self.app.layers, id)
+    }
+
+    /// Where on the screen to point at the node named `name`: `offset`
+    /// from its top left corner, or its centre.
+    #[track_caller]
+    fn point_at(&mut self, name: &str, offset: Option<(u16, u16)>) -> (u16, u16) {
+        self.settle();
+        let id = match self.named(name) {
+            Ok(id) => id,
+            Err(message) => panic!("{message}"),
+        };
+        let Some(rect) = node_rect(&self.app.layers, id) else {
+            panic!("`{name}` is not shown on the screen");
+        };
+        match offset {
+            Some((dx, dy)) => (
+                rect.x.saturating_add(dx.min(rect.width.saturating_sub(1))),
+                rect.y.saturating_add(dy.min(rect.height.saturating_sub(1))),
+            ),
+            None => (rect.x + rect.width / 2, rect.y + rect.height / 2),
+        }
+    }
+
+    /// Click the centre of the node named `name` (its
+    /// [`name`](crate::Node::name), else its accessible name), then
+    /// [`settle`](Self::settle): a click that still lands when the layout
+    /// moves. A sibling of [`click`](Self::click), which takes a cell.
+    ///
+    /// # Panics
+    /// When no node shown is named `name`, or several are, listing the
+    /// named nodes; or when it is not on the screen.
+    ///
+    /// ```
+    /// use intuituive::prelude::*;
+    ///
+    /// let app = App::new(|| {
+    ///     let n = signal(0);
+    ///     column([
+    ///         text!("{n}"),
+    ///         label("add").name("add").on_click(move |_| n.update(|n| *n += 1)),
+    ///     ])
+    /// });
+    /// let mut driver = app.driver(10, 2);
+    /// driver.click_on("add");
+    /// assert_eq!(driver.screen().plain()[0].trim_end(), "1");
+    /// ```
+    #[track_caller]
+    pub fn click_on(&mut self, name: &str) {
+        let (column, row) = self.point_at(name, None);
+        self.click(column, row);
+    }
+
+    /// Click the node named `name` at `offset` (column, row) from its top
+    /// left corner, kept inside it.
+    ///
+    /// # Panics
+    /// As [`click_on`](Self::click_on).
+    #[track_caller]
+    pub fn click_on_at(&mut self, name: &str, offset: (u16, u16)) {
+        let (column, row) = self.point_at(name, Some(offset));
+        self.click(column, row);
+    }
+
+    /// Click the centre of the node named `name` twice, at once: a double
+    /// click.
+    ///
+    /// # Panics
+    /// As [`click_on`](Self::click_on).
+    #[track_caller]
+    pub fn double_click_on(&mut self, name: &str) {
+        let (column, row) = self.point_at(name, None);
+        self.click(column, row);
+        self.click(column, row);
+    }
+
+    /// Move the pointer to the centre of the node named `name`, then
+    /// [`settle`](Self::settle): it is hovered, and its
+    /// [tooltip](crate::Node::tooltip) shows once the delay has passed
+    /// ([`advance`](Self::advance)).
+    ///
+    /// # Panics
+    /// As [`click_on`](Self::click_on).
+    #[track_caller]
+    pub fn hover_on(&mut self, name: &str) {
+        let (column, row) = self.point_at(name, None);
+        self.send(Event::Mouse(rich_interact::Mouse::new(
+            MouseKind::Moved,
+            column,
+            row,
+        )));
+    }
+
+    /// Turn the mouse wheel `steps` notches over the node named `name`
+    /// (down when positive), as [`wheel`](Self::wheel) does at a cell.
+    ///
+    /// # Panics
+    /// As [`click_on`](Self::click_on).
+    #[track_caller]
+    pub fn scroll_on(&mut self, name: &str, steps: i32) {
+        let (column, row) = self.point_at(name, None);
+        self.wheel(column, row, steps);
+    }
+
+    /// Drag from the centre of the node named `name` by `by` (columns,
+    /// rows) with the left button: a press there, a move a cell at a time,
+    /// a release at the end; then [`settle`](Self::settle).
+    ///
+    /// # Panics
+    /// As [`click_on`](Self::click_on).
+    #[track_caller]
+    pub fn drag_on(&mut self, name: &str, by: (i32, i32)) {
+        let (column, row) = self.point_at(name, None);
+        let area = self.screen.area();
+        let end = (
+            (column as i32 + by.0).clamp(0, area.width.saturating_sub(1) as i32),
+            (row as i32 + by.1).clamp(0, area.height.saturating_sub(1) as i32),
+        );
+        let mouse = |kind, x: i32, y: i32| {
+            Event::Mouse(rich_interact::Mouse::new(kind, x as u16, y as u16))
+        };
+        self.event(mouse(
+            MouseKind::Down(Button::Left),
+            column as i32,
+            row as i32,
+        ));
+        let steps = (end.0 - column as i32)
+            .abs()
+            .max((end.1 - row as i32).abs());
+        for step in 1..=steps {
+            if self.done {
+                return;
+            }
+            let x = column as i32 + (end.0 - column as i32) * step / steps;
+            let y = row as i32 + (end.1 - row as i32) * step / steps;
+            self.event(mouse(MouseKind::Drag(Button::Left), x, y));
+            self.settle();
+        }
+        self.event(mouse(MouseKind::Up(Button::Left), end.0, end.1));
+        self.settle();
+    }
+
+    /// Advance the app's clock a frame at a time until no
+    /// [animation](Ctx::animate) runs and no [effect](crate::fx) waits for
+    /// its next frame (at most 30 seconds of the app's time, so an endless
+    /// effect does not hang a test).
+    pub fn wait_for_animations(&mut self) {
+        let end = self.app.now + Duration::from_secs(30);
+        self.settle();
+        while !self.done && self.app.now < end {
+            let now = self.app.now;
+            let busy = !self.app.animations.is_empty()
+                || self.app.timeouts.iter().any(|timeout| {
+                    timeout
+                        .timer
+                        .left(now)
+                        .is_some_and(|left| left <= Duration::from_millis(50))
+                });
+            if !busy {
+                break;
+            }
+            self.advance(Duration::from_millis(16));
+        }
+    }
+
     /// Press keys by name, separated by spaces (`"down down enter"`,
     /// `"ctrl+s"`; the space key is `space`), each followed by
     /// [`settle`](Self::settle). Keys after the app quits are dropped.

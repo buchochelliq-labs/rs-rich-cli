@@ -44,6 +44,11 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   `Ctx::push_for::<T>(build, then)`, `modal_for::<T>(..)` and
   `Ctx::dismiss(value)` hand a value back from a screen of your own:
   `Some(value)` on a dismiss, `None` on a plain pop.
+- **Pilot-style test helpers** (#810): `Driver::click_on(name)`,
+  `click_on_at(name, offset)`, `double_click_on`, `hover_on`, `scroll_on`,
+  `drag_on`, `rect_of` and `wait_for_animations`. A node is found by its
+  `.name(..)`, then its accessible name; none or several panic listing the
+  named nodes. They sit beside `click(column, row)`, which is unchanged.
 
 ### The docs on Zensical
 

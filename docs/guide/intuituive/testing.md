@@ -35,6 +35,25 @@ terminal and no clock of its own. For a test it has:
   focus is. `focused()` and `focused_name()` return it;
 - `screen()` (the cells), `accessibility()` and `take_announcements()`.
 
+**By name, as Textual's `Pilot` does.** A click at a cell breaks whenever
+the layout moves; these find the node first, by its `.name("…")`, else by
+its accessible name, as `assert_focused` does:
+
+```rust
+driver.click_on("save");                 // the centre of the node named "save"
+driver.click_on_at("list", (2, 3));      // an offset inside it
+driver.double_click_on("row-4");
+driver.hover_on("help");                 // its tooltip shows after advance(..)
+driver.scroll_on("log", -3);             // the wheel, up when negative
+driver.drag_on("divider", (10, 0));      // press, move a cell at a time, release
+driver.wait_for_animations();            // until no animation or effect runs
+driver.rect_of("save")                   // Option<Rect>
+```
+
+A name that matches nothing, or several shown nodes, panics with a message
+listing the named nodes. `click(column, row)`, `wheel(..)` and
+`click_text(..)` still take a place on the screen.
+
 **Snapshots.** `assert_screen!(driver, "name")` compares the screen with
 `tests/snapshots/name.txt`: plain text, one line a row, trailing spaces
 trimmed, so a review reads it as the screen. A file saved with Windows
