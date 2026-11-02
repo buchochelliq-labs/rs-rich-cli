@@ -208,6 +208,22 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   Python's report next to ours; DIVERGENCES §19 says what differs (no
   runtime reflection, no `dunder`, methods only from a marked `impl`).
 
+### Noctiluca's larger features (wave 2, WS6 part 1)
+
+- **The mouse to the pixel (#819):** a terminal that knows SGR-Pixels
+  (mode 1016) reports the mouse in pixels. rs-rich-interact asks for it in
+  the start-up query (DECRQM), turns it on after 1006 when the terminal
+  knows it and the window size gives the cells' size in pixels, and reads
+  each report back into cells: `Mouse::pixel` (a `Subcell`) says where in
+  the cell the pointer was, `Mouse::precise` gives fractional cells (the
+  cell's centre without pixels), `Mouse::from_pixels` builds one, and
+  `RICH_PIXEL_MOUSE=0` turns it off. intuiTUIve passes it to nodes as it
+  is (it is relative to the cell, so it survives every move into a node's
+  coordinates) and adds `Driver::click_pixel`. Noctiluca sends a click on
+  a picture, a canvas, a drawing or a frame to the page at that point of
+  it (`PageAction::ClickAt`, `Command::ClickAt`), to the pixel where the
+  terminal reports pixels and at the cell's centre elsewhere.
+
 ## 0.0.23 cohort — published 2026-10-27
 
 Published on 2026-10-27 from `2624ce5` by one `release.yml` run (tag

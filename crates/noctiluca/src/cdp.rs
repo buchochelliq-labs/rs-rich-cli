@@ -481,6 +481,28 @@ impl ChromeBackend {
         let at = |i: usize| quad[i].as_f64().unwrap_or(0.0);
         let x = (at(0) + at(2) + at(4) + at(6)) / 4.0;
         let y = (at(1) + at(3) + at(5) + at(7)) / 4.0;
+        self.mouse_click(x, y)
+    }
+
+    /// A click `x`, `y` CSS pixels into the node's border box, kept inside
+    /// it: a picture's or a canvas's own pixel (#819).
+    fn click_at(&self, node: i64, x: f64, y: f64) -> io::Result<()> {
+        let _ = self.call("DOM.scrollIntoViewIfNeeded", json!({"backendNodeId": node}));
+        let model = self.call("DOM.getBoxModel", json!({"backendNodeId": node}))?;
+        let quad = model["model"]["border"]
+            .as_array()
+            .filter(|q| q.len() == 8)
+            .ok_or_else(|| io::Error::new(ErrorKind::NotFound, "the node is not on screen"))?;
+        let at = |i: usize| quad[i].as_f64().unwrap_or(0.0);
+        let (left, top) = (at(0).min(at(6)), at(1).min(at(3)));
+        let (right, bottom) = (at(2).max(at(4)), at(5).max(at(7)));
+        let (x, y) = crate::layout::inside(left, top, right, bottom, x, y);
+        self.mouse_click(x, y)
+    }
+
+    /// A left click at `x`, `y` of the viewport, as real input: moved
+    /// there, pressed and let go.
+    fn mouse_click(&self, x: f64, y: f64) -> io::Result<()> {
         for (kind, buttons) in [("mouseMoved", 0), ("mousePressed", 1), ("mouseReleased", 0)] {
             let mut event = json!({"type": kind, "x": x, "y": y, "modifiers": 0});
             if kind != "mouseMoved" {
@@ -620,6 +642,7 @@ impl Engine for ChromeBackend {
     fn act(&mut self, _tab: TabId, action: &PageAction) -> io::Result<()> {
         match action {
             PageAction::Click(node) => self.click(*node),
+            PageAction::ClickAt { node, x, y } => self.click_at(*node, *x, *y),
             PageAction::Focus(node) => self
                 .call("DOM.focus", json!({"backendNodeId": node}))
                 .map(drop),

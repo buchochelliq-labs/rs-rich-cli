@@ -358,11 +358,19 @@ and `RICH_EMBED_CHROME`.
     with a kept profile unless the user says so;
   - every action recorded somewhere the user can read (repudiation).
   **planned**.
-- **The SGR-Pixels mouse (#819) and terminal hosts' APIs (#820):** new
-  input parsers (fuzz them) and, for #820, a client that talks to the
-  terminal's own control channel (kitty's or WezTerm's remote control, for
-  example), which can run commands in the terminal. It should use only the
-  verbs it needs, and only on the user's own terminal. **planned**.
+- **The SGR-Pixels mouse (#819):** no new parser. A report in pixels has
+  the same shape as one in cells (`CSI < b ; x ; y M`), so crossterm's,
+  termion's and termwiz's own SGR parsers read it; the session divides it
+  back into cells by the cell size the kernel's window size gives
+  (never by 0: no size, no pixel mode) and clamps what overflows. The one
+  new answer, DECRQM's for mode 1016, goes through the start-up query's
+  existing reader. A page sees only where it was clicked, inside the box
+  clicked (`ClickAt`, kept inside the element's border box), which a
+  click at the cell's centre already told it. **verified** (PTY tests).
+- **Terminal hosts' APIs (#820):** a client that talks to the terminal's
+  own control channel (kitty's or WezTerm's remote control, for example),
+  which can run commands in the terminal. It should use only the verbs it
+  needs, and only on the user's own terminal. **planned**.
 - **`--ssh HOST` (#817):** where Chrome and the profile live, and what
   crosses the connection. **planned**.
 - **Bot checks:** the `Runtime` domain is visible to pages; accepted and
@@ -567,8 +575,9 @@ says, not in a public issue.
 - [ ] Navigation to `file://`, `chrome://` and `javascript:` from a page.
 - [ ] The control socket (#816), `--read-only`, and prompt injection
       through page text, once it lands.
-- [ ] The terminal hosts' API client (#820) and the pixel mouse parser
-      (#819), once they land.
+- [ ] The terminal hosts' API client (#820), once it lands.
+- [ ] The pixel mouse (#819): pixel mode only with a known cell size, and
+      `RICH_PIXEL_MOUSE=0` turns it off.
 
 ### The embed PTY host
 

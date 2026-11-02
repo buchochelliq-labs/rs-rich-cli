@@ -83,6 +83,7 @@ fn wheel_down_in_a_long_last_line_does_not_scroll_up() {
         column: 1,
         row: 1,
         modifiers: Default::default(),
+        pixel: None,
     });
     step(&mut driver, wheel);
     let after = rows(&driver);

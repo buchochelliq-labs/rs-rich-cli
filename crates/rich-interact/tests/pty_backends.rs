@@ -622,6 +622,51 @@ fn a_legacy_keys_session_asks_nothing() {
     }
 }
 
+/// A terminal that knows SGR-Pixels (mode 1016) and gives its cells' size
+/// in pixels has the mouse reported in pixels, by every backend that asks
+/// the start-up query: a report then arrives in cells as ever, with where
+/// in its cell the pointer was (#819). `RICH_PIXEL_MOUSE=0` keeps it in
+/// cells, and the restore turns 1016 off before the mouse.
+#[test]
+fn every_backend_that_asks_reads_pixel_mouse_reports() {
+    for backend in backends().filter(|backend| *backend != "termion") {
+        let mut pty = Pty::start_pixels_on(backend, "events", &[]);
+        pty.wait_for("child ready");
+        let text = pty.text();
+        assert!(text.contains("\x1b[?1016$p"), "{backend}: {text:?}");
+        assert!(
+            text.contains("\x1b[?1006h\x1b[?1016h"),
+            "{backend}: {text:?}"
+        );
+        // Pixel (25, 47), 1-based in the report: column 2, row 2 of cells
+        // of 10 by 20, 5 and 7 pixels into it.
+        let expected = Mouse::from_pixels(MouseKind::Down(Button::Left), 25, 47, (10, 20)).unwrap();
+        assert_eq!(
+            event_for(&mut pty, "\x1b[<0;26;48M"),
+            format!("{:?}", Event::Mouse(expected)),
+            "{backend}"
+        );
+        let before = pty.text().len();
+        suspends_and_resumes(&mut pty, |pty, _| pty.send("\x1a"));
+        let after = pty.text()[before..].to_string();
+        assert!(
+            after.contains("\x1b[?1016l\x1b[?1006l"),
+            "{backend}: {after:?}"
+        );
+        finish(pty, backend);
+
+        let mut pty = Pty::start_pixels_on(backend, "events", &[("RICH_PIXEL_MOUSE", "0")]);
+        pty.wait_for("child ready");
+        assert!(!pty.text().contains("\x1b[?1016h"), "{backend}");
+        assert_eq!(
+            event_for(&mut pty, "\x1b[<0;3;2M"),
+            format!("{:?}", mouse(MouseKind::Down(Button::Left), 2, 1)),
+            "{backend}"
+        );
+        finish(pty, backend);
+    }
+}
+
 /// An answer that comes after the session stopped waiting for it reaches
 /// the backend's reader, which takes it for no key: crossterm reads the
 /// DECRQM report and the device attributes after it as one answer of its

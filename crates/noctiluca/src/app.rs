@@ -1959,7 +1959,19 @@ fn reader_view(b: Browser) -> Node {
                         })
                 });
                 let view = rich_intuituive::ImageView::new().pixels(b.pixels.get_untracked());
-                let picture = picture_of(move || shown_picture(b, node).map(|(p, _)| p), view);
+                let picture = picture_of(move || shown_picture(b, node).map(|(p, _)| p), view)
+                    // A click on a picture, a canvas or a frame reaches the
+                    // page where the pointer was in it (#819).
+                    .on_mouse(move |cx, mouse| {
+                        mouse.is_click()
+                            && click_media_at(
+                                b,
+                                node,
+                                mouse.precise(),
+                                (width.into(), rows.into()),
+                                cx,
+                            )
+                    });
                 row([picture.fixed(width), label("").flex(1)]).fixed(rows)
             }
             PieceKey::Controls(nodes) => web_widget(b, nodes),
@@ -2055,6 +2067,45 @@ fn click_row(b: Browser, row: usize, column: usize, cx: &mut Ctx) -> bool {
         }
         None => false,
     }
+}
+
+/// A click at `at` (fractional cells from the drawing's top left) of the
+/// media box `node` drawn in `cells` (columns, rows): a picture, a canvas,
+/// an SVG drawing or a frame is clicked in the page at that point, to the
+/// pixel when the terminal reports the mouse in pixels (#819), else at the
+/// cell's centre. Whether it was one of those.
+fn click_media_at(
+    b: Browser,
+    node: NodeId,
+    at: (f32, f32),
+    cells: (usize, usize),
+    _cx: &mut Ctx,
+) -> bool {
+    let target = b.page.with_untracked(|p| {
+        let page = p.as_ref()?;
+        let media = page.media.iter().find(|m| m.node == node)?;
+        let pointable = matches!(
+            media.kind,
+            MediaKind::Image | MediaKind::Canvas | MediaKind::Svg | MediaKind::Frame
+        );
+        pointable.then(|| (page.document, media.rect.width, media.rect.height))
+    });
+    let Some((document, width, height)) = target else {
+        return false;
+    };
+    let (x, y) = layout::point_in(width, height, cells.0, cells.1, at);
+    let id = b.send(Command::ClickAt {
+        document,
+        node,
+        x,
+        y,
+    });
+    b.after(id, |result, cx| {
+        if let Err(refusal) = result {
+            cx.toast(format!("[red]{}[/]", markup(&refusal.to_string())));
+        }
+    });
+    true
 }
 
 /// A click on the page's control `index`: what a link hint does.
@@ -2163,6 +2214,38 @@ fn projection_view(b: Browser) -> Node {
                     .collect(),
                 None => drawn,
             }
+        })
+        // A click on a picture, a canvas or a frame, not on a control, is
+        // the page's at that point of it (#819).
+        .on_mouse(move |cx, mouse| {
+            if !mouse.is_click() {
+                return false;
+            }
+            let (x, y) = mouse.precise();
+            let column = usize::from(mouse.column);
+            let target = b.layout.with_untracked(|l| {
+                let row = l.rows.get(&key).copied().unwrap_or(i);
+                let line = l.lines.get(row)?;
+                if layout::control_at(line, column).is_some() {
+                    return None;
+                }
+                let region = l
+                    .regions
+                    .iter()
+                    .find(|r| r.on(row) && (r.column..r.column + r.cols).contains(&column))?;
+                let at = (
+                    x - region.column as f32,
+                    (row - region.row) as f32 + (y - f32::from(mouse.row)),
+                );
+                Some((region.media, at, (region.cols, region.rows)))
+            });
+            let Some((media, at, cells)) = target else {
+                return false;
+            };
+            let node = b
+                .page
+                .with_untracked(|p| p.as_ref()?.media.get(media).map(|m| m.node));
+            node.is_some_and(|node| click_media_at(b, node, at, cells, cx))
         })
         .on_click_at(move |cx, column, _| {
             let row = b

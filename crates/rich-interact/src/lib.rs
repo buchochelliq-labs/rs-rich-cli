@@ -137,6 +137,7 @@ pub use compose::{
 };
 pub use event::{
     Button, Event, HeldButton, Key, KeyCode, ModifierKey, Modifiers, Mouse, MouseKind, Releases,
+    Subcell,
 };
 pub use event_loop::{
     Error, EventLoop, Handle, LoopOptions, Outcome, RunOptions, degrade, run, run_with_graphics,
@@ -239,6 +240,15 @@ pub(crate) mod crossterm_stub {
             super::no()
         }
         pub fn supports_keyboard_enhancement() -> std::io::Result<bool> {
+            super::no()
+        }
+        pub struct WindowSize {
+            pub rows: u16,
+            pub columns: u16,
+            pub width: u16,
+            pub height: u16,
+        }
+        pub fn window_size() -> std::io::Result<WindowSize> {
             super::no()
         }
     }

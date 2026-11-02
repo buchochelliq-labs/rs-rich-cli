@@ -258,6 +258,35 @@ bubbles up through its ancestors until one uses it.
   over it, the way `.focus_style(style)` does for the focus. It works on
   containers too.
 
+### To the pixel
+
+A terminal that reports the mouse in pixels (SGR-Pixels, mode 1016) lets a
+node tell where in a cell it was clicked: a picture, a canvas or a map can
+then act on the exact pixel. Nothing needs turning on.
+
+- **The session asks** at the start (DECRQM, in the same query as the
+  kitty keyboard protocol's) and turns 1016 on, after 1006, when the
+  terminal knows it and gives its cells' size in pixels (`TIOCGWINSZ`'s
+  pixel fields). The size is measured again on a resize.
+- **Events stay in cells.** `mouse.column` and `mouse.row` are the cell, as
+  ever, and `mouse.pixel` says where in that cell the pointer was (a
+  `Subcell`: the offset from the cell's top left and the cell's size).
+  It is relative to the cell, so it is still right in a node's own
+  coordinates.
+- **`mouse.precise()`** gives the position in fractional cells: to the
+  pixel where the terminal reports pixels, the cell's centre elsewhere. A
+  node that uses it works the same in both.
+- **`RICH_PIXEL_MOUSE=0`** keeps the mouse in cells whatever the terminal
+  answers.
+- **Tests** click a pixel with `Driver::click_pixel(x, y, (width, height))`.
+
+Terminals known to report pixels (none verified on this project's build
+machine, which has no graphical terminal): kitty, WezTerm, foot, Ghostty
+and xterm.
+Terminals that do not answer the question (and multiplexers that answer it
+themselves, tmux among them) keep reporting cells, and every click
+behaves as before. termion's backend asks nothing, so it stays in cells.
+
 ### Tooltips
 
 `.tooltip(markup)` shows a small box by the pointer once the pointer has

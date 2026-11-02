@@ -120,6 +120,15 @@ pub enum Command {
         node: NodeId,
         op: MediaOp,
     },
+    /// Click the media box `node` (a picture, a canvas, a frame) of the
+    /// document `document` at `x`, `y` CSS pixels from its top left
+    /// corner ([`PageAction::ClickAt`]).
+    ClickAt {
+        document: u64,
+        node: NodeId,
+        x: f64,
+        y: f64,
+    },
     Resize(u16, u16),
     /// Read the page again now.
     Refresh,
@@ -938,6 +947,27 @@ impl Worker<'_> {
                     .act(TabId(0), &PageAction::Media { node, op })
                     .map_err(failed)
             }
+            Command::ClickAt {
+                document,
+                node,
+                x,
+                y,
+            } => {
+                let page = self
+                    .read()
+                    .ok_or_else(|| Refusal::Stale("The page is not ready.".into()))?;
+                if page.document != document {
+                    return Err(Refusal::Stale(
+                        "Stale document: the tab went to another page.".into(),
+                    ));
+                }
+                if !page.media.iter().any(|m| m.node == node) {
+                    return Err(Refusal::Stale("That picture is gone from the page.".into()));
+                }
+                self.engine
+                    .act(TabId(0), &PageAction::ClickAt { node, x, y })
+                    .map_err(failed)
+            }
             Command::Act { binding, intent } => {
                 let page = self
                     .read()
@@ -1105,6 +1135,7 @@ fn run(
                         | Command::Activate { .. }
                         | Command::Scroll(_)
                         | Command::Media { .. }
+                        | Command::ClickAt { .. }
                 );
                 let result = worker.run_command(command);
                 update(Update::Done(id, result));

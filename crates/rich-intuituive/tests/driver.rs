@@ -316,3 +316,40 @@ fn a_declined_click_can_still_start_a_selection() {
     }
     assert_eq!(driver.take_copies(), vec!["select".to_string()]);
 }
+
+/// A pixel-precise click (SGR-Pixels, #819) reaches a node in its own
+/// cells, moved into them as any click is (here past a row above and a
+/// column to its left), with where in the cell it was kept: a picture can
+/// then tell which pixel of itself was clicked.
+#[test]
+fn a_pixel_click_reaches_a_node_with_where_in_its_cell() {
+    let app = App::new(|| {
+        let at = signal(String::new());
+        column([
+            label("top"),
+            row([
+                label("|").fixed(1),
+                label("picture")
+                    .on_mouse(move |_, mouse| {
+                        if mouse.is_click() {
+                            let (x, y) = mouse.precise();
+                            at.set(format!("{} {} {x:.2} {y:.2}", mouse.column, mouse.row));
+                        }
+                        true
+                    })
+                    .flex(1),
+            ])
+            .fixed(1),
+            text!("{at}").name("at"),
+        ])
+    });
+    let mut driver = app.driver(20, 3);
+    driver.settle();
+    // Cells of 8 by 16: pixel (35, 28) is screen column 4, row 1, 3 and 12
+    // pixels into it; the node starts at column 1 of row 1.
+    driver.click_pixel(35, 28, (8, 16));
+    assert_eq!(driver.screen().plain()[2].trim_end(), "3 0 3.38 0.75");
+    // A cell click is the cell's centre.
+    driver.click(4, 1);
+    assert_eq!(driver.screen().plain()[2].trim_end(), "3 0 3.50 0.50");
+}

@@ -771,6 +771,18 @@ turns it on in the headless driver, so tests see the exact bytes, and
 out (see below) the session ends any update left open before it restores
 the other modes.
 
+### Pixel-precise mouse reports
+
+The start-up query also asks whether the terminal knows SGR-Pixels mouse
+reports (mode 1016, DECRQM). When it does, and the window size gives the
+cells' size in pixels, a session with the mouse on turns 1016 on after
+1006 and reads each report back into cells: `Mouse::column` and
+`Mouse::row` are the cell as ever, and `Mouse::pixel` is where in the cell
+the pointer was (`Subcell`). `Mouse::precise` gives fractional cells, the
+cell's centre without pixels. `RICH_PIXEL_MOUSE=0` turns it off, and the
+restore turns 1016 off before the other mouse modes. `Mouse::from_pixels`
+builds one from a pixel position, for a backend or a test of your own.
+
 ## Several at once: the event loop
 
 `EventLoop` runs several mounted components together:
