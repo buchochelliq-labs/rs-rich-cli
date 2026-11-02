@@ -248,7 +248,9 @@ fn run(program: &str, args: Vec<&str>) -> Result<(), Error> {
         }
         other => other?,
     };
-    println!("session {}", session.session_id);
+    // The session id resumes the conversation (`session/load`): it is not
+    // printed, so it stays out of terminal scrollback and CI logs.
+    println!("session started");
     let prompt = std::env::var("RICH_ACP_PROMPT").unwrap_or_else(|_| {
         "Say hello and name the files in this directory's top level.".to_owned()
     });
