@@ -194,10 +194,10 @@ impl MarkdownView {
             } else {
                 0
             };
-            let from = self
-                .blocks
-                .get(keep)
-                .map_or(if grew { last } else { 0 }, |b| b.start);
+            // Only a document that grew keeps a block's offset: the last
+            // block's start, which `last` is. Anything else splits whole,
+            // from 0 (the old first block may start later, past blank lines).
+            let from = if grew { last } else { 0 };
             self.blocks.truncate(keep);
             self.blocks.extend(split_blocks(text, from));
             self.seen.clear();

@@ -184,3 +184,30 @@ fn a_stream_batches_fragments_from_another_thread() {
     driver.settle();
     assert_eq!(doc.get().unwrap().get_untracked(), answer());
 }
+
+#[test]
+fn a_whole_replacement_splits_from_the_start() {
+    // The old document begins with blank lines, so its first block does
+    // not start at 0; replacing the document must not start from there.
+    let doc = Rc::new(Cell::new(None));
+    let mut driver = app_over(doc.clone(), Rc::default()).driver(40, 10);
+    driver.settle();
+    let text = doc.get().unwrap();
+    text.set("\n\nold".into());
+    driver.settle();
+    assert!(driver.screen().plain().iter().any(|l| l.contains("old")));
+    text.set(String::new());
+    driver.settle();
+    assert!(driver.screen().plain().iter().all(|l| l.trim().is_empty()));
+    text.set("Brand new text".into());
+    driver.settle();
+    assert!(
+        driver
+            .screen()
+            .plain()
+            .iter()
+            .any(|l| l.contains("Brand new text")),
+        "{:?}",
+        driver.screen().plain()
+    );
+}

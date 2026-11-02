@@ -186,7 +186,7 @@ pub fn derive(input: DeriveInput) -> syn::Result<TokenStream> {
     let mut predicates = Vec::new();
     let doc = doc_expr(&input.attrs);
 
-    let (kind, variants, arms) = match &input.data {
+    let (kind, variants, arms, heads) = match &input.data {
         Data::Struct(data) => {
             let bound = bind(name, &data.fields, false, &params, &mut predicates)?;
             let Bound {
@@ -202,6 +202,10 @@ pub fn derive(input: DeriveInput) -> syn::Result<TokenStream> {
                     Self #pattern => ::rich_ext::inspect::Record::new(#shape, ::std::vec![#(#fields),*])
                         .skipped(#skipped)
                 }],
+                vec![quote! {
+                    Self { .. } => ::rich_ext::inspect::Record::new(#shape, ::std::vec::Vec::new())
+                        .skipped(#skipped)
+                }],
             )
         }
         Data::Enum(data) => {
@@ -212,6 +216,7 @@ pub fn derive(input: DeriveInput) -> syn::Result<TokenStream> {
                 ));
             }
             let mut arms = Vec::new();
+            let mut heads = Vec::new();
             let mut variants = Vec::new();
             for (index, variant) in data.variants.iter().enumerate() {
                 let variant_ident = &variant.ident;
@@ -237,6 +242,14 @@ pub fn derive(input: DeriveInput) -> syn::Result<TokenStream> {
                     .variant(#index)
                     .skipped(#skipped)
                 });
+                heads.push(quote! {
+                    Self::#variant_ident { .. } => ::rich_ext::inspect::Record::new(
+                        #shape,
+                        ::std::vec::Vec::new(),
+                    )
+                    .variant(#index)
+                    .skipped(#skipped)
+                });
             }
             (
                 quote!(::rich_ext::inspect::TypeKind::Enum),
@@ -247,6 +260,7 @@ pub fn derive(input: DeriveInput) -> syn::Result<TokenStream> {
                     })
                 },
                 arms,
+                heads,
             )
         }
         Data::Union(data) => {
@@ -293,6 +307,12 @@ pub fn derive(input: DeriveInput) -> syn::Result<TokenStream> {
             fn inspect_record(&self, __inspect_depth: usize) -> ::rich_ext::inspect::Record {
                 match self {
                     #(#arms,)*
+                }
+            }
+
+            fn inspect_head(&self) -> ::rich_ext::inspect::Record {
+                match self {
+                    #(#heads,)*
                 }
             }
 

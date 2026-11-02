@@ -267,6 +267,43 @@ fn generics_use_the_concrete_type() {
     snapshot("generic", &Inspect::new(&wrapper).types(true));
 }
 
+/// A list node whose value counts how often it is read.
+#[derive(Inspect)]
+pub struct Counted {
+    #[inspect(with = counted)]
+    pub value: u32,
+    #[inspect(nested)]
+    pub next: Option<Box<Counted>>,
+}
+
+static READS: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+
+fn counted(value: &u32, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    READS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    write!(f, "{value}")
+}
+
+#[test]
+fn the_depth_limit_stops_the_walk_not_only_the_output() {
+    // A long list: past the limit, nothing of the rest may be read (the
+    // walk used to visit every node, and a deep enough list overflowed the
+    // stack).
+    let mut list = None;
+    for value in 0..1000 {
+        list = Some(Box::new(Counted { value, next: list }));
+    }
+    let list = list.unwrap();
+    READS.store(0, std::sync::atomic::Ordering::Relaxed);
+    let text = plain(&Inspect::new(&*list).max_depth(1));
+    assert!(text.contains("Counted { .. }"), "{text}");
+    // Each node shown is read for its `{:?}` and `{:#?}`; 2 nodes are shown.
+    assert!(
+        READS.load(std::sync::atomic::Ordering::Relaxed) <= 4,
+        "{} reads",
+        READS.load(std::sync::atomic::Ordering::Relaxed)
+    );
+}
+
 #[test]
 fn nested_reports_stop_at_the_depth_limit() {
     let list = Node {

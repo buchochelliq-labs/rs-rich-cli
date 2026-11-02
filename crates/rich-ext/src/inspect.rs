@@ -59,6 +59,17 @@ pub trait Inspectable {
     /// nested report at most `depth` levels deep.
     fn inspect_record(&self, depth: usize) -> Record;
 
+    /// The record's shape, variant and `skipped` without its fields: what a
+    /// value cut at the depth limit shows (`Name { .. }`). The derive gives
+    /// it without reading a field; the default asks
+    /// [`inspect_record`](Self::inspect_record) with depth 0, so a
+    /// hand-written impl whose nested fields recurse should give it too.
+    fn inspect_head(&self) -> Record {
+        let mut record = self.inspect_record(0);
+        record.fields.clear();
+        record
+    }
+
     /// The methods recorded by `#[rich_ext::inspect]` on an `impl` block.
     /// The derive returns them when the type is marked `#[inspect(methods)]`.
     fn inspect_methods(&self) -> &'static [Method] {
@@ -92,7 +103,7 @@ impl<T: Inspectable + ?Sized> InspectField for T {
     fn inspect_field(&self, depth: usize) -> FieldValue {
         let ty = self.inspect_type();
         if depth == 0 {
-            let record = self.inspect_record(0);
+            let record = self.inspect_head();
             let name = repr_name(&ty, &record);
             return FieldValue::Elided(match record.shape {
                 Shape::Named => format!("{name} {{ .. }}"),
@@ -124,6 +135,9 @@ macro_rules! delegate_inspectable {
             }
             fn inspect_record(&self, depth: usize) -> Record {
                 (**self).inspect_record(depth)
+            }
+            fn inspect_head(&self) -> Record {
+                (**self).inspect_head()
             }
             fn inspect_methods(&self) -> &'static [Method] {
                 (**self).inspect_methods()

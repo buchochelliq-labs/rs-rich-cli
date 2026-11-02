@@ -75,10 +75,15 @@ impl Workspace {
 }
 
 /// Resolves an absolute path: the longest existing prefix through the file
-/// system, the rest as plain names.
+/// system, the rest as plain names. A name that is there but does not
+/// resolve (a dangling symlink, or one this process may not follow) fails
+/// closed: following it on a write could create a file anywhere.
 fn resolve(path: &Path) -> Option<PathBuf> {
     if let Ok(real) = path.canonicalize() {
         return Some(real);
+    }
+    if path.symlink_metadata().is_ok() {
+        return None;
     }
     let mut rest = Vec::new();
     let mut base = path;
@@ -86,22 +91,26 @@ fn resolve(path: &Path) -> Option<PathBuf> {
         let name = base.file_name()?;
         rest.push(name.to_owned());
         base = base.parent()?;
-        if let Ok(real) = base.canonicalize() {
-            let mut resolved = real;
-            for name in rest.iter().rev() {
-                resolved.push(name);
-            }
-            // `file_name` skips `..` and `.` only at the end; refuse any
-            // left inside the part that does not exist yet.
-            let tail = path.strip_prefix(base).ok()?;
-            if tail
-                .components()
-                .any(|c| !matches!(c, Component::Normal(_)))
-            {
+        let Ok(real) = base.canonicalize() else {
+            if base.symlink_metadata().is_ok() {
                 return None;
             }
-            return Some(resolved);
+            continue;
+        };
+        let mut resolved = real;
+        for name in rest.iter().rev() {
+            resolved.push(name);
         }
+        // `file_name` skips `..` and `.` only at the end; refuse any left
+        // inside the part that does not exist yet.
+        let tail = path.strip_prefix(base).ok()?;
+        if tail
+            .components()
+            .any(|c| !matches!(c, Component::Normal(_)))
+        {
+            return None;
+        }
+        return Some(resolved);
     }
 }
 
@@ -177,6 +186,22 @@ mod tests {
         std::os::unix::fs::symlink(dir.join("secret"), dir.join("inside/escape")).unwrap();
         let workspace = Workspace::new(dir.join("inside")).unwrap();
         assert!(!workspace.contains(&workspace.cwd().join("escape/key")));
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn dangling_symlinks_are_refused() {
+        // A link to a file that does not exist yet, outside the workspace:
+        // following it on a write would create that file.
+        let dir = scratch("dangling");
+        std::fs::create_dir_all(dir.join("outside")).unwrap();
+        std::os::unix::fs::symlink(dir.join("outside/new.txt"), dir.join("inside/link")).unwrap();
+        std::os::unix::fs::symlink(dir.join("outside/gone"), dir.join("inside/dir")).unwrap();
+        let workspace = Workspace::new(dir.join("inside")).unwrap();
+        assert!(!workspace.contains(&workspace.cwd().join("link")));
+        assert!(!workspace.contains(&workspace.cwd().join("dir/new.txt")));
+        assert!(!dir.join("outside/new.txt").exists());
         let _ = std::fs::remove_dir_all(dir);
     }
 

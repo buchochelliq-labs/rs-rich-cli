@@ -10300,26 +10300,32 @@ pub fn T::inspect_field(&self, usize) -> rich_ext::inspect::FieldValue
 pub trait rich_ext::inspect::InspectMethods
 pub const rich_ext::inspect::InspectMethods::METHODS: &'static [rich_ext::inspect::Method]
 pub trait rich_ext::inspect::Inspectable
+pub fn rich_ext::inspect::Inspectable::inspect_head(&self) -> rich_ext::inspect::Record
 pub fn rich_ext::inspect::Inspectable::inspect_methods(&self) -> &'static [rich_ext::inspect::Method]
 pub fn rich_ext::inspect::Inspectable::inspect_record(&self, usize) -> rich_ext::inspect::Record
 pub fn rich_ext::inspect::Inspectable::inspect_type(&self) -> rich_ext::inspect::TypeInfo
 impl<T: rich_ext::inspect::Inspectable + ?core::marker::Sized> rich_ext::inspect::Inspectable for &T
+pub fn &T::inspect_head(&self) -> rich_ext::inspect::Record
 pub fn &T::inspect_methods(&self) -> &'static [rich_ext::inspect::Method]
 pub fn &T::inspect_record(&self, usize) -> rich_ext::inspect::Record
 pub fn &T::inspect_type(&self) -> rich_ext::inspect::TypeInfo
 impl<T: rich_ext::inspect::Inspectable + ?core::marker::Sized> rich_ext::inspect::Inspectable for &mut T
+pub fn &mut T::inspect_head(&self) -> rich_ext::inspect::Record
 pub fn &mut T::inspect_methods(&self) -> &'static [rich_ext::inspect::Method]
 pub fn &mut T::inspect_record(&self, usize) -> rich_ext::inspect::Record
 pub fn &mut T::inspect_type(&self) -> rich_ext::inspect::TypeInfo
 impl<T: rich_ext::inspect::Inspectable + ?core::marker::Sized> rich_ext::inspect::Inspectable for alloc::boxed::Box<T>
+pub fn alloc::boxed::Box<T>::inspect_head(&self) -> rich_ext::inspect::Record
 pub fn alloc::boxed::Box<T>::inspect_methods(&self) -> &'static [rich_ext::inspect::Method]
 pub fn alloc::boxed::Box<T>::inspect_record(&self, usize) -> rich_ext::inspect::Record
 pub fn alloc::boxed::Box<T>::inspect_type(&self) -> rich_ext::inspect::TypeInfo
 impl<T: rich_ext::inspect::Inspectable + ?core::marker::Sized> rich_ext::inspect::Inspectable for alloc::rc::Rc<T>
+pub fn alloc::rc::Rc<T>::inspect_head(&self) -> rich_ext::inspect::Record
 pub fn alloc::rc::Rc<T>::inspect_methods(&self) -> &'static [rich_ext::inspect::Method]
 pub fn alloc::rc::Rc<T>::inspect_record(&self, usize) -> rich_ext::inspect::Record
 pub fn alloc::rc::Rc<T>::inspect_type(&self) -> rich_ext::inspect::TypeInfo
 impl<T: rich_ext::inspect::Inspectable + ?core::marker::Sized> rich_ext::inspect::Inspectable for alloc::sync::Arc<T>
+pub fn alloc::sync::Arc<T>::inspect_head(&self) -> rich_ext::inspect::Record
 pub fn alloc::sync::Arc<T>::inspect_methods(&self) -> &'static [rich_ext::inspect::Method]
 pub fn alloc::sync::Arc<T>::inspect_record(&self, usize) -> rich_ext::inspect::Record
 pub fn alloc::sync::Arc<T>::inspect_type(&self) -> rich_ext::inspect::TypeInfo
@@ -18690,26 +18696,32 @@ pub fn rich_ext::ConsoleExt::install_extensions(&mut self) -> &mut Self
 impl rich_ext::ConsoleExt for rich::console::Console
 pub fn rich::console::Console::install_extensions(&mut self) -> &mut Self
 pub trait rich_ext::Inspectable
+pub fn rich_ext::Inspectable::inspect_head(&self) -> rich_ext::inspect::Record
 pub fn rich_ext::Inspectable::inspect_methods(&self) -> &'static [rich_ext::inspect::Method]
 pub fn rich_ext::Inspectable::inspect_record(&self, usize) -> rich_ext::inspect::Record
 pub fn rich_ext::Inspectable::inspect_type(&self) -> rich_ext::inspect::TypeInfo
 impl<T: rich_ext::inspect::Inspectable + ?core::marker::Sized> rich_ext::inspect::Inspectable for &T
+pub fn &T::inspect_head(&self) -> rich_ext::inspect::Record
 pub fn &T::inspect_methods(&self) -> &'static [rich_ext::inspect::Method]
 pub fn &T::inspect_record(&self, usize) -> rich_ext::inspect::Record
 pub fn &T::inspect_type(&self) -> rich_ext::inspect::TypeInfo
 impl<T: rich_ext::inspect::Inspectable + ?core::marker::Sized> rich_ext::inspect::Inspectable for &mut T
+pub fn &mut T::inspect_head(&self) -> rich_ext::inspect::Record
 pub fn &mut T::inspect_methods(&self) -> &'static [rich_ext::inspect::Method]
 pub fn &mut T::inspect_record(&self, usize) -> rich_ext::inspect::Record
 pub fn &mut T::inspect_type(&self) -> rich_ext::inspect::TypeInfo
 impl<T: rich_ext::inspect::Inspectable + ?core::marker::Sized> rich_ext::inspect::Inspectable for alloc::boxed::Box<T>
+pub fn alloc::boxed::Box<T>::inspect_head(&self) -> rich_ext::inspect::Record
 pub fn alloc::boxed::Box<T>::inspect_methods(&self) -> &'static [rich_ext::inspect::Method]
 pub fn alloc::boxed::Box<T>::inspect_record(&self, usize) -> rich_ext::inspect::Record
 pub fn alloc::boxed::Box<T>::inspect_type(&self) -> rich_ext::inspect::TypeInfo
 impl<T: rich_ext::inspect::Inspectable + ?core::marker::Sized> rich_ext::inspect::Inspectable for alloc::rc::Rc<T>
+pub fn alloc::rc::Rc<T>::inspect_head(&self) -> rich_ext::inspect::Record
 pub fn alloc::rc::Rc<T>::inspect_methods(&self) -> &'static [rich_ext::inspect::Method]
 pub fn alloc::rc::Rc<T>::inspect_record(&self, usize) -> rich_ext::inspect::Record
 pub fn alloc::rc::Rc<T>::inspect_type(&self) -> rich_ext::inspect::TypeInfo
 impl<T: rich_ext::inspect::Inspectable + ?core::marker::Sized> rich_ext::inspect::Inspectable for alloc::sync::Arc<T>
+pub fn alloc::sync::Arc<T>::inspect_head(&self) -> rich_ext::inspect::Record
 pub fn alloc::sync::Arc<T>::inspect_methods(&self) -> &'static [rich_ext::inspect::Method]
 pub fn alloc::sync::Arc<T>::inspect_record(&self, usize) -> rich_ext::inspect::Record
 pub fn alloc::sync::Arc<T>::inspect_type(&self) -> rich_ext::inspect::TypeInfo
