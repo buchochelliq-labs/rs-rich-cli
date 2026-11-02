@@ -8,12 +8,12 @@
 │▾ rs-rich 2        │   add a task to the project                            n │                   │
 │    · Sync upstream│   open the menus                                     f10 │                   │
 │    · Golden fixtur│   quit                                                 q │                   │
-│▾ Home 1           │                                                          │───────────────────╯
+│▾ Home 1           │   Screenshot                                             │───────────────────╯
 │    · Water the pla│                                                          │────────────────────
 │                   │                                                          │───────────────────╮
 │                   │                                                          │                   │
 │                   │                                                          │                   │
-│                   │  4/4 · ↑↓ move · enter run · esc close                   │                   │
+│                   │  5/5 · ↑↓ move · enter run · esc close                   │                   │
 │                   ╰──────────────────────────────────────────────────────────╯                   │
 │                                │││2026-09-06 09:26 deployed #99998                               │
 │                                │││2026-09-06 10:03 reviewed #99999                               │
