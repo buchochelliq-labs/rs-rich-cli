@@ -176,11 +176,16 @@ fn motion_plays_pauses_and_seeks_and_its_frames_change() {
         first.pixels.rgb, last.pixels.rgb,
         "the frames did not change"
     );
-    // At most eight a second.
+    // Frames keep coming, and no faster than the cap (MAX_FPS, 30 a
+    // second since 0.0.24; this asserted the old cap of eight).
     let count = w.frames.len();
     w.pump(Duration::from_secs(2));
     let in_two = w.frames.len() - count;
-    assert!((2..=17).contains(&in_two), "{in_two} frames in two seconds");
+    let most = 2 * noctiluca::video::MAX_FPS as usize + 1;
+    assert!(
+        (2..=most).contains(&in_two),
+        "{in_two} frames in two seconds"
+    );
 
     // Paused: the clock holds, and frames stop.
     w.media(MediaOp::Pause);
