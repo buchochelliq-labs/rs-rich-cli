@@ -235,6 +235,33 @@ previews its keys), so the plain arrows still only select. Call it on the
 list itself, before `.panel(..)`: on a node that is not a `list` (a
 `virtual_list`, a table, a panel), `.reorderable` does nothing.
 
+### Rows that are nodes
+
+`list` and `list_rows` draw markup rows. `list_of` takes rows made of any
+nodes (a card, a row with a label and a button), as Textual's `ListView`
+does, with the list's cursor:
+
+```rust
+list_of(move || sessions.with(Vec::len), move |i| session_card(i), selected)
+    .item_key(move |i| sessions.with(|s| s[i].id))      // rows keep their state by key
+    .separator_after(move |i| i + 1 == pinned.get())     // a rule under item i
+    .item_disabled_when(move |i| sessions.with(|s| s[i].closed))
+    .on_highlight(|i, cx| { /* the cursor moved to i */ })
+    .on_select(|i, cx| { /* Enter, or a click on row i */ })
+    .on_context(|i, cx| { /* a right click on row i */ })
+    .scroll_padding(1)
+```
+
+- ↑/↓, Home/End and PgUp/PgDn move the cursor and keep it in view;
+  separators and disabled rows are skipped, and disabled rows draw dim and
+  match `:disabled`. The wheel scrolls the view.
+- A click on a row selects it, unless a node inside the row took the
+  click: a card's button runs the button.
+- The selected row matches `:selected`, so a stylesheet styles its
+  children: `:selected .title { text-style: bold; }`.
+- All rows are built and laid out, as a `scroll`'s content is; for long
+  lists, use `virtual_list` or `scroll_virtual`.
+
 ## Trees, split panes and virtual lists
 
 ```rust

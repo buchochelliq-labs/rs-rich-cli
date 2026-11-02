@@ -58,6 +58,11 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   (pass or fail from the styled rows, the SVG kept beside them, an HTML
   report of both pictures in `target/intuituive-snapshots/` on a
   difference).
+- **Lists of node rows** (#811): `list_of(len, build_row, selected)`, with
+  `Node::separator_after(..)`, `item_disabled_when(..)` and
+  `on_highlight(..)`; `on_select`, `on_context`, `scroll_padding` and
+  `item_key` reach it too. Rows are any nodes, the selected one matches
+  `:selected`, and a click a node inside the row took does not select.
 
 ### The docs on Zensical
 

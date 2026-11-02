@@ -432,7 +432,7 @@ pub(crate) struct List {
 /// assert_eq!(screen[4].trim_end(), "item 8");
 /// ```
 pub fn list(items: impl Fn() -> Vec<String> + 'static, selected: Signal<usize>) -> Node {
-    list_of(Items::All(Rc::new(items)), Selection::One(selected))
+    list_core(Items::All(Rc::new(items)), Selection::One(selected))
 }
 
 /// A [`list`] whose selection may be empty, as ratatui's
@@ -474,7 +474,7 @@ pub fn list_optional(
     items: impl Fn() -> Vec<String> + 'static,
     selected: Signal<Option<usize>>,
 ) -> Node {
-    list_of(Items::All(Rc::new(items)), Selection::Maybe(selected))
+    list_core(Items::All(Rc::new(items)), Selection::Maybe(selected))
 }
 
 /// A [`list`] that asks only for the items it draws: `len` is how many
@@ -508,7 +508,7 @@ pub fn list_lazy(
         item: Rc::new(item),
         reset: None,
     };
-    list_of(items, Selection::One(selected))
+    list_core(items, Selection::One(selected))
 }
 
 /// One row of a [`list_rows`] list: its markup, and what
@@ -632,7 +632,7 @@ pub fn list_rows(
         reset: Some(Rc::new(move || reset.made.borrow_mut().clear())),
     };
     let (trailing, style, selected_style) = (rows.clone(), rows.clone(), rows.clone());
-    list_of(items, Selection::One(selected))
+    list_core(items, Selection::One(selected))
         .trailing(move |i| trailing.get(i, |row| row.trailing.clone()))
         .row_style(move |i| style.get(i, |row| row.style.clone()))
         .selected_style_for(move |i| selected_style.get(i, |row| row.selected_style.clone()))
@@ -641,7 +641,7 @@ pub fn list_rows(
         })
 }
 
-fn list_of(items: Items, selection: Selection) -> Node {
+fn list_core(items: Items, selection: Selection) -> Node {
     let options = Rc::new(RefCell::new(ListOptions::default()));
     let first = Rc::new(Cell::new(0usize));
     let rows = Rc::new(Cell::new(1usize));
@@ -1538,6 +1538,9 @@ impl Node {
     /// they fit: ratatui's `scroll_padding`, Vim's `scrolloff`. On a
     /// [`virtual_list`](crate::widgets::virtual_list) or a table too.
     pub fn scroll_padding(self, items: usize) -> Node {
+        if self.node_list(|list| list.set_padding(items)) {
+            return self;
+        }
         self.list_option("scroll_padding", move |node| {
             let table = table_options(node, |options| options.scroll_padding = items);
             set_list(node, |options| options.padding = items) || table
@@ -1770,6 +1773,13 @@ impl Node {
     /// assert_eq!(driver.screen().plain()[2].trim_end(), "menu on 1");
     /// ```
     pub fn on_context(self, handler: impl FnMut(usize, &mut crate::app::Ctx) + 'static) -> Node {
+        let mut handler = Some(handler);
+        self.node_list(|list| {
+            list.set_on_context(Box::new(handler.take().expect("not taken yet")))
+        });
+        let Some(handler) = handler else {
+            return self;
+        };
         let handler: OnContext = Rc::new(RefCell::new(handler));
         self.list_options("on_context", move |options| {
             options.context = Some(handler.clone())
