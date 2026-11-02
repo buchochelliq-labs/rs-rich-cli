@@ -923,7 +923,9 @@ jobs:
   # showed only with `--release` (wasmi's dispatch differs from a debug
   # build's). rs-rich-ext's sandbox tests, and the CLI's tests that load
   # modules: the test marketplace's installs, the official artifacts and
-  # `--plugin`.
+  # `--plugin`. And the WASM plugin template (templates/wasm-plugin), built
+  # for wasm32-unknown-unknown and loaded in the sandbox; elsewhere that
+  # test passes without the target, here it must have it.
   wasm-plugins-release:
     name: WASM plugins (release)
     runs-on: ubuntu-latest
@@ -935,14 +937,19 @@ jobs:
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
 
       - name: Cache cargo
         uses: Swatinem/rust-cache@v2
 
       - name: The WASM plugin tests (release)
+        env:
+          RICH_WASM_TEMPLATE_TEST: require
         run: >-
           cargo test --release --locked
           -p rs-rich-ext --features wasm-plugins --test wasm_plugins
+          --test wasm_plugin_template
 
       - name: The CLI's tests that load WASM plugins (release)
         run: >-

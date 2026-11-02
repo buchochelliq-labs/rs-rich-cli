@@ -1,0 +1,18 @@
+# A cargo-generate template for a sandboxed WASM plugin for `rich`:
+#
+#     cargo generate --git https://github.com/buchochelliq-labs/rs-rich-cli templates/wasm-plugin
+#
+# The manifest is `Cargo.toml.liquid`: cargo-generate drops the `.liquid`
+# suffix, and cargo, which reads every `Cargo.toml` in a git checkout of this
+# repo when a crate depends on one of ours by git, never sees the
+# `{{project-name}}` placeholder (not a valid package name). 0.23.4 fixed the
+# suffix being kept on git templates.
+#
+# The project name is the plugin's id (its manifest's `name`, and its
+# marketplace listing's `id`), so it keeps the plugin name rule: lowercase
+# letters, digits, `-`, `_` and `.`, starting with a letter or digit.
+[template]
+cargo_generate_version = ">=0.23.4"
+# Copied as they are, never read as Liquid: the workflow's `${{ … }}` is
+# GitHub's syntax, and the source has no placeholders.
+exclude = [".github/workflows/release.yml", "src/lib.rs", "src/abi.rs"]
