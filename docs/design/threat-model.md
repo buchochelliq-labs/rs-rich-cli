@@ -224,17 +224,34 @@ packages a user believes are official.
 - **Revocation needs the client to see the next generation.** Key
   generations are fetched from the same location as the index. A client
   pointed at a location that withholds `keys-N+1.json` (a stale mirror, a
-  `RICH_MARKETPLACE` the attacker chose) keeps trusting a revoked main key
-  for as long as that key can sign fresh indexes. The expiry limits replay,
-  not a leaked key. Consider a compiled-in minimum generation per release,
-  and a warning when the official location's generation is behind. **gap**.
-- **The state file is a trust anchor.** `marketplace.state.json` caches the
-  newest verified key generation and is read back without re-verification,
-  checked only against the root's main key id. Anything that can write the
-  install directory can replace the trusted keys, as it can the lockfile.
-  The install directory is made with the default permissions (`umask`). The
-  review should decide whether to re-verify the cached chain from the root
-  on load, and make the directory private. **gap**.
+  `RICH_MARKETPLACE` the attacker chose) kept trusting a revoked main key,
+  even when another location had already shown it the revocation, because
+  the walk's starting point was kept per location. It is now kept per trust
+  root, so once any location has served a revoking generation, an index
+  signed by the revoked key is refused everywhere, with an error saying the
+  location is stale or withholding keys
+  ([`marketplace.rs`](https://github.com/buchochelliq-labs/rs-rich-cli/blob/main/crates/rich-cli/src/marketplace.rs),
+  `open`, `stale_keys_hint`; tested in
+  [`plugin_marketplace.rs`](https://github.com/buchochelliq-labs/rs-rich-cli/blob/main/crates/rich-cli/tests/plugin_marketplace.rs)).
+  **mitigated** (0.0.24) for a client that has seen the revocation. Left,
+  by design: a client that never has depends on the compiled-in generation,
+  so a revocation is followed by a release that compiles in the new one. A
+  signed "current generation" field in the index was considered and not
+  added: the index is signed by the main key, so a holder of a leaked main
+  key could write any value there.
+- **The state file was a trust anchor.** `marketplace.state.json` cached
+  the newest verified key generation as a key set, read back without
+  re-verification and checked only against the root's main key id, and the
+  install directory was made with the default permissions (`umask`). The
+  state now keeps the generations as their `keys-N.json` files and
+  signatures, verified again from the trust root (compiled in, or the one
+  named) whenever they are read; a chain that does not verify is dropped
+  with a warning, so the file can take the walk back to the root but never
+  add a key. A 0.0.23 cached key set is not read. Directories the
+  marketplace creates are mode 700 on Unix (`create_private_dir_all`). Same
+  links as above. **mitigated** (0.0.24). Write access to the install
+  directory still lets someone change what is installed, as the lockfile's
+  entry below says.
 - **`RICH_MARKETPLACE_KEYS` and `--marketplace-keys` replace the trust
   root** with any file. That is their purpose; an environment variable is,
   however, easy to set in a shared shell profile or CI. Consider a warning

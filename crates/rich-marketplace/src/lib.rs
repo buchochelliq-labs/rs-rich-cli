@@ -74,7 +74,9 @@ pub use listing::{
     Artifact, Capability, CrateInfo, Kind, LISTING_SCHEMA_VERSION, ListedVersion, Listing,
     MAX_RECOMMENDED_NOTE, OFFICIAL_PREFIX, Recommended, Requires, Tier,
 };
-pub use lockfile::{LOCKFILE_NAME, LOCKFILE_SCHEMA_VERSION, LockEntry, Lockfile};
+pub use lockfile::{
+    LOCKFILE_NAME, LOCKFILE_SCHEMA_VERSION, LockEntry, Lockfile, create_private_dir_all,
+};
 pub use resolve::{Host, MICRO_SCHEMA_VERSION, Request, THEME_FORMAT, resolve};
 #[cfg(feature = "http")]
 pub use transport::HttpsTransport;

@@ -1308,3 +1308,188 @@ fn write_test_marketplace() {
     Market::write(&dir);
     println!("wrote the test marketplace to {}", dir.display());
 }
+
+/// `keys-N.json` naming `main` and `backup`, revoking `revoked`.
+fn keys_json_for(generation: u64, main: &Pair, backup: &Pair, revoked: &[&Pair]) -> Vec<u8> {
+    let revoked: Vec<&str> = revoked.iter().map(|p| p.id.as_str()).collect();
+    serde_json::to_vec_pretty(&json!({
+        "schema_version": 1,
+        "generation": generation,
+        "main": {"id": main.id, "public_key": main.public},
+        "backup": {"id": backup.id, "public_key": backup.public},
+        "revoked": revoked,
+    }))
+    .unwrap()
+}
+
+/// Sign `dir`'s `index.json` (at `serial`) with test key `name`.
+fn sign_index(dir: &Path, name: &str, serial: u64) {
+    let index = std::fs::read(dir.join("index.json")).unwrap();
+    let signature = pair(name).sign(
+        &index,
+        &format!("rs-rich-marketplace index serial={serial}"),
+    );
+    std::fs::write(dir.join("index.json.minisig"), signature).unwrap();
+}
+
+/// Generation 2: the backup key alone revokes the main key and names
+/// `gen2-main`; the index is signed by the new main key.
+fn rotate_to_generation_2(market: &Market) {
+    let next = keys_json_for(
+        2,
+        &pair("gen2-main"),
+        &pair("gen1-backup"),
+        &[&pair("gen1-main")],
+    );
+    let keys = market.dir.join("keys");
+    std::fs::write(keys.join("keys-2.json"), &next).unwrap();
+    let signature = pair("gen1-backup").sign(&next, "rs-rich-marketplace keys generation=2");
+    std::fs::write(keys.join("keys-2.json.backup.minisig"), signature).unwrap();
+    sign_index(&market.dir, "gen2-main", market.serial);
+}
+
+fn copy_dir(from: &Path, to: &Path) {
+    std::fs::create_dir_all(to).unwrap();
+    for entry in std::fs::read_dir(from).unwrap() {
+        let entry = entry.unwrap();
+        let target = to.join(entry.file_name());
+        if entry.file_type().unwrap().is_dir() {
+            copy_dir(&entry.path(), &target);
+        } else {
+            std::fs::copy(entry.path(), target).unwrap();
+        }
+    }
+}
+
+#[test]
+fn a_location_withholding_newer_keys_cannot_bring_back_a_revoked_key() {
+    let w = world();
+    rotate_to_generation_2(&w.market);
+    let out = w.plugin(&["search"]);
+    assert_code(&out, 0);
+    assert!(
+        text(&out.stderr).contains("was revoked and replaced"),
+        "{}",
+        text(&out.stderr)
+    );
+
+    // Another location with the same trust root that never serves
+    // keys-2.json, and an index signed by the key it revoked.
+    let stale = w.root.join("stale");
+    copy_dir(&w.market.dir, &stale);
+    for name in ["keys-2.json", "keys-2.json.backup.minisig"] {
+        std::fs::remove_file(stale.join("keys").join(name)).unwrap();
+    }
+    sign_index(&stale, "gen1-main", w.market.serial);
+    let keys = w.keys();
+    let out = w.rich(&[
+        "plugin",
+        "search",
+        "--marketplace",
+        stale.to_str().unwrap(),
+        "--marketplace-keys",
+        keys.to_str().unwrap(),
+    ]);
+    assert_code(&out, 4);
+    let stderr = text(&out.stderr);
+    assert!(
+        stderr.contains("was revoked by keys generation 2") && stderr.contains("withholding"),
+        "{stderr}"
+    );
+}
+
+#[test]
+fn the_state_file_cannot_add_a_trusted_key() {
+    let w = world();
+    // The index is signed by a key no generation of the trust root names.
+    sign_index(&w.market.dir, "stranger", w.market.serial);
+    let (main, backup, stranger) = (pair("gen1-main"), pair("gen1-backup"), pair("stranger"));
+    let forged = keys_json_for(2, &stranger, &backup, &[&main]);
+    let location = format!(
+        "file://{}",
+        std::fs::canonicalize(&w.market.dir).unwrap().display()
+    );
+    std::fs::create_dir_all(&w.plugins).unwrap();
+    let state = w.plugins.join("marketplace.state.json");
+    let refused = |what: &str| {
+        let out = w.plugin(&["search"]);
+        assert_code(&out, 4);
+        assert!(
+            text(&out.stderr).contains("signed by key"),
+            "{what}: {}",
+            text(&out.stderr)
+        );
+        text(&out.stderr)
+    };
+
+    // The cached generation as 0.0.23 wrote it: a key set and its root's id,
+    // which nothing can verify.
+    let keys: Value = serde_json::from_slice(&forged).unwrap();
+    let old = json!({
+        "schema_version": 1,
+        "disabled": [],
+        "marketplaces": {location.clone(): {"keys": keys, "root": main.id}},
+        "yanked": {},
+    });
+    std::fs::write(&state, serde_json::to_vec_pretty(&old).unwrap()).unwrap();
+    refused("a cached key set");
+
+    // A cached chain whose signatures are the stranger's: verified from the
+    // root, it is refused and dropped.
+    let chain = json!({
+        "schema_version": 1,
+        "disabled": [],
+        "marketplaces": {},
+        "key_chains": {main.id.clone(): [{
+            "keys": String::from_utf8(forged.clone()).unwrap(),
+            "main_signature": stranger.sign(&forged, "rs-rich-marketplace keys generation=2"),
+            "backup_signature": stranger.sign(&forged, "rs-rich-marketplace keys generation=2"),
+        }]},
+        "yanked": {},
+    });
+    std::fs::write(&state, serde_json::to_vec_pretty(&chain).unwrap()).unwrap();
+    let stderr = refused("a forged chain");
+    assert!(
+        stderr.contains("does not verify from the trust root"),
+        "{stderr}"
+    );
+    let saved: Value = serde_json::from_slice(&std::fs::read(&state).unwrap()).unwrap();
+    assert!(
+        saved
+            .get("key_chains")
+            .is_none_or(|c| c.get(&main.id).is_none()),
+        "{saved}"
+    );
+}
+
+#[test]
+fn a_verified_chain_is_kept_and_verified_again() {
+    let w = world();
+    rotate_to_generation_2(&w.market);
+    assert_code(&w.plugin(&["search"]), 0);
+    let state = w.plugins.join("marketplace.state.json");
+    let saved: Value = serde_json::from_slice(&std::fs::read(&state).unwrap()).unwrap();
+    let main = pair("gen1-main");
+    assert_eq!(
+        saved["key_chains"][&main.id].as_array().unwrap().len(),
+        1,
+        "{saved}"
+    );
+    // Gone from the location now, the cached generation still verifies:
+    // the index signed by the new main key is accepted.
+    std::fs::remove_file(w.market.dir.join("keys/keys-2.json")).unwrap();
+    let out = w.plugin(&["search"]);
+    assert_code(&out, 0);
+    assert!(
+        !text(&out.stderr).contains("warning"),
+        "{}",
+        text(&out.stderr)
+    );
+
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let mode = std::fs::metadata(&w.plugins).unwrap().permissions().mode() & 0o777;
+        assert_eq!(mode, 0o700);
+    }
+}

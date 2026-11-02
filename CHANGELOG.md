@@ -52,6 +52,18 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   hash-pinned `.github/requirements-signer.txt` (`--require-hashes`), and
   defaults `RS_RICH_CLI_REF` to the commit of `release-0.0.23` instead of
   `main` (`check-listings.yml` too). For the marketplace repository to take.
+- **Marketplace key chain: kept per trust root, verified on every read.**
+  `marketplace.state.json` keeps the key generations accepted after each
+  trust root as their `keys-N.json` files and signatures (`key_chains`),
+  shared by every location, and verifies them again from the root whenever
+  it is read; a chain that does not verify is dropped with a warning. A
+  location that withholds a newer `keys-N.json` can no longer bring back a
+  main key another location's chain revoked, and an index signed by such a
+  key is refused with an error naming the location as stale. The state
+  file can no longer add a trusted key: the cached key set 0.0.23 wrote is
+  not read (the chain is fetched again). Directories the marketplace
+  creates (the install directory, package folders) are mode 700 on Unix:
+  `rich_marketplace::create_private_dir_all` (new).
 
 ### The docs on Zensical
 

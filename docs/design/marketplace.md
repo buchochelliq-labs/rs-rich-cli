@@ -459,11 +459,23 @@ another generation:
 `minisign -S -s backup.key -m keys-2.json -x keys-2.json.backup.minisig -t "rs-rich-marketplace keys generation=2"`.
 A revoked key stays revoked in every later generation.
 
-A client holds the newest generation it has verified. On refresh it fetches
-the generations after it and accepts them one at a time, each against the
-one before, before it verifies the index with the newest main key. A
-release of the crate compiles in the newest generation, so a new install
-does not walk the whole chain.
+A client holds the generations it has verified after its trust root. On
+refresh it fetches the generations after the newest and accepts them one at
+a time, each against the one before, before it verifies the index with the
+newest main key. A release of the crate compiles in the newest generation,
+so a new install does not walk the whole chain.
+
+What it holds is kept per trust root, not per location: a location that
+does not serve a newer `keys-N.json` (a stale mirror, a `RICH_MARKETPLACE`
+someone else chose) starts from the newest generation any location gave,
+so a main key revoked there stays revoked, and an index it signed is
+refused with an error saying the location is stale or withholding keys.
+The chain is stored as the `keys-N.json` files and their signatures, and
+verified again from the trust root each time it is read, so the state file
+can lose generations but never add a key. (A client that has never seen a
+revoking generation still depends on the location it is given, or on a
+release compiling that generation in: after a revocation, ship a release
+with the new generation.)
 
 **The test key.** The crate's tests sign a fixture marketplace with key
 pairs checked into its test fixtures

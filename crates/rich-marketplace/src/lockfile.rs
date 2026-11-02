@@ -245,11 +245,24 @@ impl Lockfile {
     }
 }
 
+/// Create `dir` and any missing parents, each private on Unix (mode 700:
+/// read, write and search for the owner only), so another local user can
+/// neither read nor change what the install directory trusts. A directory
+/// that already exists keeps its mode. Elsewhere, `create_dir_all`.
+pub fn create_private_dir_all(dir: &Path) -> std::io::Result<()> {
+    let mut builder = fs::DirBuilder::new();
+    builder.recursive(true);
+    #[cfg(unix)]
+    std::os::unix::fs::DirBuilderExt::mode(&mut builder, 0o700);
+    builder.create(dir)
+}
+
 /// Write `bytes` to `path` through a temporary file in the same directory,
-/// synced, then renamed over it.
+/// synced, then renamed over it. The directory is made with
+/// [`create_private_dir_all`].
 pub(crate) fn write_atomically(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
     let dir = path.parent().unwrap_or(Path::new("."));
-    fs::create_dir_all(dir)?;
+    create_private_dir_all(dir)?;
     let name = path
         .file_name()
         .map(|n| n.to_string_lossy().into_owned())
@@ -271,6 +284,25 @@ pub(crate) fn write_atomically(path: &Path, bytes: &[u8]) -> std::io::Result<()>
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(unix)]
+    #[test]
+    fn directories_it_makes_are_private() {
+        use std::os::unix::fs::PermissionsExt;
+        let root = std::env::temp_dir().join(format!("rs-rich-lockfile-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&root);
+        let file = root.join("plugins/shout/shout-0.2.0.wasm");
+        write_atomically(&file, b"x").unwrap();
+        for dir in [
+            root.clone(),
+            root.join("plugins"),
+            root.join("plugins/shout"),
+        ] {
+            let mode = fs::metadata(&dir).unwrap().permissions().mode() & 0o777;
+            assert_eq!(mode, 0o700, "{}", dir.display());
+        }
+        fs::remove_dir_all(&root).unwrap();
+    }
 
     #[test]
     fn paths_stay_inside_their_package_folder() {

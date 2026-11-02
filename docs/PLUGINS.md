@@ -436,8 +436,10 @@ maintainer can also mark any package `★ recommended`, with a short reason
   `$XDG_DATA_HOME/rich/plugins` (`~/.local/share/rich/plugins`;
   `%LOCALAPPDATA%\rich\plugins` on Windows), as `ID/ID-VERSION.EXT` beside
   `marketplace.lock.json`. `marketplace.state.json` there keeps the disabled
-  packages, the last index each marketplace served, the newest key
-  generation verified and the yank reasons last seen.
+  packages, the last index each marketplace served, the key generations
+  verified after each trust root (verified again from the root whenever
+  they are read) and the yank reasons last seen. On Unix the directory is
+  created private (mode 700); an existing one keeps its mode.
 - **Which marketplace.** `--marketplace LOCATION`, else `RICH_MARKETPLACE`,
   else the official one. A location is an `https://` base URL, or a
   directory (a path or a `file://` URL) laid out as the marketplace
