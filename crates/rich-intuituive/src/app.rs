@@ -445,6 +445,8 @@ enum Nav {
     Replace(Build),
     /// The command palette, or the help, from the focused node's bindings.
     Palette,
+    /// A palette of one provider's hits, under a prompt.
+    PaletteOf(Rc<dyn crate::commands::Provider>, String),
     Help(crate::help::HelpOptions),
     /// Run binding `index` of node `id` (a key sequence's, if `true`), as
     /// its key would.
@@ -474,10 +476,15 @@ struct Mode {
     stash: Option<Vec<Layer>>,
 }
 
-/// The command palette's *Screenshot* (Textual's name for it; not "Save
-/// screenshot", which an app's own "Save" would have to share a search
-/// with).
-const SCREENSHOT_COMMAND: &str = "app.screenshot";
+/// `name` with its first letter in upper case: a provider's name as a
+/// palette's prompt.
+fn capitalized(name: &str) -> String {
+    let mut chars = name.chars();
+    match chars.next() {
+        Some(first) => first.to_uppercase().chain(chars).collect(),
+        None => String::new(),
+    }
+}
 
 /// The mode an app starts in ([`Ctx::mode`]).
 pub const DEFAULT_MODE: &str = "default";
@@ -950,6 +957,18 @@ impl Ctx {
         self.nav.push(Nav::Palette);
     }
 
+    /// Open a palette of `provider`'s hits alone, as the palette's *Theme*
+    /// command opens one of [`Themes`](crate::Themes): what it
+    /// [discovers](crate::Provider::discover) at first, then what it finds
+    /// as you type. The hit chosen runs once the palette closes.
+    pub fn palette_of(&mut self, provider: impl crate::commands::Provider) {
+        let prompt = match provider.name() {
+            "" => "Command".to_string(),
+            name => capitalized(name),
+        };
+        self.nav.push(Nav::PaletteOf(Rc::new(provider), prompt));
+    }
+
     /// Open a palette of `actions` of your own over the current screen:
     /// [`action_overlay`](crate::action_overlay) in a modal titled
     /// `Actions`. It lists what `actions` returns as it changes, and runs
@@ -1176,6 +1195,12 @@ impl Ctx {
     /// [screenshot directory](App::screenshot_dir).
     pub fn screenshot(&mut self, path: impl Into<std::path::PathBuf>) {
         self.screenshots.push(Some(path.into()));
+    }
+
+    /// A screenshot into the [screenshot directory](App::screenshot_dir),
+    /// as the palette's *Screenshot* takes it.
+    pub(crate) fn screenshot_to_dir(&mut self) {
+        self.screenshots.push(None);
     }
 
     /// Set the subtitle a [`header`](crate::header) shows under the app's
@@ -1430,6 +1455,29 @@ impl Theme {
                 ("button.danger", "white on red3"),
             ],
         )
+    }
+
+    /// Whether it is for a dark terminal, as a stylesheet's `:dark` and
+    /// `:light` read it: by the background its `screen` style (a theme
+    /// [from a palette](Self::from_palette)) or its `button` style gives,
+    /// dark when neither says.
+    pub(crate) fn is_dark(&self) -> bool {
+        let ground = |name: &str| {
+            self.styles
+                .iter()
+                .find(|(n, _)| n == name)
+                .and_then(|(_, style)| style.bgcolor())
+                .and_then(rich::Color::get_truecolor)
+        };
+        match ground("screen").or_else(|| ground("button")) {
+            Some(rgb) => {
+                let luma = 0.299 * f64::from(rgb.red)
+                    + 0.587 * f64::from(rgb.green)
+                    + 0.114 * f64::from(rgb.blue);
+                luma < 128.0
+            }
+            None => true,
+        }
     }
 
     /// For light terminals.
@@ -2381,6 +2429,10 @@ pub struct App {
     /// new file in `screenshot_dir`.
     screenshots: Vec<Option<std::path::PathBuf>>,
     screenshot_dir: Option<std::path::PathBuf>,
+    /// The command palette's providers ([`App::provider`]) and system
+    /// commands ([`App::system_commands`]).
+    providers: Vec<Rc<dyn crate::commands::Provider>>,
+    system_commands: crate::commands::SystemCommands,
     /// The app's title ([`App::title`]).
     title: Option<String>,
     help_key: Vec<Key>,
@@ -2776,6 +2828,8 @@ impl App {
             mode: Rc::from(DEFAULT_MODE),
             screenshots: Vec::new(),
             screenshot_dir: None,
+            providers: Vec::new(),
+            system_commands: crate::commands::SystemCommands::default(),
             title: None,
             help_key: Vec::new(),
             legacy_keys: false,
@@ -3453,6 +3507,23 @@ impl App {
     #[must_use]
     pub fn screenshot_dir(mut self, dir: impl Into<std::path::PathBuf>) -> App {
         self.screenshot_dir = Some(dir.into());
+        self
+    }
+
+    /// Add `provider`'s hits to the command palette: it is searched as the
+    /// query changes, and its hits are merged in by score as they come
+    /// (see [`Provider`](crate::Provider)).
+    #[must_use]
+    pub fn provider(mut self, provider: impl crate::commands::Provider) -> App {
+        self.providers.push(Rc::new(provider));
+        self
+    }
+
+    /// The commands the palette offers on its own (all of
+    /// [`SystemCommands`](crate::SystemCommands) unless set).
+    #[must_use]
+    pub fn system_commands(mut self, commands: crate::commands::SystemCommands) -> App {
+        self.system_commands = commands;
         self
     }
 
@@ -4625,6 +4696,7 @@ impl App {
                 generation: generation.unwrap_or(source.generation),
                 vars: &vars,
                 viewport,
+                dark: self.theme.is_dark(),
             }),
             chain: Vec::new(),
             announcements: Vec::new(),
@@ -5137,7 +5209,7 @@ impl App {
             Nav::Popup(..) | Nav::PopupAt(..) => Some("pop-up opened"),
             Nav::Pop => (self.layers.len() > 1).then_some("screen closed"),
             Nav::Replace(_) => Some("screen replaced"),
-            Nav::Palette => Some("command palette opened"),
+            Nav::Palette | Nav::PaletteOf(..) => Some("command palette opened"),
             Nav::Help(_) => Some("help opened"),
             Nav::Dismiss(_) => (self.layers.len() > 1).then_some("screen closed"),
             Nav::SwitchMode(_) => Some("mode switched"),
@@ -5205,6 +5277,7 @@ impl App {
                 }
             }
             Nav::Palette => self.open_palette(),
+            Nav::PaletteOf(provider, prompt) => self.open_palette_of(provider, prompt),
             Nav::Help(options) => self.open_help(options),
             Nav::PopupAt(origin, offset, look, build) => {
                 self.open(build, Some((offset.w, offset.h)));
@@ -5495,40 +5568,54 @@ impl App {
         );
     }
 
-    /// The command palette over the top screen.
+    /// The command palette over the top screen: the focused path's
+    /// bindings and the system commands, read again as it is drawn (the
+    /// focus stays on a command by its id as the list changes), and the
+    /// app's providers.
     fn open_palette(&mut self) {
-        // Read again as it is drawn, as the help is; the focus stays on a
-        // command by its id as the list changes.
         let listed = self.candidates_of(&self.focus_ids(), true);
-        let targets: Vec<(String, NodeId, usize, bool)> = listed
-            .iter()
-            .map(|l| (l.binding.id(), l.node, l.index, l.sequence))
-            .collect();
+        let system = self.system_commands.clone();
+        let maximized = self.top().maximized.is_some();
+        let live = move || {
+            let mut hits: Vec<crate::commands::Hit> = Vec::new();
+            for item in &listed {
+                let Some(binding) = item.now() else { continue };
+                let (id, index, sequence) = (item.node, item.index, item.sequence);
+                let mut hit = crate::commands::Hit::new(
+                    binding.id(),
+                    binding.description.clone(),
+                    move |cx| cx.nav.push(Nav::Run(id, index, sequence)),
+                )
+                .group(binding.context.clone());
+                hit.keys = binding.keys.clone();
+                hit.sequence = binding.sequence;
+                hit.unavailable = binding.unavailable.clone();
+                hits.push(hit);
+            }
+            hits.extend(system.hits(maximized));
+            hits
+        };
+        self.open_hits("Command", Box::new(live), self.providers.clone());
+    }
+
+    /// A palette of `provider` alone.
+    fn open_palette_of(&mut self, provider: Rc<dyn crate::commands::Provider>, prompt: String) {
+        self.open_hits(&prompt, Box::new(Vec::new), vec![provider]);
+    }
+
+    fn open_hits(
+        &mut self,
+        prompt: &str,
+        live: Box<dyn Fn() -> Vec<crate::commands::Hit>>,
+        providers: Vec<Rc<dyn crate::commands::Provider>>,
+    ) {
+        let prompt = prompt.to_string();
         self.open(
             Box::new(move || {
-                let palette = crate::actions::LivePalette::new(
-                    rich_interact::overlay::Palette::new(Vec::new()),
-                    Box::new(move || {
-                        let mut commands: Vec<_> = crate::actions::listed_now(&listed)
-                            .iter()
-                            .map(rich_interact::overlay::Command::from_binding)
-                            .collect();
-                        commands.push(rich_interact::overlay::Command::new(
-                            SCREENSHOT_COMMAND,
-                            "Screenshot",
-                        ));
-                        commands
-                    }),
-                );
-                crate::node::component(palette, move |command, cx| {
+                let palette = crate::commands::ProviderPalette::new(&prompt, live, providers);
+                crate::node::component(palette, move |hit: crate::commands::Hit, cx| {
                     cx.pop();
-                    if command.id == SCREENSHOT_COMMAND {
-                        cx.screenshots.push(None);
-                    } else if let Some((_, id, index, sequence)) =
-                        targets.iter().find(|t| t.0 == command.id)
-                    {
-                        cx.nav.push(Nav::Run(*id, *index, *sequence));
-                    }
+                    hit.run(cx);
                 })
                 .on_cancel(|cx| cx.pop())
                 .panel("Commands")

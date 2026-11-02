@@ -104,6 +104,7 @@ mod calendar;
 mod clock;
 mod collapsible;
 pub mod command_line;
+mod commands;
 pub mod complete;
 mod controls;
 mod datetime;
@@ -132,6 +133,7 @@ mod lockstep;
 pub mod log;
 #[cfg(feature = "syntax")]
 mod markdown;
+mod markdown_viewer;
 pub mod menu;
 #[cfg(feature = "micro")]
 pub mod micro_sprite;
@@ -205,6 +207,7 @@ pub use bindings::{ModePage, Scaled, Stepped};
 pub use border::{Border, BorderSet, Edge, Shadow, Sides};
 pub use collapsible::{Status, collapsible, collapsible_with};
 pub use command_line::{CommandLine, CommandLineOptions, command_line, command_line_with};
+pub use commands::{Hit, HitSink, Provider, SystemCommands, Themes};
 pub use complete::{
     CompleteOptions, Completion, InputHistory, complete_words, history_file, history_in,
     history_session,
@@ -240,6 +243,7 @@ pub use lockstep::{Lockstep, Steps, stepped_worker, stepped_worker_with};
 pub use log::Log;
 #[cfg(feature = "syntax")]
 pub use markdown::{MarkdownStream, markdown};
+pub use markdown_viewer::{MarkdownHeading, MarkdownViewer, markdown_viewer};
 pub use miller::{MillerSource, miller_in, miller_of};
 pub use node::{
     Node, column, component, each, fit_text, grid, keyed, label, layers, leaf, list, renderable,

@@ -42,6 +42,17 @@ rules are in [the demo gaps](intuituive-demo-gaps.md).
   a small change: a kind with no artifact, `requires.acp`, the schema,
   validator, client and CLI), resume and a session store, agent terminals
   on a PTY, "send to the agent" from the shell.
+- **Wave 3b** (branch `024-w3b`, backup
+  `claude/next-priority-items-3c5p8e-wip-w3b`): #803 palette providers
+  (`Provider`, `Hit`, `HitSink` with background searches cancelled by the
+  next query, `Themes`, `SystemCommands`, `App::provider`,
+  `cx.palette_of`) and #805 the Markdown viewer (`markdown_viewer`,
+  `MarkdownViewer`, `files::markdown_loader`) are done. #812 is in part:
+  slice 1 (`>`, `*`, `&` nesting, `$var: value;`), slice 2 (structural,
+  theme and focus pseudo-classes) and slice 3 (`margin`, `visibility`,
+  `scrollbar-color`/`-background`) are done; left: `offset`, `opacity`,
+  `tint`, `outline`, `hatch`, `keyline`, `layer`, `scrollbar-color-hover`
+  and the scrollbar's size, `:inline`, and states that change layout.
 
 ## Where things stood (2026-11-01)
 

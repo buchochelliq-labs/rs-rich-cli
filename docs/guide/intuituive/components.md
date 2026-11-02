@@ -287,6 +287,35 @@ scroll(
   lists of one item each (a line indented under an item stays with it).
   A table draws as a table once its delimiter row arrives.
 
+### A Markdown viewer
+
+New in 0.0.24: `markdown_viewer(load)` reads documents with a table of
+contents and a history, as Textual's `MarkdownViewer` does. How a
+document is loaded is the app's: `load` takes a location (`guide/a.md`)
+and gives its text or an error, and runs off the app's thread. The
+`files` plugin's `files::markdown_loader(root)` reads files under `root`.
+
+```rust
+use intuituive::markdown_viewer;
+
+let viewer = markdown_viewer(intuituive::files::markdown_loader("docs"))
+    .on_link(|url, cx| cx.copy(url.to_string()))   // `https:` and the like
+    .open("guide/index.md");
+viewer.view().on_key("ctrl+h", move |_| viewer.go("index.md#install"))
+```
+
+- **Contents.** A list of the headings, docked left, marks the one in
+  view with `▸`; Enter scrolls the one selected to the top. `t` shows or
+  hides it (`.toc(false)` starts it hidden).
+- **Links.** A link with no scheme is followed: `other.md`, `../b.md#usage`
+  (relative to the document shown) or `#install` (an anchor of this one,
+  GitHub's: lower case, spaces as `-`). Any other goes to `.on_link`.
+- **History.** `viewer.go(target)`, `back()` and `forward()` (Backspace or
+  Alt+←, Alt+→), each place coming back at its scroll offset.
+  `location()`, `headings()` and `offset()` read where it is.
+- **Errors.** A loader that fails shows its error in place of the
+  document; the app goes on, and Back returns.
+
 ## Diffs to review
 
 New in 0.0.24: `diff_view(old, new)` is an interactive diff of two

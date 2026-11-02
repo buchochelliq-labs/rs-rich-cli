@@ -87,6 +87,58 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   --allow-host HOST` (repeatable). Reaching the server by a LAN name it does
   not know as its own now needs `--allow-host`.
 
+### intuiTUIve: palette providers, a Markdown viewer, stylesheet coverage (wave 3, #803, #805, #812)
+
+- **Command palette providers (#803).** A `Provider` (`name`, `discover`,
+  `search(query, &HitSink)`) adds `Hit`s to the palette, registered with
+  `App::provider`. A hit has an id, a label, a help line, a shortcut, a
+  score, the characters to highlight and a closure run once the palette
+  closes; `Hit::matching(query)` scores and highlights it with
+  rs-rich-interact's fuzzy match. The palette lists the focused path's
+  bindings at once and merges each provider's hits by score as they
+  arrive; `HitSink::background` moves a slow search to a thread of its
+  own, and the next query cancels it (`HitSink::cancelled`, and what it
+  sends after is dropped). `cx.palette_of(provider)` opens a palette of
+  one provider alone.
+- **System commands (#803).** The palette offers Textual's system
+  commands: *Theme* (a picker of the built-in `Themes`), *Keys* (shows or
+  hides the `key_panel`, or opens the help), *Maximize* or *Minimize*,
+  *Screenshot* and *Quit*. `App::system_commands(SystemCommands)` turns
+  them off one by one (`without`, `with`, `none`). The palette's rows now
+  show a hit's help line, and its footer counts the hits listed (and says
+  when a search is still running).
+- **A Markdown viewer (#805).** `markdown_viewer(load)` is a
+  `MarkdownViewer`: a `markdown` document in a view that scrolls, with a
+  table of contents of its headings (Enter scrolls one to the top, the one
+  in view is marked, `t` toggles it), links followed between documents
+  (`b.md#usage`, relative to the document shown) and to `#anchors`, and
+  `go`, `back` and `forward` (Backspace or Alt+←, Alt+→) coming back at the
+  same scroll offset. Links with a scheme go to `.on_link`. The loader is
+  the app's and runs off the app's thread; a failure shows in the view.
+  `files::markdown_loader(root)` reads files under a directory.
+- **Stylesheets: child combinators, nesting and variables (#812, slice
+  1).** A selector takes `>` (`#sidebar > list`) beside descendants and
+  `*`; `#a > .b` beats `.b`. A rule may nest rules, Textual's and CSS's
+  way (`&:hover { … }`, `& .title { … }`, `.title { … }`, `> .foot { … }`),
+  each read as its flattened form. `$name: value;` at the top level
+  declares a variable, which later values (and variables) use; a `$name`
+  not declared still names a theme style. Sibling combinators (`+`, `~`)
+  are still an error, which now says so.
+- **Stylesheets: more pseudo-classes (#812, slice 2).** `:first-child`,
+  `:last-child`, `:odd`, `:even` and `:empty` follow where a node is among
+  its siblings (an `each`'s stripes move when a row is inserted); `:dark`
+  and `:light` follow the theme (`:dark #logo` holds at the top of the app
+  too); `:blur`, `:enabled` and `:can-focus`. Like the other states, they
+  change colours and text styles, not layout.
+- **Stylesheets: `margin`, `visibility` and scrollbar colours (#812, slice
+  3).** `margin` (one to four numbers) keeps room round a node's border,
+  which its colours do not fill; `visibility: hidden` keeps the node's
+  room but draws nothing there and takes it out of the Tab order, where
+  `display: none` gives the room up; `scrollbar-color` and
+  `scrollbar-background` colour a node's scrollbars, through the theme
+  styles `scrollbar.thumb` and `scrollbar` the sheet gives the node (code's
+  `theme_styles` go over them).
+
 ### intuiTUIve: maximize, modes, Pilot helpers, screenshots and more (#807 to #815)
 
 - **Maximize a pane** (#807): `Node::maximizable()` and
