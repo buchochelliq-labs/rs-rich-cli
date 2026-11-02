@@ -65,7 +65,7 @@ Modules are under `crates/rich-intuituive/src/`.
 | `LoadingIndicator` | `spinner`, `.loading_when`, `fx::placeholder` (`spinner.rs`, `fx.rs`) | ✓ | |
 | `Log` | `Log::new(cap).view()` (`log.rs`) | ✓ | Adds levels, targets, filters and follow, which Textual's lacks |
 | `Markdown` | `renderable(Markdown::new(..))`, rs-rich's port (`crates/rich/src/markdown.rs`) | partial | Static only. The whole document is parsed and drawn again on each change. Links cannot be clicked or focused, code blocks are not retained nodes, and nothing streams: Textual has `Markdown.append` and `MarkdownStream`. Core. **Cornacai's first need.** |
-| `MarkdownViewer` | — | ✗ | Missing a table of contents, link-following, history (back and forward) and anchors. Core, on the streaming `markdown` node. |
+| `MarkdownViewer` | `markdown_viewer(load)`, `MarkdownViewer` (`go`, `back`, `forward`, `toc`, `on_link`), `files::markdown_loader(root)` (`markdown_viewer.rs`) | ✓ | The loader is the app's (the `files` plugin reads files). Anchors are GitHub's slugs of the ATX and setext headings (#805) |
 | `MaskedInput` | — | ✗ | `.mask(char)` is a password mask, not a template such as `9999-99-99` or `>AAA`. Core. |
 | `OptionList` | `list`, `.multiline()`, `list_search`, `.row_style` | ✓ | Missing separators between options. Small, tracked with `ListView`. |
 | `Placeholder` | `fx::placeholder` | partial | `fx::placeholder` is a loading skeleton. Textual's is for laying out a prototype: each one labelled with its id, in cycling colours. Core, small. |

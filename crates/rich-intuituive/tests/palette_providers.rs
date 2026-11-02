@@ -17,7 +17,11 @@ fn shown(driver: &Driver) -> String {
 fn wait_until(driver: &mut Driver, done: impl Fn(&Driver) -> bool) {
     let start = Instant::now();
     while !done(driver) {
-        assert!(start.elapsed() < Duration::from_secs(5), "{}", shown(driver));
+        assert!(
+            start.elapsed() < Duration::from_secs(5),
+            "{}",
+            shown(driver)
+        );
         std::thread::sleep(Duration::from_millis(10));
         driver.settle();
     }
@@ -45,13 +49,9 @@ impl Provider for Slow {
 }
 
 fn slow_app(log: Arc<Mutex<Vec<(String, bool)>>>) -> App {
-    App::new(|| {
-        label("main")
-            .bind("ctrl+a", "Archive", |_| {})
-            .focusable()
-    })
-    .provider(Slow(log))
-    .palette_key("ctrl+p")
+    App::new(|| label("main").bind("ctrl+a", "Archive", |_| {}).focusable())
+        .provider(Slow(log))
+        .palette_key("ctrl+p")
 }
 
 #[test]
@@ -108,7 +108,10 @@ fn the_picks_theme_and_enter_opens_the_picker() {
     driver.press("enter");
     let picker = shown(&driver);
     assert!(picker.contains("Theme ›"), "{picker}");
-    assert!(picker.contains("theme dark") && picker.contains("theme nord"), "{picker}");
+    assert!(
+        picker.contains("theme dark") && picker.contains("theme nord"),
+        "{picker}"
+    );
     driver.press("d r a c enter");
     let styled = intuituive::testing::styled(&driver);
     assert!(styled.contains("[#ff79c6]hi[/]"), "{styled}");
@@ -140,7 +143,11 @@ fn system_commands_can_be_turned_off() {
     let none = themed().system_commands(SystemCommands::none());
     let mut driver = none.driver(60, 14);
     driver.press("ctrl+p");
-    assert!(shown(&driver).contains("no matching commands"), "{}", shown(&driver));
+    assert!(
+        shown(&driver).contains("no matching commands"),
+        "{}",
+        shown(&driver)
+    );
 }
 
 #[test]
@@ -164,7 +171,10 @@ fn maximize_gives_way_to_minimize() {
     assert!(!shown(&driver).contains("right"), "{}", shown(&driver));
     driver.press("ctrl+p");
     let now = shown(&driver);
-    assert!(now.contains("Minimize") && !now.contains("Maximize"), "{now}");
+    assert!(
+        now.contains("Minimize") && !now.contains("Maximize"),
+        "{now}"
+    );
     driver.press("M i n i enter");
     assert!(shown(&driver).contains("right"), "{}", shown(&driver));
 }

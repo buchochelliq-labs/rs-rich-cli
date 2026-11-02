@@ -218,7 +218,9 @@ struct Shared {
 
 impl Shared {
     fn hits(&self) -> std::sync::MutexGuard<'_, Vec<(u64, Hit)>> {
-        self.hits.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
+        self.hits
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
     }
 }
 
@@ -361,8 +363,14 @@ impl Default for SystemCommands {
 
 impl SystemCommands {
     /// Every system command's name, in the order the palette lists them.
-    pub const NAMES: [&'static str; 6] =
-        ["theme", "keys", "maximize", "minimize", "screenshot", "quit"];
+    pub const NAMES: [&'static str; 6] = [
+        "theme",
+        "keys",
+        "maximize",
+        "minimize",
+        "screenshot",
+        "quit",
+    ];
 
     /// None of them.
     pub fn none() -> SystemCommands {
@@ -419,10 +427,8 @@ impl SystemCommands {
                     Hit::new("app.maximize", "Maximize", |cx| cx.maximize())
                         .help("Show the focused pane alone")
                 }
-                "minimize" if maximized => {
-                    Hit::new("app.minimize", "Minimize", |cx| cx.minimize())
-                        .help("Restore the layout")
-                }
+                "minimize" if maximized => Hit::new("app.minimize", "Minimize", |cx| cx.minimize())
+                    .help("Restore the layout"),
                 "screenshot" => Hit::new("app.screenshot", "Screenshot", |cx| {
                     cx.screenshot_to_dir();
                 })
@@ -536,7 +542,10 @@ impl ProviderPalette {
     }
 
     fn focused(&self) -> Option<Hit> {
-        self.shown.borrow().get(self.list.borrow().cursor()).cloned()
+        self.shown
+            .borrow()
+            .get(self.list.borrow().cursor())
+            .cloned()
     }
 
     fn chosen(&self) -> Flow<Hit> {
@@ -697,10 +706,7 @@ impl Component for ProviderPalette {
             lines.push(vec![kit::text("  no matching commands", &theme.hint)]);
         }
         lines.resize_with(page + 1, Vec::new);
-        let mut hint = format!(
-            "  {} · ↑↓ move · enter run · esc close",
-            shown.len()
-        );
+        let mut hint = format!("  {} · ↑↓ move · enter run · esc close", shown.len());
         if searching {
             hint.push_str(" · searching…");
         }

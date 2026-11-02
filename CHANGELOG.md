@@ -92,6 +92,15 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   them off one by one (`without`, `with`, `none`). The palette's rows now
   show a hit's help line, and its footer counts the hits listed (and says
   when a search is still running).
+- **A Markdown viewer (#805).** `markdown_viewer(load)` is a
+  `MarkdownViewer`: a `markdown` document in a view that scrolls, with a
+  table of contents of its headings (Enter scrolls one to the top, the one
+  in view is marked, `t` toggles it), links followed between documents
+  (`b.md#usage`, relative to the document shown) and to `#anchors`, and
+  `go`, `back` and `forward` (Backspace or Alt+←, Alt+→) coming back at the
+  same scroll offset. Links with a scheme go to `.on_link`. The loader is
+  the app's and runs off the app's thread; a failure shows in the view.
+  `files::markdown_loader(root)` reads files under a directory.
 
 ### intuiTUIve: maximize, modes, Pilot helpers, screenshots and more (#807 to #815)
 
