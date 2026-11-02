@@ -223,28 +223,179 @@ impl From<Rect> for Anchor {
     }
 }
 
-/// How an [animation](Ctx::animate) moves between its two values.
+/// How an [animation](Ctx::animate) moves between its two values: the
+/// standard easings (easings.net's, as Textual names them), each in, out
+/// and in-out. `EaseIn`, `EaseOut` and `EaseInOut` are the cubic ones.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum Easing {
     Linear,
     EaseIn,
     EaseOut,
     #[default]
     EaseInOut,
+    InSine,
+    OutSine,
+    InOutSine,
+    InQuad,
+    OutQuad,
+    InOutQuad,
+    InCubic,
+    OutCubic,
+    InOutCubic,
+    InQuart,
+    OutQuart,
+    InOutQuart,
+    InQuint,
+    OutQuint,
+    InOutQuint,
+    InExpo,
+    OutExpo,
+    InOutExpo,
+    InCirc,
+    OutCirc,
+    InOutCirc,
+    InBack,
+    OutBack,
+    InOutBack,
+    InElastic,
+    OutElastic,
+    InOutElastic,
+    InBounce,
+    OutBounce,
+    InOutBounce,
+}
+
+/// easings.net's `easeOutBounce`.
+fn out_bounce(x: f64) -> f64 {
+    const N: f64 = 7.5625;
+    const D: f64 = 2.75;
+    if x < 1.0 / D {
+        N * x * x
+    } else if x < 2.0 / D {
+        let x = x - 1.5 / D;
+        N * x * x + 0.75
+    } else if x < 2.5 / D {
+        let x = x - 2.25 / D;
+        N * x * x + 0.9375
+    } else {
+        let x = x - 2.625 / D;
+        N * x * x + 0.984375
+    }
 }
 
 impl Easing {
-    /// The share of the way at time `t` (0 to 1).
+    /// The share of the way at time `t` (0 to 1): 0 at 0 and 1 at 1, as
+    /// Textual's `_easing.py` computes it (back and elastic go past both
+    /// ends between).
     pub fn at(self, t: f64) -> f64 {
-        let t = t.clamp(0.0, 1.0);
+        use std::f64::consts::PI;
+        let x = t.clamp(0.0, 1.0);
+        // Back's and elastic's constants.
+        const C1: f64 = 1.70158;
+        const C2: f64 = C1 * 1.525;
+        const C3: f64 = C1 + 1.0;
+        const C4: f64 = 2.0 * PI / 3.0;
+        const C5: f64 = 2.0 * PI / 4.5;
+        let half = x < 0.5;
+        // An in-out made of an in for the first half and an out after.
+        let in_out = |n: i32| {
+            if half {
+                2f64.powi(n - 1) * x.powi(n)
+            } else {
+                1.0 - (-2.0 * x + 2.0).powi(n) / 2.0
+            }
+        };
+        let ends = x == 0.0 || x == 1.0;
         match self {
-            Easing::Linear => t,
-            Easing::EaseIn => t * t * t,
-            Easing::EaseOut => 1.0 - (1.0 - t).powi(3),
-            Easing::EaseInOut if t < 0.5 => 4.0 * t * t * t,
-            Easing::EaseInOut => 1.0 - (-2.0 * t + 2.0).powi(3) / 2.0,
+            Easing::Linear => x,
+            Easing::EaseIn | Easing::InCubic => x * x * x,
+            Easing::EaseOut | Easing::OutCubic => 1.0 - (1.0 - x).powi(3),
+            Easing::EaseInOut | Easing::InOutCubic => in_out(3),
+            Easing::InSine => 1.0 - (x * PI / 2.0).cos(),
+            Easing::OutSine => (x * PI / 2.0).sin(),
+            Easing::InOutSine => -((x * PI).cos() - 1.0) / 2.0,
+            Easing::InQuad => x * x,
+            Easing::OutQuad => 1.0 - (1.0 - x).powi(2),
+            Easing::InOutQuad => in_out(2),
+            Easing::InQuart => x.powi(4),
+            Easing::OutQuart => 1.0 - (1.0 - x).powi(4),
+            Easing::InOutQuart => in_out(4),
+            Easing::InQuint => x.powi(5),
+            Easing::OutQuint => 1.0 - (1.0 - x).powi(5),
+            Easing::InOutQuint => in_out(5),
+            Easing::InExpo if x == 0.0 => 0.0,
+            Easing::InExpo => 2f64.powf(10.0 * x - 10.0),
+            Easing::OutExpo if x == 1.0 => 1.0,
+            Easing::OutExpo => 1.0 - 2f64.powf(-10.0 * x),
+            Easing::InOutExpo if ends => x,
+            Easing::InOutExpo if half => 2f64.powf(20.0 * x - 10.0) / 2.0,
+            Easing::InOutExpo => (2.0 - 2f64.powf(-20.0 * x + 10.0)) / 2.0,
+            Easing::InCirc => 1.0 - (1.0 - x * x).sqrt(),
+            Easing::OutCirc => (1.0 - (x - 1.0).powi(2)).sqrt(),
+            Easing::InOutCirc if half => (1.0 - (1.0 - (2.0 * x).powi(2)).sqrt()) / 2.0,
+            Easing::InOutCirc => ((1.0 - (-2.0 * x + 2.0).powi(2)).sqrt() + 1.0) / 2.0,
+            Easing::InBack => C3 * x.powi(3) - C1 * x * x,
+            Easing::OutBack => 1.0 + C3 * (x - 1.0).powi(3) + C1 * (x - 1.0).powi(2),
+            Easing::InOutBack if half => (2.0 * x).powi(2) * ((C2 + 1.0) * 2.0 * x - C2) / 2.0,
+            Easing::InOutBack => {
+                ((2.0 * x - 2.0).powi(2) * ((C2 + 1.0) * (x * 2.0 - 2.0) + C2) + 2.0) / 2.0
+            }
+            Easing::InElastic if ends => x,
+            Easing::InElastic => -2f64.powf(10.0 * x - 10.0) * ((x * 10.0 - 10.75) * C4).sin(),
+            Easing::OutElastic if ends => x,
+            Easing::OutElastic => 2f64.powf(-10.0 * x) * ((x * 10.0 - 0.75) * C4).sin() + 1.0,
+            Easing::InOutElastic if ends => x,
+            Easing::InOutElastic if half => {
+                -(2f64.powf(20.0 * x - 10.0) * ((20.0 * x - 11.125) * C5).sin()) / 2.0
+            }
+            Easing::InOutElastic => {
+                2f64.powf(-20.0 * x + 10.0) * ((20.0 * x - 11.125) * C5).sin() / 2.0 + 1.0
+            }
+            Easing::InBounce => 1.0 - out_bounce(1.0 - x),
+            Easing::OutBounce => out_bounce(x),
+            Easing::InOutBounce if half => (1.0 - out_bounce(1.0 - 2.0 * x)) / 2.0,
+            Easing::InOutBounce => (1.0 + out_bounce(2.0 * x - 1.0)) / 2.0,
         }
     }
+
+    /// Every easing, in the order declared.
+    pub const ALL: [Easing; 34] = [
+        Easing::Linear,
+        Easing::EaseIn,
+        Easing::EaseOut,
+        Easing::EaseInOut,
+        Easing::InSine,
+        Easing::OutSine,
+        Easing::InOutSine,
+        Easing::InQuad,
+        Easing::OutQuad,
+        Easing::InOutQuad,
+        Easing::InCubic,
+        Easing::OutCubic,
+        Easing::InOutCubic,
+        Easing::InQuart,
+        Easing::OutQuart,
+        Easing::InOutQuart,
+        Easing::InQuint,
+        Easing::OutQuint,
+        Easing::InOutQuint,
+        Easing::InExpo,
+        Easing::OutExpo,
+        Easing::InOutExpo,
+        Easing::InCirc,
+        Easing::OutCirc,
+        Easing::InOutCirc,
+        Easing::InBack,
+        Easing::OutBack,
+        Easing::InOutBack,
+        Easing::InElastic,
+        Easing::OutElastic,
+        Easing::InOutElastic,
+        Easing::InBounce,
+        Easing::OutBounce,
+        Easing::InOutBounce,
+    ];
 }
 
 enum FocusMove {

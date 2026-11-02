@@ -69,6 +69,13 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   (`App::title`, `Ctx::set_subtitle`, `.clock()`, `.tall()`),
   `key_panel()` with `Ctx::toggle_key_panel()`, `masked_input(value,
   template)` and `placeholder(label)` with `PlaceholderVariant`.
+- **Easings and a directory tree** (#814): `Easing` gains Textual's
+  standard set (sine, quad, cubic, quart, quint, expo, circ, back, elastic
+  and bounce, each in, out and in-out) and `Easing::ALL`, checked against
+  Textual's values; it is `#[non_exhaustive]` from this release (listed in
+  `api/semver-breaks.toml`). The `files` plugin's `dir_tree(root)`
+  (`.filter`, `.on_open`, `.view()`) loads folders off-thread on
+  `tree_lazy`.
 
 ### The docs on Zensical
 

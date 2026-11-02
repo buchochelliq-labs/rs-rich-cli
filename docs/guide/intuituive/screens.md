@@ -303,8 +303,11 @@ the room and the answers at the bottom) and styles its title.
   one-line error stay on one line.
 - **`cx.animate(signal, to, duration, easing)`** moves a `Signal<f64>` to
   `to` over `duration`, setting it every frame, so whatever reads it moves
-  with it: a split's ratio, a gauge, a scroll offset. `Easing` is `Linear`,
-  `EaseIn`, `EaseOut` or `EaseInOut`. A new animation of the same signal
+  with it: a split's ratio, a gauge, a scroll offset. `Easing` is
+  `Linear`, `EaseIn`, `EaseOut` or `EaseInOut` (the cubic ones), or one of
+  Textual's: sine, quad, cubic, quart, quint, expo, circ, back, elastic and
+  bounce, each `In…`, `Out…` and `InOut…` (`Easing::OutBounce`,
+  `Easing::InOutBack`); `Easing::ALL` lists them. A new animation of the same signal
   takes over from where it is. While one runs, the app draws at about 60
   frames a second, and it goes back to waiting for input when they end.
 
