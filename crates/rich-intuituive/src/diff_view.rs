@@ -134,8 +134,8 @@ impl DiffOptions {
     /// Decide on each hunk into `decisions`, one per hunk: `a` and `r`
     /// accept or reject the hunk under the cursor, `A` and `R` all of
     /// them, and a status row counts what is decided. The view keeps the
-    /// signal as long as the hunks (all [`Pending`](Decision::Pending)
-    /// when the texts change their number).
+    /// signal as long as the hunks, and sets every hunk back to
+    /// [`Pending`](Decision::Pending) when either text changes.
     pub fn decide(mut self, decisions: Signal<Vec<Decision>>) -> DiffOptions {
         self.decisions = Some(decisions);
         self
@@ -422,20 +422,30 @@ struct Core {
 }
 
 impl Core {
-    /// The diff, read untracked.
+    /// The diff, read untracked. When a text changes after a diff was
+    /// shown, the decisions start again, all pending: a decision belongs to
+    /// the hunk it was made on, not to its position.
     fn model(&self) -> Rc<Model> {
-        let mut cached = self.model.borrow_mut();
-        let fresh = cached.as_ref().is_some_and(|model| {
-            self.old.with_untracked(|old| *old == model.old_src)
-                && self.new.with_untracked(|new| *new == model.new_src)
-        });
-        if !fresh {
-            let model = self
-                .old
-                .with_untracked(|old| self.new.with_untracked(|new| Model::new(old, new)));
-            *cached = Some(Rc::new(model));
+        let (model, replaced) = {
+            let mut cached = self.model.borrow_mut();
+            let fresh = cached.as_ref().is_some_and(|model| {
+                self.old.with_untracked(|old| *old == model.old_src)
+                    && self.new.with_untracked(|new| *new == model.new_src)
+            });
+            let replaced = !fresh && cached.is_some();
+            if !fresh {
+                let model = self
+                    .old
+                    .with_untracked(|old| self.new.with_untracked(|new| Model::new(old, new)));
+                *cached = Some(Rc::new(model));
+            }
+            (cached.clone().expect("just set"), replaced)
+        };
+        if replaced {
+            self.decisions
+                .set(vec![Decision::Pending; model.changes.len()]);
         }
-        cached.clone().expect("just set")
+        model
     }
 
     /// The decisions, as many as the hunks.

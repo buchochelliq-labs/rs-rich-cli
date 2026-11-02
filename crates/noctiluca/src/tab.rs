@@ -54,6 +54,9 @@ pub const DEBOUNCE: Duration = Duration::from_millis(100);
 pub const SETTLE_STEP: Duration = Duration::from_millis(250);
 /// How long a new document is watched for its layout to settle.
 pub const SETTLE_MAX: Duration = Duration::from_secs(3);
+/// How long a new document is watched at least: a quiet step sooner does
+/// not settle it, since a script's first move can come after one.
+pub const SETTLE_MIN: Duration = Duration::from_secs(1);
 /// How often the tab looks at its engine when nothing happens.
 const TICK: Duration = Duration::from_millis(25);
 /// At most this many stills are captured per reading.
@@ -459,6 +462,10 @@ impl Worker<'_> {
             Some((_, end, last)) if last != key && now < end => Some((now + SETTLE_STEP, end, key)),
             // Read early (a ping): the step still counts from the move.
             Some((next, end, last)) if now < next && now < end => Some((next, end, last)),
+            // A step with no move, but too soon after the document came.
+            Some((_, end, _)) if now + SETTLE_MAX < end + SETTLE_MIN => {
+                Some((now + SETTLE_STEP, end, key))
+            }
             // A step with no move: settled.
             _ => None,
         };
