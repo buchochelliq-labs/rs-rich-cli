@@ -22,8 +22,8 @@ exclude_docs: |
 
 theme:
   name: material
-  # Zensical's Material look (its default, modern, is a new design).
-  variant: classic
+  # Zensical's modern design (Inter, JetBrains Mono, Lucide icons).
+  variant: modern
   # No request leaves the site: the fonts are served with it
   # (docs/assets/fonts.css), and the overrides' partials/source.html keeps
   # the repository link without Material's call to the GitHub API.

@@ -485,7 +485,7 @@ async function browser() {
       await page.evaluate(() => document.fonts.ready);
       if (at === "") {
         const fonts = await page.evaluate(() => [...document.fonts].filter((f) => f.status === "loaded").map((f) => f.family.replace(/"/g, "")));
-        check(fonts.includes("Roboto"), "the site's own Roboto loads");
+        check(fonts.includes("Inter"), "the site's own Inter loads");
         check(await page.locator(".md-source").count() > 0, "the header still links to the repository");
       }
       same(asked, [], `/${at} asks nothing of another site`);

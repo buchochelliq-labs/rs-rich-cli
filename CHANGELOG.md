@@ -31,9 +31,10 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 - Both docs sites build with [Zensical](https://zensical.org/) 0.0.74,
   Material for MkDocs' successor, from the same `mkdocs.yml` and
-  `mkdocs-python.yml` (with Zensical's `classic` look, Material's), pinned
-  in the new `requirements-docs.txt`. The theme override, the self-hosted
-  fonts and the no-outside-requests rule are unchanged. The versioned
+  `mkdocs-python.yml`, in Zensical's modern design, pinned in the new
+  `requirements-docs.txt`. Its faces, Inter and JetBrains Mono, are served
+  with the site in place of Roboto, so the no-outside-requests rule holds;
+  the theme override is unchanged. The versioned
   site builds 0.0.24's docs on with Zensical and 0.0.23's and older with
   MkDocs, as they were built.
 - Zensical rebases raw HTML's URLs like Markdown links', so the raw

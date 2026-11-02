@@ -12,8 +12,8 @@ site_dir: site/python
 
 theme:
   name: material
-  # Zensical's Material look (its default, modern, is a new design).
-  variant: classic
+  # Zensical's modern design (Inter, JetBrains Mono, Lucide icons).
+  variant: modern
   # No request leaves the site: the main site's fonts (this site is
   # published inside it, at python/), and the repository link without
   # Material's call to the GitHub API (scripts/docs_overrides).
