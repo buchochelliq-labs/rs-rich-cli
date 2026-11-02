@@ -718,7 +718,7 @@ fn view(ui: Ui, hub: Arc<Hub>, shell: Option<ShellPane>) -> Node {
                     .sessions
                     .with_untracked(|s| s.iter().find(|s| s.key == key).copied())
                     .expect("a session for its key");
-                session_view(ui, hub.clone(), session, prompts.clone())
+                session_view(hub.clone(), session, prompts.clone())
             },
         )
         .flex(1)
@@ -843,12 +843,7 @@ impl Ui {
 }
 
 /// One session's conversation, plan and prompt.
-fn session_view(
-    ui: Ui,
-    hub: Arc<Hub>,
-    session: Session,
-    prompts: Rc<RefCell<HashMap<u64, u64>>>,
-) -> Node {
+fn session_view(hub: Arc<Hub>, session: Session, prompts: Rc<RefCell<HashMap<u64, u64>>>) -> Node {
     let s = session;
     let cwd = hub.cwd.clone();
     let transcript = scroll(
@@ -874,7 +869,7 @@ fn session_view(
         .placeholder("Ask the agent…  @ names a file")
         .complete_at('@', path_completer(walk))
         .history(history_session())
-        .on_submit(move |text, cx| send(ui, &send_hub, s, text, cx))
+        .on_submit(move |text, cx| send(&send_hub, s, text, cx))
         .autofocus();
     prompts.borrow_mut().insert(s.key, prompt.id());
     let prompt = prompt.panel_with(move || {
@@ -900,8 +895,7 @@ fn session_view(
 }
 
 /// Send `text` as a prompt turn of `s`.
-fn send(ui: Ui, hub: &Arc<Hub>, s: Session, text: &str, cx: &mut Ctx) {
-    let _ = ui;
+fn send(hub: &Arc<Hub>, s: Session, text: &str, cx: &mut Ctx) {
     let text = text.trim_end().to_string();
     if text.trim().is_empty() {
         return;
