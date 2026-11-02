@@ -296,6 +296,8 @@ nav:
       - "Design: the demo loop, where things stand": design/intuituive-status.md
       - "Design: Noctiluca, a terminal web browser": design/browser.md
       - "Design: fuzzing": design/fuzzing.md
+      - "Design: the threat model": design/threat-model.md
+      - "Security policy": https://github.com/buchochelliq-labs/rs-rich-cli/blob/main/SECURITY.md
       - "Design: the clones' gap reports":
           - "git (gitui)": design/gaps/git.md
           - "top (bottom)": design/gaps/top.md
