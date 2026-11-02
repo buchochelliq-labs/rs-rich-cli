@@ -963,6 +963,7 @@ dependencies = [
  "rs-rich-data",
  "rs-rich-diagram",
  "rs-rich-ext",
+ "rs-rich-interact",
  "rs-rich-intuituive",
  "rs-rich-marketplace",
  "rs-rich-mermaid",
@@ -982,6 +983,7 @@ dependencies = [
  "libc",
  "rs-rich",
  "rs-rich-ext",
+ "serde_json",
  "signal-hook 0.4.5",
  "windows-sys",
 ]

@@ -30,6 +30,8 @@ rich-mermaid = { package = "rs-rich-mermaid", path = "../crates/rich-mermaid" }
 rich-data = { package = "rs-rich-data", path = "../crates/rich-data" }
 intuituive = { package = "rs-rich-intuituive", path = "../crates/rich-intuituive", default-features = false }
 rich-record = { package = "rs-rich-record", path = "../crates/rich-record" }
+# The terminal host client's reply parser, and nothing that opens a socket.
+rich-interact = { package = "rs-rich-interact", path = "../crates/rich-interact", default-features = false, features = ["host"] }
 # Only the input decoder: no server, so no PTYs or sockets.
 rich-web = { package = "rs-rich-web", path = "../crates/rich-web", default-features = false }
 rich-marketplace = { package = "rs-rich-marketplace", path = "../crates/rich-marketplace", default-features = false }
@@ -175,6 +177,13 @@ bench = false
 [[bin]]
 name = "plugin_wasm"
 path = "fuzz_targets/plugin_wasm.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "terminal_host"
+path = "fuzz_targets/terminal_host.rs"
 test = false
 doc = false
 bench = false
