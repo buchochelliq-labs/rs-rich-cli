@@ -1,0 +1,22 @@
+ @@ -2 +2 @@
+  1  1   line 1
+  2    - line 2
+     2 + line two
+  3  3   line 3
+  4  4   line 4
+       ⋯ 3 unchanged lines
+ @@ -10 +10,2 @@
+  8  8   line 8
+  9  9   line 9
+ 10    - line 10
+    10 + line ten
+    11 + line ten and a half
+ 11 12   line 11
+ 12 13   line 12
+       ⋯ 6 unchanged lines
+ @@ -20,0 +22 @@
+ 19 20   line 19
+ 20 21   line 20
+    22 + line 21
+
+

@@ -50,6 +50,8 @@ use crate::reactive::{Memo, NodeId, Proxy, Runtime, Signal, signal};
 use crate::screen::{PaintStats, PaintStrategy, Painter, Rect, Screen};
 use crate::widget::{Used, WidgetEvent};
 
+mod keymap;
+
 /// The theme style a pop-up's title is drawn in: the palette's, the
 /// help's, a modal's or pop-up's panel, a [confirm](Ctx::confirm) dialog's.
 /// The theme's `title` when it does not name it.
@@ -94,6 +96,8 @@ pub struct Ctx {
     layers: usize,
     /// The handler passed its key on ([`pass_key`](Ctx::pass_key)).
     pub(crate) passed: bool,
+    /// A new keymap, or a reload of the keys file.
+    keymap: Option<keymap::Request>,
 }
 
 /// The user's editor: `$VISUAL` (a program and its arguments), else
@@ -319,6 +323,7 @@ impl Ctx {
             releases: Releases::None,
             layers: 1,
             passed: false,
+            keymap: None,
         }
     }
 
@@ -875,6 +880,31 @@ impl Ctx {
         self.theme = Some(theme);
     }
 
+    /// Switch the app to the built-in theme `name` ([`Theme::named`]):
+    /// `nord`, `gruvbox`, `textual-light`, …; `false`, and no change, for a
+    /// name it does not know.
+    ///
+    /// ```
+    /// use intuituive::prelude::*;
+    ///
+    /// let app = App::new(|| {
+    ///     label("[accent]hi[/]").on_key("t", |cx| assert!(cx.set_theme_named("dracula")))
+    /// });
+    /// let mut driver = app.driver(4, 1);
+    /// driver.press("t");
+    /// let styled = intuituive::testing::styled(&driver);
+    /// assert!(styled.contains("[#ff79c6]hi[/]"), "{styled}");
+    /// ```
+    pub fn set_theme_named(&mut self, name: &str) -> bool {
+        match Theme::named(name) {
+            Some(theme) => {
+                self.set_theme(theme);
+                true
+            }
+            None => false,
+        }
+    }
+
     /// End the app after this event.
     pub fn quit(&mut self) {
         self.quit = true;
@@ -1118,6 +1148,166 @@ impl Theme {
         )
     }
 
+    /// A theme generated from `palette`'s semantic colours, as Textual's
+    /// `ColorSystem` generates them (see [`Palette`](crate::Palette)).
+    ///
+    /// Every generated colour is a named style, by Textual's name: a
+    /// foreground (`primary`, `primary-lighten-2`, `text-primary`,
+    /// `primary-muted`, `text-muted`, `border`, …) or, for the grounds,
+    /// a background (`background`, `surface`, `panel`, `boost`, their
+    /// shades, `primary-background`, `surface-active`, …). So they work in
+    /// markup (`[primary-muted]…[/]`, `[text on surface]`) and as `$name`
+    /// in a stylesheet (`background: $surface;`). The names the presets
+    /// have come from the palette too, so an app written for them follows:
+    /// `accent` is the accent colour, `muted` is `text-muted`, `good`,
+    /// `warn` and `bad` are `text-success`, `text-warning` and bold
+    /// `text-error`, `selected` is the block cursor (bold text on
+    /// `block-cursor-background`), the buttons sit on the panel, primary
+    /// and error colours, `border.focused` is `border` and `border` the
+    /// foreground at 38%. `screen` is the foreground on the background:
+    /// `.style("screen")` on the root paints the whole screen in it.
+    ///
+    /// ```
+    /// use intuituive::prelude::*;
+    /// use intuituive::Palette;
+    /// use rich::Color;
+    ///
+    /// let palette = Palette::new(Color::parse("#0178D4").unwrap())
+    ///     .accent(Color::parse("#ffa62b").unwrap())
+    ///     .dark(true);
+    /// let app = App::new(|| label("[primary-muted]hi[/] [accent]there[/]"))
+    ///     .theme(Theme::from_palette(palette));
+    /// let mut driver = app.driver(10, 1);
+    /// driver.settle();
+    /// let styled = intuituive::testing::styled(&driver);
+    /// assert!(styled.contains("[#0c304c]hi[/]"), "{styled}");
+    /// ```
+    pub fn from_palette(palette: crate::Palette) -> Theme {
+        let solid = palette.solid();
+        let color = |name: &str| -> String {
+            solid
+                .iter()
+                .find(|(n, _, _)| n == name)
+                .map(|(_, c, dim)| if *dim { format!("dim {c}") } else { c.clone() })
+                .expect("a generated colour")
+        };
+        let mut styles: Vec<(String, Style)> = solid
+            .iter()
+            .map(|(name, c, dim)| {
+                let definition = if crate::palette::is_ground(name) {
+                    format!("on {c}")
+                } else if *dim {
+                    format!("dim {c}")
+                } else {
+                    c.clone()
+                };
+                (name.clone(), style(&definition))
+            })
+            .collect();
+        let ansi = palette.colors().iter().all(|(_, c)| !c.starts_with('#'));
+        let preset = if palette.is_dark() {
+            Theme::dark()
+        } else {
+            Theme::light()
+        };
+        let mut named = vec![
+            ("muted".to_string(), color("text-muted")),
+            ("good".to_string(), color("text-success")),
+            ("warn".to_string(), color("text-warning")),
+            ("bad".to_string(), format!("bold {}", color("text-error"))),
+            (
+                "screen".to_string(),
+                format!("{} on {}", color("foreground"), color("background")),
+            ),
+        ];
+        if ansi {
+            // Terminal colours have no shades to build faces from: the
+            // presets' faces, which use terminal colours too.
+            for name in ["selected", "button", "button.primary", "button.danger"] {
+                if let Some((_, s)) = preset.styles.iter().find(|(n, _)| n == name) {
+                    styles.push((name.to_string(), s.clone()));
+                }
+            }
+        } else {
+            let on = |name: &str| {
+                format!(
+                    "{} on {}",
+                    crate::palette::contrast_on(&color(name)),
+                    color(name)
+                )
+            };
+            named.extend([
+                (
+                    "selected".to_string(),
+                    format!(
+                        "bold {} on {}",
+                        color("text"),
+                        color("block-cursor-background")
+                    ),
+                ),
+                (
+                    "button".to_string(),
+                    format!("{} on {}", color("text"), color("panel-lighten-1")),
+                ),
+                ("button.primary".to_string(), on("primary")),
+                ("button.danger".to_string(), on("error")),
+                (
+                    "tooltip".to_string(),
+                    format!("{} on {}", color("text"), color("panel")),
+                ),
+            ]);
+        }
+        let mut theme = Theme {
+            border: style(&color("foreground-disabled")),
+            border_focused: style(&color("border")),
+            title: style("bold"),
+            styles: Vec::new(),
+        };
+        for (name, definition) in named {
+            styles.retain(|(n, _)| *n != name);
+            styles.push((name, style(&definition)));
+        }
+        theme.styles = styles;
+        theme
+    }
+
+    /// The built-in theme `name`: `dark`, `light` or `mono` (the presets),
+    /// or one of Textual's themes made [from its palette](Self::from_palette)
+    /// (`textual-dark`, `nord`, `gruvbox`, `dracula`, `tokyo-night`, …;
+    /// see [`Palette::named`](crate::Palette::named)).
+    ///
+    /// ```
+    /// use intuituive::Theme;
+    ///
+    /// assert!(Theme::named("nord").is_some());
+    /// assert!(Theme::named("no-such-theme").is_none());
+    /// assert_eq!(Theme::builtin_names()[..3], ["dark", "light", "mono"]);
+    /// ```
+    pub fn named(name: &str) -> Option<Theme> {
+        match name {
+            "dark" => Some(Theme::dark()),
+            "light" => Some(Theme::light()),
+            "mono" => Some(Theme::mono()),
+            _ => crate::Palette::named(name).map(Theme::from_palette),
+        }
+    }
+
+    /// The names [`named`](Self::named) knows: the presets, then Textual's
+    /// themes in Textual's order.
+    pub fn builtin_names() -> Vec<&'static str> {
+        let mut names = vec!["dark", "light", "mono"];
+        names.extend(crate::Palette::names());
+        names
+    }
+
+    /// Every built-in theme with its name, for a theme picker.
+    pub fn builtin() -> Vec<(&'static str, Theme)> {
+        Theme::builtin_names()
+            .into_iter()
+            .filter_map(|name| Some((name, Theme::named(name)?)))
+            .collect()
+    }
+
     /// Add (or replace) the named style `name`, for markup: `[name]…[/]`.
     #[must_use]
     pub fn style(mut self, name: &str, style: Style) -> Theme {
@@ -1164,7 +1354,7 @@ impl Theme {
     }
 
     /// The named style `name`, or `fallback` when the theme has none.
-    pub(crate) fn named(&self, name: &str, fallback: &str) -> Style {
+    pub(crate) fn named_style(&self, name: &str, fallback: &str) -> Style {
         self.styles
             .iter()
             .find(|(n, _)| n == name)
@@ -1923,6 +2113,8 @@ pub struct App {
     /// The theme set in code, before any theme file's styles.
     theme_base: Theme,
     theme_file: Option<ThemeFile>,
+    /// The user keymap ([`App::keymap`], [`App::keymap_file`]).
+    keymap: keymap::KeymapState,
     sheet: Option<SheetSource>,
     /// For assistive technology: whether to draw for it, or write lines
     /// for it (linear mode), where announcements go, those not yet taken,
@@ -2260,6 +2452,7 @@ impl App {
                 .map(|_| Inspector::new(true)),
             theme_base: Theme::default(),
             theme_file: None,
+            keymap: Default::default(),
             sheet: None,
             accessible,
             linear,
@@ -3893,6 +4086,7 @@ impl App {
 
     /// Draw what changed; returns the damage.
     fn frame(&mut self, console: &Console, screen: &mut Screen, full: bool) -> Vec<Rect> {
+        self.check_keymap();
         crate::a11y::set_text_mode(self.text_mode());
         // What the inspector drew over the app comes off first, so the
         // app's cells are its own again before anything draws.
@@ -4124,7 +4318,11 @@ impl App {
                 frame.damage.push(rect);
             }
             if let Some(rect) = drag.target.and_then(|id| anchor_rect(root, id)) {
-                restyle_rect(screen, rect, &self.theme.named("drop.target", "reverse"));
+                restyle_rect(
+                    screen,
+                    rect,
+                    &self.theme.named_style("drop.target", "reverse"),
+                );
                 frame.damage.push(rect);
             }
         }
@@ -4167,7 +4365,7 @@ impl App {
         }
         // A tooltip, over the toasts too.
         if let Some(tip) = self.tip.as_ref().filter(|tip| tip.shown && !self.linear) {
-            let look = self.theme.named("tooltip", "reverse");
+            let look = self.theme.named_style("tooltip", "reverse");
             frame
                 .damage
                 .push(draw_tip(console, screen, area, tip, &look));
@@ -4215,9 +4413,11 @@ impl App {
         if let (Some(panel), Some(drawn)) = (panel, frame.drawn_ids) {
             let theme = self.theme_status();
             let looks = crate::inspect::Looks {
-                selected: self.theme.named("inspector.selected", "reverse magenta"),
-                cursor: self.theme.named("inspector.cursor", "reverse yellow"),
-                flash: self.theme.named("inspector.flash", "on dark_green"),
+                selected: self
+                    .theme
+                    .named_style("inspector.selected", "reverse magenta"),
+                cursor: self.theme.named_style("inspector.cursor", "reverse yellow"),
+                flash: self.theme.named_style("inspector.flash", "on dark_green"),
             };
             let focus_path = self.focus_path.get_untracked();
             let hover = self.hover_path.get_untracked();
@@ -4389,6 +4589,9 @@ impl App {
         for nav in navs {
             quit |= self.navigate(nav);
         }
+        if let Some(request) = cx.keymap {
+            self.keymap_request(request);
+        }
         if let Some(theme) = cx.theme {
             self.theme_base = theme;
             self.retheme();
@@ -4537,6 +4740,7 @@ impl App {
     /// or not they apply now, each with what decides it: what the help and
     /// the palette list, read again as they are drawn.
     fn candidates_of(&self, ids: &[NodeId], palette: bool) -> Vec<crate::actions::Listed> {
+        self.remap_nodes(ids);
         use crate::actions::Listed;
         let mut out = Vec::new();
         for &id in ids {
@@ -4620,6 +4824,7 @@ impl App {
             .map(|id| self.path_to(id))
             .filter(|p| !p.is_empty())
             .unwrap_or_else(|| vec![self.top().root.id()]);
+        self.remap_nodes(&path);
         let mut shown: Vec<crate::help::Hint> = Vec::new();
         for &id in path.iter().rev() {
             with_node(&self.top().root, id, &mut |node| {
@@ -5265,7 +5470,9 @@ impl App {
     /// [claims](crate::Widget::claims_key) it.
     fn binds(&self, key: Key) -> bool {
         let mut bound = false;
-        for id in self.key_path() {
+        let path = self.key_path();
+        self.remap_nodes(&path);
+        for id in path {
             with_node(&self.top().root, id, &mut |node| {
                 bound |= crate::node::pick_binding(key, &node.keys.borrow(), &[]).is_some()
                     || node
@@ -5313,6 +5520,7 @@ impl App {
     }
 
     fn key(&mut self, key: Key) -> bool {
+        self.remap_nodes(&self.key_path());
         self.repeating_key = self.press_held(key);
         self.hide_tip();
         if key.code == KeyCode::Escape && self.drag.as_ref().is_some_and(|drag| drag.active) {
@@ -6362,6 +6570,7 @@ impl Driver {
         let app = &mut self.app;
         app.reload_theme();
         app.reload_sheet();
+        app.reload_keymap_file(false);
         app.now = now;
         app.runtime.tracer.set_now(now);
         app.runtime.now.set(now);

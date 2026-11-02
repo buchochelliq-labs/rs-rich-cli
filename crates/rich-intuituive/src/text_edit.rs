@@ -41,6 +41,10 @@ pub(crate) struct Editing {
     pub cursor_line: bool,
     pub caret_shape: Option<CaretShape>,
     pub draw_caret: bool,
+    /// The keymap before the app's keymap went over it, and the app
+    /// keymap's generation it has.
+    pub declared_keymap: Option<Keymap>,
+    pub keymap_generation: u64,
 }
 
 impl Default for Editing {
@@ -55,6 +59,8 @@ impl Default for Editing {
             cursor_line: false,
             caret_shape: None,
             draw_caret: false,
+            declared_keymap: None,
+            keymap_generation: 0,
         }
     }
 }
@@ -334,6 +340,28 @@ fn found_in(
             .map_or(0, |i| i + 1);
         (at, count)
     })
+}
+
+/// Put the app's keymap (its `text_area.*` ids) over the editing keys of
+/// `node`, if it is a text area or an input, once per keymap generation.
+pub(crate) fn apply_app_keymap(
+    node: &Node,
+    overrides: &rich_interact::keymap::Overrides,
+    generation: u64,
+) {
+    node.widget_mut(|area: &mut TextArea| {
+        let editing = &mut area.options.editing;
+        if editing.keymap_generation == generation {
+            return;
+        }
+        editing.keymap_generation = generation;
+        let mut keymap = editing
+            .declared_keymap
+            .get_or_insert_with(|| editing.keymap.clone())
+            .clone();
+        keymap.apply(overrides);
+        editing.keymap = keymap;
+    });
 }
 
 /// The editing options of a [`text_area`](crate::text_area) or an

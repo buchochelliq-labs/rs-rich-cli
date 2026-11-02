@@ -98,6 +98,49 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   ends with the checklist stage 4's security review works through. A root
   [`SECURITY.md`](SECURITY.md) says how to report a vulnerability privately.
 
+### intuiTUIve: a diff to review, themes, keymaps (wave 2)
+
+- **`widgets::diff_view(old, new)` and `diff_view_with(.., DiffOptions)`**
+  (#799): an interactive diff of two `Signal<String>`s on rs-rich-ext's
+  line diff, unified or side by side (`side_by_side_at(columns)` switches
+  by width), highlighted with `.language(..)`. Unchanged runs fold to
+  `context` lines around each hunk (Enter or a click opens them), `]` `[`
+  (`n` `p`) move the hunk cursor, and with `.decide(signal)` `a` `r` `A`
+  `R` accept or reject a hunk or all of them, a status row counting what
+  is decided; `.on_done(..)` runs when none is pending.
+  `accepted_text(old, new, decisions)` applies the accepted hunks. Only
+  the rows in view are rendered, so a 10,000-line diff scrolls as a short
+  one does.
+- **`Palette`, `Theme::from_palette`, `Theme::named`, `Theme::builtin`
+  and `Ctx::set_theme_named`** (#801): semantic colours (primary,
+  secondary, accent, warning, error, success, foreground, background,
+  surface, panel, boost, dark) from which the shades are generated as
+  Textual's `ColorSystem` generates them, by its names and to its values
+  (`primary-lighten-2`, `primary-muted`, `text-primary`, `text-muted`,
+  `surface`, …; a golden table captured from Textual 8.2.8 by
+  `scripts/capture_textual_themes.py`). Each is a named style for markup
+  and `$name` in stylesheets, and the presets' names (`accent`, `muted`,
+  `good`, `warn`, `bad`, `selected`, the buttons, the borders) are derived
+  from the palette. Textual's 21 themes are built in beside `dark`,
+  `light` and `mono`, which are unchanged; their palettes are Textual's
+  (MIT), credited in the crate's new `THIRD_PARTY.md`.
+- **User keymaps** (#806): `Node::bind_id(id, ..)`, `.binding_id(id)` and
+  `.sequence_id(id)` give a binding, a scaled binding or a sequence an id;
+  `App::keymap([(id, keys)])`, `App::keymap_file(path)` (one `id = keys` a
+  line, TOML's quoted strings read too, checked for changes as the app
+  runs), `Ctx::set_keymap` and `Ctx::reload_keymap` remap them, and the
+  editors' actions by `text_area.<action>`. The help, the palette,
+  `key_hints` and which-key show the new keys. Unknown ids and keys two ids
+  share on one path are reported once in a warning toast (and by
+  `Driver::keymap_report`); the deeper binding still wins. The diff view's
+  keys have ids (`diff.next`, `diff.accept`, …).
+- **`Log::write(renderable)` and `Log::write_with(renderable, line)`**
+  (#802): any rich renderable in a log (a `Table`, `Syntax`, a `Panel`),
+  laid out at the view's width and again when it changes, only while in
+  view; it counts as one line for the capacity, and filters match its
+  plain text. A log holding one draws its rows in full and scrolls by
+  entries, and still follows its end.
+
 ### intuiTUIve: Cornacai's parity items (wave 1, WS2)
 
 - **`Node::follow_end` and `follow_end_with(signal)`** (#798), on `scroll`
