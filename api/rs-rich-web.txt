@@ -97,6 +97,7 @@ impl !core::panic::unwind_safe::UnwindSafe for rich_web::Handle
 pub struct rich_web::Server
 impl rich_web::Server
 pub fn rich_web::Server::access_token(&self) -> &str
+pub fn rich_web::Server::allow_host(self, impl core::convert::AsRef<str>) -> rich_web::Server
 pub fn rich_web::Server::allow_origin(self, impl core::convert::Into<alloc::string::String>) -> rich_web::Server
 pub fn rich_web::Server::bind<A, F>(A, F) -> std::io::error::Result<rich_web::Server> where A: std::net::socket_addr::ToSocketAddrs, F: core::ops::function::Fn() -> intuituive::app::App + core::marker::Send + core::marker::Sync + 'static
 pub fn rich_web::Server::bind_command<A>(A, impl core::convert::Into<rich_embed::host::Command>) -> std::io::error::Result<rich_web::Server> where A: std::net::socket_addr::ToSocketAddrs
