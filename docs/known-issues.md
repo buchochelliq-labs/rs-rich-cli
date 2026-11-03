@@ -4,10 +4,10 @@ What does not work yet, what was never meant to, and what works differently on
 purpose. Three different things, kept apart — a deliberate trade-off listed as a
 bug makes a considered decision look like neglect.
 
-**Applies to** the 0.0.24 release (`rs-rich-cli` 0.0.24, `rs-rich` 0.0.14),
-reviewed against Python `rich` 15.0.0. Older entries name the release they
-were found in. Each entry links to its issue or report so you can check the
-status without waiting for this page to be updated.
+**Applies to** the 0.0.24 release (`rs-rich-cli` 0.0.24, `rs-rich` 0.0.14,
+published 2026-11-03), reviewed against Python `rich` 15.0.0. Older entries
+name the release they were found in. Each entry links to its issue or report
+so you can check the status without waiting for this page to be updated.
 
 ---
 
@@ -124,11 +124,6 @@ fixed size (for example 8 MiB or 20,000 lines for source in `view`, 64 MiB per
 `inspect` document, 1 MiB of `capture` output), so an endless input ends instead
 of exhausting memory. Larger inputs are shown in part or refused; the caps are
 not configurable. See [Limits](cli.md#limits).
-
-### `capture` has no PNG export
-
-`rich capture` shows the output in a panel, exports SVG or HTML, and records an
-asciicast with `--cast`. There is no PNG export; convert the SVG yourself.
 
 ### Mermaid subgraphs are drawn without frames; DOT's limits
 

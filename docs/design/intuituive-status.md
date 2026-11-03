@@ -3,14 +3,28 @@
 Status: handoff note, updated when a session ends mid-round. The loop and its
 rules are in [the demo gaps](intuituive-demo-gaps.md).
 
-## Where things stand (2026-11-03, evening)
+## Where things stand (2026-11-03, night)
 
-- **0.0.24 is tagged** (`release-0.0.24`, `python-v0.0.12`, on `c2d65880`)
-  and publishing. Next: the publication pull request, which pins the 0.0.24
-  docs to `9a02fdb1` and opens the 0.0.25 versions.
+- **0.0.24 is published** (21 crates from `main` at `c2d65880` by one
+  release run, `release-0.0.24`, on 2026-11-03, `rs-rich-acp` and
+  `cornacai` for the first time; `rs-rich` 0.0.12 on PyPI,
+  `python-v0.0.12`; see the [0.0.24 release notes](../releases/0.0.24.md)).
+  The release PR merged as #844 (`9a02fdb1`), which `docs-versions.toml`
+  names for the 0.0.24 docs.
+- **The 0.0.25 versions are open** (every package one patch past 0.0.24),
+  on `claude/next-priority-items-3c5p8e-wip-published`, stacked on #847
+  (the stylesheet fuzz fix).
+- **After the publication:** Trusted Publishing entries for `rs-rich-acp`
+  and `cornacai`; the marketplace lists the 0.0.24 crates (mermaid 0.0.10,
+  dot 0.0.7, lumis 0.0.8) and moves `RS_RICH_CLI_REF` to `release-0.0.24`.
 - **0.0.25 is planned** ([the plan](../plans/0.0.25.md)): the last release
   before 0.1.0, released with release-kit v1.2.0. Wave 1 is its
   workstreams 1 to 5.
+
+## Where things stood (2026-11-03, evening)
+
+- **0.0.24 was tagged** (`release-0.0.24`, `python-v0.0.12`, on
+  `c2d65880`) and publishing.
 
 ## Where things stood (2026-11-03)
 

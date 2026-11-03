@@ -55,9 +55,8 @@ console.print_str("[bold red]Hello[/] [green]World[/] — 42");
 
 ## New in 0.0.24
 
-To be published as one release, `release-0.0.24`
-([release notes](docs/releases/0.0.24.md)). Cornacai, Textual parity, and
-Noctiluca for scripts and agents:
+Published on 2026-11-03 ([release notes](docs/releases/0.0.24.md)).
+Cornacai, Textual parity, and Noctiluca for scripts and agents:
 
 - **[Cornacai](docs/guide/cornacai.md)** (new): a terminal client for
   coding agents over the Agent Client Protocol, with streamed Markdown,
@@ -186,9 +185,9 @@ why, is in [docs/ROADMAP.md](docs/ROADMAP.md); the tracking epic is
 ## Releases
 
 Each release has notes in [`docs/releases/`](docs/releases/) (the newest
-published one is [0.0.23](docs/releases/0.0.23.md)), and
+published one is [0.0.24](docs/releases/0.0.24.md)), and
 [`CHANGELOG.md`](CHANGELOG.md) lists every change. What comes next is in the
-[roadmap](docs/ROADMAP.md) and the [0.0.24 plan](docs/plans/0.0.24.md). The
+[roadmap](docs/ROADMAP.md) and the [0.0.25 plan](docs/plans/0.0.25.md). The
 manifest table above describes this checkout; crates.io is the source for
 published versions.
 

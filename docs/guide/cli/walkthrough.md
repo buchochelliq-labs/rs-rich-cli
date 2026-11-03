@@ -679,7 +679,8 @@ asciinema play test-run.cast
 signal killed it) after drawing the panel and writing any exports, so
 `rich capture -- cargo test` fails a CI step when the tests fail. Append
 `|| true` to ignore it. With `--report json` a failed command's envelope has
-`"code": "command"` and its status. There is no PNG export.
+`"code": "command"` and its status. `--export-png FILE` writes a PNG too
+(see [A PNG of the output](../../cli.md#a-png-of-the-output-0019)).
 
 The command sees `COLUMNS` as the panel's inner width. `capture` keeps at most
 1 MiB or 20,000 lines of output, stopping the command beyond that, and stops

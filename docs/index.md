@@ -53,7 +53,7 @@ topic and a widget index.
 ## New in 0.0.24
 
 ![Memo, intuiTUIve's elephant, in the cartoon look](assets/intuituive/mascot/memo-cartoon.svg){ .tui-mascot width="128" }
-0.0.24, to be published as one release ([release notes](releases/0.0.24.md)),
+0.0.24, published on 2026-11-03 ([release notes](releases/0.0.24.md)),
 brings Cornacai, catches intuiTUIve up with Textual and opens Noctiluca to
 scripts and coding agents.
 
