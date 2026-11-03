@@ -13,11 +13,13 @@ rules are in [the demo gaps](intuituive-demo-gaps.md).
   `docs-versions.toml` builds the 0.0.24 docs from its publication notes
   (`395b7b12`).
 - **The 0.0.25 versions are open** (every package one patch past 0.0.24),
-  on `claude/next-priority-items-3c5p8e-wip-published`, stacked on #847
-  (the stylesheet fuzz fix).
-- **After the publication:** Trusted Publishing entries for `rs-rich-acp`
-  and `cornacai`; the marketplace lists the 0.0.24 crates (mermaid 0.0.10,
-  dot 0.0.7, lumis 0.0.8) and moves `RS_RICH_CLI_REF` to `release-0.0.24`.
+  in #848, after #847 (the stylesheet fuzz fix) merged.
+- **After the publication:** the maintainer added Trusted Publishing
+  entries for `rs-rich-acp` and `cornacai` and retired the signer's deploy
+  key. rs-rich-marketplace#24 lists the 0.0.24 crates (mermaid 0.0.10,
+  dot 0.0.7, lumis 0.0.8) and moves the default `RS_RICH_CLI_REF` to
+  release-0.0.24's commit (`c2d65880`); `docs/marketplace-repo/` mirrors
+  it.
 - **0.0.25 is planned** ([the plan](../plans/0.0.25.md)): the last release
   before 0.1.0, released with release-kit v1.2.0. Wave 1 is its
   workstreams 1 to 5.
