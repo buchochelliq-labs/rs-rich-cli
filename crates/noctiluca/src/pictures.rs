@@ -383,6 +383,7 @@ mod tests {
             empty_alt: false,
             aria_hidden: false,
             in_label: false,
+            pending: false,
         });
         page
     }

@@ -133,6 +133,7 @@ pub mod control;
 pub mod draft;
 pub mod dump;
 pub mod engine;
+pub mod indicator;
 pub mod layout;
 pub mod model;
 pub mod pictures;

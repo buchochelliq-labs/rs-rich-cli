@@ -257,6 +257,14 @@ fn spans(runs: &[Run], base: &str, page: &Page, marks: &Marks) -> Vec<Span> {
     let mut out = Vec::new();
     let mut last = None;
     for run in runs {
+        // Of a pair of screen-reader twins, one is drawn: the spoken one,
+        // adapted; the shown parts, faithful.
+        let spoken = marks.adapt.on(Rule::ScreenReaderTwins);
+        match run.twin {
+            Some(crate::model::Twin::Shown) if spoken => continue,
+            Some(crate::model::Twin::Spoken) if !spoken => continue,
+            _ => {}
+        }
         // A decorative picture in a line is dropped, adapted.
         if run
             .picture
@@ -623,6 +631,14 @@ pub fn reader(page: &Page, width: u16, marks: &Marks) -> Vec<Piece> {
             BlockKind::Media(index)
                 if marks.adapt.on(Rule::DecorativeImages)
                     && crate::adapt::decorative(&page.media[*index]) => {}
+            BlockKind::Media(index) if crate::indicator::instead(page, *index, marks.adapt) => {}
+            BlockKind::Indicator(index) => {
+                if let Some(lines) =
+                    crate::indicator::reader_lines(page, *index, width, marks.adapt)
+                {
+                    text.extend(lines);
+                }
+            }
             BlockKind::Log(index) => {
                 for entry in &page.logs[*index].entries {
                     text.extend(wrap(
@@ -823,7 +839,11 @@ pub fn face(control: &Control) -> String {
     let value = control.value.as_deref().unwrap_or("");
     let name = &control.name;
     match control.role {
-        Role::Button | Role::MenuItem | Role::Tab => format!("[ {name} ]"),
+        Role::Button | Role::MenuItem | Role::Tab => match &control.glyph {
+            // An icon button's glyph; its name is in its hint and lists.
+            Some(glyph) => format!("[{glyph}]"),
+            None => format!("[ {name} ]"),
+        },
         Role::Link => name.clone(),
         Role::CheckBox | Role::Switch => {
             let mark = match control.checked {
@@ -1178,6 +1198,54 @@ pub fn project(page: &Page, columns: u16, cell: (f64, f64), marks: &Marks) -> Pr
             BlockKind::Media(index)
                 if adapt.on(Rule::DecorativeImages)
                     && crate::adapt::decorative(&page.media[*index]) => {}
+            BlockKind::Media(index) if crate::indicator::instead(page, *index, adapt) => {}
+            BlockKind::Indicator(index) => {
+                // A piece of its own, placed as Chrome placed the box: one
+                // row (a bar, steps, stars) grows like a control's face;
+                // a dial keeps its lines.
+                let indicator = &page.indicators[*index];
+                if indicator.media.is_some() && !adapt.on(Rule::Indicators) {
+                    continue;
+                }
+                let (i0, i1) = snap(indicator.rect.x, indicator.rect.right());
+                let rows = ((indicator.rect.height / ch).round() as usize).max(1);
+                let mut lines = crate::indicator::lines(indicator, i1 - i0, rows, (cw, ch));
+                if lines.len() == 1 {
+                    one_row.push(items.len());
+                    let mut item = text_item(
+                        indicator.node,
+                        indicator.rect,
+                        indicator.rect.x,
+                        indicator.rect.right(),
+                        lines.remove(0).spans,
+                        Vec::new(),
+                    );
+                    item.one_line = true;
+                    items.push(item);
+                } else {
+                    let full = lines.len();
+                    items.push(Item {
+                        top: indicator.rect.y,
+                        bottom: indicator.rect.y + full as f64 * ch,
+                        left: indicator.rect.x,
+                        x0: i0,
+                        x1: (i0 + lines.first().map_or(1, Line::width))
+                            .min(columns)
+                            .max(i0 + 1),
+                        wrap: None,
+                        lines,
+                        node: indicator.node,
+                        log: None,
+                        media: None,
+                        one_line: false,
+                        row: None,
+                        caption: None,
+                    });
+                    if (full as f64) < (indicator.rect.height / ch).round() {
+                        shrunk.push((items.len() - 1, indicator.rect.height, i0, i1));
+                    }
+                }
+            }
             BlockKind::Media(index)
                 if adapt.on(Rule::TextOverPictures)
                     && crate::adapt::picture_of_text(&page.media[*index], ch) =>
