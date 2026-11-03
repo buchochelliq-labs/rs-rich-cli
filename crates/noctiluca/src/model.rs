@@ -404,13 +404,19 @@ pub enum IndicatorKind {
 /// reading, so a moving bar moves.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Indicator {
+    /// The node it is on.
     pub node: NodeId,
+    /// What it is.
     pub kind: IndicatorKind,
     /// Its accessible name, or its `<label for>`'s text; cleaned.
     pub label: String,
     /// `value` or `aria-valuenow`, within `min..=max`; `None` when busy.
     pub value: Option<f64>,
+    /// The low end of its range: `min`, `aria-valuemin`, else 0.
     pub min: f64,
+    /// The high end of its range, never below `min`: `max`,
+    /// `aria-valuemax`, else 1 for a `<meter>` or a `<progress>` and 100
+    /// for an ARIA one; a rating's scale (5).
     pub max: f64,
     /// `aria-valuetext`, or the text it holds; cleaned.
     pub text: Option<String>,

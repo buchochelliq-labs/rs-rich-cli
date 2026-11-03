@@ -9,6 +9,44 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Noctiluca: page semantics (0.0.25)
+
+- **Meters, progress bars and ratings are native.** `<meter>`,
+  `<progress>`, `role=meter` and `role=progressbar` (with `aria-value*`)
+  are a new model kind, `Indicator` (`Page::indicators`,
+  `BlockKind::Indicator`), read again at every reading so a moving bar
+  moves. They are drawn by `noctiluca::indicator`: a bar as intuiTUIve's
+  `progress_bar` draws one (`Upload ━━━━━━━━ 40%`, a meter green, yellow or
+  red by its `low`, `high` and `optimum`, a busy one for a progress with no
+  value), rising blocks for a narrow meter of a few steps, a dial for a
+  roughly square box (a speed test's gauge), and stars for `role=img`
+  named "4.5 out of 5 stars" or "4.5 / 5" (`★★★★½ 4.5`; nothing new when
+  the name is not a rating). A `<canvas>` or `<svg>` that is one is drawn
+  as the indicator in its place by the new `indicators` adaptation; off,
+  its picture is. Before, a meter and its label showed nothing.
+- **A `<label for>` of something that is not a control stays text**, as
+  does one pointing at nothing or at a control that is not drawn (a custom
+  check box's transparent input). Before, its text was dropped.
+- **Screen-reader twins:** a price shown in parts for looks (`$`, `29`, a
+  raised `99`, `aria-hidden`) beside the whole price in visually hidden
+  text reads as `$29.99`, not `$2999`, by the new `screen-reader-twins`
+  adaptation (`Run::twin`; off, the parts). Only when the two say the same
+  digits, so hidden hints stay hidden.
+- **Icon-only buttons have a face.** Their name comes from `aria-label`,
+  `title`, `aria-labelledby` or an inner drawing's `<title>`; a name, or
+  the icon's own (`<use href="#icon-close">`, `class="icon-search"`), that
+  is a known icon's is drawn as its glyph (`Control::glyph`): `[⋯]` for
+  "More actions", `[✕]` for "Close", `[🔍]` for "Search", where `[  ]` was.
+- **Hover-only controls** (transparent until hovered: a card's "More
+  actions") are on the page's lists, so a site key can be bound to one,
+  but not drawn and not given a hint (`Control::hover_only`). Before, they
+  were not read at all.
+- **Lazy thumbnails get a placeholder**: an `<img>` with no source yet,
+  transparent until it loads or with no size of its own, takes its box (or
+  its parent's) with its alt text, else its link's title
+  (`Media::pending`). Before, a channel's videos past the first row were
+  blank rows.
+
 ## 0.0.24 cohort — to be published
 
 To be published from `main` by one `release.yml` run (tag

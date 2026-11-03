@@ -47,9 +47,13 @@ const TRACK: &str = "grey23";
 /// How an indicator is drawn.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Shape {
+    /// A bar, one row: [`bar`].
     Bar,
+    /// Rising blocks, one a step: [`steps`].
     Steps,
+    /// An arc around its readout: [`dial`].
     Dial,
+    /// Stars and the number: [`stars`].
     Stars,
 }
 
