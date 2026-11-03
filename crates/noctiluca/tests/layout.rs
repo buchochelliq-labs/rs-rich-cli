@@ -631,8 +631,14 @@ fn strips(name: &str, columns: u16) -> (Vec<String>, Vec<String>, Vec<String>) {
     let plain = |lines: &[Line]| lines.iter().map(Line::plain).collect::<Vec<_>>();
     (
         plain(&projection.lines),
-        projection.pinned.as_ref().map_or(Vec::new(), |p| plain(&p.lines)),
-        projection.docked.as_ref().map_or(Vec::new(), |p| plain(&p.lines)),
+        projection
+            .pinned
+            .as_ref()
+            .map_or(Vec::new(), |p| plain(&p.lines)),
+        projection
+            .docked
+            .as_ref()
+            .map_or(Vec::new(), |p| plain(&p.lines)),
     )
 }
 
@@ -674,7 +680,11 @@ fn badges_over_a_picture_stay_in_its_cells() {
     let projection = project(&page, 100, (8.0, 18.0), &Marks::default());
     let lines: Vec<String> = projection.lines.iter().map(Line::plain).collect();
     let region = |alt: &str| {
-        let m = page.media.iter().position(|m| m.alt.starts_with(alt)).unwrap();
+        let m = page
+            .media
+            .iter()
+            .position(|m| m.alt.starts_with(alt))
+            .unwrap();
         *projection.regions.iter().find(|r| r.media == m).unwrap()
     };
     let inside = |text: &str, r: noctiluca::layout::Region| {
@@ -715,10 +725,22 @@ fn art_over_a_player_takes_none_of_its_rows() {
         .position(|m| m.kind == noctiluca::model::MediaKind::Video)
         .unwrap();
     assert!(projection.regions.iter().all(|r| r.media != art));
-    let player = projection.regions.iter().find(|r| r.media == video).unwrap();
+    let player = projection
+        .regions
+        .iter()
+        .find(|r| r.media == video)
+        .unwrap();
     // The thumbnails start under the player, not under the art too.
-    let next = projection.regions.iter().find(|r| r.row > player.row).unwrap();
-    assert!(next.row <= player.row + player.rows + 1, "{:?}", projection.regions);
+    let next = projection
+        .regions
+        .iter()
+        .find(|r| r.row > player.row)
+        .unwrap();
+    assert!(
+        next.row <= player.row + player.rows + 1,
+        "{:?}",
+        projection.regions
+    );
 }
 
 #[test]
@@ -739,7 +761,9 @@ fn icon_buttons_at_the_right_edge_shorten_rather_than_being_cut() {
         assert!(rich::cells::cell_len(bar) <= columns as usize, "{bar}");
         // Every face is whole or shortened with `…`, its bracket kept.
         for name in ["Prime", "Log", "Sign", "User"] {
-            let at = bar.find(&format!("[{name}")).unwrap_or_else(|| panic!("{bar}"));
+            let at = bar
+                .find(&format!("[{name}"))
+                .unwrap_or_else(|| panic!("{bar}"));
             let face = &bar[at..at + bar[at..].find(']').unwrap_or_else(|| panic!("{bar}")) + 1];
             assert!(!face[1..].contains('['), "{name} in {bar}");
         }
@@ -756,9 +780,21 @@ fn two_runs_that_touch_in_cells_keep_a_space_between_them() {
     // first fills its cells up to where the second starts.
     let mut p = PageBuilder::new("https://fixture.example/meta.html", "Meta", 800.0, 100.0);
     let body = p.body();
-    let views = p.element(body, "DIV", &[], &[], Some(Rect::new(100.0, 40.0, 16.0, 18.0)));
+    let views = p.element(
+        body,
+        "DIV",
+        &[],
+        &[],
+        Some(Rect::new(100.0, 40.0, 16.0, 18.0)),
+    );
     p.text(views, "16", Rect::new(100.0, 40.0, 16.0, 18.0));
-    let age = p.element(body, "DIV", &[], &[], Some(Rect::new(118.0, 40.0, 50.0, 18.0)));
+    let age = p.element(
+        body,
+        "DIV",
+        &[],
+        &[],
+        Some(Rect::new(118.0, 40.0, 50.0, 18.0)),
+    );
     p.text(age, "13y ago", Rect::new(118.0, 40.0, 50.0, 18.0));
     let page = build(&p.snapshot(), &mut Revisions::new());
     let lines: Vec<String> = projection(&page, 100, (8.0, 18.0), &Marks::default())

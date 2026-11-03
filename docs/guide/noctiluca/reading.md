@@ -29,9 +29,36 @@ In the projection, controls show as faces: `[Ada_]` for a field,
 Images, videos, canvases and frames show as a placeholder box with their
 alt text.
 
-This first projection is rough. It has no fixed or sticky layer and no
-paint order, so a page with a sticky header or overlapping boxes can read
-oddly. Reader mode is one key away.
+### Top bars, bottom bars and layers
+
+A page's own layers are kept apart from its flow:
+
+- **Top bars** (a header fixed or sticky at the top of the page) are
+  pinned: drawn above the page, and they stay when you scroll. A bar
+  taller than a quarter of the screen scrolls with the page instead.
+- **Bottom bars** fixed to the screen (a cookie banner, a "join" bar, a
+  floating chat button) are docked: drawn under the page, just above the
+  status bar, at most a quarter of the screen, never in the middle of the
+  page. Use their buttons with a hint, as anywhere else.
+- **Sticky boxes** further down the page sit at their own place in it,
+  not where they were stuck when the page was read.
+- **What a box covers.** A part of the page an opaque box is painted over
+  (a player's hidden error panel under a notice) is not drawn, as in a
+  browser. A see-through box covers nothing.
+- **Badges on pictures.** A short text over a picture (a video's
+  duration, LIVE, a viewer count, a price tag) is drawn in the picture's
+  cells where the page puts it, not pushed under it. A picture laid over
+  a player (its offline art) is in the player's frames already and takes
+  none of its rows.
+- **Right-edge controls.** A run of buttons at the right of a top bar
+  that needs more cells than it has moves left, then shortens its faces
+  (`[Sign…]`), rather than being cut by the screen.
+
+A page that fits in two screens is read where it starts: Noctiluca does
+not scroll Chrome to its bottom to look for more, as it does for a long
+page or a feed.
+
+The projection is still rough on some pages. Reader mode is one key away.
 
 ## Reader mode
 

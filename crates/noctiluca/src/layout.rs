@@ -1019,7 +1019,13 @@ fn cut_face(face: &str, width: usize) -> String {
 }
 
 /// One part of the page projected ([`project`]).
-fn project_part(page: &Page, columns: u16, cell: (f64, f64), marks: &Marks, part: Part) -> Projection {
+fn project_part(
+    page: &Page,
+    columns: u16,
+    cell: (f64, f64),
+    marks: &Marks,
+    part: Part,
+) -> Projection {
     let columns = columns.max(10) as usize;
     let (cw, ch) = (cell.0.max(1.0), cell.1.max(1.0));
     /// A box to place: where Chrome put it, and what it holds.

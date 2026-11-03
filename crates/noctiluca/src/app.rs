@@ -2341,8 +2341,7 @@ fn draw_row(
     // Only a row a picture covers reads the pictures.
     let inline: Vec<&(layout::Region, String)> =
         l.inline.iter().filter(|(r, _)| r.on(row)).collect();
-    if b.images.get() == Images::None
-        || (inline.is_empty() && !l.regions.iter().any(|r| r.on(row)))
+    if b.images.get() == Images::None || (inline.is_empty() && !l.regions.iter().any(|r| r.on(row)))
     {
         return segments;
     }
@@ -2354,8 +2353,7 @@ fn draw_row(
     });
     // The media regions, then the small pictures in the row's lines, each
     // with its picture.
-    let mut on_row: Vec<layout::Region> =
-        l.regions.iter().filter(|r| r.on(row)).copied().collect();
+    let mut on_row: Vec<layout::Region> = l.regions.iter().filter(|r| r.on(row)).copied().collect();
     on_row.extend(inline.iter().map(|(r, _)| *r));
     let pixels = b.pixels.get();
     let small = |region: &layout::Region| -> Option<(Picture, Pixels)> {
@@ -2382,7 +2380,11 @@ fn draw_row(
         let mut pieces = rich::Segment::divide(&spliced, &[*column, end, width]);
         pieces.resize(3, Vec::new());
         let mut joined = std::mem::take(&mut pieces[0]);
-        joined.extend(rich::Segment::adjust_line_length(&drawn, end - column, None));
+        joined.extend(rich::Segment::adjust_line_length(
+            &drawn,
+            end - column,
+            None,
+        ));
         joined.extend(std::mem::take(&mut pieces[2]));
         spliced = joined;
     }

@@ -9,6 +9,39 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Noctiluca: layers and placement (real sites, second pass, workstream B)
+
+Fixes 2, 4, 10, 12 and 14 of
+[Noctiluca on real sites, second pass](docs/design/noctiluca-real-sites-2.md).
+
+- **Fixed and sticky layers.** The model reads each box's `position`, the
+  snapshot's paint orders, Chrome's scroll offset and the viewport's
+  height (`Page::layers`, `Page::scroll_y`, `Page::view_height`, and each
+  block's `Stack`). Top bars (fixed or sticky at the top) are drawn on a
+  pinned strip above the page, bottom bars fixed to the screen (cookie
+  banners, sign-up bars) on a docked strip above the status bar, each at
+  most a quarter of the screen (`Projection::pinned`,
+  `Projection::docked`); a sticky box further down sits at its static
+  place, recovered from the box after it when it was read stuck; a fixed
+  box wholly off screen is not drawn.
+- **Short pages are not scrolled to their end.** The view's "near the
+  end" no longer scrolls Chrome to the bottom of a page that fits in two
+  screens, which made a search page's sticky header read under its first
+  result.
+- **Paint order.** A block wholly under an opaque box or a picture painted
+  above it is not drawn (a player's hidden error panel under an
+  interstitial).
+- **Text over pictures.** A short text over a picture (a duration, LIVE,
+  a viewer count) is drawn in the picture's cells, again over the picture
+  once it shows (`Projection::overlays`); a picture over a player (its
+  offline art) takes none of its rows.
+- **Right-edge controls** move left into free cells, then shorten their
+  faces with `…` (`[Sign…]`), instead of being cut by the screen.
+- **Runs that touch** ("16" views and "13y ago") keep a cell between them.
+- `testing::PageBuilder` gains `view` (scroll offset and viewport) and
+  `paint` (paint orders). New fixture `overlays.html`; Chrome's snapshots
+  of `search-results.html` and `product-grid.html` read scrolled.
+
 ## 0.0.24 cohort — to be published
 
 To be published from `main` by one `release.yml` run (tag

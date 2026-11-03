@@ -32,9 +32,11 @@ DevTools, and some bot checks notice that. Noctiluca does not try to hide
 it, or to get past bot checks, CAPTCHAs or sign-in walls. See
 [Bot checks](privacy.md#bot-checks).
 
-**The projection looks wrong.** The first projection has no fixed or
-sticky layer and no paint order, so sticky headers and overlapping boxes
-can read oddly. Press `r` for reader mode.
+**The projection looks wrong.** Top bars are pinned and bottom bars
+docked ([Top bars, bottom bars and layers](reading.md#top-bars-bottom-bars-and-layers)),
+but a page that moves its boxes with script, or stacks translucent
+layers, can still read oddly. Press `a` for the faithful projection, or
+`r` for reader mode.
 
 **The page stops where it should load more.** Keep going down: each time
 you near the end, Noctiluca asks the page for more. A feed that loads

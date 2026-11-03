@@ -488,7 +488,12 @@ fn a_script_value_for_alt_text_is_no_alt_text() {
 fn layered() -> Page {
     use noctiluca::engine::Rect;
     use noctiluca::testing::PageBuilder;
-    let mut p = PageBuilder::new("https://fixture.example/layers.html", "Layers", 960.0, 3090.0);
+    let mut p = PageBuilder::new(
+        "https://fixture.example/layers.html",
+        "Layers",
+        960.0,
+        3090.0,
+    );
     p.view(500.0, 648.0);
     let body = p.body();
     let mut boxed = |p: &mut PageBuilder, position: &str, rect: Rect, text: &str| {
@@ -496,12 +501,42 @@ fn layered() -> Page {
         p.text(at, text, Rect::new(rect.x, rect.y, 100.0, 18.0));
     };
     boxed(&mut p, "static", Rect::new(0.0, 16.0, 960.0, 18.0), "Intro");
-    boxed(&mut p, "sticky", Rect::new(0.0, 500.0, 960.0, 40.0), "Sticky head");
-    boxed(&mut p, "static", Rect::new(0.0, 90.0, 960.0, 3000.0), "Long section");
-    boxed(&mut p, "fixed", Rect::new(0.0, 1130.0, 960.0, 18.0), "Cookie bar");
-    boxed(&mut p, "fixed", Rect::new(0.0, 500.0, 100.0, 18.0), "Fixed top");
-    boxed(&mut p, "fixed", Rect::new(-300.0, 2000.0, 300.0, 18.0), "Slid away");
-    boxed(&mut p, "fixed", Rect::new(860.0, 500.0, 100.0, 648.0), "Side rail");
+    boxed(
+        &mut p,
+        "sticky",
+        Rect::new(0.0, 500.0, 960.0, 40.0),
+        "Sticky head",
+    );
+    boxed(
+        &mut p,
+        "static",
+        Rect::new(0.0, 90.0, 960.0, 3000.0),
+        "Long section",
+    );
+    boxed(
+        &mut p,
+        "fixed",
+        Rect::new(0.0, 1130.0, 960.0, 18.0),
+        "Cookie bar",
+    );
+    boxed(
+        &mut p,
+        "fixed",
+        Rect::new(0.0, 500.0, 100.0, 18.0),
+        "Fixed top",
+    );
+    boxed(
+        &mut p,
+        "fixed",
+        Rect::new(-300.0, 2000.0, 300.0, 18.0),
+        "Slid away",
+    );
+    boxed(
+        &mut p,
+        "fixed",
+        Rect::new(860.0, 500.0, 100.0, 648.0),
+        "Side rail",
+    );
     build(&p.snapshot(), &mut Revisions::new())
 }
 
@@ -514,11 +549,12 @@ fn fixed_and_sticky_boxes_are_layers_placed_by_where_they_are_on_screen() {
         let block = page.blocks.iter().find(|b| b.text() == text).unwrap();
         page.layers[block.stack.layer.unwrap_or_else(|| panic!("{text}"))]
     };
-    assert!(page
-        .blocks
-        .iter()
-        .filter(|b| ["Intro", "Long section"].contains(&b.text().as_str()))
-        .all(|b| b.stack.layer.is_none()));
+    assert!(
+        page.blocks
+            .iter()
+            .filter(|b| ["Intro", "Long section"].contains(&b.text().as_str()))
+            .all(|b| b.stack.layer.is_none())
+    );
     // Stuck at the top now, it sits at its static place, under the intro:
     // the top of the section after it less its height.
     let sticky = layer("Sticky head");
@@ -549,12 +585,20 @@ fn a_box_painted_above_covers_what_it_holds_and_a_badge_lies_over_its_picture() 
         Some(Rect::new(0.0, 0.0, 320.0, 180.0)),
     );
     p.paint(thumb, 2);
-    p.image(thumb, "thumb.png", "A thumbnail", Rect::new(0.0, 0.0, 320.0, 180.0));
+    p.image(
+        thumb,
+        "thumb.png",
+        "A thumbnail",
+        Rect::new(0.0, 0.0, 320.0, 180.0),
+    );
     let badge = p.element(
         thumb,
         "SPAN",
         &[],
-        &[("position", "absolute"), ("background-color", "rgb(0, 0, 0)")],
+        &[
+            ("position", "absolute"),
+            ("background-color", "rgb(0, 0, 0)"),
+        ],
         Some(Rect::new(270.0, 158.0, 44.0, 18.0)),
     );
     p.paint(badge, 3);
@@ -568,28 +612,56 @@ fn a_box_painted_above_covers_what_it_holds_and_a_badge_lies_over_its_picture() 
         Some(Rect::new(0.0, 200.0, 800.0, 60.0)),
     );
     p.paint(panel, 4);
-    let error = p.element(panel, "P", &[], &[], Some(Rect::new(0.0, 200.0, 800.0, 18.0)));
-    p.text(error, "Hidden error panel", Rect::new(0.0, 200.0, 120.0, 17.0));
+    let error = p.element(
+        panel,
+        "P",
+        &[],
+        &[],
+        Some(Rect::new(0.0, 200.0, 800.0, 18.0)),
+    );
+    p.text(
+        error,
+        "Hidden error panel",
+        Rect::new(0.0, 200.0, 120.0, 17.0),
+    );
     let cover = p.element(
         panel,
         "DIV",
         &[],
-        &[("position", "absolute"), ("background-color", "rgb(255, 255, 255)")],
+        &[
+            ("position", "absolute"),
+            ("background-color", "rgb(255, 255, 255)"),
+        ],
         Some(Rect::new(0.0, 200.0, 800.0, 60.0)),
     );
     p.paint(cover, 5);
-    let shown = p.element(cover, "P", &[], &[], Some(Rect::new(0.0, 216.0, 800.0, 18.0)));
+    let shown = p.element(
+        cover,
+        "P",
+        &[],
+        &[],
+        Some(Rect::new(0.0, 216.0, 800.0, 18.0)),
+    );
     p.text(shown, "Interstitial", Rect::new(0.0, 216.0, 70.0, 17.0));
     // A translucent box painted above text covers nothing.
     let veil = p.element(
         body,
         "DIV",
         &[],
-        &[("position", "absolute"), ("background-color", "rgba(0, 0, 0, 0)")],
+        &[
+            ("position", "absolute"),
+            ("background-color", "rgba(0, 0, 0, 0)"),
+        ],
         Some(Rect::new(0.0, 280.0, 800.0, 40.0)),
     );
     p.paint(veil, 6);
-    let under = p.element(body, "P", &[], &[], Some(Rect::new(0.0, 290.0, 800.0, 18.0)));
+    let under = p.element(
+        body,
+        "P",
+        &[],
+        &[],
+        Some(Rect::new(0.0, 290.0, 800.0, 18.0)),
+    );
     p.set_style(under, "position", "static");
     p.paint(under, 1);
     p.text(under, "Under a veil", Rect::new(0.0, 290.0, 80.0, 17.0));

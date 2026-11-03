@@ -2300,7 +2300,11 @@ fn stack(dom: &Dom, page: &mut Page) {
     }
     roots.sort_by(|a, b| a.1.total_cmp(&b.1));
     let view = dom.view_height;
-    let quarter = if view > 0.0 { view / 4.0 } else { f64::INFINITY };
+    let quarter = if view > 0.0 {
+        view / 4.0
+    } else {
+        f64::INFINITY
+    };
     let mut pinned_to = 0.0f64;
     let mut layer_of = HashMap::new();
     for (r, top) in roots {
@@ -2386,9 +2390,9 @@ fn stack(dom: &Dom, page: &mut Page) {
         if rect.width <= 0.0 || rect.height <= 0.0 {
             continue;
         }
-        block.stack.covered = covers
-            .iter()
-            .any(|&(c, by, co)| co > o && c != i && holds(by, rect) && !under(c, i) && !under(i, c));
+        block.stack.covered = covers.iter().any(|&(c, by, co)| {
+            co > o && c != i && holds(by, rect) && !under(c, i) && !under(i, c)
+        });
         if block.stack.covered {
             continue;
         }

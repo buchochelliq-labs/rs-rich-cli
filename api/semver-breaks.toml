@@ -112,3 +112,10 @@ version = "0.0.9"
 lint = "constructible_struct_adds_field"
 items = ["field TableOptions.freeze_rows"]
 why = "frozen rows in tables, Textual's fixed_rows, are a TableOptions field like the rest of its options (#814, 0.0.24 plan)"
+
+[[break]]
+crate = "noctiluca"
+version = "0.0.4"
+lint = "constructible_struct_adds_field"
+items = ["field Block.stack", "field Page.layers", "field Page.scroll_y", "field Page.view_height", "field Projection.overlays", "field Projection.pinned", "field Projection.docked"]
+why = "fixed and sticky layers, paint order and text over pictures (real sites, second pass, fixes 2, 4 and 12): the model reads each block's place in the page's stack, the projection draws pinned and docked strips and badges over pictures (0.0.25 plan)"
