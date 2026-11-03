@@ -39,6 +39,11 @@
 //!   that changes at every capture for [`CANVAS_BUSY`] and is bigger than
 //!   a quarter of the viewport is cut from the screencast, as a playing
 //!   video is. Off screen, or frozen, none is captured.
+//! - **Failed navigations**: Chrome shows its own error page at
+//!   [`ERROR_PAGE`]'s address. The tab keeps the address that was asked
+//!   for in the page and its state instead, and puts a notice over
+//!   Chrome's text saying what failed, where, and how to try again
+//!   ([`ERROR_NOTICE`] is its node).
 
 use std::collections::{HashMap, HashSet};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -53,7 +58,8 @@ use crate::engine::{
     Engine, EngineEvent, Format, HistoryStep, MediaOp, Metrics, NodeId, PageAction, Rect, TabId,
 };
 use crate::model::{
-    Binding, Control, Entry, Media, MediaKind, Page, Revisions, Role, Run, build_with, live_runs,
+    Binding, Block, BlockKind, Control, Entry, Media, MediaKind, Page, Revisions, Role, Run,
+    build_with, live_runs,
 };
 use crate::video::{Frames, Region, VideoFrame};
 use rich_intuituive::Picture;
@@ -473,6 +479,9 @@ struct Worker<'a> {
     stale: HashSet<NodeId>,
     /// The canvases watched as live regions, by node.
     canvases: HashMap<NodeId, Watch>,
+    /// The address last opened, until a page other than Chrome's error
+    /// page is read: what the address bar keeps when it fails.
+    asked: Option<String>,
 }
 
 /// A canvas watched while the view shows it.
@@ -490,6 +499,27 @@ struct Watch {
     busy: bool,
     /// It was sent frames since it last stopped.
     moving: bool,
+}
+
+/// The start of the address Chrome gives its own error page, the page it
+/// shows when a navigation fails (`chrome-error://chromewebdata/`).
+pub const ERROR_PAGE: &str = "chrome-error://";
+
+/// The node of the notice the tab puts over Chrome's error page: no node
+/// of the page's (the snapshot's are never negative).
+pub const ERROR_NOTICE: NodeId = -1;
+
+/// The error code on Chrome's error page (`ERR_NAME_NOT_RESOLVED`), if
+/// its text has one.
+fn error_code(page: &Page) -> Option<String> {
+    page.blocks.iter().find_map(|block| {
+        block.text().split_whitespace().find_map(|word| {
+            let word = word.trim_matches(|c: char| !c.is_ascii_alphanumeric() && c != '_');
+            let code = word.strip_prefix("ERR_")?;
+            (!code.is_empty() && code.chars().all(|c| c.is_ascii_uppercase() || c == '_'))
+                .then(|| word.to_string())
+        })
+    })
 }
 
 /// A key of where the page's boxes are: it changes when its layout moves.
@@ -515,6 +545,7 @@ impl Worker<'_> {
             self.appended = boxes.into_iter().collect();
         }
         let mut page = build_with(&snapshot, &mut self.revisions, &self.appended);
+        self.dress_error(&mut page);
         if self.page.as_ref().map(|p| p.document) != Some(page.document) {
             self.live.clear();
             self.latest.clear();
@@ -560,6 +591,89 @@ impl Worker<'_> {
         self.page = Some(page.clone());
         self.dirty = None;
         Some(page)
+    }
+
+    /// The address to show for `url` when it is Chrome's error page: the
+    /// one last opened, else the address Chrome's history keeps for the
+    /// entry; `None` when `url` is not the error page or nothing better
+    /// is known.
+    fn error_address(&self, url: &str) -> Option<String> {
+        if !url.starts_with(ERROR_PAGE) {
+            return None;
+        }
+        self.asked.clone().or_else(|| {
+            let kept = self.engine.state(TabId(0)).url;
+            (!kept.is_empty() && !kept.starts_with(ERROR_PAGE)).then_some(kept)
+        })
+    }
+
+    /// A page read from Chrome's error page keeps the address that was
+    /// asked for, and gets a notice above Chrome's own text: what could
+    /// not be opened, the error code, and the key that tries again. A page
+    /// that is not the error page ends the asking.
+    fn dress_error(&mut self, page: &mut Page) {
+        if !page.url.starts_with(ERROR_PAGE) {
+            if self.page.as_ref().map(|p| p.document) != Some(page.document) {
+                self.asked = None;
+            }
+            return;
+        }
+        let shown = self.error_address(&page.url);
+        // Chrome's history keeps the address that failed: after a
+        // redirect, not the one asked for.
+        let failed = Some(self.engine.state(TabId(0)).url)
+            .filter(|u| !u.is_empty() && !u.starts_with(ERROR_PAGE) && Some(u) != shown.as_ref());
+        let address = shown.as_deref().unwrap_or("the page");
+        let mut runs = vec![
+            Run {
+                text: "Could not open ".into(),
+                bold: true,
+                ..Run::default()
+            },
+            Run {
+                text: crate::clean::clean(address),
+                bold: true,
+                ..Run::default()
+            },
+        ];
+        let mut rest = String::new();
+        if let Some(failed) = failed {
+            rest.push_str(&format!(" (it went on to {})", crate::clean::clean(&failed)));
+        }
+        if let Some(code) = error_code(page) {
+            rest.push_str(&format!(": {code}"));
+        }
+        rest.push_str(". Reload (R) tries again.");
+        runs.push(Run {
+            text: rest,
+            ..Run::default()
+        });
+        // Above Chrome's own text, at its left edge.
+        let left = page.blocks.iter().map(|b| b.rect.x).fold(f64::NAN, f64::min);
+        let left = if left.is_finite() { left } else { 8.0 };
+        let top = page.blocks.iter().map(|b| b.rect.y).fold(f64::NAN, f64::min);
+        let height = 32.0;
+        let y = if top.is_finite() && top >= height + 8.0 {
+            8.0
+        } else {
+            0.0
+        };
+        let rect = Rect::new(left, y, (page.width - 2.0 * left).max(320.0), height);
+        page.blocks.insert(
+            0,
+            Block {
+                kind: BlockKind::Paragraph,
+                runs,
+                quote: 0,
+                rect,
+                frame: rect,
+                node: ERROR_NOTICE,
+                region: None,
+            },
+        );
+        if let Some(address) = shown {
+            page.url = address;
+        }
     }
 
     /// The still and picture to show for `key`, and whether they are of
@@ -1221,8 +1335,18 @@ impl Worker<'_> {
                 (self.update)(Update::About { answers, product });
                 Ok(())
             }
-            Command::Open(url) => self.engine.open(TabId(0), &url).map_err(failed),
-            Command::History(step) => self.engine.history(TabId(0), step).map_err(failed),
+            Command::Open(url) => {
+                self.asked = Some(url.clone());
+                self.engine.open(TabId(0), &url).map_err(failed)
+            }
+            Command::History(step) => {
+                // Back and forward go to entries Chrome keeps the address
+                // of; a reload tries the same address again.
+                if step != HistoryStep::Reload {
+                    self.asked = None;
+                }
+                self.engine.history(TabId(0), step).map_err(failed)
+            }
             Command::Resize(columns, rows) => self.engine.resize(columns, rows).map_err(failed),
             Command::Scroll(y) => self.scroll(PageAction::ScrollTo(y)).map_err(failed),
             Command::Wheel(delta) => self.scroll(PageAction::Wheel(delta)).map_err(failed),
@@ -1461,6 +1585,7 @@ fn run(
         drawn: HashMap::new(),
         stale: HashSet::new(),
         canvases: HashMap::new(),
+        asked: None,
     };
     let mut live_due = false;
     // Read once at the start, then whenever something says to.
@@ -1506,7 +1631,10 @@ fn run(
                 }
             }
         }
-        let state = worker.engine.state(TabId(0));
+        let mut state = worker.engine.state(TabId(0));
+        if let Some(address) = worker.error_address(&state.url) {
+            state.url = address;
+        }
         if state != worker.state {
             if worker.state.loading && !state.loading {
                 read_now = true;
