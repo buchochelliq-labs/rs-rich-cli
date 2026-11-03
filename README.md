@@ -53,26 +53,25 @@ console.print_str("[bold red]Hello[/] [green]World[/] — 42");
 [Getting started](docs/getting-started.md) has a complete program; the
 [tutorial](docs/tutorial/index.md) builds up from there.
 
-## New in 0.0.23
+## New in 0.0.24
 
-Published on 2026-10-27 ([release notes](docs/releases/0.0.23.md)). Faster frames, pictures and
-video in Noctiluca, and the marketplace goes live:
+To be published as one release, `release-0.0.24`
+([release notes](docs/releases/0.0.24.md)). Cornacai, Textual parity, and
+Noctiluca for scripts and agents:
 
-- **The core:** `console.py` fully ported (capture, `record=` and its
-  exports, `log`, render hooks, `screen()`, `status()`, nested `Live`),
-  themes in Markdown, and fast paths that render the same bytes in a
-  fraction of the time.
-- **intuiTUIve:** the `best` paint strategy by default (a scrolled log sends
-  a row's bytes, not a screen's), a fast drawing path, virtual scrolling,
-  a timedemo, sound in recordings, and what rs-rich-doom built for itself.
-- **[Noctiluca](docs/guide/noctiluca.md):** pictures, GIFs and video where
-  the page puts them, live logs, terminal adaptations, and a
-  [gallery of real sites](docs/guide/noctiluca/real-sites.md).
-- **The marketplace is live:** signed, trusted with no flags, with official
-  plugins, themes and micro packs, statistics, and
-  [its own site](https://buchochelliq-labs.github.io/rs-rich-marketplace/).
-- **Also:** WebP everywhere, HTTPS through the system's certificates,
-  `rich --rst` on rich-rst 2.2.0, API checks and nightly fuzzing.
+- **[Cornacai](docs/guide/cornacai.md)** (new): a terminal client for
+  coding agents over the Agent Client Protocol, with streamed Markdown,
+  permission prompts, edits reviewed hunk by hunk, sessions as tabs and a
+  shell pane. Its protocol layer is the new `rs-rich-acp` crate.
+- **intuiTUIve:** a Markdown viewer and a diff view, Textual's themes, user
+  keymaps, palette providers, modes, screenshots, Pilot-style test helpers
+  and much more of Textual's stylesheet language.
+- **[Noctiluca](docs/guide/noctiluca.md):** a control socket for scripts and
+  coding agents, the mouse, video to 30 fps, a full-pixel view, `--ssh`
+  and `--transparent`.
+- **Also:** `inspect` for Rust values, animated banners, AVIF (opt in),
+  edition 2024, a threat model and a security policy, and the docs on
+  Zensical.
 
 The [changelog](CHANGELOG.md) lists every change.
 
