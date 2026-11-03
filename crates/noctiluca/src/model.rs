@@ -427,6 +427,8 @@ pub struct Indicator {
     /// The text just before it on its line ends with its label (`Download
     /// <span role=progressbar aria-label=Download>`): drawn without it.
     pub label_in_text: bool,
+    /// Text comes before it on its line, in the same block.
+    pub after_text: bool,
 }
 
 impl Indicator {
@@ -489,8 +491,7 @@ pub fn rating_of(name: &str) -> Option<(f64, f64)> {
         .or_else(|| lower.split_once('/'))?;
     let last_number = |text: &str| {
         text.split(|c: char| c.is_whitespace() || c == '(')
-            .filter(|w| !w.is_empty())
-            .next_back()
+            .rfind(|w| !w.is_empty())
             .and_then(|w| w.replace(',', ".").parse::<f64>().ok())
     };
     let first_number = |text: &str| {
@@ -2072,6 +2073,7 @@ impl Walker<'_> {
         });
         let before = plain(&self.runs).trim_end().to_lowercase();
         let label_in_text = !label.is_empty() && before.ends_with(&label.to_lowercase());
+        let after_text = !before.is_empty() && !before.ends_with('\n');
         self.flush(context);
         let index = self.page.indicators.len();
         self.page.indicators.push(Indicator {
@@ -2086,6 +2088,7 @@ impl Walker<'_> {
             bands,
             media,
             label_in_text,
+            after_text,
         });
         self.block(BlockKind::Indicator(index), i, context);
     }

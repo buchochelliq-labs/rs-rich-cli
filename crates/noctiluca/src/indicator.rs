@@ -79,16 +79,24 @@ pub fn shape(indicator: &Indicator, cols: usize, rows: usize, cell: (f64, f64)) 
 /// bounds) for a dial. A bar's line may be wider than `cols`: its label
 /// and readout are around it.
 pub fn lines(indicator: &Indicator, cols: usize, rows: usize, cell: (f64, f64)) -> Vec<Line> {
-    match shape(indicator, cols, rows, cell) {
-        Shape::Bar => vec![bar(indicator, cols)],
-        Shape::Steps => vec![steps(indicator)],
-        Shape::Dial => dial(
-            indicator,
-            cols.min(MAX_DIAL_COLUMNS),
-            rows.min(MAX_DIAL_ROWS),
-        ),
-        Shape::Stars => vec![stars(indicator)],
+    let mut line = match shape(indicator, cols, rows, cell) {
+        Shape::Bar => bar(indicator, cols),
+        Shape::Steps => steps(indicator),
+        Shape::Dial => {
+            return dial(
+                indicator,
+                cols.min(MAX_DIAL_COLUMNS),
+                rows.min(MAX_DIAL_ROWS),
+            );
+        }
+        Shape::Stars => stars(indicator),
+    };
+    // Text before it on its line ("Rating ★★★★½"): a space between them
+    // that wrapping keeps, as terminal glyphs are wider than a page's.
+    if indicator.after_text {
+        line.spans.insert(0, Span::new("\u{a0}", ""));
     }
+    vec![line]
 }
 
 /// Whether media region `media` of `page` is drawn as the indicator it
@@ -346,6 +354,7 @@ mod tests {
             bands: None,
             media: None,
             label_in_text: false,
+            after_text: false,
         }
     }
 
