@@ -479,3 +479,133 @@ fn a_script_value_for_alt_text_is_no_alt_text() {
     let alts: Vec<&str> = page.media.iter().map(|m| m.alt.as_str()).collect();
     assert_eq!(alts, ["", "", "A harbour at night"]);
 }
+
+/// A page 3000 pixels long read with Chrome scrolled 500 pixels down, its
+/// viewport 648 tall: an intro, a sticky header stuck at the viewport's
+/// top (its static place is 50), a long section, a cookie bar fixed to
+/// the bottom, a bar fixed to the top, a menu fixed but slid off screen,
+/// and a sidebar fixed down the whole viewport.
+fn layered() -> Page {
+    use noctiluca::engine::Rect;
+    use noctiluca::testing::PageBuilder;
+    let mut p = PageBuilder::new("https://fixture.example/layers.html", "Layers", 960.0, 3090.0);
+    p.view(500.0, 648.0);
+    let body = p.body();
+    let mut boxed = |p: &mut PageBuilder, position: &str, rect: Rect, text: &str| {
+        let at = p.element(body, "DIV", &[], &[("position", position)], Some(rect));
+        p.text(at, text, Rect::new(rect.x, rect.y, 100.0, 18.0));
+    };
+    boxed(&mut p, "static", Rect::new(0.0, 16.0, 960.0, 18.0), "Intro");
+    boxed(&mut p, "sticky", Rect::new(0.0, 500.0, 960.0, 40.0), "Sticky head");
+    boxed(&mut p, "static", Rect::new(0.0, 90.0, 960.0, 3000.0), "Long section");
+    boxed(&mut p, "fixed", Rect::new(0.0, 1130.0, 960.0, 18.0), "Cookie bar");
+    boxed(&mut p, "fixed", Rect::new(0.0, 500.0, 100.0, 18.0), "Fixed top");
+    boxed(&mut p, "fixed", Rect::new(-300.0, 2000.0, 300.0, 18.0), "Slid away");
+    boxed(&mut p, "fixed", Rect::new(860.0, 500.0, 100.0, 648.0), "Side rail");
+    build(&p.snapshot(), &mut Revisions::new())
+}
+
+#[test]
+fn fixed_and_sticky_boxes_are_layers_placed_by_where_they_are_on_screen() {
+    use noctiluca::model::Place;
+    let page = layered();
+    assert_eq!((page.scroll_y, page.view_height), (500.0, 648.0));
+    let layer = |text: &str| {
+        let block = page.blocks.iter().find(|b| b.text() == text).unwrap();
+        page.layers[block.stack.layer.unwrap_or_else(|| panic!("{text}"))]
+    };
+    assert!(page
+        .blocks
+        .iter()
+        .filter(|b| ["Intro", "Long section"].contains(&b.text().as_str()))
+        .all(|b| b.stack.layer.is_none()));
+    // Stuck at the top now, it sits at its static place, under the intro:
+    // the top of the section after it less its height.
+    let sticky = layer("Sticky head");
+    assert_eq!((sticky.place, sticky.top), (Place::Flow, 50.0));
+    assert!(!sticky.fixed);
+    assert_eq!(layer("Fixed top").place, Place::Pinned);
+    let cookies = layer("Cookie bar");
+    assert_eq!((cookies.place, cookies.top), (Place::Docked, 630.0));
+    assert_eq!(layer("Slid away").place, Place::Off);
+    // Taller than a quarter of the screen: in the flow, as at the top.
+    let rail = layer("Side rail");
+    assert_eq!((rail.place, rail.top), (Place::Flow, 0.0));
+}
+
+#[test]
+fn a_box_painted_above_covers_what_it_holds_and_a_badge_lies_over_its_picture() {
+    use noctiluca::engine::Rect;
+    use noctiluca::testing::PageBuilder;
+    let mut p = PageBuilder::new("https://fixture.example/stack.html", "Stack", 800.0, 600.0);
+    let body = p.body();
+    p.paint(body, 1);
+    // A thumbnail with a duration badge painted above it.
+    let thumb = p.element(
+        body,
+        "DIV",
+        &[],
+        &[("position", "relative")],
+        Some(Rect::new(0.0, 0.0, 320.0, 180.0)),
+    );
+    p.paint(thumb, 2);
+    p.image(thumb, "thumb.png", "A thumbnail", Rect::new(0.0, 0.0, 320.0, 180.0));
+    let badge = p.element(
+        thumb,
+        "SPAN",
+        &[],
+        &[("position", "absolute"), ("background-color", "rgb(0, 0, 0)")],
+        Some(Rect::new(270.0, 158.0, 44.0, 18.0)),
+    );
+    p.paint(badge, 3);
+    p.text(badge, "12:34", Rect::new(272.0, 158.0, 40.0, 17.0));
+    // An error panel under an opaque interstitial painted above it.
+    let panel = p.element(
+        body,
+        "DIV",
+        &[],
+        &[("position", "relative")],
+        Some(Rect::new(0.0, 200.0, 800.0, 60.0)),
+    );
+    p.paint(panel, 4);
+    let error = p.element(panel, "P", &[], &[], Some(Rect::new(0.0, 200.0, 800.0, 18.0)));
+    p.text(error, "Hidden error panel", Rect::new(0.0, 200.0, 120.0, 17.0));
+    let cover = p.element(
+        panel,
+        "DIV",
+        &[],
+        &[("position", "absolute"), ("background-color", "rgb(255, 255, 255)")],
+        Some(Rect::new(0.0, 200.0, 800.0, 60.0)),
+    );
+    p.paint(cover, 5);
+    let shown = p.element(cover, "P", &[], &[], Some(Rect::new(0.0, 216.0, 800.0, 18.0)));
+    p.text(shown, "Interstitial", Rect::new(0.0, 216.0, 70.0, 17.0));
+    // A translucent box painted above text covers nothing.
+    let veil = p.element(
+        body,
+        "DIV",
+        &[],
+        &[("position", "absolute"), ("background-color", "rgba(0, 0, 0, 0)")],
+        Some(Rect::new(0.0, 280.0, 800.0, 40.0)),
+    );
+    p.paint(veil, 6);
+    let under = p.element(body, "P", &[], &[], Some(Rect::new(0.0, 290.0, 800.0, 18.0)));
+    p.set_style(under, "position", "static");
+    p.paint(under, 1);
+    p.text(under, "Under a veil", Rect::new(0.0, 290.0, 80.0, 17.0));
+    let page = build(&p.snapshot(), &mut Revisions::new());
+    let stack = |text: &str| {
+        page.blocks
+            .iter()
+            .find(|b| b.text() == text)
+            .unwrap_or_else(|| panic!("{text}: {:#?}", page.blocks))
+            .stack
+    };
+    assert!(stack("Hidden error panel").covered);
+    assert!(!stack("Interstitial").covered);
+    assert!(!stack("Under a veil").covered);
+    let over = stack("12:34");
+    assert!(!over.covered);
+    assert_eq!(over.over, Some(0));
+    assert_eq!(stack("Interstitial").over, None);
+}

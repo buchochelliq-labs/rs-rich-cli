@@ -9,8 +9,11 @@
 //!   column pushes a box down below what is already in its columns. So
 //!   text never shares a cell with text, and a column that grew pushes
 //!   what is under it, not what is beside it. Controls show as faces and
-//!   media as framed placeholders with their alt text; fixed and sticky
-//!   layers, paint order and per-region pixels come in phase 0.3.
+//!   media as framed placeholders with their alt text. Fixed and sticky
+//!   layers go on a pinned strip above the page, a docked strip under it,
+//!   or their static place in it ([`Place`]); a block an opaque box above
+//!   covers is not drawn, and a short text over a picture is drawn in the
+//!   picture's cells ([`Projection::overlays`]).
 //!
 //! Every string here comes from the [model](crate::model), which has
 //! cleaned it already.
@@ -22,7 +25,9 @@ use rich::cells::cell_len;
 
 use crate::adapt::{Adapt, Rule};
 use crate::engine::NodeId;
-use crate::model::{BlockKind, Check, Control, Log, MediaKind, Page, Role, Run, Table};
+use crate::model::{
+    Block, BlockKind, Check, Control, Log, MediaKind, Page, Place, Role, Run, Table,
+};
 
 /// A run of text on a line with one style (a rich style definition).
 #[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
@@ -917,6 +922,39 @@ pub struct Projection {
     /// The small pictures in lines, one row each, with their sources (keys
     /// of [`Page::inline_pictures`]); their `media` is `usize::MAX`.
     pub inline: Vec<(Region, String)>,
+    /// Short texts drawn over a picture's cells (a duration badge on a
+    /// thumbnail), as (row, column, line): already in [`lines`](Self::lines),
+    /// and drawn again over the picture once it shows.
+    pub overlays: Vec<(usize, usize, Line)>,
+    /// The page's top bars ([`Place::Pinned`]), projected on their own:
+    /// drawn above the page, never scrolled.
+    pub pinned: Option<Box<Projection>>,
+    /// Its bottom bars ([`Place::Docked`]: cookie banners, sign-up bars),
+    /// projected on their own: drawn under the page, above the status bar.
+    pub docked: Option<Box<Projection>>,
+}
+
+/// Which part of the page a projection holds.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Part {
+    Flow,
+    Pinned,
+    Docked,
+}
+
+/// How far down `part` moves `block`'s boxes, in CSS pixels; `None` when
+/// it is not in `part`. `docked` is the top of the highest docked layer.
+fn shift(page: &Page, block: &Block, part: Part, pinned: f64, docked: f64) -> Option<f64> {
+    let Some(layer) = block.stack.layer.and_then(|l| page.layers.get(l)) else {
+        return (part == Part::Flow).then_some(0.0);
+    };
+    let base = match (layer.place, part) {
+        (Place::Flow, Part::Flow) => 0.0,
+        (Place::Pinned, Part::Pinned) => pinned,
+        (Place::Docked, Part::Docked) => docked,
+        _ => return None,
+    };
+    Some(layer.top - base - layer.rect.y)
 }
 
 impl Projection {
@@ -931,8 +969,57 @@ impl Projection {
     }
 }
 
-/// The [`projection`] with its rows' keys and page positions.
+/// The [`projection`] with its rows' keys and page positions, and the
+/// page's pinned and docked strips.
 pub fn project(page: &Page, columns: u16, cell: (f64, f64), marks: &Marks) -> Projection {
+    let mut main = project_part(page, columns, cell, marks, Part::Flow);
+    for (place, part) in [(Place::Pinned, Part::Pinned), (Place::Docked, Part::Docked)] {
+        if !page.layers.iter().any(|l| l.place == place) {
+            continue;
+        }
+        let strip = project_part(page, columns, cell, marks, part);
+        if strip.lines.is_empty() {
+            continue;
+        }
+        let strip = Some(Box::new(strip));
+        match part {
+            Part::Pinned => main.pinned = strip,
+            _ => main.docked = strip,
+        }
+    }
+    main
+}
+
+/// Cells a run of controls at the right edge keeps for each control when
+/// it has to shorten them: `[`, a letter, `…` and `]`.
+const MIN_FACE: usize = 4;
+
+/// `face` (a control's face, `[Sign Up]`) cut to `width` cells with `…`,
+/// its closing bracket kept.
+fn cut_face(face: &str, width: usize) -> String {
+    if cell_len(face) <= width {
+        return face.to_string();
+    }
+    let (inner, close) = match face.strip_suffix(']') {
+        Some(inner) if width >= 3 => (inner, "]"),
+        _ => (face, ""),
+    };
+    let room = width.saturating_sub(cell_len(close) + 1);
+    let mut out = String::new();
+    let mut used = 0;
+    for c in inner.chars() {
+        let w = cell_len(&c.to_string());
+        if used + w > room {
+            break;
+        }
+        out.push(c);
+        used += w;
+    }
+    format!("{}…{close}", out.trim_end())
+}
+
+/// One part of the page projected ([`project`]).
+fn project_part(page: &Page, columns: u16, cell: (f64, f64), marks: &Marks, part: Part) -> Projection {
     let columns = columns.max(10) as usize;
     let (cw, ch) = (cell.0.max(1.0), cell.1.max(1.0));
     /// A box to place: where Chrome put it, and what it holds.
@@ -964,6 +1051,38 @@ pub fn project(page: &Page, columns: u16, cell: (f64, f64), marks: &Marks) -> Pr
         caption: Option<Vec<Span>>,
     }
     let mut items: Vec<Item> = Vec::new();
+    // The tops of the highest pinned and docked layers: each strip starts
+    // at its first.
+    let top_of = |place: Place| {
+        page.layers
+            .iter()
+            .filter(|l| l.place == place)
+            .map(|l| l.top)
+            .fold(f64::INFINITY, f64::min)
+    };
+    let (pinned_top, docked_top) = (top_of(Place::Pinned).max(0.0), top_of(Place::Docked));
+    let in_part = |block: &Block| shift(page, block, part, pinned_top, docked_top);
+    // The pictures this part draws: a box over one of them is in its
+    // pixels, or (a short text) drawn in its cells.
+    let adapt = marks.adapt;
+    let pictured: std::collections::HashSet<usize> = page
+        .blocks
+        .iter()
+        .filter(|b| !b.stack.covered && in_part(b).is_some())
+        .filter_map(|b| match b.kind {
+            BlockKind::Media(m) => Some(m),
+            _ => None,
+        })
+        .filter(|&m| {
+            let media = &page.media[m];
+            !(adapt.on(Rule::DecorativeImages) && crate::adapt::decorative(media))
+                && !(adapt.on(Rule::TextOverPictures)
+                    && crate::adapt::picture_of_text(media, cell.1.max(1.0)))
+        })
+        .collect();
+    // Short texts over a picture: (the picture, the box), placed in its
+    // cells once it has its place.
+    let mut overlaid: Vec<(usize, Item)> = Vec::new();
     let snap = |left: f64, right: f64| -> (usize, usize) {
         // Both edges round, so boxes that touch in Chrome touch here and
         // never share a column.
@@ -994,13 +1113,20 @@ pub fn project(page: &Page, columns: u16, cell: (f64, f64), marks: &Marks) -> Pr
             caption: None,
         }
     };
-    let adapt = marks.adapt;
-    // Landmarks that collapse: on a narrow terminal, with the rule.
+    // Landmarks that collapse: on a narrow terminal, with the rule, in the
+    // page's flow (not in a top or bottom bar).
     let collapsed: Vec<bool> = page
         .regions
         .iter()
-        .map(|r| {
-            adapt.on(Rule::CollapseNav)
+        .enumerate()
+        .map(|(n, r)| {
+            part == Part::Flow
+                && page
+                    .blocks
+                    .iter()
+                    .filter(|b| b.region == Some(n))
+                    .all(|b| in_part(b) == Some(0.0))
+                && adapt.on(Rule::CollapseNav)
                 && columns < crate::adapt::NARROW_COLUMNS as usize
                 && r.collapsible
                 && r.rect.height > 1.5 * ch
@@ -1092,9 +1218,18 @@ pub fn project(page: &Page, columns: u16, cell: (f64, f64), marks: &Marks) -> Pr
         }
     }
     for block in &page.blocks {
-        if block.region.is_some_and(|r| collapsed[r]) {
+        if block.region.is_some_and(|r| collapsed[r]) || block.stack.covered {
             continue;
         }
+        let Some(dy) = in_part(block) else {
+            continue;
+        };
+        // Art over a picture is in the picture's pixels: it takes no rows.
+        let over = block.stack.over.filter(|m| pictured.contains(m));
+        if over.is_some() && matches!(block.kind, BlockKind::Media(_)) {
+            continue;
+        }
+        let first_item = items.len();
         // Wholly above or left of the page: text moved off screen for
         // screen readers only (Wikipedia's reference back-links sit
         // 100,000 pixels up), never shown.
@@ -1347,6 +1482,22 @@ pub fn project(page: &Page, columns: u16, cell: (f64, f64), marks: &Marks) -> Pr
                 ));
             }
         }
+        for item in &mut items[first_item..] {
+            item.top += dy;
+            item.bottom += dy;
+        }
+        // A short text (one line, at most a third of the picture's width)
+        // over a picture is drawn in its cells, not under it.
+        if let Some(m) = over
+            && items.len() == first_item + 1
+            && block.rect.height <= 1.5 * ch
+            && block.rect.width <= page.media[m].rect.width / 3.0
+            && items[first_item].wrap.is_some()
+        {
+            let item = items.pop().expect("one item");
+            one_row.retain(|&n| n != first_item);
+            overlaid.push((m, item));
+        }
     }
     // A grid snaps first, on Chrome's own places.
     if adapt.on(Rule::SnapGrids) {
@@ -1408,26 +1559,103 @@ pub fn project(page: &Page, columns: u16, cell: (f64, f64), marks: &Marks) -> Pr
             .or_default()
             .push(n);
     }
+    let need_of = |item: &Item| {
+        item.wrap.as_ref().map_or(0, |(spans, first)| {
+            first
+                .iter()
+                .chain(spans.iter())
+                .map(|s| cell_len(&s.text))
+                .sum::<usize>()
+        })
+    };
     for (_, mut row) in rows_of {
         row.sort_by_key(|&n| items[n].x0);
         let mut push = 0;
-        for n in row {
-            let item = &mut items[n];
-            item.x0 = (item.x0 + push).min(columns - 1);
-            item.x1 = (item.x1 + push).clamp(item.x0 + 1, columns);
-            let need = item.wrap.as_ref().map_or(0, |(spans, first)| {
-                first
-                    .iter()
-                    .chain(spans.iter())
-                    .map(|s| cell_len(&s.text))
-                    .sum::<usize>()
-            });
-            if item.x0 + need > item.x1 {
-                let grown = (item.x0 + need).min(columns);
-                push += grown - item.x1;
-                item.x1 = grown;
+        // Where each goes, past the screen's edge if it must.
+        let mut at: Vec<(usize, usize)> = Vec::with_capacity(row.len());
+        for &n in &row {
+            let item = &items[n];
+            let (x0, x1) = (item.x0 + push, item.x1 + push);
+            let grown = x1.max(x0 + need_of(item));
+            push += grown - x1;
+            at.push((x0, grown));
+        }
+        // A run past the right edge (a top bar's icon buttons with long
+        // names) moves left into cells nothing beside it claims, its gaps
+        // a cell at most; still too wide, its faces shorten with `…`
+        // rather than being cut by the screen.
+        if at.last().is_some_and(|&(_, x1)| x1 > columns) {
+            let (top, bottom, first) = (items[row[0]].top, items[row[0]].bottom, at[0].0);
+            let floor = items
+                .iter()
+                .enumerate()
+                .filter(|(m, it)| {
+                    !row.contains(m)
+                        && it.top < bottom - 0.5
+                        && top < it.bottom - 0.5
+                        && it.x1 <= first
+                })
+                .map(|(_, it)| it.x1 + 1)
+                .max()
+                .unwrap_or(0)
+                .min(first);
+            let gaps: Vec<usize> = (0..at.len())
+                .map(|k| match k {
+                    0 => 0,
+                    _ => at[k].0.saturating_sub(at[k - 1].1).min(1),
+                })
+                .collect();
+            let mut widths: Vec<usize> = at.iter().map(|(a, b)| b - a).collect();
+            let total = |w: &[usize]| w.iter().sum::<usize>() + gaps.iter().sum::<usize>();
+            let room = columns.saturating_sub(floor);
+            if total(&widths) > room {
+                // The widest give way first, none under a few cells.
+                let mut cap = widths.iter().copied().max().unwrap_or(0);
+                while cap > MIN_FACE
+                    && total(&widths.iter().map(|&w| w.min(cap)).collect::<Vec<_>>()) > room
+                {
+                    cap -= 1;
+                }
+                for w in &mut widths {
+                    *w = (*w).min(cap);
+                }
+            }
+            let mut x = columns.saturating_sub(total(&widths)).max(floor).min(first);
+            for (k, &n) in row.iter().enumerate() {
+                x += gaps[k];
+                let item = &mut items[n];
+                item.x0 = x.min(columns - 1);
+                item.x1 = (x + widths[k]).clamp(item.x0 + 1, columns);
+                x = item.x1;
+            }
+        } else {
+            for (&n, &(x0, x1)) in row.iter().zip(&at) {
+                items[n].x0 = x0;
+                items[n].x1 = x1;
             }
         }
+    }
+    // Two boxes side by side that touch in cells, the left one's text
+    // filling its box ("16" views and "13y ago"), get a cell between them,
+    // or their words run together.
+    let touching: Vec<usize> = (0..items.len())
+        .filter(|&b| {
+            let right = &items[b];
+            right.wrap.is_some()
+                && right.row.is_none()
+                && right.x1 > right.x0 + 1
+                && items.iter().any(|left| {
+                    left.wrap.is_some()
+                        && left.row.is_none()
+                        && left.x1 == right.x0
+                        && left.bottom - left.top <= 1.5 * ch
+                        && (left.top / ch).round() == (right.top / ch).round()
+                        && need_of(left) >= left.x1 - left.x0
+                })
+        })
+        .collect();
+    for b in touching {
+        items[b].x0 += 1;
     }
     // Terminal glyphs are not Chrome's: a box whose text needs more cells
     // than it has grows to the right, into cells no box beside it (on the
@@ -1499,7 +1727,22 @@ pub fn project(page: &Page, columns: u16, cell: (f64, f64), marks: &Marks) -> Pr
         };
         item.lines = wrap(spans, item.x1 - item.x0, first, &[]);
         if item.one_line && item.lines.len() > 1 {
-            item.lines = vec![cut_line(first, spans, item.x1 - item.x0)];
+            // A face keeps its closing bracket: `[Sign…]`.
+            let width = item.x1 - item.x0;
+            let hint: usize = first.iter().map(|s| cell_len(&s.text)).sum();
+            item.lines = vec![match spans.as_slice() {
+                [face] if face.control.is_some() && width >= hint + 3 => {
+                    let mut line = Line {
+                        spans: first.clone(),
+                    };
+                    line.spans.push(Span {
+                        text: cut_face(&face.text, width - hint),
+                        ..face.clone()
+                    });
+                    line
+                }
+                _ => cut_line(first, spans, width),
+            }];
         }
     }
     // Reading order: top, then left. A table's rows keep their order, even
@@ -1686,6 +1929,50 @@ pub fn project(page: &Page, columns: u16, cell: (f64, f64), marks: &Marks) -> Pr
             *slot = y + lines.len();
         }
     }
+    // Texts over a picture, in its cells where they are in its box; at
+    // its right edge when they would run past it.
+    let mut overlays = Vec::new();
+    for (m, item) in overlaid {
+        let (Some(region), Some((spans, first))) =
+            (regions.iter().find(|r| r.media == m), item.wrap.as_ref())
+        else {
+            continue;
+        };
+        let media = &page.media[m];
+        let line = cut_line(first, spans, region.cols);
+        let width = line.width();
+        let row = region.row
+            + (((item.top - media.rect.y) / ch).round().max(0.0) as usize)
+                .min(region.rows.saturating_sub(1));
+        let column = region.column
+            + (((item.left - media.rect.x) / cw).round().max(0.0) as usize)
+                .min(region.cols.saturating_sub(width));
+        let Some(cells) = grid.get_mut(row) else {
+            continue;
+        };
+        let mut x = column;
+        for span in &line.spans {
+            let style = styles
+                .iter()
+                .position(|(s, c)| *s == span.style && *c == span.control)
+                .unwrap_or_else(|| {
+                    styles.push((span.style.clone(), span.control));
+                    styles.len() - 1
+                });
+            for c in span.text.chars() {
+                let w = cell_len(&c.to_string());
+                if w == 0 || x + w > (region.column + region.cols).min(columns) {
+                    continue;
+                }
+                cells[x] = Some((c.to_string(), style));
+                for extra in 1..w {
+                    cells[x + extra] = Some((String::new(), style));
+                }
+                x += w;
+            }
+        }
+        overlays.push((row, column, line));
+    }
     // Keys: a row with no box keeps to the row above it; a key met twice
     // (a table's caption and its cells share the table's node) is told
     // apart by how often it came.
@@ -1762,6 +2049,8 @@ pub fn project(page: &Page, columns: u16, cell: (f64, f64), marks: &Marks) -> Pr
         logs: placed_logs,
         regions,
         inline,
+        overlays,
+        ..Projection::default()
     }
 }
 
@@ -1986,6 +2275,7 @@ mod tests {
             frame: rect,
             node: 1,
             region: None,
+            stack: Default::default(),
         };
         let page = Page {
             blocks: vec![

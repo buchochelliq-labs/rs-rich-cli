@@ -240,6 +240,9 @@ pub struct PageBuilder {
     /// box, when it has a layout box.
     layout: Vec<Option<(Vec<String>, Rect)>>,
     current_source: Vec<(usize, String)>,
+    /// Each node's paint order: its parent's unless set ([`paint`](Self::paint)).
+    paint: Vec<i64>,
+    scroll_y: f64,
 }
 
 /// The computed styles CSS inherits, among the snapshot's.
@@ -288,6 +291,8 @@ impl PageBuilder {
             attrs: Vec::new(),
             layout: Vec::new(),
             current_source: Vec::new(),
+            paint: Vec::new(),
+            scroll_y: 0.0,
         };
         let all = Rect::new(0.0, 0.0, width, height);
         page.push(-1, 9, "#document", None, &[], Some(all));
@@ -334,7 +339,29 @@ impl PageBuilder {
         self.value.push(value.map(str::to_string));
         self.attrs.push(Vec::new());
         self.layout.push(rect.map(|r| (computed, r)));
+        let paint = usize::try_from(parent)
+            .ok()
+            .and_then(|p| self.paint.get(p).copied())
+            .unwrap_or(0);
+        self.paint.push(paint);
         at
+    }
+
+    /// Chrome scrolled `scroll_y` CSS pixels down, its viewport `height`
+    /// tall (the document node's box, as Chrome reports it): fixed and
+    /// sticky boxes are then given where they are on screen.
+    pub fn view(&mut self, scroll_y: f64, height: f64) {
+        self.scroll_y = scroll_y;
+        if let Some((_, rect)) = self.layout[0].as_mut() {
+            rect.height = height;
+        }
+    }
+
+    /// Set a laid-out node's paint order (Chrome's `paintOrders`: boxes
+    /// painted together share one, a positioned box paints after the flow
+    /// around it); its children made after take it.
+    pub fn paint(&mut self, node: usize, order: i64) {
+        self.paint[node] = order;
     }
 
     /// An element under `parent`: its tag, attributes, the computed
@@ -415,13 +442,14 @@ impl PageBuilder {
             .iter()
             .map(|list| list.iter().flat_map(|(k, v)| [s(k), s(v)]).collect())
             .collect();
-        let (mut node_index, mut styles, mut bounds, mut text) =
-            (Vec::new(), Vec::new(), Vec::new(), Vec::new());
+        let (mut node_index, mut styles, mut bounds, mut text, mut paint) =
+            (Vec::new(), Vec::new(), Vec::new(), Vec::new(), Vec::new());
         for (i, layout) in self.layout.iter().enumerate() {
             let Some((computed, rect)) = layout else {
                 continue;
             };
             node_index.push(i as i64);
+            paint.push(self.paint[i]);
             styles.push(computed.iter().map(|v| s(v)).collect::<Vec<_>>());
             bounds.push(json!([rect.x, rect.y, rect.width, rect.height]));
             text.push(if self.kind[i] == 3 { values[i] } else { -1 });
@@ -442,7 +470,7 @@ impl PageBuilder {
             "documents": [{
                 "documentURL": url, "title": title, "baseURL": url,
                 "contentWidth": self.width, "contentHeight": self.height,
-                "scrollOffsetX": 0, "scrollOffsetY": 0,
+                "scrollOffsetX": 0, "scrollOffsetY": self.scroll_y,
                 "nodes": {
                     "parentIndex": self.parent, "nodeType": self.kind,
                     "nodeName": names, "nodeValue": values,
@@ -454,6 +482,7 @@ impl PageBuilder {
                 },
                 "layout": {
                     "nodeIndex": node_index, "styles": styles, "bounds": bounds, "text": text,
+                    "paintOrders": paint,
                 },
             }],
             "strings": strings,

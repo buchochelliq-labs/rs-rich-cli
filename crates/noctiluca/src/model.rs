@@ -148,6 +148,57 @@ pub struct Block {
     pub node: NodeId,
     /// The landmark it is in: an index into [`Page::regions`].
     pub region: Option<usize>,
+    /// Where it is in the page's stack of boxes: its fixed or sticky
+    /// layer, whether a box painted above it hides it, the picture it lies
+    /// on.
+    pub stack: Stack,
+}
+
+/// A block's place in the page's stack of boxes, from computed `position`
+/// and the snapshot's paint orders.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct Stack {
+    /// The fixed or sticky box it is in: an index into [`Page::layers`].
+    pub layer: Option<usize>,
+    /// An opaque box or a picture painted above it covers its whole box:
+    /// Chrome does not show it (a player's hidden error panel under an
+    /// interstitial).
+    pub covered: bool,
+    /// It lies inside a picture's box and is painted above it (a duration
+    /// badge on a thumbnail, art over a player): an index into
+    /// [`Page::media`].
+    pub over: Option<usize>,
+}
+
+/// Where a fixed or sticky layer is drawn.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Place {
+    /// In the page's flow, at [`Layer::top`]: a sticky box at its static
+    /// place, a fixed box too tall to pin where it is on screen.
+    Flow,
+    /// On the strip above the page (a top bar), at [`Layer::top`] in it.
+    Pinned,
+    /// On the strip under the page, above the status bar (a cookie
+    /// banner, a sign-up bar), at [`Layer::top`] in the viewport.
+    Docked,
+    /// Wholly outside the viewport (a fixed menu slid away): not drawn.
+    Off,
+}
+
+/// A box the page takes out of its flow with `position: fixed` or
+/// `sticky`, and every block in it.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Layer {
+    pub node: NodeId,
+    /// `fixed`; else `sticky`.
+    pub fixed: bool,
+    /// Its box as the snapshot reports it: where it is on screen now, in
+    /// the document's pixels.
+    pub rect: Rect,
+    /// Where it is drawn: its top in the document ([`Place::Flow`]) or in
+    /// the viewport (pinned and docked).
+    pub top: f64,
+    pub place: Place,
 }
 
 impl Block {
@@ -464,6 +515,14 @@ pub struct Page {
     pub regions: Vec<Region>,
     /// Its grids and wrapping flex rows.
     pub grids: Vec<Grid>,
+    /// Its fixed and sticky boxes ([`Stack::layer`]).
+    pub layers: Vec<Layer>,
+    /// How far down the page Chrome was scrolled when it was read, in CSS
+    /// pixels.
+    pub scroll_y: f64,
+    /// The viewport's height in CSS pixels (0 when the snapshot does not
+    /// say).
+    pub view_height: f64,
 }
 
 impl Page {
@@ -595,6 +654,12 @@ struct Dom {
     /// Whether each node is visually hidden by itself or an ancestor
     /// (see [`conceals`]): its text is not drawn.
     concealed: Vec<bool>,
+    /// Each layout object's paint order (`paintOrders`): boxes painted
+    /// together share one; empty when the snapshot has none.
+    paint: Vec<i64>,
+    scroll_y: f64,
+    /// The viewport's height: the document node's box.
+    view_height: f64,
     url: String,
     title: String,
     width: f64,
@@ -743,7 +808,11 @@ impl Dom {
             width: document["contentWidth"].as_f64().unwrap_or(0.0),
             height: document["contentHeight"].as_f64().unwrap_or(0.0),
             concealed: Vec::new(),
+            paint: ints(&layout_tree["paintOrders"]),
+            scroll_y: document["scrollOffsetY"].as_f64().unwrap_or(0.0),
+            view_height: 0.0,
         };
+        dom.view_height = dom.rect(0).map_or(0.0, |r| r.height);
         // Parents come before their children in a snapshot's order; a
         // parent after its child is read as not concealing.
         let mut concealed = vec![false; n];
@@ -1269,6 +1338,7 @@ impl Walker<'_> {
             frame: context.frame,
             node: context.node,
             region: context.region,
+            stack: Stack::default(),
         });
     }
 
@@ -1282,6 +1352,7 @@ impl Walker<'_> {
             frame: rect,
             node: self.dom.backend[i],
             region: context.region,
+            stack: Stack::default(),
         });
     }
 
@@ -1429,6 +1500,7 @@ impl Walker<'_> {
                     frame: rect,
                     node: backend,
                     region: context.region,
+                    stack: Stack::default(),
                 });
             }
             return;
@@ -2157,6 +2229,213 @@ fn tidy(runs: &mut Vec<Run>) {
     }
 }
 
+/// How near the viewport's top a fixed box (or the bottom of the boxes
+/// pinned above it) may start and still be a top bar: about a row, in CSS
+/// pixels.
+const TOUCH: f64 = 24.0;
+/// The tags whose box is a picture: one covers what lies wholly under it.
+const PICTURE_TAGS: &[&str] = &["IMG", "VIDEO", "CANVAS", "SVG", "IFRAME", "EMBED", "OBJECT"];
+/// The most covering boxes looked at, the largest first.
+const MAX_COVERS: usize = 1024;
+
+/// Whether `outer` holds all of `inner`, to a pixel.
+fn holds(outer: Rect, inner: Rect) -> bool {
+    inner.x >= outer.x - 1.0
+        && inner.y >= outer.y - 1.0
+        && inner.right() <= outer.right() + 1.0
+        && inner.bottom() <= outer.bottom() + 1.0
+}
+
+/// The page's stack of boxes, read into [`Page::layers`] and each block's
+/// [`Stack`]:
+/// - a block in a `position: fixed` or `sticky` box (its outermost) is in
+///   that box's layer. A fixed box touching the viewport's top (or the
+///   boxes already pinned) is pinned, others are docked, one wholly off
+///   screen is not drawn, and one taller than a quarter of the viewport
+///   goes in the flow where it is on screen. A sticky box goes in the flow
+///   at its static place (recovered from the box after it, as the
+///   snapshot reports a stuck box where it is stuck), pinned instead when
+///   that place is the page's top;
+/// - a block a box painted above it covers wholly is `covered`: only a
+///   box with an opaque background or a picture covers, never one of its
+///   ancestors or descendants, nor a fixed or sticky one (they move);
+/// - a block wholly inside a picture's box and painted above it is
+///   `over` it.
+fn stack(dom: &Dom, page: &mut Page) {
+    page.scroll_y = dom.scroll_y;
+    page.view_height = dom.view_height;
+    let n = dom.parent.len();
+    let parent = |i: usize| usize::try_from(dom.parent[i]).ok().filter(|&p| p < i);
+    let mut root: Vec<Option<usize>> = vec![None; n];
+    for i in 0..n {
+        root[i] = parent(i).and_then(|p| root[p]).or_else(|| {
+            (dom.is_element(i)
+                && dom.layout[i].is_some()
+                && matches!(dom.style(i, 14), "fixed" | "sticky"))
+            .then_some(i)
+        });
+    }
+    let index: HashMap<i64, usize> = dom
+        .backend
+        .iter()
+        .enumerate()
+        .filter(|(_, b)| **b >= 0)
+        .map(|(i, &b)| (b, i))
+        .collect();
+    // The layers, in the order of their tops on screen.
+    let mut roots: Vec<(usize, f64)> = Vec::new();
+    let mut seen = HashSet::new();
+    for block in &page.blocks {
+        if let Some(r) = index.get(&block.node).and_then(|&i| root[i])
+            && seen.insert(r)
+        {
+            let rect = dom.rect(r).unwrap_or_default();
+            let top = if dom.style(r, 14) == "fixed" {
+                rect.y - dom.scroll_y
+            } else {
+                static_top(dom, r, rect)
+            };
+            roots.push((r, top));
+        }
+    }
+    roots.sort_by(|a, b| a.1.total_cmp(&b.1));
+    let view = dom.view_height;
+    let quarter = if view > 0.0 { view / 4.0 } else { f64::INFINITY };
+    let mut pinned_to = 0.0f64;
+    let mut layer_of = HashMap::new();
+    for (r, top) in roots {
+        let rect = dom.rect(r).unwrap_or_default();
+        let fixed = dom.style(r, 14) == "fixed";
+        let place = if fixed && view > 0.0 && (top >= view || top + rect.height <= 0.0) {
+            Place::Off
+        } else if rect.height > quarter {
+            Place::Flow
+        } else if top <= pinned_to + TOUCH {
+            pinned_to = pinned_to.max(top + rect.height);
+            Place::Pinned
+        } else if fixed {
+            Place::Docked
+        } else {
+            Place::Flow
+        };
+        let top = if fixed && place == Place::Flow {
+            top.max(0.0)
+        } else {
+            top
+        };
+        layer_of.insert(r, page.layers.len());
+        page.layers.push(Layer {
+            node: dom.backend[r],
+            fixed,
+            rect,
+            top,
+            place,
+        });
+    }
+    let order = |i: usize| dom.layout[i].and_then(|k| dom.paint.get(k)).copied();
+    let under = |a: usize, mut i: usize| {
+        while let Some(p) = parent(i) {
+            if p == a {
+                return true;
+            }
+            i = p;
+        }
+        false
+    };
+    let area = |r: &Rect| r.width * r.height;
+    let mut covers: Vec<(usize, Rect, i64)> = (0..n)
+        .filter_map(|i| {
+            if !dom.is_element(i)
+                || root[i].is_some()
+                || matches!(dom.name[i].as_str(), "HTML" | "BODY")
+                || dom.concealed[i]
+                || !dom.shows(i)
+            {
+                return None;
+            }
+            let (o, rect) = (order(i)?, dom.rect(i)?);
+            let picture = PICTURE_TAGS.contains(&dom.name[i].as_str());
+            (rect.width >= 4.0
+                && rect.height >= 4.0
+                && (picture || opaque(&dom.style(i, 3).trim().to_ascii_lowercase())))
+            .then_some((i, rect, o))
+        })
+        .collect();
+    covers.sort_by(|a, b| area(&b.1).total_cmp(&area(&a.1)));
+    covers.truncate(MAX_COVERS);
+    let media: Vec<(usize, Rect, Option<i64>)> = page
+        .media
+        .iter()
+        .enumerate()
+        .filter_map(|(m, media)| {
+            let i = *index.get(&media.node)?;
+            root[i].is_none().then(|| (m, media.rect, order(i)))
+        })
+        .collect();
+    for block in &mut page.blocks {
+        let Some(&i) = index.get(&block.node) else {
+            continue;
+        };
+        if let Some(r) = root[i] {
+            block.stack.layer = layer_of.get(&r).copied();
+            continue;
+        }
+        let (Some(o), rect) = (order(i), block.rect) else {
+            continue;
+        };
+        if rect.width <= 0.0 || rect.height <= 0.0 {
+            continue;
+        }
+        block.stack.covered = covers
+            .iter()
+            .any(|&(c, by, co)| co > o && c != i && holds(by, rect) && !under(c, i) && !under(i, c));
+        if block.stack.covered {
+            continue;
+        }
+        block.stack.over = media
+            .iter()
+            .filter(|(m, by, mo)| {
+                page.media[*m].node != block.node
+                    && mo.is_some_and(|mo| mo <= o)
+                    && area(by) > area(&rect)
+                    && holds(*by, rect)
+            })
+            .min_by(|a, b| area(&a.1).total_cmp(&area(&b.1)))
+            .map(|(m, _, _)| *m);
+    }
+}
+
+/// Where sticky box `r` sits in the flow when the page is at its top: as
+/// reported when the page is not scrolled; else the top of the next box in
+/// the flow under it less its height, or the bottom of the one before it,
+/// or its parent's top; never under where it is now.
+fn static_top(dom: &Dom, r: usize, rect: Rect) -> f64 {
+    if dom.scroll_y <= 0.0 {
+        return rect.y;
+    }
+    let Some(p) = usize::try_from(dom.parent[r]).ok().filter(|&p| p < r) else {
+        return rect.y;
+    };
+    let in_flow = |s: usize| {
+        s != r
+            && dom.is_element(s)
+            && !matches!(dom.style(s, 14), "absolute" | "fixed" | "sticky")
+            && dom
+                .rect(s)
+                .is_some_and(|b| b.height > 0.0 && b.x < rect.right() && rect.x < b.right())
+    };
+    let siblings = &dom.children[p];
+    let at = siblings.iter().position(|&s| s == r).unwrap_or(0);
+    let top = if let Some(&next) = siblings[at..].iter().find(|&&s| in_flow(s)) {
+        dom.rect(next).map_or(rect.y, |b| b.y - rect.height)
+    } else if let Some(&before) = siblings[..at].iter().rev().find(|&&s| in_flow(s)) {
+        dom.rect(before).map_or(rect.y, |b| b.bottom())
+    } else {
+        dom.rect(p).map_or(rect.y, |b| b.y)
+    };
+    top.min(rect.y)
+}
+
 /// The page in `snapshot`, its control revisions kept in `revisions`.
 pub fn build(snapshot: &PageSnapshot, revisions: &mut Revisions) -> Page {
     build_with(snapshot, revisions, &HashSet::new())
@@ -2215,6 +2494,7 @@ pub fn build_with(
     }
     walker.flush(&top);
     let mut page = walker.page;
+    stack(&dom, &mut page);
     // A landmark with a field or a live log in it is not only links: it
     // never collapses.
     for block in &page.blocks {

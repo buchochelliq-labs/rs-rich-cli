@@ -247,6 +247,7 @@ fn tall_picture() -> noctiluca::model::Page {
         frame: rect,
         node: 1,
         region: None,
+        stack: Default::default(),
     });
     page
 }
