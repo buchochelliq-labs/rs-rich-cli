@@ -9,6 +9,23 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### intuiTUIve: the stylesheet fuzz timeout (rs-rich-intuituive)
+
+- **Fixed: a stylesheet could take seconds and gigabytes to parse.** The
+  `stylesheet` fuzz target timed out (2026-11-03) on 921 bytes of nested
+  `&` and selector lists: each nested rule was read with each of its
+  parent's selectors and each `&` replaced by the parent's text, so the
+  selectors grew exponentially with nesting. `Stylesheet::parse` now takes
+  time linear in a stylesheet's length: rules nest at most 32 deep, and the
+  text nesting and variables expand it to (nested selectors read with their
+  parents', values with their variables put in) is at most four times its
+  length, or 64 KiB for a shorter one. Past either, it returns an error
+  (`rules nested more than 32 deep`, `nested selectors expand this
+  stylesheet past … bytes`, `variables expand …`). A rule's body is read
+  in one pass (a long body was scanned again for each declaration and
+  nested rule in it), and a variable is looked up by name, not through
+  every variable declared. Ordinary stylesheets parse as before.
+
 ## 0.0.24 cohort — to be published
 
 To be published from `main` by one `release.yml` run (tag
