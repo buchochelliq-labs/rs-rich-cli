@@ -18,6 +18,7 @@ from an off-by-default feature name it: `art`, `micro`, `viz`, `files` and
 | ![](../../assets/intuituive/widgets/scroll.svg){ .tui-icon width="20" } | [scroll_virtual](tables.md#long-and-endless-content-scroll_virtual) | `scroll_virtual`, `scroll_virtual_with` | A scroll view over items that builds only those near the view; loads more near the end; follows its end (`follow_end`) |
 | ![](../../assets/intuituive/widgets/split.svg){ .tui-icon width="20" } | [split](lists.md#trees-split-panes-and-virtual-lists) | `hsplit`, `vsplit`, `split` | Two panes with a divider you can drag |
 | ![](../../assets/intuituive/widgets/treemap.svg){ .tui-icon width="20" } | [treemap](layout.md#treemaps) | `treemap` | Rectangles sized by weight |
+| ![](../../assets/intuituive/widgets/carousel.svg){ .tui-icon width="20" } | [carousel](widgets.md#carousels) | `carousel` | Items side by side a page at a time, with `‹ ›` and `1–4 of 12`; keys, clicks and Shift+wheel turn pages; follows the width |
 | ![](../../assets/intuituive/widgets/switch.svg){ .tui-icon width="20" } | [switch](layout.md#nodes) | `switch`, `keyed` | One child at a time, chosen by a key; the others are kept |
 | ![](../../assets/intuituive/widgets/each.svg){ .tui-icon width="20" } | [each](layout.md#nodes) | `each` | One child per key, kept by key across reorders |
 | ![](../../assets/intuituive/widgets/panel.svg){ .tui-icon width="20" } | [panel](panels.md#panels) | `.panel(title)` | A border with a title around any node |
@@ -59,6 +60,7 @@ from an off-by-default feature name it: `art`, `micro`, `viz`, `files` and
 | ![](../../assets/intuituive/widgets/switch_toggle.svg){ .tui-icon width="20" } | [switch toggle](controls.md#check-boxes-and-switches) | `switch_toggle`, `switch_of` | An on/off switch, bound to a `Signal<bool>` |
 | ![](../../assets/intuituive/widgets/radio.svg){ .tui-icon width="20" } | [radio group](controls.md#radio-groups) | `radio`, `radio_keyed` | One choice of several, shown at once; by index or by key |
 | ![](../../assets/intuituive/widgets/slider.svg){ .tui-icon width="20" } | [slider](controls.md#sliders) | `slider` | A number in a range, by keys, click, drag or wheel |
+| ![](../../assets/intuituive/widgets/rating.svg){ .tui-icon width="20" } | [rating input](widgets.md#ratings) | `rating_input` | A score in stars the user sets, by keys, digits, clicks or wheel |
 | ![](../../assets/intuituive/widgets/select_field.svg){ .tui-icon width="20" } | [select field](controls.md#select-fields) | `select_field`, `select_field_keyed` | One choice of several, from a menu that opens under it; by index or by key |
 | ![](../../assets/intuituive/widgets/collapsible.svg){ .tui-icon width="20" } | [collapsible](controls.md#collapsible-sections) | `collapsible`, `collapsible_with` | A titled section that opens and closes; a status beside the title and a summary while closed |
 | ![](../../assets/intuituive/widgets/spinner.svg){ .tui-icon width="20" } | [spinner](controls.md#spinners-and-loading) | `spinner`, `.loading_when` | An animated busy sign; a node dimmed while it loads |
@@ -123,6 +125,8 @@ from an off-by-default feature name it: `art`, `micro`, `viz`, `files` and
 | | Widget | Constructor | What it is |
 |---|---|---|---|
 | ![](../../assets/intuituive/widgets/pixels.svg){ .tui-icon width="20" } | [pixels](timers.md#sprites-stages-and-pixel-buffers) | `pixels`, `pixels_fit` | A pixel buffer drawn with half blocks |
+| ![](../../assets/intuituive/widgets/dial.svg){ .tui-icon width="20" } | [dial](widgets.md#dials) | `dial` | A value in a range on an arc, the reading in big digits; zones or a `<meter>`'s bands; a bar when small |
+| ![](../../assets/intuituive/widgets/rating.svg){ .tui-icon width="20" } | [rating](widgets.md#ratings) | `rating` | A score in stars, `★★★★½ 4.5`, said as `4.5 out of 5` |
 | ![](../../assets/intuituive/widgets/stage.svg){ .tui-icon width="20" } | [stage](timers.md#sprites-stages-and-pixel-buffers) | `stage`, `stage_with` | Sprites placed over a backdrop, in z order |
 | ![](../../assets/intuituive/widgets/effect.svg){ .tui-icon width="20" } | [effect](widgets.md#effects) | `effect` | A pass over a node's cells after it draws |
 | ![](../../assets/intuituive/widgets/fx.svg){ .tui-icon width="20" } | [effect presets](widgets.md#effect-presets) | `fx::fade_in`, `fx::sweep`, …, `fx::play` | Ready effects (fades, dissolve, sweep, slide, glitch, rain, shimmer) that compose and run on cue |

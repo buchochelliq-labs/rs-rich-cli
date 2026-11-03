@@ -69,6 +69,28 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   (`Media::pending`). Before, a channel's videos past the first row were
   blank rows.
 
+### intuiTUIve: dials, ratings and carousels
+
+New generic widgets in rs-rich-intuituive's core, for what a dashboard or
+a web page states (Noctiluca's native controls build on them):
+
+- **`dial(value, range)`**: a value on an arc (270° by default,
+  `.sweep(..)`), drawn in Braille dots or half blocks (`.arc_mode(..)`),
+  the reading in big digits inside it, `.unit(..)`, the range's ends,
+  `.caption(..)`, `.readout(..)`; colours by `.zones(..)` or an HTML
+  `<meter>`'s `.bands(low, high, optimum)`. In a small box or text mode it
+  is a bar and the reading. A `meter` to assistive technology.
+- **`rating(value, out_of)`** and **`rating_input(value, out_of)`**: a
+  score in stars, `★★★★½ 4.5`, said as `4.5 out of 5`; the input is set by
+  keys, digits, clicks and the wheel.
+- **`carousel(len, first, item)`**: items side by side a page at a time,
+  `‹ ›` and `1–4 of 12`; `[`/`]`, the arrows, clicks and Shift+wheel turn
+  pages, `.per_page(..)` or `.item_width(..)` sets how many show,
+  `.on_page(..)` hears each turn, and the focus moves into the new page.
+- **Accessibility:** roles `Role::Meter` and `Role::Img`; a meter's or a
+  slider's value in words goes to a browser as `aria-valuetext`.
+- `examples/indicators.rs`; the guide's "Dials, ratings and carousels".
+
 ## 0.0.24 cohort — to be published
 
 To be published from `main` by one `release.yml` run (tag

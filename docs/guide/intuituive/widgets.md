@@ -1,7 +1,7 @@
 # Chrome, your own widgets and effects
 
 The rows round an app's content (status bars, breadcrumbs, key hints,
-description lists), then how to write a widget of your own with the same
+description lists), dials, ratings and carousels, then how to write a widget of your own with the same
 powers as the built-in ones, and effects that rework what a node drew.
 
 ## Bars for an app's chrome
@@ -117,6 +117,103 @@ placeholder("sidebar")                            // a coloured block for a prot
 - **`placeholder(label)`** fills its area with the next of twelve colours
   and its label; `.placeholder_variant(PlaceholderVariant::Size)` shows its
   size, `Text` a paragraph, and a click cycles them.
+
+## Dials, ratings and carousels
+
+Three nodes for what a dashboard or a web page states rather than asks:
+a value in a range, a score, and a strip of items too wide to show at
+once. `examples/indicators.rs` has all of them, a speed test's two dials
+over a shelf of rated items:
+
+```bash
+cargo run -p rs-rich-intuituive --example indicators
+```
+
+```text
+--8<-- "crates/rich-intuituive/tests/snapshots/indicators_example.txt"
+```
+
+```rust
+use intuituive::{carousel, dial, rating, rating_input};
+
+dial(move || speed.get(), 0.0..=1000.0)       // a 270° arc, the reading inside
+    .unit("Mbps")
+    .caption("Download")
+    .bands(100.0, 800.0, 1000.0);              // as a <meter>'s low, high, optimum
+rating(|| 4.5, 5);                             // ★★★★½ 4.5
+rating_input(mine, 5).label("Your rating");    // set by keys, digits, clicks
+carousel(|| items.len(), first, |i| card(i))   // ‹ … › and 1–4 of 12
+    .item_width(14)
+    .on_page(|first| load_more(first));
+```
+
+### Dials
+
+`dial(value, range)` draws what `value` returns (a closure that may read
+signals, so it follows them) as an arc filled up to it: 270° open at the
+bottom, or any `.sweep(degrees)` (180 for a half circle, 360 for a ring).
+The reading sits in the middle, in big [`digits`](plugins.md#levels-sparklines-and-big-text)
+when they fit inside the arc and in text when they do not; `.unit(..)`
+goes under it, the range's two ends under the arc's ends
+(`.range_labels(false)` hides them), and `.caption(..)` at the bottom.
+The reading is the value with as many decimals as the range calls for
+(none for a range of 100 or more, one for 10 or more, two below);
+`.readout(|| ..)` says it another way.
+
+The arc is Braille dots, eight a cell, so it is round from 10 by 5 cells
+up; `.arc_mode(PixelMode::HalfBlocks)` draws it solid in half blocks. In a
+smaller box, and in text mode, a dial is one row: the caption, a bar in
+eighths and the reading, `CPU ██████▎░░░░░░░░ 42 %`.
+
+The filled arc and the reading take the style of the zone the value is
+in. `.bands(low, high, optimum)` colours as a browser colours an HTML
+`<meter>`: the region holding the optimum is `good`, the next `warn`, the
+far one `bad`. `.zones([(60.0, "good"), (90.0, "warn"), (120.0, "bad")])`
+names a style for each threshold (a theme style or a style). With neither,
+it is `dial.fill` (else `accent`); the rest of the arc is `dial.track`
+(else `muted`), the ends and the unit `dial.label`, the caption
+`dial.caption` (else `bold`).
+
+A dial is a `meter` to assistive technology, its value the reading and
+unit: `Download, meter: 287 Mbps`, and a browser gets `aria-valuetext`.
+
+### Ratings
+
+`rating(value, out_of)` shows a score in stars, to the nearest half:
+`★★★★½ 4.5`, the number to one decimal. It is an image named by its
+score, `4.5 out of 5` (with a `.label`, `Rating: 4.5 out of 5`). In text
+mode it is `4.5/5`. The stars are `rating.on` (else `warn`), the empty
+ones `rating.off` (else `muted`), the number `rating.score`.
+
+`rating_input(value, out_of)` is one the user sets, held in a
+`Signal<f64>`: ←/↓ and →/↑ take a star off or add one, Home and End set
+none and all, a digit sets that many, a click sets up to the star clicked
+(a second click on it makes it a half), and the wheel adds and takes off.
+It is a slider, `Your rating, slider: 4 out of 5`.
+
+### Carousels
+
+`carousel(len, first, item)` shows `len()` items a page at a time, side
+by side: `item(i)` builds the node for item `i` when its page shows (and
+the node is kept while it stays shown), and `first` holds the first item
+shown, so the app can read the page and set it. A page holds as many
+items as fit at `.item_width(cells)` (16 by default) with a cell between
+them, so it follows the terminal's width; `.per_page(n)` fixes it. The
+last page is kept full: `9–12 of 12`, not `11–12`.
+
+`‹` and `›` at the ends turn the page (dimmed at the ends of the items),
+and a counter under it says what shows, `1–4 of 12`. `[` and `]` turn
+pages from anywhere inside it; with the strip focused, ← and →, PageUp
+and PageDown, Home and End do too. A click on an arrow turns the page,
+and so does the wheel with Shift (the wheel alone scrolls what the strip
+is in). When a key turns the page from inside an item, the focus moves to
+the new page's first item rather than vanishing with the old one.
+`.on_page(|first| ..)` hears each turn the user makes: to load more, or
+to scroll something else along.
+
+The arrows are `carousel.control` (else `accent`), the counter
+`carousel.counter` (else `muted`). It is a region whose value is the
+counter: `Shelf, region: 1–4 of 12`.
 
 ## Your own widgets
 
