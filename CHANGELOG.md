@@ -9,6 +9,28 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Noctiluca: live regions (0.0.25)
+
+- **Canvases are drawn, and stay live.** A `<canvas>` gets a picture from
+  Chrome's pixels, as an inline SVG does; while the view shows it, it is
+  captured twice a second (every two seconds once it holds still), and a
+  capture that changed is sent as a frame within the byte budget GIFs and
+  video share. At most four are live at once, nearest the view; a big one
+  that changes at every capture for two seconds is cut from the
+  screencast, as a playing video is. Off screen or frozen, none is
+  captured. A speed test's canvas gauge, three grey boxes before, now
+  moves.
+- **A changing SVG drawing is captured again.** `Media::revision` hashes an
+  inline `<svg>`'s subtree, and its still is kept by it, so a dial whose
+  arc, needle and number a script moves no longer stays at its first
+  frame (`0.00`). Its last picture shows until the new one comes.
+- **An SVG's words are text.** `Media::text` holds an inline `<svg>`'s
+  `<text>` (the dial's `287.40 Mbps`): in reader mode under the drawing's
+  name, in `--dump json` as `"text"`, and as its alt text when it has no
+  other name (its `<title>` first).
+- **Testing:** `FakeState::paint` sets the colour the scripted engine's
+  captures show, and `FakeState::captures` lists the regions captured.
+
 ## 0.0.24 cohort — to be published
 
 To be published from `main` by one `release.yml` run (tag

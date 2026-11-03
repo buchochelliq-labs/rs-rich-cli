@@ -117,8 +117,34 @@ In **the projection**, an image is drawn over the box Chrome gave it (see
 as you scroll, as in a browser, and a picture partly in view shows the
 part on screen.
 
-A canvas, an inline SVG drawing and a frame (an `iframe`, an `embed`) show as
-their alt text in both views.
+A frame (an `iframe`, an `embed`) shows as its alt text in both views. A
+canvas and an inline SVG drawing are drawn from Chrome's pixels in the
+projection, and stay live (below); in reader mode they show as their alt
+text, and a drawing's own words under it.
+
+### Live drawings: canvases and SVG
+
+A dial, a chart or a game drawn by a script is drawn again as it changes
+(0.0.25), so a speed test's gauge moves rather than showing a grey box or
+its first frame.
+
+- **An inline `<svg>`** changes the page, so each reading sees it: when
+  its content changed (an arc's dash, a needle's turn, a number), its
+  picture is taken again from Chrome's pixels. The old picture stays on
+  screen until the new one comes. Its own words (its `<text>`, the dial's
+  `287.40 Mbps`) are read as its text: in reader mode under its name, in
+  `--dump json` as `"text"`, and as its alt text when it has no other name
+  (its `<title>` first).
+- **A `<canvas>`** changes nothing a reading sees, so while it is on
+  screen Noctiluca looks at its pixels: twice a second, then every two
+  seconds once it has held still for ten looks. Only a look that changed
+  sends the terminal a new picture, within the same byte budget as GIFs and
+  video, starting in half blocks over SSH. A large canvas that changes at
+  every look for two seconds is cut from Chrome's screencast, as a playing
+  video is.
+- **At most four canvases** are live at once, the ones on screen nearest
+  the view; off screen, or frozen (`F4`), none is looked at. A canvas has
+  no words of its own: its alt text is its `aria-label`.
 
 | An image in reader mode, against a real Chrome | The same article in the projection (0.0.22) |
 |---|---|

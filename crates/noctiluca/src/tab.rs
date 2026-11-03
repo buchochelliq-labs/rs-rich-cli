@@ -984,18 +984,16 @@ impl Worker<'_> {
             std::hash::Hash::hash(&(pixels.width, pixels.height, &pixels.rgb), &mut hasher);
             std::hash::Hasher::finish(&hasher)
         };
-        let width = self.page.as_ref().map_or(0.0, |p| p.width);
-        let height = self.metrics.map_or(0.0, |m| m.viewport_height);
-        let big = rect.width * rect.height * 4.0 >= width * height;
         let interval = self.intervals.get(&node).copied().unwrap_or_default();
         let watch = self.canvases.entry(node).or_default();
         let first = watch.hash.is_none();
         let changed = watch.hash != Some(hash);
         watch.hash = Some(hash);
+        let mut busy = false;
         if changed && !first {
             watch.unchanged = 0;
             let since = *watch.changing_since.get_or_insert(now);
-            watch.busy |= big && now.duration_since(since) >= CANVAS_BUSY;
+            busy = !watch.busy && now.duration_since(since) >= CANVAS_BUSY;
         } else if !changed {
             watch.unchanged = watch.unchanged.saturating_add(1);
             watch.changing_since = None;
@@ -1003,6 +1001,9 @@ impl Worker<'_> {
                 watch.busy = false;
             }
         }
+        let busy = busy && self.big(rect);
+        let watch = self.canvases.entry(node).or_default();
+        watch.busy |= busy;
         let every = if watch.unchanged >= CANVAS_QUIET {
             CANVAS_IDLE
         } else {
@@ -1011,6 +1012,19 @@ impl Worker<'_> {
         watch.due = Some(now + every.max(interval));
         watch.moving |= changed;
         changed
+    }
+
+    /// Whether `rect` is bigger than a quarter of Chrome's viewport (read
+    /// when it was not yet).
+    fn big(&mut self, rect: Rect) -> bool {
+        if self.metrics.is_none() {
+            self.metrics = self.engine.metrics(TabId(0)).ok();
+        }
+        let width = self.page.as_ref().map_or(0.0, |p| p.width);
+        let Some(height) = self.metrics.map(|m| m.viewport_height) else {
+            return false;
+        };
+        rect.width * rect.height * 4.0 >= width * height
     }
 
     /// Hand a frame cut or captured for a region to the app: a canvas's
