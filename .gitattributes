@@ -9,3 +9,4 @@
 
 # Fuzz seeds are exact input bytes (CR, NUL, escapes).
 fuzz/seeds/** binary
+crates/*/tests/fixtures/fuzz/** binary

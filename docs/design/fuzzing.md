@@ -115,23 +115,28 @@ happens:
   bugs below, then 120 seconds each after the fixes, clean.
 - **First nightly run:** 2026-10-28, on `main` at `2624ce5b`. Clean for
   six nights, to 2026-11-02.
-- **Stopped:** 2026-11-03, by the `stylesheet` finding below. The clock
-  starts again with the first clean nightly run after its fix.
+- **Stopped:** 2026-11-03, by the `stylesheet` finding below (fixed the
+  same day). The clock starts again with the first clean nightly run after
+  the fix merges.
 - **Earliest the criterion can be met:** four weeks after that date, with
   no open finding below. A new finding restarts the clock once it is fixed.
 
 ## Known findings
 
-Open:
+None open.
 
-- `stylesheet` (2026-11-03, [run 41604039967](https://github.com/buchochelliq-labs/rs-rich-cli/actions/runs/41604039967)):
-  a timeout. A 1.4 KB stylesheet with long runs of `&` nesting selectors
-  and `,` lists took 12 seconds and 1.4 GB to parse. Not yet
-  root-caused; the likely place is the nesting added in 0.0.24 (#812),
-  which joins each `&` with its parent's selectors. A stylesheet comes from
-  the app's author, not from outside, so this is a slow start, not an
-  attack surface; it is fixed in [0.0.25](../plans/0.0.25.md), with the
-  input as a regression test.
+Fixed after the targets landed, with a regression test in its crate:
+
+- `stylesheet` (2026-11-03, 0.0.25): a timeout, 12 seconds and 1.4 GB on
+  921 bytes of nested `&` and `,` lists. intuiTUIve's parser read each
+  nested rule with each of its parent's selectors, and replaced each `&`
+  with the parent's text, so selectors grew exponentially with nesting
+  (`flatten` and its caller in `sheet.rs`). Nesting is now at most 32
+  deep and the text it and variables expand to at most four times the
+  stylesheet (or 64 KiB), past which it does not parse; a body is read in
+  one pass. The input is `tests/fixtures/fuzz/stylesheet-timeout.css`
+  (rs-rich-intuituive's `stylesheet_bounds` tests) and a seed,
+  `fuzz/seeds/stylesheet/timeout-2026-11-03.tcss`.
 
 Fixed while the targets were written (0.0.23), each with a regression
 test in its crate:

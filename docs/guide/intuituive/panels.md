@@ -347,7 +347,9 @@ wins, then the later one: `#a > .b` beats `.b`.
 **Nesting.** A rule may hold rules, as in Textual and CSS: `&` is the rule
 around it, and a nested selector without one is a descendant (or, after a
 `>`, a child). A nested rule reads as its flattened form, after the rule
-around it.
+around it. Rules nest at most 32 deep, and what nesting and variables
+expand a stylesheet to may be at most four times its length (or 64 KiB);
+past that it does not parse, so a stylesheet always parses quickly.
 
 ```css
 .card {
