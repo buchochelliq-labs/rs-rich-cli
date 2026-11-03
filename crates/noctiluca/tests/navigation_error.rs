@@ -14,18 +14,49 @@ use noctiluca::testing::{FakeEngine, PageBuilder};
 /// Chrome's error page as it reads after a redirect to a bot check the
 /// network refused (the YouTube `/watch` case, reduced).
 fn error_page() -> PageSnapshot {
-    let mut p = PageBuilder::new("chrome-error://chromewebdata/", "www.google.com", 800.0, 600.0);
+    let mut p = PageBuilder::new(
+        "chrome-error://chromewebdata/",
+        "www.google.com",
+        800.0,
+        600.0,
+    );
     let body = p.body();
-    let h1 = p.element(body, "H1", &[], &[], Some(Rect::new(100.0, 220.0, 295.0, 29.0)));
-    p.text(h1, "This site can’t be reached", Rect::new(100.0, 220.0, 295.0, 29.0));
-    let para = p.element(body, "P", &[], &[], Some(Rect::new(100.0, 268.0, 600.0, 40.0)));
+    let h1 = p.element(
+        body,
+        "H1",
+        &[],
+        &[],
+        Some(Rect::new(100.0, 220.0, 295.0, 29.0)),
+    );
+    p.text(
+        h1,
+        "This site can’t be reached",
+        Rect::new(100.0, 220.0, 295.0, 29.0),
+    );
+    let para = p.element(
+        body,
+        "P",
+        &[],
+        &[],
+        Some(Rect::new(100.0, 268.0, 600.0, 40.0)),
+    );
     p.text(
         para,
         "The webpage at https://www.google.com/sorry/index might be temporarily down.",
         Rect::new(100.0, 268.0, 600.0, 40.0),
     );
-    let code = p.element(body, "DIV", &[], &[], Some(Rect::new(100.0, 426.0, 208.0, 15.0)));
-    p.text(code, "ERR_TUNNEL_CONNECTION_FAILED", Rect::new(100.0, 426.0, 208.0, 15.0));
+    let code = p.element(
+        body,
+        "DIV",
+        &[],
+        &[],
+        Some(Rect::new(100.0, 426.0, 208.0, 15.0)),
+    );
+    p.text(
+        code,
+        "ERR_TUNNEL_CONNECTION_FAILED",
+        Rect::new(100.0, 426.0, 208.0, 15.0),
+    );
     p.snapshot()
 }
 
@@ -95,12 +126,19 @@ fn a_failed_navigation_keeps_the_asked_address_and_says_what_failed() {
     let notice = &page.blocks[0];
     assert_eq!(notice.node, ERROR_NOTICE);
     let text = notice.text();
-    assert!(text.starts_with("Could not open https://www.youtube.com/watch?v=abc"), "{text}");
+    assert!(
+        text.starts_with("Could not open https://www.youtube.com/watch?v=abc"),
+        "{text}"
+    );
     assert!(text.contains("ERR_TUNNEL_CONNECTION_FAILED"), "{text}");
     assert!(text.contains("Reload (R)"), "{text}");
     // Above Chrome's own text, which stays.
     assert!(notice.rect.y + notice.rect.height <= page.blocks[1].rect.y);
-    assert!(page.blocks.iter().any(|b| b.text() == "This site can’t be reached"));
+    assert!(
+        page.blocks
+            .iter()
+            .any(|b| b.text() == "This site can’t be reached")
+    );
 
     // Back on a page that loads, its own address shows again.
     tab.send(Command::History(HistoryStep::Back));

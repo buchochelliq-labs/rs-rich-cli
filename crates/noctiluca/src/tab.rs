@@ -638,7 +638,10 @@ impl Worker<'_> {
         ];
         let mut rest = String::new();
         if let Some(failed) = failed {
-            rest.push_str(&format!(" (it went on to {})", crate::clean::clean(&failed)));
+            rest.push_str(&format!(
+                " (it went on to {})",
+                crate::clean::clean(&failed)
+            ));
         }
         if let Some(code) = error_code(page) {
             rest.push_str(&format!(": {code}"));
@@ -649,9 +652,17 @@ impl Worker<'_> {
             ..Run::default()
         });
         // Above Chrome's own text, at its left edge.
-        let left = page.blocks.iter().map(|b| b.rect.x).fold(f64::NAN, f64::min);
+        let left = page
+            .blocks
+            .iter()
+            .map(|b| b.rect.x)
+            .fold(f64::NAN, f64::min);
         let left = if left.is_finite() { left } else { 8.0 };
-        let top = page.blocks.iter().map(|b| b.rect.y).fold(f64::NAN, f64::min);
+        let top = page
+            .blocks
+            .iter()
+            .map(|b| b.rect.y)
+            .fold(f64::NAN, f64::min);
         let height = 32.0;
         let y = if top.is_finite() && top >= height + 8.0 {
             8.0

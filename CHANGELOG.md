@@ -31,6 +31,22 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 - **Testing:** `FakeState::paint` sets the colour the scripted engine's
   captures show, and `FakeState::captures` lists the regions captured.
 
+### Noctiluca: failed navigations keep their address (0.0.25)
+
+- **The address bar keeps the address asked for.** When a navigation
+  fails, Chrome shows its error page at `chrome-error://chromewebdata/`,
+  and the address bar showed that. The tab now keeps the address that
+  was opened (or, for a link or a history step, the one Chrome's history
+  keeps) in the page and its state, and puts a line above Chrome's text:
+  `Could not open ADDRESS: ERR_…. Reload (R) tries again.`
+  `noctiluca::tab::ERROR_PAGE` and `ERROR_NOTICE` (the notice's node) are
+  new.
+- **Docs:** [Noctiluca on real sites](docs/guide/noctiluca/real-sites.md)
+  gains the second pass (0.0.25, in progress): what changes for YouTube,
+  Twitch, and search, shop and speed-test pages, and which parts were
+  checked live and which on fixtures; [status](docs/guide/noctiluca/status.md)
+  gains 0.0.25's known limits.
+
 ## 0.0.24 cohort — to be published
 
 To be published from `main` by one `release.yml` run (tag

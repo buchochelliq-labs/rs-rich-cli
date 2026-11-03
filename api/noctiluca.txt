@@ -2333,6 +2333,8 @@ pub const noctiluca::tab::CANVAS_IDLE: core::time::Duration
 pub const noctiluca::tab::CANVAS_POLL: core::time::Duration
 pub const noctiluca::tab::CANVAS_QUIET: u32
 pub const noctiluca::tab::DEBOUNCE: core::time::Duration
+pub const noctiluca::tab::ERROR_NOTICE: noctiluca::engine::NodeId
+pub const noctiluca::tab::ERROR_PAGE: &str
 pub const noctiluca::tab::MAX_LIVE_CANVASES: usize
 pub const noctiluca::tab::SETTLE_MAX: core::time::Duration
 pub const noctiluca::tab::SETTLE_MIN: core::time::Duration
