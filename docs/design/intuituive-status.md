@@ -9,8 +9,9 @@ rules are in [the demo gaps](intuituive-demo-gaps.md).
   release run, `release-0.0.24`, on 2026-11-03, `rs-rich-acp` and
   `cornacai` for the first time; `rs-rich` 0.0.12 on PyPI,
   `python-v0.0.12`; see the [0.0.24 release notes](../releases/0.0.24.md)).
-  The release PR merged as #844 (`9a02fdb1`), which `docs-versions.toml`
-  names for the 0.0.24 docs.
+  The tags are on `c2d65880`, before the release PR (#844) merged;
+  `docs-versions.toml` builds the 0.0.24 docs from its publication notes
+  (`395b7b12`).
 - **The 0.0.25 versions are open** (every package one patch past 0.0.24),
   on `claude/next-priority-items-3c5p8e-wip-published`, stacked on #847
   (the stylesheet fuzz fix).
