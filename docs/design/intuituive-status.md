@@ -3,7 +3,20 @@
 Status: handoff note, updated when a session ends mid-round. The loop and its
 rules are in [the demo gaps](intuituive-demo-gaps.md).
 
-## Where things stand (2026-11-02)
+## Where things stand (2026-11-03)
+
+- **0.0.24 is in release.** Every wave is merged (#828, #829, #830, #839,
+  #841), with the Dependabot updates (#826, #827, #842) and three flaky
+  test fixes (#843, #844). The release PR prepares the cohort from `main`
+  with [the release notes](../releases/0.0.24.md); after it merges, the
+  maintainer tags it with `python3 scripts/release_cohort.py tag`.
+- **After the tag:** list the new crate versions in the marketplace with
+  `add_crate_version.py`, move its `RS_RICH_CLI_REF` to `release-0.0.24`,
+  and retire the signer's deploy key once the GitHub App has signed.
+- **Waiting on the maintainer:** Memo's reference pictures; lumis 0.17
+  (its minimum Rust is 1.95); one run of Cornacai with a real agent.
+
+## Where things stood (2026-11-02)
 
 - **Wave 0 is merged** (#828, the plan; #829, edition 2024).
 - **Wave 1 is integrated** on `claude/next-priority-items-3c5p8e-wip-wave1`

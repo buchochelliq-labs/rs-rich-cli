@@ -50,28 +50,26 @@ topic and a widget index.
 
 </div>
 
-## New in 0.0.23
+## New in 0.0.24
 
 ![Memo, intuiTUIve's elephant, in the cartoon look](assets/intuituive/mascot/memo-cartoon.svg){ .tui-mascot width="128" }
-0.0.23, published on 2026-10-27 ([release notes](releases/0.0.23.md)),
-finishes porting the core's console, paints with fewer bytes, brings
-pictures and video to Noctiluca and puts the plugin marketplace live.
+0.0.24, to be published as one release ([release notes](releases/0.0.24.md)),
+brings Cornacai, catches intuiTUIve up with Textual and opens Noctiluca to
+scripts and coding agents.
 
-- **The core:** `console.py` fully ported, themes in Markdown, and fast
-  paths that render the same bytes in a fraction of the time.
-- **intuiTUIve:** the `best` paint strategy by default, a fast drawing
-  path, virtual scrolling, a timedemo and sound in recordings.
-- **[Noctiluca](guide/noctiluca.md):** [pictures, GIFs and
-  video](guide/noctiluca/media.md), live logs,
-  [terminal adaptations](guide/noctiluca/adaptations.md) and a
-  [gallery of real sites](guide/noctiluca/real-sites.md).
-- **[The marketplace](marketplace.md) is live**: signed, with official
-  plugins, themes and micro packs, and
-  [its own site](https://buchochelliq-labs.github.io/rs-rich-marketplace/).
-- **Also:** WebP everywhere, HTTPS through the system's certificates,
-  `rich --rst` on rich-rst 2.2.0, API checks and nightly fuzzing.
+- **[Cornacai](guide/cornacai.md)** (new): a terminal client for coding
+  agents over the Agent Client Protocol, with edits reviewed hunk by hunk.
+- **intuiTUIve:** a Markdown viewer and a diff view, Textual's themes, user
+  keymaps, palette providers, modes, screenshots and more of Textual's
+  stylesheet language.
+- **[Noctiluca](guide/noctiluca.md):** a control socket for scripts and
+  agents, the mouse, video to 30 fps, a full-pixel view, `--ssh` and
+  `--transparent`.
+- **Also:** `inspect` for Rust values, animated banners, AVIF (opt in),
+  edition 2024, a threat model and a security policy, and the docs on
+  Zensical.
 
-Earlier releases are under [Releases](releases/0.0.23.md) in the
+Earlier releases are under [Releases](releases/0.0.24.md) in the
 navigation; the [roadmap](ROADMAP.md) says what comes next.
 
 ### Which version are these docs for?
@@ -284,6 +282,6 @@ published or not. Each crate versions independently; see
 | ![](assets/rs-rich/troubleshooting.svg){ .rs-icon width="20" } [Troubleshooting](troubleshooting.md) | When the output is not what you expected |
 | ![](assets/rs-rich/known-issues.svg){ .rs-icon width="20" } [Known issues](known-issues.md) | What is known not to work yet |
 | ![](assets/rs-rich/plans.svg){ .rs-icon width="20" } [Development plans](plans/1.0.0.md) | What each release sets out to do |
-| ![](assets/rs-rich/releases.svg){ .rs-icon width="20" } [Releases](releases/0.0.23.md) | What each release shipped |
+| ![](assets/rs-rich/releases.svg){ .rs-icon width="20" } [Releases](releases/0.0.24.md) | What each release shipped |
 | ![](assets/rs-rich/parity.svg){ .rs-icon width="20" } [Parity with Python rich](parity.md) | What matches upstream, and how it is proven |
 | ![](assets/rs-rich/contributing.svg){ .rs-icon width="20" } [Contributing](BRANCHING.md) | Branches, architecture and design notes |
