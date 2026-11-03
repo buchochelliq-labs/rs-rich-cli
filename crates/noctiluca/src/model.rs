@@ -853,6 +853,17 @@ impl Dom {
     }
 }
 
+/// Whether a text alternative is a script's value rendered as text, not
+/// words: `alt="true"` from a boolean bound to the attribute (a video
+/// site's thumbnails), `undefined`, `null`, `NaN`, `[object Object]`. It
+/// says nothing, so the picture is taken to have no text alternative.
+fn script_value(text: &str) -> bool {
+    matches!(
+        text.trim(),
+        "true" | "false" | "null" | "undefined" | "NaN" | "[object Object]"
+    )
+}
+
 /// Whether element `i` hides what is in it from sight, though it is laid
 /// out (text for screen readers only, a tooltip waiting for a hover):
 /// - it is fully transparent (`opacity: 0`, which its children do not
@@ -862,7 +873,11 @@ impl Dom {
 /// - its `clip-path` is an inset of half its size or more
 ///   (`inset(50%)`), or a circle or ellipse of no radius;
 /// - it hides its overflow and is at most a pixel wide or tall (the
-///   1 x 1 box of a "visually hidden" class, a collapsed panel).
+///   1 x 1 box of a "visually hidden" class, a collapsed panel); not the
+///   root or the body, whose overflow clips the viewport, not their own
+///   box (CSS Overflow 3, 3.3): a root 0 pixels tall over an absolutely
+///   placed body still shows the whole page (a video site's embedded
+///   player).
 ///
 /// `visibility: hidden` needs no rule: it is inherited, so each hidden
 /// text node says so itself.
@@ -883,6 +898,7 @@ fn conceals(dom: &Dom, i: usize) -> bool {
     let display = dom.style(i, 0);
     let boxed = !display.is_empty() && display != "inline" && display != "contents";
     if boxed
+        && !matches!(dom.name[i].as_str(), "HTML" | "BODY")
         && matches!(dom.style(i, 10), "hidden" | "clip")
         && let Some(rect) = dom.rect(i)
         && (rect.width <= 1.0 || rect.height <= 1.0)
@@ -1562,6 +1578,7 @@ impl Walker<'_> {
             .or_else(|| self.ax.get(backend).and_then(|n| ax_string(n, "name")))
             .or_else(|| dom.attr(i, "title").map(clean))
             .or_else(|| dom.attr(i, "aria-label").map(clean))
+            .filter(|a| !script_value(a))
             .unwrap_or_default();
         let src = dom
             .source

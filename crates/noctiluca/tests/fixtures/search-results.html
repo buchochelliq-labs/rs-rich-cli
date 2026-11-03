@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<title>tide tables - Fixture Search</title>
+<!-- Written for Noctiluca's corpus, reduced from the general shape of a web
+     search results page (not copied from any site): a sticky header with
+     the logo as an inline <svg> and a search combobox holding the query;
+     result-type tabs; results, each a site name and breadcrumb above a
+     heading link and a snippet; a "People also ask" list of expandable
+     questions (aria-expanded buttons with hidden answers); a knowledge
+     panel beside the results; numbered pages at the foot. The results are
+     what a terminal user wants first and fastest. -->
+<style>
+  body { font: 14px/1.5 sans-serif; margin: 0; color: #202124; }
+  header { position: sticky; top: 0; background: #fff; display: flex; gap: 24px;
+           align-items: center; padding: 12px 16px; border-bottom: 1px solid #ddd; }
+  header input { width: 480px; padding: 8px 16px; border: 1px solid #ccc; border-radius: 24px; }
+  nav.tabs { display: flex; gap: 20px; padding: 4px 150px; border-bottom: 1px solid #eee; }
+  main { display: flex; gap: 64px; padding: 0 150px; }
+  .results { width: 600px; }
+  .result { margin: 24px 0; }
+  .site { display: flex; gap: 8px; align-items: center; font-size: 12px; }
+  .site img { width: 18px; height: 18px; border-radius: 50%; }
+  .site cite { color: #4d5156; font-style: normal; }
+  .result h3 { margin: 4px 0; font-size: 20px; font-weight: 400; }
+  .result h3 a { color: #1a0dab; text-decoration: none; }
+  .ask button { display: block; width: 100%; text-align: left; padding: 12px 0;
+                border: 0; border-top: 1px solid #ddd; background: none; font: inherit; }
+  .ask [hidden] { display: none; }
+  aside { width: 360px; border: 1px solid #ddd; border-radius: 8px; padding: 16px; margin-top: 24px; }
+  aside img { width: 100%; height: 160px; object-fit: cover; }
+  footer { display: flex; gap: 12px; padding: 24px 150px; }
+</style>
+<header>
+  <a href="#home" aria-label="Fixture Search home"><svg width="92" height="30" viewBox="0 0 92 30" role="img" aria-label="Fixture Search">
+    <text x="0" y="24" font-size="26" fill="#4285f4">Fixture</text></svg></a>
+  <form role="search" action="#search">
+    <input type="text" role="combobox" name="q" value="tide tables" aria-label="Search"
+           aria-expanded="false" aria-autocomplete="both">
+    <button type="submit" aria-label="Search"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
+      <circle cx="6" cy="6" r="5" stroke="#4285f4" fill="none" stroke-width="2"/></svg></button>
+  </form>
+</header>
+<nav class="tabs" aria-label="Result types">
+  <a href="#all" aria-current="page">All</a><a href="#images">Images</a><a href="#news">News</a>
+  <a href="#videos">Videos</a><a href="#maps">Maps</a><a href="#more">More</a>
+</nav>
+<p style="padding: 0 150px; color: #70757a">About 4,210,000 results (0.31 seconds)</p>
+<main>
+  <div class="results" id="search">
+    <div class="result">
+      <div class="site"><img src="media/avatar-1.png" alt=""><span>Harbour Office</span>
+        <cite>https://harbour.example › tides › today</cite></div>
+      <h3><a href="#r1">Tide tables for today and the next 7 days</a></h3>
+      <p>High and low water times, heights and the moon's phase for every port on the coast. Updated daily at 06:00.</p>
+    </div>
+    <div class="result">
+      <div class="site"><img src="media/avatar-2.png" alt=""><span>Sea Almanac</span>
+        <cite>https://almanac.example › tide-tables</cite></div>
+      <h3><a href="#r2">Tide Tables 2026 – Free printable tide charts</a></h3>
+      <p><b>Tide tables</b> for 2026 as PDF or text, one page per month, with sunrise and sunset.</p>
+    </div>
+    <div class="ask">
+      <h2>People also ask</h2>
+      <button aria-expanded="false" aria-controls="a1">How do you read a tide table?</button>
+      <div id="a1" hidden>Each row gives a time and the water's height above chart datum.</div>
+      <button aria-expanded="false" aria-controls="a2">What time is high tide today?</button>
+      <div id="a2" hidden>It depends on the port; the nearest is listed first.</div>
+      <button aria-expanded="false" aria-controls="a3">Why are there two high tides a day?</button>
+      <div id="a3" hidden>The moon pulls the water on both sides of the earth.</div>
+    </div>
+    <div class="result">
+      <div class="site"><img src="media/avatar-3.png" alt=""><span>Encyclopedia</span>
+        <cite>https://encyclopedia.example › wiki › Tide_table</cite></div>
+      <h3><a href="#r3">Tide table - Encyclopedia</a></h3>
+      <p>A <b>tide table</b> lists the times and heights of high and low water at a place.</p>
+    </div>
+  </div>
+  <aside aria-label="About the result">
+    <img src="media/harbour.jpg" alt="A harbour at low tide">
+    <h2>Tide table</h2>
+    <p>A list of predicted times and heights of the tide at a place.</p>
+    <dl><dt>Used for</dt><dd>Navigation, fishing, walking the shore</dd></dl>
+  </aside>
+</main>
+<footer aria-label="Pages"><span>1</span><a href="#p2">2</a><a href="#p3">3</a><a href="#p4">4</a><a href="#next">Next</a></footer>
+<script>
+  for (const b of document.querySelectorAll('.ask button')) {
+    b.addEventListener('click', () => {
+      const open = b.getAttribute('aria-expanded') !== 'true';
+      b.setAttribute('aria-expanded', String(open));
+      document.getElementById(b.getAttribute('aria-controls')).hidden = !open;
+    });
+  }
+</script>

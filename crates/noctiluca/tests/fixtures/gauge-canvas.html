@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<title>Speed gauge (canvas) fixture</title>
+<!-- Written for Noctiluca's corpus, reduced from the pattern of an internet
+     speed test (not copied from any site): the same dial as gauge-svg.html,
+     drawn on a <canvas> each frame with requestAnimationFrame. A canvas
+     changes no DOM, so no mutation reports it; its number is painted
+     pixels, not text. A second dial has the number in HTML as well, and a
+     third gives the canvas role=meter with aria-valuenow, as an accessible
+     page would. What Noctiluca should show: each dial, moving. -->
+<style>
+  body { font: 16px sans-serif; margin: 0 8px; background: #141526; color: #fff; }
+  .row { display: flex; gap: 24px; align-items: center; }
+  .readout b { display: block; font-size: 32px; }
+</style>
+<h1>Speed test</h1>
+<div class="row">
+  <canvas id="painted" width="240" height="200"></canvas>
+  <canvas id="labelled" width="240" height="200"></canvas>
+  <div class="readout">Download <b id="value">0.00</b> Mbps</div>
+  <canvas id="meter" width="240" height="200" role="meter" aria-label="Upload"
+          aria-valuemin="0" aria-valuemax="500" aria-valuenow="0" aria-valuetext="0 Mbps"></canvas>
+</div>
+<script>
+  function dial(canvas, mbps) {
+    const g = canvas.getContext('2d');
+    const share = mbps / 500;
+    g.clearRect(0, 0, canvas.width, canvas.height);
+    g.lineWidth = 16;
+    g.strokeStyle = '#2a2c45';
+    g.beginPath(); g.arc(120, 120, 90, 0.75 * Math.PI, 2.25 * Math.PI); g.stroke();
+    g.strokeStyle = '#1de0fa';
+    g.beginPath(); g.arc(120, 120, 90, 0.75 * Math.PI, (0.75 + 1.5 * share) * Math.PI); g.stroke();
+    g.fillStyle = '#fff';
+    g.font = '28px sans-serif';
+    g.textAlign = 'center';
+    g.fillText(mbps.toFixed(2), 120, 130);
+    g.font = '12px sans-serif';
+    g.fillText('Mbps', 120, 150);
+  }
+  const start = performance.now();
+  function frame(now) {
+    const mbps = Math.min((now - start) / 1000 * 36, 287.4);
+    dial(document.getElementById('painted'), mbps);
+    dial(document.getElementById('labelled'), mbps);
+    const up = mbps / 3;
+    const meter = document.getElementById('meter');
+    dial(meter, up);
+    meter.setAttribute('aria-valuenow', up.toFixed(1));
+    meter.setAttribute('aria-valuetext', up.toFixed(1) + ' Mbps');
+    document.getElementById('value').textContent = mbps.toFixed(2);
+    if (mbps < 287.4) requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+</script>

@@ -396,3 +396,86 @@ fn visually_hidden_text_is_left_out_unless_it_names_a_link() {
         "{read:#?}"
     );
 }
+
+#[test]
+fn a_root_that_hides_its_overflow_over_a_placed_body_still_shows_the_page() {
+    // tests/fixtures/root-overflow.html, reduced from a video site's
+    // embedded player page: `html { overflow: hidden }` and a body placed
+    // absolutely, so the root's box is 0 pixels tall. The root's overflow
+    // clips the viewport, not its box: the page shows, as in Chrome.
+    use noctiluca::engine::Rect;
+    use noctiluca::testing::PageBuilder;
+    let mut p = PageBuilder::new(
+        "file:///noctiluca/fixtures/root-overflow.html",
+        "Root overflow fixture",
+        800.0,
+        0.0,
+    );
+    for node in [1, p.body()] {
+        p.set_style(node, "overflow-y", "hidden");
+    }
+    p.set_style(p.body(), "position", "absolute");
+    let alert = p.element(
+        p.body(),
+        "DIV",
+        &[("role", "alert")],
+        &[],
+        Some(Rect::new(0.0, 0.0, 800.0, 120.0)),
+    );
+    let h1 = p.element(
+        alert,
+        "H1",
+        &[],
+        &[],
+        Some(Rect::new(0.0, 20.0, 800.0, 37.0)),
+    );
+    p.text(
+        h1,
+        "Video player configuration error",
+        Rect::new(0.0, 20.0, 420.0, 37.0),
+    );
+    let para = p.element(
+        alert,
+        "P",
+        &[],
+        &[],
+        Some(Rect::new(0.0, 80.0, 800.0, 18.0)),
+    );
+    p.text(para, "Error 153", Rect::new(0.0, 80.0, 72.0, 18.0));
+    let page = build(&p.snapshot(), &mut Revisions::new());
+    assert_eq!(
+        kinds(&page),
+        vec![
+            (
+                BlockKind::Heading(1),
+                "Video player configuration error".into()
+            ),
+            (BlockKind::Paragraph, "Error 153".into()),
+        ]
+    );
+}
+
+#[test]
+fn a_script_value_for_alt_text_is_no_alt_text() {
+    // A video site's search results bind a boolean to their thumbnails'
+    // `alt`, so each says "true"; the captions would read "Image: true".
+    use noctiluca::engine::Rect;
+    use noctiluca::testing::PageBuilder;
+    let mut p = PageBuilder::new("file:///noctiluca/alt.html", "Alt", 800.0, 400.0);
+    let body = p.body();
+    for (k, alt) in ["true", "undefined", "A harbour at night"]
+        .iter()
+        .enumerate()
+    {
+        let y = 120.0 * k as f64;
+        p.image(
+            body,
+            "media/thumb-1.jpg",
+            alt,
+            Rect::new(0.0, y, 160.0, 90.0),
+        );
+    }
+    let page = build(&p.snapshot(), &mut Revisions::new());
+    let alts: Vec<&str> = page.media.iter().map(|m| m.alt.as_str()).collect();
+    assert_eq!(alts, ["", "", "A harbour at night"]);
+}

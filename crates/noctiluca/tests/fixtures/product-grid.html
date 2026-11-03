@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<title>Fixture Shop: kettles</title>
+<!-- Written for Noctiluca's corpus, reduced from the general shape of a shop's
+     search results (not copied from any site): a sticky header with a
+     search field, a department select and a cart count; a filter sidebar of
+     check boxes; a grid of product cards, each a picture, a title link, a
+     star rating drawn as an inline <svg> named "4.5 out of 5 stars", a
+     rating count, and a price split into parts for show (whole, fraction)
+     with the whole price in visually hidden text; a sponsored label; a
+     horizontal shelf (carousel) that scrolls sideways with previous and
+     next buttons; and a cookie banner fixed to the bottom of the screen. -->
+<style>
+  body { font: 14px/1.4 sans-serif; margin: 0; color: #0f1111; }
+  header { position: sticky; top: 0; z-index: 2; display: flex; gap: 12px; align-items: center;
+           background: #131921; color: #fff; padding: 8px 12px; }
+  header a { color: #fff; }
+  header input { width: 360px; }
+  .layout { display: flex; gap: 16px; padding: 12px; }
+  .filters { width: 180px; flex: none; }
+  .filters label { display: block; }
+  .grid { display: grid; grid-template-columns: repeat(3, 220px); gap: 16px; }
+  .card img { width: 220px; height: 160px; object-fit: cover; }
+  .card h2 { font-size: 15px; font-weight: 400; margin: 4px 0; }
+  .rating { display: flex; gap: 6px; align-items: center; font-size: 12px; }
+  .price { font-size: 13px; }
+  .price .whole { font-size: 24px; }
+  .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+  .badge { background: #232f3e; color: #fff; font-size: 11px; padding: 0 4px; }
+  .shelf { display: flex; gap: 12px; overflow-x: auto; width: 720px; scroll-snap-type: x mandatory; }
+  .shelf .card { flex: none; width: 160px; }
+  .shelf img { width: 160px; height: 110px; }
+  .cookies { position: fixed; bottom: 0; left: 0; right: 0; background: #fff; border-top: 2px solid #f90;
+             padding: 8px 12px; display: flex; gap: 12px; align-items: center; }
+</style>
+<header>
+  <a href="#home">Fixture Shop</a>
+  <select aria-label="Department"><option>All</option><option>Kitchen</option><option>Garden</option></select>
+  <input type="search" aria-label="Search the shop" value="kettle">
+  <button>Go</button>
+  <a href="#cart" aria-label="3 items in cart">Cart <span>3</span></a>
+</header>
+<div class="layout">
+  <aside class="filters" aria-label="Filters">
+    <h3>Brand</h3>
+    <label><input type="checkbox"> Harbourline</label>
+    <label><input type="checkbox" checked> Tidewell</label>
+    <h3>Price</h3>
+    <label><input type="checkbox"> Under $25</label>
+    <label><input type="checkbox"> $25 to $50</label>
+  </aside>
+  <main>
+    <p>1-3 of over 2,000 results for <b>"kettle"</b></p>
+    <div class="grid">
+      <div class="card">
+        <img src="media/thumb-1.jpg" alt="Tidewell 1.7 litre kettle, stainless steel">
+        <span class="badge">Sponsored</span>
+        <h2><a href="#p1">Tidewell 1.7 L Electric Kettle, Stainless Steel, Auto Shut-Off</a></h2>
+        <div class="rating"><svg width="76" height="14" viewBox="0 0 76 14" role="img" aria-label="4.5 out of 5 stars">
+          <rect width="68" height="14" fill="#ffa41c"/><rect x="68" width="8" height="14" fill="#ddd"/></svg>
+          <a href="#p1-reviews">12,408</a></div>
+        <div class="price"><span class="sr">$29.99</span><span aria-hidden="true">$<span class="whole">29</span>99</span></div>
+        <div>Delivery <b>Tomorrow</b></div>
+      </div>
+      <div class="card">
+        <img src="media/thumb-2.jpg" alt="Harbourline glass kettle with blue light">
+        <h2><a href="#p2">Harbourline Glass Kettle 1.5 L with Blue Light</a></h2>
+        <div class="rating"><svg width="76" height="14" viewBox="0 0 76 14" role="img" aria-label="4.1 out of 5 stars">
+          <rect width="62" height="14" fill="#ffa41c"/><rect x="62" width="14" height="14" fill="#ddd"/></svg>
+          <a href="#p2-reviews">3,117</a></div>
+        <div class="price"><span class="sr">$24.49</span><span aria-hidden="true">$<span class="whole">24</span>49</span>
+          <s>$34.99</s></div>
+        <div>Only 4 left in stock.</div>
+      </div>
+      <div class="card">
+        <img src="media/thumb-3.jpg" alt="Gooseneck pour-over kettle in black">
+        <h2><a href="#p3">Gooseneck Pour-Over Kettle, Temperature Control</a></h2>
+        <div class="rating"><svg width="76" height="14" viewBox="0 0 76 14" role="img" aria-label="4.7 out of 5 stars">
+          <rect width="72" height="14" fill="#ffa41c"/><rect x="72" width="4" height="14" fill="#ddd"/></svg>
+          <a href="#p3-reviews">887</a></div>
+        <div class="price"><span class="sr">$49.00</span><span aria-hidden="true">$<span class="whole">49</span>00</span></div>
+      </div>
+    </div>
+    <h2>Customers also viewed</h2>
+    <button aria-label="Previous items">‹</button>
+    <ol class="shelf" aria-label="Customers also viewed">
+      <li class="card"><img src="media/thumb-4.jpg" alt="Kettle descaler"><a href="#s1">Kettle descaler, 6 pack</a> <span>$8.99</span></li>
+      <li class="card"><img src="media/thumb-5.jpg" alt="Tea tin"><a href="#s2">Tea tin with seal</a> <span>$12.50</span></li>
+      <li class="card"><img src="media/thumb-6.jpg" alt="Mug set"><a href="#s3">Mug set of 4</a> <span>$21.00</span></li>
+      <li class="card"><img src="media/thumb-1.jpg" alt="Travel kettle"><a href="#s4">Travel kettle 0.5 L</a> <span>$19.99</span></li>
+      <li class="card"><img src="media/thumb-2.jpg" alt="Water filter jug"><a href="#s5">Water filter jug</a> <span>$17.25</span></li>
+      <li class="card"><img src="media/thumb-3.jpg" alt="Milk frother"><a href="#s6">Milk frother</a> <span>$15.00</span></li>
+    </ol>
+    <button aria-label="Next items">›</button>
+  </main>
+</div>
+<div class="cookies" role="dialog" aria-label="Cookie preferences">
+  <span>We use cookies to run the shop.</span><button>Accept</button><button>Decline</button>
+</div>

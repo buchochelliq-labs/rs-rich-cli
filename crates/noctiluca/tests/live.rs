@@ -514,3 +514,21 @@ fn a_pages_own_background_is_read() {
     let page = live.open("with-background.html");
     assert_eq!(page.background.as_deref(), Some("rgb(255, 250, 230)"));
 }
+
+#[test]
+fn a_shelf_that_scrolls_sideways_is_not_a_live_log() {
+    // product-grid.html's "Customers also viewed" is a list that scrolls
+    // sideways; the parser appends its items as it builds the page. It is
+    // not a chat: its items stay where Chrome put them, side by side.
+    let Some(binary) = chrome() else { return };
+    let mut live = Live::start(binary);
+    let page = live.wait_open("product-grid.html", "Customers also viewed");
+    assert!(page.logs.is_empty(), "{:#?}", page.logs);
+    let shelf: Vec<_> = page
+        .media
+        .iter()
+        .filter(|m| m.rect.height < 120.0 && m.rect.width > 100.0)
+        .collect();
+    assert_eq!(shelf.len(), 6, "{:#?}", page.media);
+    assert!(shelf.windows(2).all(|w| w[0].rect.y == w[1].rect.y));
+}

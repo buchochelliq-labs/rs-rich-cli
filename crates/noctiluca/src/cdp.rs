@@ -187,17 +187,23 @@ pub const PING_SCRIPT: &str = r#"(function start(tries) {
   live.boxes = () => [...live.appended].filter(el => el.isConnected);
   // Whether every change is inside a live log the tab has read; entries
   // that changed get a new revision. A scroll box the page appends
-  // elements to becomes a log, and the tab learns of it by a full read.
+  // elements to becomes a log, and the tab learns of it by a full read:
+  // not while the parser builds the page (it appends every box's
+  // children), and not a shelf that scrolls only sideways (a carousel,
+  // whose overflow-y computes to auto beside its overflow-x).
   const sort = records => {
     let all = true;
     for (const r of records) {
       const target = r.target;
       if (r.type === 'childList' && target.nodeType === 1 && r.nextSibling === null &&
+          document.readyState !== 'loading' &&
           !live.appended.has(target) && !isLog(target) &&
           target !== document.documentElement && target !== document.body &&
           [...r.addedNodes].some(n => n.nodeType === 1)) {
         const overflow = style(target).overflowY;
-        if (overflow === 'auto' || overflow === 'scroll') {
+        const sideways = target.scrollWidth > target.clientWidth + 1 &&
+          target.scrollHeight <= target.clientHeight + 1;
+        if ((overflow === 'auto' || overflow === 'scroll') && !sideways) {
           live.appended.add(target);
           live.count++;
           all = false;
