@@ -120,8 +120,23 @@ happens:
 
 ## Known findings
 
-None open. Fixed while the targets were written (0.0.23), each with a
-regression test in its crate:
+None open.
+
+Fixed after the targets landed, with a regression test in its crate:
+
+- `stylesheet` (2026-11-03, 0.0.25): a timeout, 12 seconds and 1.4 GB on
+  921 bytes of nested `&` and `,` lists. intuiTUIve's parser read each
+  nested rule with each of its parent's selectors, and replaced each `&`
+  with the parent's text, so selectors grew exponentially with nesting
+  (`flatten` and its caller in `sheet.rs`). Nesting is now at most 32
+  deep and the text it and variables expand to at most four times the
+  stylesheet (or 64 KiB), past which it does not parse; a body is read in
+  one pass. The input is `tests/fixtures/fuzz/stylesheet-timeout.css`
+  (rs-rich-intuituive's `stylesheet_bounds` tests) and a seed,
+  `fuzz/seeds/stylesheet/timeout-2026-11-03.tcss`.
+
+Fixed while the targets were written (0.0.23), each with a regression
+test in its crate:
 
 - `ansi`: `AnsiDecoder` panicked on a multi-byte character after a
   charset-select escape (`ESC (`), slicing inside the character. It now

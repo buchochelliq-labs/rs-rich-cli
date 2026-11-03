@@ -45,6 +45,8 @@
 //! and several are joined with `and`. Width and height are the app's
 //! [`viewport`](crate::viewport()).
 
+use std::cell::Cell;
+use std::collections::HashMap;
 use std::fmt;
 use std::rc::Rc;
 
@@ -364,6 +366,13 @@ pub(crate) type Vars<'a> = &'a dyn Fn(&str) -> Option<Style>;
 impl Stylesheet {
     /// Parse `css`, or say where and why it does not parse.
     ///
+    /// Nesting and variables are bounded, so a stylesheet parses in time
+    /// linear in its length: rules nest at most 32 deep, and the text they
+    /// expand to (each nested selector, read with its parents' as `&`
+    /// repeats them, and each value with its variables put in) is at most
+    /// four times the stylesheet's length, or 64 KiB for a shorter one.
+    /// Past either, it does not parse.
+    ///
     /// ```
     /// use intuituive::Stylesheet;
     ///
@@ -664,11 +673,22 @@ impl Compound {
     }
 }
 
+/// How deep rules nest, at most.
+const MAX_NESTING: usize = 32;
+
+/// How many bytes of text nesting and variables may expand a stylesheet to,
+/// at least; a longer stylesheet may expand to four times its length.
+const MIN_EXPANSION: usize = 64 * 1024;
+
 struct Parser<'a> {
     text: &'a str,
     at: usize,
-    /// The variables declared so far (`$name: value;`), the latest last.
-    vars: Vec<(String, String)>,
+    /// The variables declared so far (`$name: value;`), each name's latest.
+    vars: HashMap<String, String>,
+    /// How many bytes nested selectors and substituted values may take.
+    budget: usize,
+    /// How many of them they have taken so far.
+    spent: Cell<usize>,
 }
 
 /// The rules parsed so far, each with its specificity and its order.
@@ -679,7 +699,9 @@ impl<'a> Parser<'a> {
         Parser {
             text,
             at: 0,
-            vars: Vec::new(),
+            vars: HashMap::new(),
+            budget: text.len().saturating_mul(4).max(MIN_EXPANSION),
+            spent: Cell::new(0),
         }
     }
 
@@ -692,6 +714,13 @@ impl<'a> Parser<'a> {
             column,
             message: message.into(),
         }
+    }
+
+    /// Take `bytes` of the expansion budget, or say there is not enough.
+    fn spend(&self, bytes: usize) -> bool {
+        let spent = self.spent.get().saturating_add(bytes);
+        self.spent.set(spent);
+        spent <= self.budget
     }
 
     fn rest(&self) -> &'a str {
@@ -787,6 +816,7 @@ impl<'a> Parser<'a> {
                 body_start,
                 body_start + close,
                 &media_now,
+                0,
             )?;
             self.at = body_start + close + 1;
         }
@@ -804,20 +834,23 @@ impl<'a> Parser<'a> {
         if !is_ident(name) {
             return Err(self.error(start, format!("`${name}` is not a variable name")));
         }
-        let value = self.substitute(value.trim());
+        let value = self
+            .substitute(value.trim())
+            .map_err(|e| self.error(start, e))?;
         if value.is_empty() {
             return Err(self.error(start, format!("`${name}` has no value")));
         }
-        self.vars.push((name.to_string(), value));
+        self.vars.insert(name.to_string(), value);
         self.at += (end + 1).min(self.rest().len());
         Ok(())
     }
 
     /// `value` with each declared `$variable` in it replaced by its value;
-    /// a name not declared stays, for a theme style (`$accent`).
-    fn substitute(&self, value: &str) -> String {
+    /// a name not declared stays, for a theme style (`$accent`). The error
+    /// is that the values put in run past the expansion budget.
+    fn substitute(&self, value: &str) -> Result<String, String> {
         if !value.contains('$') {
-            return value.to_string();
+            return Ok(value.to_string());
         }
         let mut out = String::with_capacity(value.len());
         let mut rest = value;
@@ -828,8 +861,13 @@ impl<'a> Parser<'a> {
                 .find(|c: char| !(c.is_ascii_alphanumeric() || c == '-' || c == '_'))
                 .unwrap_or(after.len());
             let name = &after[..len];
-            match self.vars.iter().rev().find(|(known, _)| known == name) {
-                Some((_, known)) => out.push_str(known),
+            match self.vars.get(name) {
+                Some(known) => {
+                    if !self.spend(known.len()) {
+                        return Err(self.too_long("variables"));
+                    }
+                    out.push_str(known);
+                }
                 None => {
                     out.push('$');
                     out.push_str(name);
@@ -838,13 +876,20 @@ impl<'a> Parser<'a> {
             rest = &after[len..];
         }
         out.push_str(rest);
-        out
+        Ok(out)
+    }
+
+    /// The error for expanding past the budget, by `what`.
+    fn too_long(&self, what: &str) -> String {
+        format!("{what} expand this stylesheet past {} bytes", self.budget)
     }
 
     /// The rule for `selectors` (as written, before nesting is flattened)
     /// whose body is `body_start..body_end`: its declarations, then the
     /// rules nested in it (`&:hover { … }`, `.title { … }`), each read as
-    /// its flattened form and ordered after it.
+    /// its flattened form and ordered after it. `depth` is how many rules
+    /// it is nested in.
+    #[allow(clippy::too_many_arguments)]
     fn rule(
         &self,
         rules: &mut Parsed,
@@ -853,6 +898,7 @@ impl<'a> Parser<'a> {
         body_start: usize,
         body_end: usize,
         media: &Option<Rc<Media>>,
+        depth: usize,
     ) -> Result<(), SheetError> {
         let parsed = selectors
             .iter()
@@ -883,26 +929,38 @@ impl<'a> Parser<'a> {
                 break;
             }
             let body = &self.text[at..body_end];
-            let semi = find_unquoted(body, ';').unwrap_or(body.len());
-            match find_unquoted(body, '{').filter(|open| *open < semi) {
-                Some(open) => {
+            // A `{` before the first `;` opens a nested rule; found in one
+            // pass, so a long body is not scanned again for each item.
+            let mark = find_unquoted_either(body, '{', ';');
+            match mark.filter(|&(_, c)| c == '{') {
+                Some((open, _)) => {
                     // A nested rule.
+                    if depth + 1 >= MAX_NESTING {
+                        return Err(
+                            self.error(at, format!("rules nested more than {MAX_NESTING} deep"))
+                        );
+                    }
                     let head = &body[..open];
                     let inner = at + open + 1;
                     let Some(close) = find_close(&self.text[inner..body_end]) else {
                         return Err(self.error(at, "a nested rule with no `}`"));
                     };
-                    let nested: Vec<String> = head
-                        .split(',')
-                        .map(str::trim)
-                        .flat_map(|child| {
-                            selectors.iter().map(move |parent| flatten(parent, child))
-                        })
-                        .collect();
-                    self.rule(rules, at, &nested, inner, inner + close, media)?;
+                    let mut nested = Vec::new();
+                    for child in head.split(',').map(str::trim) {
+                        for parent in selectors {
+                            // Count the selector before building it: `&`
+                            // and lists multiply as rules nest.
+                            if !self.spend(flattened_len(parent, child) + 1) {
+                                return Err(self.error(at, self.too_long("nested selectors")));
+                            }
+                            nested.push(flatten(parent, child));
+                        }
+                    }
+                    self.rule(rules, at, &nested, inner, inner + close, media, depth + 1)?;
                     at = inner + close + 1;
                 }
                 None => {
+                    let semi = mark.map_or(body.len(), |(semi, _)| semi);
                     let part = &body[..semi];
                     let line = part.trim();
                     if line.starts_with('$') {
@@ -911,7 +969,9 @@ impl<'a> Parser<'a> {
                     let Some((property, value)) = line.split_once(':') else {
                         return Err(self.error(at, format!("`{line}` is not `property: value`")));
                     };
-                    let value = self.substitute(value.trim());
+                    let value = self
+                        .substitute(value.trim())
+                        .map_err(|e| self.error(at, e))?;
                     declare(&mut decls, property.trim(), &value).map_err(|e| self.error(at, e))?;
                     at += semi + 1;
                 }
@@ -934,6 +994,14 @@ fn flatten(parent: &str, child: &str) -> String {
         child.replace('&', parent)
     } else {
         format!("{parent} {child}")
+    }
+}
+
+/// How long `flatten(parent, child)` is, without building it.
+fn flattened_len(parent: &str, child: &str) -> usize {
+    match child.matches('&').count() {
+        0 => parent.len() + 1 + child.len(),
+        amps => (child.len() - amps).saturating_add(amps.saturating_mul(parent.len())),
     }
 }
 
@@ -1001,6 +1069,22 @@ fn find_unquoted(text: &str, c: char) -> Option<usize> {
             Some(_) => {}
             None if ch == '"' || ch == '\'' => quote = Some(ch),
             None if ch == c => return Some(i),
+            None => {}
+        }
+        None
+    })
+}
+
+/// Where `a` or `b` first appears in `text` outside a quoted string, and
+/// which.
+fn find_unquoted_either(text: &str, a: char, b: char) -> Option<(usize, char)> {
+    let mut quote = None;
+    text.char_indices().find_map(|(i, ch)| {
+        match quote {
+            Some(q) if ch == q => quote = None,
+            Some(_) => {}
+            None if ch == '"' || ch == '\'' => quote = Some(ch),
+            None if ch == a || ch == b => return Some((i, ch)),
             None => {}
         }
         None
