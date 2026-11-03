@@ -496,7 +496,7 @@ fn layered() -> Page {
     );
     p.view(500.0, 648.0);
     let body = p.body();
-    let mut boxed = |p: &mut PageBuilder, position: &str, rect: Rect, text: &str| {
+    let boxed = |p: &mut PageBuilder, position: &str, rect: Rect, text: &str| {
         let at = p.element(body, "DIV", &[], &[("position", position)], Some(rect));
         p.text(at, text, Rect::new(rect.x, rect.y, 100.0, 18.0));
     };
@@ -680,4 +680,77 @@ fn a_box_painted_above_covers_what_it_holds_and_a_badge_lies_over_its_picture() 
     assert!(!over.covered);
     assert_eq!(over.over, Some(0));
     assert_eq!(stack("Interstitial").over, None);
+}
+
+#[test]
+fn an_app_shells_bars_above_and_under_its_scrolling_main_box_are_layers() {
+    // The page does not scroll; its main box does (a streaming site's
+    // directory): the top bar above it is pinned, the sign-up bar under it
+    // docked, the sidebar beside it stays in the flow.
+    use noctiluca::engine::Rect;
+    use noctiluca::model::Place;
+    use noctiluca::testing::PageBuilder;
+    let mut p = PageBuilder::new("https://fixture.example/shell.html", "Shell", 800.0, 648.0);
+    p.view(0.0, 648.0);
+    let body = p.body();
+    let top = p.element(
+        body,
+        "NAV",
+        &[],
+        &[],
+        Some(Rect::new(0.0, 0.0, 800.0, 50.0)),
+    );
+    p.text(top, "Browse", Rect::new(8.0, 16.0, 60.0, 18.0));
+    let middle = p.element(
+        body,
+        "DIV",
+        &[],
+        &[],
+        Some(Rect::new(0.0, 50.0, 800.0, 541.0)),
+    );
+    let side = p.element(
+        middle,
+        "DIV",
+        &[],
+        &[],
+        Some(Rect::new(0.0, 50.0, 50.0, 541.0)),
+    );
+    p.text(side, "Side", Rect::new(4.0, 60.0, 40.0, 18.0));
+    let main = p.element(
+        middle,
+        "MAIN",
+        &[],
+        &[("overflow-y", "auto")],
+        Some(Rect::new(50.0, 50.0, 750.0, 541.0)),
+    );
+    for k in 0..20 {
+        let y = 60.0 + 100.0 * f64::from(k);
+        let para = p.element(main, "P", &[], &[], Some(Rect::new(60.0, y, 700.0, 18.0)));
+        p.text(
+            para,
+            &format!("Channel {k}"),
+            Rect::new(60.0, y, 100.0, 18.0),
+        );
+    }
+    let foot = p.element(
+        body,
+        "FOOTER",
+        &[],
+        &[],
+        Some(Rect::new(0.0, 591.0, 800.0, 57.0)),
+    );
+    p.text(
+        foot,
+        "Join the community!",
+        Rect::new(16.0, 610.0, 150.0, 18.0),
+    );
+    let page = build(&p.snapshot(), &mut Revisions::new());
+    let place = |text: &str| {
+        let block = page.blocks.iter().find(|b| b.text() == text).unwrap();
+        block.stack.layer.map(|l| page.layers[l].place)
+    };
+    assert_eq!(place("Browse"), Some(Place::Pinned));
+    assert_eq!(place("Join the community!"), Some(Place::Docked));
+    assert_eq!(place("Side"), None);
+    assert_eq!(place("Channel 12"), None);
 }

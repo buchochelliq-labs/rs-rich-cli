@@ -1127,15 +1127,15 @@ fn project_part(
         .enumerate()
         .map(|(n, r)| {
             part == Part::Flow
+                && adapt.on(Rule::CollapseNav)
+                && columns < crate::adapt::NARROW_COLUMNS as usize
+                && r.collapsible
+                && r.rect.height > 1.5 * ch
                 && page
                     .blocks
                     .iter()
                     .filter(|b| b.region == Some(n))
                     .all(|b| in_part(b) == Some(0.0))
-                && adapt.on(Rule::CollapseNav)
-                && columns < crate::adapt::NARROW_COLUMNS as usize
-                && r.collapsible
-                && r.rect.height > 1.5 * ch
         })
         .collect();
     // Boxes that shrank: (item, its height before in CSS pixels, its

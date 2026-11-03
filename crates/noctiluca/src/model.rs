@@ -2266,15 +2266,17 @@ fn stack(dom: &Dom, page: &mut Page) {
     page.view_height = dom.view_height;
     let n = dom.parent.len();
     let parent = |i: usize| usize::try_from(dom.parent[i]).ok().filter(|&p| p < i);
+    let shell = shell_bars(dom);
     let mut root: Vec<Option<usize>> = vec![None; n];
     for i in 0..n {
         root[i] = parent(i).and_then(|p| root[p]).or_else(|| {
             (dom.is_element(i)
                 && dom.layout[i].is_some()
-                && matches!(dom.style(i, 14), "fixed" | "sticky"))
+                && (matches!(dom.style(i, 14), "fixed" | "sticky") || shell.contains(&i)))
             .then_some(i)
         });
     }
+    let fixed_at = |r: usize| dom.style(r, 14) == "fixed" || shell.contains(&r);
     let index: HashMap<i64, usize> = dom
         .backend
         .iter()
@@ -2290,7 +2292,7 @@ fn stack(dom: &Dom, page: &mut Page) {
             && seen.insert(r)
         {
             let rect = dom.rect(r).unwrap_or_default();
-            let top = if dom.style(r, 14) == "fixed" {
+            let top = if fixed_at(r) {
                 rect.y - dom.scroll_y
             } else {
                 static_top(dom, r, rect)
@@ -2309,7 +2311,7 @@ fn stack(dom: &Dom, page: &mut Page) {
     let mut layer_of = HashMap::new();
     for (r, top) in roots {
         let rect = dom.rect(r).unwrap_or_default();
-        let fixed = dom.style(r, 14) == "fixed";
+        let fixed = fixed_at(r);
         let place = if fixed && view > 0.0 && (top >= view || top + rect.height <= 0.0) {
             Place::Off
         } else if rect.height > quarter {
@@ -2407,6 +2409,56 @@ fn stack(dom: &Dom, page: &mut Page) {
             .min_by(|a, b| area(&a.1).total_cmp(&area(&b.1)))
             .map(|(m, _, _)| *m);
     }
+}
+
+/// The bars of an app shell: a page that does not scroll itself (its
+/// content fits the viewport) but scrolls its main box (`overflow-y: auto`
+/// or `scroll`, the largest that overflows, at least a quarter of the
+/// viewport) keeps the boxes above and under that box on screen, as if
+/// fixed: a site's top bar and its bottom sign-up bar. They are the boxes
+/// beside the main box's ancestors, wholly above or wholly under it.
+fn shell_bars(dom: &Dom) -> HashSet<usize> {
+    let view = dom.view_height;
+    let mut bars = HashSet::new();
+    let Some(page) = dom.rect(0) else {
+        return bars;
+    };
+    if view <= 0.0 || dom.height > view + 1.0 {
+        return bars;
+    }
+    let area = |r: Rect| r.width * r.height;
+    let main = (0..dom.parent.len())
+        .filter(|&i| dom.is_element(i) && matches!(dom.style(i, 10), "auto" | "scroll"))
+        .filter_map(|i| Some((i, dom.rect(i)?)))
+        .filter(|&(_, r)| area(r) >= area(page) / 4.0)
+        .filter(|&(i, r)| {
+            dom.descendants(i)
+                .iter()
+                .any(|&d| dom.rect(d).is_some_and(|b| b.bottom() > r.bottom() + 1.0))
+        })
+        .max_by(|a, b| area(a.1).total_cmp(&area(b.1)));
+    let Some((main, rect)) = main else {
+        return bars;
+    };
+    let mut on_chain = main;
+    while let Some(up) = usize::try_from(dom.parent[on_chain])
+        .ok()
+        .filter(|&p| p < on_chain)
+    {
+        for &c in &dom.children[up] {
+            if c == on_chain || !dom.is_element(c) {
+                continue;
+            }
+            if let Some(b) = dom.rect(c)
+                && b.height > 0.0
+                && (b.bottom() <= rect.y + 1.0 || b.y >= rect.bottom() - 1.0)
+            {
+                bars.insert(c);
+            }
+        }
+        on_chain = up;
+    }
+    bars
 }
 
 /// Where sticky box `r` sits in the flow when the page is at its top: as

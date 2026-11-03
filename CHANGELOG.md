@@ -23,7 +23,9 @@ Fixes 2, 4, 10, 12 and 14 of
   most a quarter of the screen (`Projection::pinned`,
   `Projection::docked`); a sticky box further down sits at its static
   place, recovered from the box after it when it was read stuck; a fixed
-  box wholly off screen is not drawn.
+  box wholly off screen is not drawn. An app shell (a page that does not
+  scroll, its main box scrolling: a streaming site's directory) has its
+  bars above and under that box pinned and docked the same way.
 - **Short pages are not scrolled to their end.** The view's "near the
   end" no longer scrolls Chrome to the bottom of a page that fits in two
   screens, which made a search page's sticky header read under its first
