@@ -108,6 +108,15 @@ pub fn json_of(page: &Page) -> Value {
                 ),
                 BlockKind::Media(i) => ("media", json!({"media": i})),
                 BlockKind::Control(i) => ("control", json!({"control": i})),
+                BlockKind::Indicator(i) => {
+                    let n = &page.indicators[*i];
+                    (
+                        "indicator",
+                        json!({"indicator": format!("{:?}", n.kind).to_lowercase(),
+                               "label": n.label, "value": n.value, "min": n.min, "max": n.max,
+                               "readout": n.readout()}),
+                    )
+                }
                 BlockKind::Log(i) => (
                     "log",
                     json!({"log": i, "label": page.logs[*i].label,

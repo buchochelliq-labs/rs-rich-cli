@@ -1130,7 +1130,8 @@ fn start_hints(b: Browser) {
                 p.controls
                     .iter()
                     .enumerate()
-                    .filter(|(_, c)| !c.disabled)
+                    // A hover-only control is not drawn: no label for it.
+                    .filter(|(_, c)| !c.disabled && !c.hover_only)
                     .map(|(i, _)| i)
                     .collect()
             })

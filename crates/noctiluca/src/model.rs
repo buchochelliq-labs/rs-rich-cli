@@ -65,6 +65,23 @@ pub struct Run {
     /// A small picture in the line (an emote, a badge): the text is its
     /// alt text, which stands in where pictures are not drawn.
     pub picture: Option<Picture>,
+    /// Which of a pair of [screen-reader twins](Twin) it is, if either:
+    /// the [screen-reader twins](crate::adapt::Rule::ScreenReaderTwins)
+    /// rule draws one of the two.
+    pub twin: Option<Twin>,
+}
+
+/// One of two sibling runs saying the same thing two ways: the visually
+/// hidden text a page writes for screen readers (`$29.99`) and the parts
+/// it shows instead, hidden from assistive technology (`$`, `29`, `99`
+/// drawn apart, read together as `$2999`). Only a pair whose digits agree
+/// is a pair, so a hidden hint ("Use the Right Arrow Key…") never is.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum Twin {
+    /// The visually hidden text, for screen readers.
+    Spoken,
+    /// The `aria-hidden` parts shown in its place.
+    Shown,
 }
 
 /// A small picture inside a line of text.
@@ -131,6 +148,9 @@ pub enum BlockKind {
     Control(usize),
     /// A live log: an index into [`Page::logs`].
     Log(usize),
+    /// A value in a range the page states: an index into
+    /// [`Page::indicators`].
+    Indicator(usize),
 }
 
 /// A block of the page, in reading order.
@@ -157,9 +177,12 @@ impl Block {
     }
 }
 
-/// The text of `runs`.
+/// The text of `runs`: of a pair of [twins](Twin), the spoken one.
 pub fn plain(runs: &[Run]) -> String {
-    runs.iter().map(|r| r.text.as_str()).collect()
+    runs.iter()
+        .filter(|r| r.twin != Some(Twin::Shown))
+        .map(|r| r.text.as_str())
+        .collect()
 }
 
 /// A control's role, as the accessibility tree names it.
@@ -277,6 +300,14 @@ pub struct Control {
     /// A button with no text of its own: its name comes from a label or
     /// a title (an icon button).
     pub icon_only: bool,
+    /// An icon-only button's face, when its name or its icon's name is a
+    /// known one: `⋯` for "More actions", `✕` for "Close", `🔍` for
+    /// "Search". Its name stays its name, in hints and lists.
+    pub glyph: Option<String>,
+    /// Laid out but transparent until hovered (`opacity: 0` on it or an
+    /// ancestor: a card's "More actions"): not drawn, as Chrome draws it,
+    /// but on the page's lists (site keys) to bind and use.
+    pub hover_only: bool,
     /// The meaning's revision: role, name, type, destination, options.
     pub revision: u32,
     /// The state's revision: value, checked, choice.
@@ -358,6 +389,140 @@ pub struct Media {
     /// `<tspan>`s), in document order, cleaned, so a dial's number reads
     /// as text in reader mode and `--dump`; empty for every other kind.
     pub text: String,
+    /// An `<img>` that has no source yet (a lazy thumbnail, transparent
+    /// until its picture loads): a placeholder in its box, with its alt
+    /// text or title, until it has one.
+    pub pending: bool,
+}
+
+/// What an [`Indicator`] is.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum IndicatorKind {
+    /// `<meter>` or `role=meter`: a measurement in a known range.
+    Meter,
+    /// `<progress>` or `role=progressbar` with a value.
+    Progress,
+    /// A progress with no value: busy, for an unknown time.
+    Busy,
+    /// A score out of a few (`role=img` named "4.5 out of 5 stars").
+    Rating,
+}
+
+/// A value in a range the page states, not a control (the user does not
+/// change it): a `<meter>`, a `<progress>`, `role=meter` or
+/// `role=progressbar` with `aria-value*`, a rating. Read again at every
+/// reading, so a moving bar moves.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Indicator {
+    /// The node it is on.
+    pub node: NodeId,
+    /// What it is.
+    pub kind: IndicatorKind,
+    /// Its accessible name, or its `<label for>`'s text; cleaned.
+    pub label: String,
+    /// `value` or `aria-valuenow`, within `min..=max`; `None` when busy.
+    pub value: Option<f64>,
+    /// The low end of its range: `min`, `aria-valuemin`, else 0.
+    pub min: f64,
+    /// The high end of its range, never below `min`: `max`,
+    /// `aria-valuemax`, else 1 for a `<meter>` or a `<progress>` and 100
+    /// for an ARIA one; a rating's scale (5).
+    pub max: f64,
+    /// `aria-valuetext`, or the text it holds; cleaned.
+    pub text: Option<String>,
+    /// Its box, in CSS pixels of the document.
+    pub rect: Rect,
+    /// A `<meter>`'s `low`, `high` and `optimum`: which colour its value
+    /// is drawn in, as browsers draw it.
+    pub bands: Option<(f64, f64, f64)>,
+    /// The media region it also is (a `<canvas>` or `<svg>` given the
+    /// role): an index into [`Page::media`]. The
+    /// [indicators](crate::adapt::Rule::Indicators) rule draws the
+    /// indicator in its place.
+    pub media: Option<usize>,
+    /// The text just before it on its line ends with its label (`Download
+    /// <span role=progressbar aria-label=Download>`): drawn without it.
+    pub label_in_text: bool,
+    /// Text comes before it on its line, in the same block.
+    pub after_text: bool,
+}
+
+impl Indicator {
+    /// Its value's share of its range, 0 to 1; `None` when busy.
+    pub fn share(&self) -> Option<f64> {
+        let span = self.max - self.min;
+        self.value
+            .map(|v| {
+                if span > 0.0 {
+                    (v - self.min) / span
+                } else {
+                    1.0
+                }
+            })
+            .map(|s| s.clamp(0.0, 1.0))
+    }
+
+    /// What it says, without its label: its value text, else its share as
+    /// a percentage (`72%`), `busy` for a busy one, the number of a rating
+    /// (`4.5`).
+    pub fn readout(&self) -> String {
+        if let Some(text) = self.text.as_deref().filter(|t| !t.trim().is_empty()) {
+            return text.to_string();
+        }
+        match (self.kind, self.value) {
+            (IndicatorKind::Rating, Some(value)) => number_text(value),
+            (_, None) | (IndicatorKind::Busy, _) => "busy".into(),
+            _ => format!("{:.0}%", self.share().unwrap_or(0.0) * 100.0),
+        }
+    }
+
+    /// What a reader says of it: its label, then its [readout](Self::readout)
+    /// (a rating's label says its number already).
+    pub fn said(&self) -> String {
+        if self.kind == IndicatorKind::Rating && !self.label.is_empty() {
+            return self.label.clone();
+        }
+        [self.label.clone(), self.readout()]
+            .into_iter()
+            .filter(|t| !t.is_empty())
+            .collect::<Vec<_>>()
+            .join(" ")
+    }
+}
+
+/// A number as people write it: `4.5`, `4`, `287.4`; at most two decimals.
+pub fn number_text(value: f64) -> String {
+    let text = format!("{value:.2}");
+    text.trim_end_matches('0').trim_end_matches('.').to_string()
+}
+
+/// A rating in an accessible name, as (value, out of): "4.5 out of 5
+/// stars", "Rated 4 out of 5", "4.5 / 5", "4.5/5 stars". `None` when it
+/// is not one: no pair of numbers, the value above the scale, or a scale
+/// of more than 10 (a count, not stars).
+pub fn rating_of(name: &str) -> Option<(f64, f64)> {
+    let lower = name.to_ascii_lowercase();
+    let (before, after) = lower
+        .split_once(" out of ")
+        .or_else(|| lower.split_once('/'))?;
+    let last_number = |text: &str| {
+        text.split(|c: char| c.is_whitespace() || c == '(')
+            .rfind(|w| !w.is_empty())
+            .and_then(|w| w.replace(',', ".").parse::<f64>().ok())
+    };
+    let first_number = |text: &str| {
+        text.split(|c: char| c.is_whitespace() || c == ')')
+            .find(|w| !w.is_empty())
+            .and_then(|w| w.replace(',', ".").parse::<f64>().ok())
+    };
+    let value = last_number(before.trim())?;
+    let scale = first_number(after.trim())?;
+    (value.is_finite()
+        && scale.is_finite()
+        && scale > 0.0
+        && scale <= 10.0
+        && (0.0..=scale).contains(&value))
+    .then_some((value, scale))
 }
 
 /// What made a box a live log.
@@ -474,6 +639,8 @@ pub struct Page {
     pub regions: Vec<Region>,
     /// Its grids and wrapping flex rows.
     pub grids: Vec<Grid>,
+    /// Its meters, progress bars and ratings.
+    pub indicators: Vec<Indicator>,
 }
 
 impl Page {
@@ -522,6 +689,7 @@ impl Page {
                 BlockKind::Media(i) => out.push(format!("[{}]", self.media[*i].alt)),
                 BlockKind::Control(i) => out.push(self.controls[*i].name.clone()),
                 BlockKind::Log(i) => out.extend(self.logs[*i].entries.iter().map(Entry::text)),
+                BlockKind::Indicator(i) => out.push(self.indicators[*i].said()),
                 _ => out.push(block.text()),
             }
         }
@@ -603,8 +771,16 @@ struct Dom {
     selected: HashSet<usize>,
     source: HashMap<usize, String>,
     /// Whether each node is visually hidden by itself or an ancestor
-    /// (see [`conceals`]): its text is not drawn.
+    /// (see [`transparent`] and [`veils`]): its text is not drawn.
     concealed: Vec<bool>,
+    /// Concealed by `opacity: 0` on it or an ancestor ([`transparent`]).
+    faded: Vec<bool>,
+    /// Concealed another way ([`veils`]): clipped or shrunk away.
+    veiled: Vec<bool>,
+    /// The [screen-reader twins](Twin): each element of a pair.
+    twins: HashMap<usize, Twin>,
+    /// Elements by their `id`, the first of each.
+    ids: HashMap<String, usize>,
     url: String,
     title: String,
     width: f64,
@@ -753,18 +929,28 @@ impl Dom {
             width: document["contentWidth"].as_f64().unwrap_or(0.0),
             height: document["contentHeight"].as_f64().unwrap_or(0.0),
             concealed: Vec::new(),
+            faded: Vec::new(),
+            veiled: Vec::new(),
+            twins: HashMap::new(),
+            ids: HashMap::new(),
         };
         // Parents come before their children in a snapshot's order; a
         // parent after its child is read as not concealing.
-        let mut concealed = vec![false; n];
+        let (mut faded, mut veiled) = (vec![false; n], vec![false; n]);
         for i in 0..n {
-            let from_parent = usize::try_from(dom.parent[i])
-                .ok()
-                .filter(|&p| p < i)
-                .is_some_and(|p| concealed[p]);
-            concealed[i] = from_parent || conceals(&dom, i);
+            let parent = usize::try_from(dom.parent[i]).ok().filter(|&p| p < i);
+            faded[i] = parent.is_some_and(|p| faded[p]) || transparent(&dom, i);
+            veiled[i] = parent.is_some_and(|p| veiled[p]) || veils(&dom, i);
         }
-        dom.concealed = concealed;
+        dom.concealed = faded.iter().zip(&veiled).map(|(f, v)| *f || *v).collect();
+        dom.faded = faded;
+        dom.veiled = veiled;
+        for i in 0..n {
+            if let Some(id) = dom.attr(i, "id").filter(|id| !id.is_empty()) {
+                dom.ids.entry(id.to_string()).or_insert(i);
+            }
+        }
+        dom.twins = twins(&dom);
         dom
     }
 
@@ -874,8 +1060,8 @@ fn script_value(text: &str) -> bool {
     )
 }
 
-/// Whether element `i` hides what is in it from sight, though it is laid
-/// out (text for screen readers only, a tooltip waiting for a hover):
+/// Whether element `i` conceals what is in it from sight, though it is
+/// laid out (text for screen readers only, a tooltip waiting for a hover):
 /// - it is fully transparent (`opacity: 0`, which its children do not
 ///   inherit as a computed style);
 /// - it is positioned and clipped to no area (`clip: rect(0 0 0 0)`, or
@@ -891,12 +1077,20 @@ fn script_value(text: &str) -> bool {
 ///
 /// `visibility: hidden` needs no rule: it is inherited, so each hidden
 /// text node says so itself.
-fn conceals(dom: &Dom, i: usize) -> bool {
+///
+/// These are two tests: this one, the first, and [`veils`], the rest. A
+/// control hidden only by this one is waiting for a hover.
+fn transparent(dom: &Dom, i: usize) -> bool {
+    dom.is_element(i)
+        && dom.layout[i].is_some()
+        && number(Some(dom.style(i, 8))).is_some_and(|o| o <= 0.0)
+}
+
+/// The rest of [`transparent`]'s tests: element `i` is clipped or shrunk to
+/// nothing.
+fn veils(dom: &Dom, i: usize) -> bool {
     if !dom.is_element(i) || dom.layout[i].is_none() {
         return false;
-    }
-    if number(Some(dom.style(i, 8))).is_some_and(|o| o <= 0.0) {
-        return true;
     }
     let positioned = matches!(dom.style(i, 14), "absolute" | "fixed");
     if positioned && clipped_to_nothing(dom.style(i, 12)) {
@@ -916,6 +1110,52 @@ fn conceals(dom: &Dom, i: usize) -> bool {
         return true;
     }
     false
+}
+
+/// The digits of `text`, in order.
+fn digits(text: &str) -> String {
+    text.chars().filter(char::is_ascii_digit).collect()
+}
+
+/// The page's [screen-reader twins](Twin): an element that starts a
+/// concealed run (visually hidden itself, its parent not) and a sibling
+/// marked `aria-hidden="true"` that shows, whose texts have the same
+/// digits, at least one. A hidden hint has no digits its sibling shows,
+/// so it stays hidden.
+fn twins(dom: &Dom) -> HashMap<usize, Twin> {
+    let mut out = HashMap::new();
+    let hidden = |n: usize| {
+        dom.attr(n, "aria-hidden")
+            .is_some_and(|v| v.eq_ignore_ascii_case("true"))
+    };
+    for i in 0..dom.name.len() {
+        if !dom.concealed[i] || !dom.is_element(i) {
+            continue;
+        }
+        let Some(parent) = usize::try_from(dom.parent[i]).ok().filter(|&p| p < i) else {
+            continue;
+        };
+        if dom.concealed[parent] {
+            continue;
+        }
+        let said = digits(&dom.raw_text(i));
+        if said.is_empty() {
+            continue;
+        }
+        let shown = dom.children[parent].iter().copied().find(|&s| {
+            s != i
+                && dom.is_element(s)
+                && hidden(s)
+                && dom.layout[s].is_some()
+                && !dom.concealed[s]
+                && digits(&dom.raw_text(s)) == said
+        });
+        if let Some(shown) = shown {
+            out.insert(i, Twin::Spoken);
+            out.insert(shown, Twin::Shown);
+        }
+    }
+    out
 }
 
 /// The page's background colour: the root element's, else the body's
@@ -1224,6 +1464,9 @@ struct Context {
     /// Inside a link with nothing else to show: its visually hidden text
     /// is its name, and is read.
     name_only: bool,
+    /// Inside one of a pair of [screen-reader twins](Twin): the spoken
+    /// one's visually hidden text is read, marked so.
+    twin: Option<Twin>,
 }
 
 /// Tags whose content is never page text.
@@ -1281,6 +1524,7 @@ impl Walker<'_> {
                     && last.code == run.code
                     && last.control == run.control
                     && last.color == run.color
+                    && last.twin == run.twin
                     && last.picture.is_none()
                     && run.picture.is_none() =>
             {
@@ -1341,7 +1585,10 @@ impl Walker<'_> {
         let dom = self.dom;
         match dom.kind[i] {
             3 => {
-                if context.silent || !dom.shows(i) || dom.concealed[i] && !context.name_only {
+                if context.silent
+                    || !dom.shows(i)
+                    || dom.concealed[i] && !context.name_only && context.twin != Some(Twin::Spoken)
+                {
                     return;
                 }
                 let Some(text) = dom.text[i].clone() else {
@@ -1368,6 +1615,7 @@ impl Walker<'_> {
                     // layout's page-colors rule decides what of it shows.
                     color: (!color.is_empty()).then(|| truncate(&clean(color), 64)),
                     picture: None,
+                    twin: context.twin,
                 };
                 self.push(run, dom.rect(i));
             }
@@ -1422,8 +1670,19 @@ impl Walker<'_> {
             _ => None,
         };
         if let Some(kind) = media {
-            if laid_out && dom.shows(i) && !dom.concealed[i] {
+            if kind == MediaKind::Image
+                && let Some(rect) = pending_box(dom, i)
+            {
+                self.pending(i, rect, context);
+            } else if laid_out && dom.shows(i) && !dom.concealed[i] {
+                let index = self.page.media.len();
                 self.media(i, kind, context);
+                // A canvas or a drawing given a meter's or a progress
+                // bar's role, or a drawing named as a rating, is an
+                // indicator too.
+                if let Some(indicator) = self.indicator_kind(i) {
+                    self.indicator(i, indicator, Some(index), context);
+                }
             }
             return;
         }
@@ -1436,6 +1695,14 @@ impl Walker<'_> {
             self.log(i, kind, context);
             return;
         }
+        if laid_out
+            && dom.shows(i)
+            && !dom.concealed[i]
+            && let Some(kind) = self.indicator_kind(i)
+        {
+            self.indicator(i, kind, None, context);
+            return;
+        }
         // A CSS background picture on a box with no text of its own (a
         // thumbnail, an avatar, a banner): a picture region, under what
         // the box holds. A box with text keeps its text instead.
@@ -1445,6 +1712,16 @@ impl Walker<'_> {
         // Controls: an interactive role in the AX tree, or a form element.
         let role = self.ax.role(backend).or_else(|| dom_role(dom, i));
         if let Some(role) = role {
+            // Transparent until hovered: on the page's lists, not drawn.
+            if laid_out
+                && dom.faded[i]
+                && !dom.veiled[i]
+                && !matches!(dom.style(i, 1), "hidden" | "collapse")
+            {
+                let index = self.control(i, role);
+                self.page.controls[index].hover_only = true;
+                return;
+            }
             if !laid_out || !dom.shows(i) && role != Role::Link || dom.concealed[i] {
                 return;
             }
@@ -1486,6 +1763,9 @@ impl Walker<'_> {
             return;
         }
         let mut inner = context.clone();
+        if let Some(twin) = dom.twins.get(&i) {
+            inner.twin = Some(*twin);
+        }
         let role_attr = dom.attr(i, "role").unwrap_or_default().to_ascii_lowercase();
         if dom
             .attr(i, "aria-hidden")
@@ -1545,11 +1825,20 @@ impl Walker<'_> {
             "I" | "EM" | "CITE" | "DFN" => inner.italic = true,
             "CODE" | "KBD" | "SAMP" | "TT" => inner.code = true,
             "LABEL" => {
-                let labels_a_control = dom.attr(i, "for").is_some()
-                    || dom
-                        .descendants(i)
-                        .into_iter()
-                        .any(|d| dom.is_element(d) && dom_role(dom, d).is_some());
+                // It names what it labels, which shows the name: a
+                // control, a meter or a progress bar that is drawn. A
+                // `for` that points at anything else, or at nothing, or
+                // at a control that is not drawn (a custom check box's
+                // transparent input), leaves it the text it is.
+                let labels_a_control = match dom.attr(i, "for") {
+                    Some(id) => dom
+                        .ids
+                        .get(id.trim())
+                        .is_some_and(|&t| self.labelable(t) && !dom.concealed[t]),
+                    None => dom.descendants(i).into_iter().any(|d| {
+                        dom.is_element(d) && dom_role(dom, d).is_some() && !dom.concealed[d]
+                    }),
+                };
                 if labels_a_control {
                     inner.silent = true;
                 }
@@ -1691,8 +1980,231 @@ impl Walker<'_> {
                 || matches!(context.kind, BlockKind::Heading(_)),
             revision,
             text: truncate(&text, 500),
+            pending: false,
         });
         self.block(BlockKind::Media(index), i, context);
+    }
+
+    /// Whether a `<label for>` can name node `i`: a control, a meter or
+    /// a progress bar.
+    fn labelable(&self, i: usize) -> bool {
+        let dom = self.dom;
+        dom.is_element(i)
+            && (dom_role(dom, i).is_some()
+                || self.ax.role(dom.backend[i]).is_some()
+                || matches!(dom.name[i].as_str(), "METER" | "PROGRESS")
+                || matches!(
+                    self.indicator_kind(i),
+                    Some(IndicatorKind::Meter | IndicatorKind::Progress)
+                ))
+    }
+
+    /// Whether node `i` is an [`Indicator`], and which kind (a progress
+    /// with no value is told apart when it is read).
+    fn indicator_kind(&self, i: usize) -> Option<IndicatorKind> {
+        let dom = self.dom;
+        match dom.name[i].as_str() {
+            "METER" => return Some(IndicatorKind::Meter),
+            "PROGRESS" => return Some(IndicatorKind::Progress),
+            _ => {}
+        }
+        let role = dom
+            .attr(i, "role")
+            .and_then(|r| r.split_whitespace().next())
+            .unwrap_or_default()
+            .to_ascii_lowercase();
+        let ax_role = self
+            .ax
+            .get(dom.backend[i])
+            .and_then(|n| n["role"]["value"].as_str())
+            .unwrap_or_default();
+        match (role.as_str(), ax_role) {
+            ("progressbar", _) | (_, "progressbar" | "progressIndicator") => {
+                Some(IndicatorKind::Progress)
+            }
+            ("meter", _) | (_, "meter") => Some(IndicatorKind::Meter),
+            ("img" | "image", _) | ("", "img" | "image") if rating_of(&self.label(i)).is_some() => {
+                Some(IndicatorKind::Rating)
+            }
+            _ => None,
+        }
+    }
+
+    /// The text of the elements `ids` (space-separated) names, as
+    /// `aria-labelledby` points at them.
+    fn text_of_ids(&self, ids: &str) -> String {
+        ids.split_whitespace()
+            .filter_map(|id| self.dom.ids.get(id))
+            .map(|&t| clean(&self.dom.raw_text(t)))
+            .filter(|t| !t.is_empty())
+            .collect::<Vec<_>>()
+            .join(" ")
+    }
+
+    /// Node `i`'s indicator, of `kind`, as a block; `media` is the region
+    /// it also is.
+    fn indicator(
+        &mut self,
+        i: usize,
+        kind: IndicatorKind,
+        media: Option<usize>,
+        context: &Context,
+    ) {
+        let dom = self.dom;
+        let backend = dom.backend[i];
+        let ax = self.ax.get(backend);
+        let ax_number = |prop: &str| {
+            ax.and_then(|n| property(n, prop)).and_then(|v| {
+                v.as_f64()
+                    .or_else(|| v.as_str().and_then(|t| number(Some(t))))
+            })
+        };
+        let ax_value = ax.and_then(|n| match &n["value"]["value"] {
+            Value::Number(v) => v.as_f64(),
+            Value::String(t) => number(Some(t)),
+            _ => None,
+        });
+        let attr = |name: &str| number(dom.attr(i, name));
+        let label = Some(self.label(i))
+            .filter(|l| !l.is_empty())
+            .or_else(|| {
+                let id = dom.attr(i, "id")?;
+                (0..dom.name.len())
+                    .find(|&l| dom.name[l] == "LABEL" && dom.attr(l, "for") == Some(id))
+                    .map(|l| clean(&dom.raw_text(l)))
+                    .filter(|t| !t.is_empty())
+            })
+            .or_else(|| {
+                dom.attr(i, "aria-labelledby")
+                    .map(|ids| self.text_of_ids(ids))
+                    .filter(|t| !t.is_empty())
+            })
+            .or_else(|| dom.attr(i, "title").map(clean))
+            .map(|l| truncate(&l, 200))
+            .unwrap_or_default();
+        let (mut kind, value, min, max) = match (kind, dom.name[i].as_str()) {
+            (IndicatorKind::Rating, _) => {
+                let (value, scale) = rating_of(&label).unwrap_or((0.0, 5.0));
+                (kind, Some(value), 0.0, scale)
+            }
+            // A meter's value is 0 when it says none.
+            (_, "METER") => (
+                kind,
+                attr("value").or(ax_value).or(Some(0.0)),
+                attr("min").unwrap_or(0.0),
+                attr("max").unwrap_or(1.0),
+            ),
+            // A progress with no value is busy (indeterminate).
+            (_, "PROGRESS") => (kind, attr("value"), 0.0, attr("max").unwrap_or(1.0)),
+            _ => (
+                kind,
+                attr("aria-valuenow")
+                    .or_else(|| ax_number("valuenow"))
+                    .or(ax_value),
+                attr("aria-valuemin")
+                    .or_else(|| ax_number("valuemin"))
+                    .unwrap_or(0.0),
+                attr("aria-valuemax")
+                    .or_else(|| ax_number("valuemax"))
+                    .unwrap_or(100.0),
+            ),
+        };
+        let max = if max < min { min } else { max };
+        let value = value.map(|v| v.clamp(min, max));
+        if kind == IndicatorKind::Progress && value.is_none() {
+            kind = IndicatorKind::Busy;
+        }
+        if kind == IndicatorKind::Meter && value.is_none() {
+            kind = IndicatorKind::Busy;
+        }
+        let text = dom
+            .attr(i, "aria-valuetext")
+            .map(clean)
+            .or_else(|| {
+                ax.and_then(|n| property(n, "valuetext"))
+                    .and_then(Value::as_str)
+                    .map(clean)
+            })
+            .or_else(|| {
+                // What a styled box holds (a signal meter's glyphs); a
+                // meter's or a progress's own content is fallback, never
+                // shown, and a rating's is its picture.
+                if matches!(dom.name[i].as_str(), "METER" | "PROGRESS")
+                    || kind == IndicatorKind::Rating
+                {
+                    return None;
+                }
+                let text = clean(&dom.raw_text(i));
+                (!text.trim().is_empty() && text.trim() != label).then(|| text.trim().to_string())
+            })
+            .filter(|t| !t.trim().is_empty())
+            .map(|t| truncate(&t, 200));
+        let bands = (dom.name[i] == "METER"
+            && ["low", "high", "optimum"].iter().any(|a| attr(a).is_some()))
+        .then(|| {
+            let low = attr("low").unwrap_or(min).clamp(min, max);
+            let high = attr("high").unwrap_or(max).clamp(low, max);
+            let optimum = attr("optimum").unwrap_or((min + max) / 2.0).clamp(min, max);
+            (low, high, optimum)
+        });
+        let before = plain(&self.runs).trim_end().to_lowercase();
+        let label_in_text = !label.is_empty() && before.ends_with(&label.to_lowercase());
+        let after_text = !before.is_empty() && !before.ends_with('\n');
+        self.flush(context);
+        let index = self.page.indicators.len();
+        self.page.indicators.push(Indicator {
+            node: backend,
+            kind,
+            label,
+            value,
+            min,
+            max,
+            text,
+            rect: dom.rect(i).unwrap_or_default(),
+            bands,
+            media,
+            label_in_text,
+            after_text,
+        });
+        self.block(BlockKind::Indicator(index), i, context);
+    }
+
+    /// A placeholder for the `<img>` on node `i`, which has no picture yet,
+    /// in `rect`: its alt text or title, else its link's.
+    fn pending(&mut self, i: usize, rect: Rect, context: &Context) {
+        let dom = self.dom;
+        self.media(i, MediaKind::Image, context);
+        let mut alt = self
+            .page
+            .media
+            .last()
+            .map(|m| m.alt.clone())
+            .unwrap_or_default();
+        if alt.is_empty() {
+            let mut at = dom.parent[i];
+            for _ in 0..6 {
+                let Ok(p) = usize::try_from(at) else { break };
+                if dom.name[p] == "A" {
+                    alt = dom
+                        .attr(p, "title")
+                        .or_else(|| dom.attr(p, "aria-label"))
+                        .map(clean)
+                        .filter(|t| !script_value(t))
+                        .unwrap_or_default();
+                    break;
+                }
+                at = dom.parent[p];
+            }
+        }
+        if let Some(media) = self.page.media.last_mut() {
+            media.pending = true;
+            media.rect = rect;
+            media.alt = truncate(&alt, 500);
+        }
+        if let Some(block) = self.page.blocks.last_mut() {
+            block.rect = rect;
+            block.frame = rect;
+        }
     }
 
     /// Its accessible name: the AX tree's, else `aria-label`.
@@ -1813,11 +2325,37 @@ impl Walker<'_> {
             .or_else(|| dom.attr(i, "title").map(clean))
             .or_else(|| dom.attr(i, "placeholder").map(clean))
             .or_else(|| {
+                dom.attr(i, "aria-labelledby")
+                    .map(|ids| self.text_of_ids(ids))
+                    .filter(|t| !t.is_empty())
+            })
+            .or_else(|| {
+                // Its text, an inner drawing's `<title>` among it.
                 let text = clean(&dom.raw_text(i));
-                (!text.is_empty()).then_some(text)
+                (!text.trim().is_empty()).then(|| text.trim().to_string())
             })
             .or_else(|| dom.attr(i, "name").map(clean))
             .unwrap_or_default();
+        let icon_only = role == Role::Button
+            && if dom.name[i] == "INPUT" {
+                kind == "image"
+            } else {
+                !shows_text(dom, i)
+            };
+        // An icon button's face: a glyph for its name, else for its
+        // icon's (`<use href="#icon-close">`, `class="icon-search"`),
+        // which then names it too.
+        let (name, glyph) = if icon_only {
+            match glyph_for(&name) {
+                Some(glyph) => (name, Some(glyph)),
+                None => match icon_name(dom, i) {
+                    Some((word, glyph)) if name.is_empty() => (word, Some(glyph)),
+                    _ => (name, None),
+                },
+            }
+        } else {
+            (name, None)
+        };
         let options = if dom.name[i] == "SELECT" {
             dom.descendants(i)
                 .into_iter()
@@ -1940,12 +2478,9 @@ impl Walker<'_> {
                 .flatten(),
             rect: dom.rect(i).unwrap_or_default(),
             from_ax: ax.is_some(),
-            icon_only: role == Role::Button
-                && if dom.name[i] == "INPUT" {
-                    kind == "image"
-                } else {
-                    clean(&dom.raw_text(i)).trim().is_empty()
-                },
+            icon_only,
+            glyph: glyph.map(str::to_string),
+            hover_only: false,
             revision: 0,
             state_revision: 0,
         };
@@ -2071,6 +2606,33 @@ impl Walker<'_> {
     }
 }
 
+/// The box a placeholder for `<img>` `i` takes when the image has no
+/// source yet: a lazy thumbnail, transparent (`opacity: 0`) until its
+/// picture loads, in its own box; or one with no size of its own yet, in
+/// its parent's box when that holds nothing else. Not one hidden another
+/// way, and only a box of at least 16 x 16 CSS pixels.
+fn pending_box(dom: &Dom, i: usize) -> Option<Rect> {
+    let has_source = dom.source.get(&i).is_some_and(|s| !s.trim().is_empty())
+        || dom.attr(i, "src").is_some_and(|s| !s.trim().is_empty());
+    if has_source || dom.layout[i].is_none() || dom.veiled[i] {
+        return None;
+    }
+    if matches!(dom.style(i, 1), "hidden" | "collapse") {
+        return None;
+    }
+    let big = |r: &Rect| r.width >= 16.0 && r.height >= 16.0;
+    let own = dom.rect(i)?;
+    if big(&own) {
+        return Some(own);
+    }
+    let parent = usize::try_from(dom.parent[i]).ok()?;
+    let rect = dom.rect(parent).filter(big)?;
+    let alone = dom.children[parent].iter().all(|&c| {
+        c == i || dom.layout[c].is_none() || dom.kind[c] == 3 && dom.value[c].trim().is_empty()
+    });
+    alone.then_some(rect)
+}
+
 /// Whether table `i` lays a page out rather than holding data: it says
 /// so (`role="presentation"` or `"none"`), or a table is nested in it, as
 /// browsers' accessibility trees judge. Its contents are then read as the
@@ -2160,6 +2722,159 @@ pub fn live_runs(value: &Value, base: &str) -> Vec<Run> {
     }
     tidy(&mut merged);
     merged
+}
+
+/// Whether node `i` shows text of its own: a laid-out, visible text node
+/// under it with words. A drawing's `<title>` is never laid out.
+fn shows_text(dom: &Dom, i: usize) -> bool {
+    dom.descendants(i).into_iter().any(|d| {
+        dom.kind[d] == 3
+            && dom.layout[d].is_some()
+            && dom.shows(d)
+            && !dom.concealed[d]
+            && dom.text[d].as_deref().is_some_and(|t| !t.trim().is_empty())
+    })
+}
+
+/// Icon words and the glyph each is drawn as, on an icon-only button.
+const GLYPHS: &[(&[&str], &str)] = &[
+    (&["more", "ellipsis", "kebab", "overflow", "dots"], "⋯"),
+    (&["close", "dismiss", "cancel", "x"], "✕"),
+    (&["search", "magnifier"], "🔍"),
+    (&["menu", "hamburger", "burger", "navigation"], "≡"),
+    (&["settings", "gear", "cog", "preferences"], "⚙"),
+    (&["home"], "⌂"),
+    (&["notifications", "notification", "bell", "alerts"], "🔔"),
+    (&["user", "profile", "account", "avatar"], "👤"),
+    (&["play"], "▶"),
+    (&["pause"], "⏸"),
+    (&["next", "forward"], "›"),
+    (&["previous", "prev", "back"], "‹"),
+    (&["share"], "⤴"),
+    (&["like", "heart", "favorite", "favourite"], "♥"),
+    (
+        &[
+            "chat", "message", "messages", "comment", "comments", "whispers",
+        ],
+        "💬",
+    ),
+    (&["cart", "basket"], "🛒"),
+    (&["download"], "⤓"),
+    (&["upload"], "⤒"),
+    (&["edit", "pencil"], "✎"),
+    (&["delete", "trash"], "🗑"),
+    (&["add", "plus"], "+"),
+    (&["remove", "minus"], "−"),
+    (&["expand", "chevron", "caret"], "▾"),
+    (&["collapse"], "▴"),
+    (&["fullscreen", "maximize"], "⛶"),
+    (&["mute", "volume", "unmute"], "🔈"),
+    (&["refresh", "reload"], "↻"),
+    (&["help", "question"], "?"),
+    (&["info", "information"], "ⓘ"),
+    (&["filter", "filters"], "⏷"),
+    (&["copy"], "⧉"),
+    (&["link"], "🔗"),
+    (&["bookmark", "save"], "🔖"),
+];
+
+/// The glyph of an icon word, if it is one.
+fn glyph_of_word(word: &str) -> Option<&'static str> {
+    GLYPHS
+        .iter()
+        .find(|(words, _)| words.contains(&word))
+        .map(|(_, glyph)| *glyph)
+}
+
+/// The glyph for an icon button named `name`: its first word an icon
+/// word, in a short name ("More actions", "Close", "Search the shop");
+/// not a sentence.
+fn glyph_for(name: &str) -> Option<&'static str> {
+    let words: Vec<String> = name
+        .split(|c: char| !c.is_alphanumeric())
+        .filter(|w| !w.is_empty())
+        .map(str::to_lowercase)
+        .collect();
+    if words.is_empty() || words.len() > 4 {
+        return None;
+    }
+    glyph_of_word(&words[0])
+}
+
+/// The name of the icon a button draws, as the page spells it in its
+/// own attributes or its icon's (`data-icon`, `<use href="#icon-close">`,
+/// `class="fa-search"`, `data-testid="CloseIcon"`), and its glyph: the
+/// first icon word found, capitalised (`Close`).
+fn icon_name(dom: &Dom, i: usize) -> Option<(String, &'static str)> {
+    let mut nodes = vec![i];
+    nodes.extend(
+        dom.descendants(i)
+            .into_iter()
+            .filter(|&d| dom.is_element(d))
+            .take(32),
+    );
+    for n in nodes {
+        for (key, value) in &dom.attrs[n] {
+            let value = match key.as_str() {
+                "data-icon" | "icon" | "data-testid" | "data-test-selector" | "data-a-target"
+                | "id" => value.clone(),
+                // Of its classes, only an icon's (`icon-search`,
+                // `fa-search`): the rest name its look (`…ButtonShapeNext…`).
+                "class" => value
+                    .split_whitespace()
+                    .filter(|c| {
+                        let c = c.to_ascii_lowercase();
+                        c.contains("icon")
+                            || ["fa-", "bi-", "mdi-", "ti-"]
+                                .iter()
+                                .any(|p| c.starts_with(p))
+                    })
+                    .collect::<Vec<_>>()
+                    .join(" "),
+                "href" | "xlink:href" if dom.name[n] == "USE" => {
+                    value.rsplit('#').next().unwrap_or_default().to_string()
+                }
+                _ => continue,
+            };
+            for word in words_of(&value) {
+                if let Some(glyph) = glyph_of_word(&word) {
+                    let mut name = word.clone();
+                    if let Some(first) = name.get_mut(0..1) {
+                        first.make_ascii_uppercase();
+                    }
+                    return Some((name, glyph));
+                }
+            }
+        }
+    }
+    None
+}
+
+/// The words of an identifier: split at anything not a letter, and
+/// between a lower-case letter and an upper-case one (`CloseIcon`), in
+/// lower case.
+fn words_of(text: &str) -> Vec<String> {
+    let mut words = Vec::new();
+    let mut word = String::new();
+    let mut lower = false;
+    for c in text.chars() {
+        if !c.is_ascii_alphabetic() {
+            if !word.is_empty() {
+                words.push(std::mem::take(&mut word));
+            }
+            lower = false;
+            continue;
+        }
+        if c.is_ascii_uppercase() && lower && !word.is_empty() {
+            words.push(std::mem::take(&mut word));
+        }
+        lower = c.is_ascii_lowercase();
+        word.push(c.to_ascii_lowercase());
+    }
+    if !word.is_empty() {
+        words.push(word);
+    }
+    words
 }
 
 /// A form element's role when the AX tree has none for it.
@@ -2279,6 +2994,7 @@ pub fn build_with(
         region: None,
         aria_hidden: false,
         name_only: false,
+        twin: None,
     };
     if !dom.parent.is_empty() {
         walker.walk(0, &top);

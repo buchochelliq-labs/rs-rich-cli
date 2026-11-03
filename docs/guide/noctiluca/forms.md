@@ -31,6 +31,36 @@ Disabled controls and disabled options stay in view, marked, and cannot be
 used. A control's label is its accessible name: what a screen reader
 would say.
 
+- **Icon-only buttons** (an icon and no text) take their name from
+  `aria-label`, `title`, `aria-labelledby` or an inner drawing's
+  `<title>`. A name, or an icon's own name (`<use href="#icon-close">`,
+  `class="icon-search"`), that is a known icon's draws its glyph: `[⋯]`
+  for "More actions", `[✕]` for "Close", `[🔍]` for "Search". The name is
+  still what hints, site keys and `F1` say.
+- **Hover-only controls**, transparent until the pointer is over them (a
+  card's "More actions"), are not drawn, as Chrome does not draw them;
+  they are still on the page's lists, so `Ctrl+K` can bind a key to one.
+- A `<label for>` names the control it points at. One that points at
+  something that is not a control, or at nothing, stays the text it is.
+
+## Meters, progress bars and ratings
+
+Values a page states in a range are drawn as native ones, read again at
+every reading, so a bar that moves on the page moves here:
+
+| On the page | Drawn as |
+|---|---|
+| `<meter>`, `role=meter` | A bar, green, yellow or red by the meter's `low`, `high` and `optimum`; a narrow meter of a few steps (a signal's "3 of 5 bars") as rising blocks `▁▃▄▆█` |
+| `<progress>`, `role=progressbar` with `aria-valuenow` | A bar and its share, `Upload ━━━━━━━━ 40%` |
+| A progress with no value | A busy bar, `busy` |
+| A roughly square box of at least 10 x 5 cells (a speed test's gauge, a `<canvas>` or `<svg>` given `role=meter`) | A dial: an arc lit to its value, its value text inside |
+| `role=img` named "4.5 out of 5 stars" or "4.5 / 5" | Stars and the number, `★★★★½ 4.5`; nothing when the name is not a rating |
+
+Each shows its label (its `<label for>` or accessible name) and its
+`aria-valuetext`, else its share. A canvas or drawing that is an
+indicator too is drawn as the indicator in its place, by the
+[`indicators`](adaptations.md#terminal-adaptations) rule.
+
 ## Getting to a control
 
 **In reader mode**, the widgets sit in the page's column, where the page

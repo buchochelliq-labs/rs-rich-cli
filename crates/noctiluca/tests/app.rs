@@ -399,7 +399,8 @@ fn a_key_toggles_the_adapted_and_the_faithful_projection_and_about_lists_the_rul
         Box::new(engine()),
         projection(Config::default(), "adapt.html"),
     )
-    .driver(72, 40);
+    // Tall enough for every rule and the codec table under them.
+    .driver(72, 48);
     wait_for(&mut driver, "≡ Sections: News Sea Sky About");
     driver.press("a");
     wait_for(&mut driver, "faithful");

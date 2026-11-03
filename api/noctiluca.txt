@@ -64,9 +64,11 @@ pub noctiluca::adapt::Rule::CollapseGaps
 pub noctiluca::adapt::Rule::CollapseNav
 pub noctiluca::adapt::Rule::DecorativeImages
 pub noctiluca::adapt::Rule::IconButtons
+pub noctiluca::adapt::Rule::Indicators
 pub noctiluca::adapt::Rule::InlinePictures
 pub noctiluca::adapt::Rule::LiveTail
 pub noctiluca::adapt::Rule::PageColors
+pub noctiluca::adapt::Rule::ScreenReaderTwins
 pub noctiluca::adapt::Rule::SnapGrids
 pub noctiluca::adapt::Rule::TextOverPictures
 impl noctiluca::adapt::Rule
@@ -1259,6 +1261,42 @@ pub fn noctiluca::testing::FakeEngine::set_screencast_scale(&mut self, noctiluca
 pub fn noctiluca::testing::FakeEngine::snapshot(&mut self, noctiluca::engine::TabId) -> std::io::error::Result<noctiluca::engine::PageSnapshot>
 pub fn noctiluca::testing::FakeEngine::state(&self, noctiluca::engine::TabId) -> rich_embed::web::PageState
 pub type noctiluca::engine::NodeId = i64
+pub mod noctiluca::indicator
+pub enum noctiluca::indicator::Shape
+pub noctiluca::indicator::Shape::Bar
+pub noctiluca::indicator::Shape::Dial
+pub noctiluca::indicator::Shape::Stars
+pub noctiluca::indicator::Shape::Steps
+impl core::clone::Clone for noctiluca::indicator::Shape
+pub fn noctiluca::indicator::Shape::clone(&self) -> noctiluca::indicator::Shape
+impl core::cmp::Eq for noctiluca::indicator::Shape
+impl core::cmp::PartialEq for noctiluca::indicator::Shape
+pub fn noctiluca::indicator::Shape::eq(&self, &noctiluca::indicator::Shape) -> bool
+impl core::fmt::Debug for noctiluca::indicator::Shape
+pub fn noctiluca::indicator::Shape::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Copy for noctiluca::indicator::Shape
+impl core::marker::StructuralPartialEq for noctiluca::indicator::Shape
+impl core::marker::Freeze for noctiluca::indicator::Shape
+impl core::marker::Send for noctiluca::indicator::Shape
+impl core::marker::Sync for noctiluca::indicator::Shape
+impl core::marker::Unpin for noctiluca::indicator::Shape
+impl core::marker::UnsafeUnpin for noctiluca::indicator::Shape
+impl core::panic::unwind_safe::RefUnwindSafe for noctiluca::indicator::Shape
+impl core::panic::unwind_safe::UnwindSafe for noctiluca::indicator::Shape
+pub const noctiluca::indicator::DIAL_COLUMNS: usize
+pub const noctiluca::indicator::DIAL_ROWS: usize
+pub const noctiluca::indicator::MAX_DIAL_COLUMNS: usize
+pub const noctiluca::indicator::MAX_DIAL_ROWS: usize
+pub const noctiluca::indicator::MIN_BAR: usize
+pub fn noctiluca::indicator::bar(&noctiluca::model::Indicator, usize) -> noctiluca::layout::Line
+pub fn noctiluca::indicator::colour(&noctiluca::model::Indicator) -> &'static str
+pub fn noctiluca::indicator::dial(&noctiluca::model::Indicator, usize, usize) -> alloc::vec::Vec<noctiluca::layout::Line>
+pub fn noctiluca::indicator::instead(&noctiluca::model::Page, usize, noctiluca::adapt::Adapt) -> bool
+pub fn noctiluca::indicator::lines(&noctiluca::model::Indicator, usize, usize, (f64, f64)) -> alloc::vec::Vec<noctiluca::layout::Line>
+pub fn noctiluca::indicator::reader_lines(&noctiluca::model::Page, usize, usize, noctiluca::adapt::Adapt) -> core::option::Option<alloc::vec::Vec<noctiluca::layout::Line>>
+pub fn noctiluca::indicator::shape(&noctiluca::model::Indicator, usize, usize, (f64, f64)) -> noctiluca::indicator::Shape
+pub fn noctiluca::indicator::stars(&noctiluca::model::Indicator) -> noctiluca::layout::Line
+pub fn noctiluca::indicator::steps(&noctiluca::model::Indicator) -> noctiluca::layout::Line
 pub mod noctiluca::layout
 pub enum noctiluca::layout::LogScroll
 pub noctiluca::layout::LogScroll::Follow
@@ -1450,6 +1488,7 @@ pub enum noctiluca::model::BlockKind
 pub noctiluca::model::BlockKind::Code
 pub noctiluca::model::BlockKind::Control(usize)
 pub noctiluca::model::BlockKind::Heading(u8)
+pub noctiluca::model::BlockKind::Indicator(usize)
 pub noctiluca::model::BlockKind::ListItem
 pub noctiluca::model::BlockKind::ListItem::depth: u8
 pub noctiluca::model::BlockKind::ListItem::marker: alloc::string::String
@@ -1493,6 +1532,29 @@ impl core::marker::Unpin for noctiluca::model::Check
 impl core::marker::UnsafeUnpin for noctiluca::model::Check
 impl core::panic::unwind_safe::RefUnwindSafe for noctiluca::model::Check
 impl core::panic::unwind_safe::UnwindSafe for noctiluca::model::Check
+pub enum noctiluca::model::IndicatorKind
+pub noctiluca::model::IndicatorKind::Busy
+pub noctiluca::model::IndicatorKind::Meter
+pub noctiluca::model::IndicatorKind::Progress
+pub noctiluca::model::IndicatorKind::Rating
+impl core::clone::Clone for noctiluca::model::IndicatorKind
+pub fn noctiluca::model::IndicatorKind::clone(&self) -> noctiluca::model::IndicatorKind
+impl core::cmp::Eq for noctiluca::model::IndicatorKind
+impl core::cmp::PartialEq for noctiluca::model::IndicatorKind
+pub fn noctiluca::model::IndicatorKind::eq(&self, &noctiluca::model::IndicatorKind) -> bool
+impl core::fmt::Debug for noctiluca::model::IndicatorKind
+pub fn noctiluca::model::IndicatorKind::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::hash::Hash for noctiluca::model::IndicatorKind
+pub fn noctiluca::model::IndicatorKind::hash<__H: core::hash::Hasher>(&self, &mut __H)
+impl core::marker::Copy for noctiluca::model::IndicatorKind
+impl core::marker::StructuralPartialEq for noctiluca::model::IndicatorKind
+impl core::marker::Freeze for noctiluca::model::IndicatorKind
+impl core::marker::Send for noctiluca::model::IndicatorKind
+impl core::marker::Sync for noctiluca::model::IndicatorKind
+impl core::marker::Unpin for noctiluca::model::IndicatorKind
+impl core::marker::UnsafeUnpin for noctiluca::model::IndicatorKind
+impl core::panic::unwind_safe::RefUnwindSafe for noctiluca::model::IndicatorKind
+impl core::panic::unwind_safe::UnwindSafe for noctiluca::model::IndicatorKind
 pub enum noctiluca::model::LogKind
 pub noctiluca::model::LogKind::Appended
 pub noctiluca::model::LogKind::Live
@@ -1591,6 +1653,27 @@ impl core::marker::Unpin for noctiluca::model::Role
 impl core::marker::UnsafeUnpin for noctiluca::model::Role
 impl core::panic::unwind_safe::RefUnwindSafe for noctiluca::model::Role
 impl core::panic::unwind_safe::UnwindSafe for noctiluca::model::Role
+pub enum noctiluca::model::Twin
+pub noctiluca::model::Twin::Shown
+pub noctiluca::model::Twin::Spoken
+impl core::clone::Clone for noctiluca::model::Twin
+pub fn noctiluca::model::Twin::clone(&self) -> noctiluca::model::Twin
+impl core::cmp::Eq for noctiluca::model::Twin
+impl core::cmp::PartialEq for noctiluca::model::Twin
+pub fn noctiluca::model::Twin::eq(&self, &noctiluca::model::Twin) -> bool
+impl core::fmt::Debug for noctiluca::model::Twin
+pub fn noctiluca::model::Twin::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::hash::Hash for noctiluca::model::Twin
+pub fn noctiluca::model::Twin::hash<__H: core::hash::Hasher>(&self, &mut __H)
+impl core::marker::Copy for noctiluca::model::Twin
+impl core::marker::StructuralPartialEq for noctiluca::model::Twin
+impl core::marker::Freeze for noctiluca::model::Twin
+impl core::marker::Send for noctiluca::model::Twin
+impl core::marker::Sync for noctiluca::model::Twin
+impl core::marker::Unpin for noctiluca::model::Twin
+impl core::marker::UnsafeUnpin for noctiluca::model::Twin
+impl core::panic::unwind_safe::RefUnwindSafe for noctiluca::model::Twin
+impl core::panic::unwind_safe::UnwindSafe for noctiluca::model::Twin
 pub struct noctiluca::model::Binding
 pub noctiluca::model::Binding::document: u64
 pub noctiluca::model::Binding::node: noctiluca::engine::NodeId
@@ -1685,7 +1768,9 @@ pub struct noctiluca::model::Control
 pub noctiluca::model::Control::checked: core::option::Option<noctiluca::model::Check>
 pub noctiluca::model::Control::disabled: bool
 pub noctiluca::model::Control::from_ax: bool
+pub noctiluca::model::Control::glyph: core::option::Option<alloc::string::String>
 pub noctiluca::model::Control::group: core::option::Option<alloc::string::String>
+pub noctiluca::model::Control::hover_only: bool
 pub noctiluca::model::Control::href: core::option::Option<alloc::string::String>
 pub noctiluca::model::Control::icon_only: bool
 pub noctiluca::model::Control::max: core::option::Option<f64>
@@ -1756,6 +1841,37 @@ impl core::marker::Unpin for noctiluca::model::Grid
 impl core::marker::UnsafeUnpin for noctiluca::model::Grid
 impl core::panic::unwind_safe::RefUnwindSafe for noctiluca::model::Grid
 impl core::panic::unwind_safe::UnwindSafe for noctiluca::model::Grid
+pub struct noctiluca::model::Indicator
+pub noctiluca::model::Indicator::after_text: bool
+pub noctiluca::model::Indicator::bands: core::option::Option<(f64, f64, f64)>
+pub noctiluca::model::Indicator::kind: noctiluca::model::IndicatorKind
+pub noctiluca::model::Indicator::label: alloc::string::String
+pub noctiluca::model::Indicator::label_in_text: bool
+pub noctiluca::model::Indicator::max: f64
+pub noctiluca::model::Indicator::media: core::option::Option<usize>
+pub noctiluca::model::Indicator::min: f64
+pub noctiluca::model::Indicator::node: noctiluca::engine::NodeId
+pub noctiluca::model::Indicator::rect: noctiluca::engine::Rect
+pub noctiluca::model::Indicator::text: core::option::Option<alloc::string::String>
+pub noctiluca::model::Indicator::value: core::option::Option<f64>
+impl noctiluca::model::Indicator
+pub fn noctiluca::model::Indicator::readout(&self) -> alloc::string::String
+pub fn noctiluca::model::Indicator::said(&self) -> alloc::string::String
+pub fn noctiluca::model::Indicator::share(&self) -> core::option::Option<f64>
+impl core::clone::Clone for noctiluca::model::Indicator
+pub fn noctiluca::model::Indicator::clone(&self) -> noctiluca::model::Indicator
+impl core::cmp::PartialEq for noctiluca::model::Indicator
+pub fn noctiluca::model::Indicator::eq(&self, &noctiluca::model::Indicator) -> bool
+impl core::fmt::Debug for noctiluca::model::Indicator
+pub fn noctiluca::model::Indicator::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for noctiluca::model::Indicator
+impl core::marker::Freeze for noctiluca::model::Indicator
+impl core::marker::Send for noctiluca::model::Indicator
+impl core::marker::Sync for noctiluca::model::Indicator
+impl core::marker::Unpin for noctiluca::model::Indicator
+impl core::marker::UnsafeUnpin for noctiluca::model::Indicator
+impl core::panic::unwind_safe::RefUnwindSafe for noctiluca::model::Indicator
+impl core::panic::unwind_safe::UnwindSafe for noctiluca::model::Indicator
 pub struct noctiluca::model::Log
 pub noctiluca::model::Log::entries: alloc::vec::Vec<noctiluca::model::Entry>
 pub noctiluca::model::Log::first_shown: core::option::Option<u64>
@@ -1787,6 +1903,7 @@ pub noctiluca::model::Media::empty_alt: bool
 pub noctiluca::model::Media::in_label: bool
 pub noctiluca::model::Media::kind: noctiluca::model::MediaKind
 pub noctiluca::model::Media::node: noctiluca::engine::NodeId
+pub noctiluca::model::Media::pending: bool
 pub noctiluca::model::Media::picture: core::option::Option<rich_art::picture::Picture>
 pub noctiluca::model::Media::playback: core::option::Option<noctiluca::engine::Playback>
 pub noctiluca::model::Media::poster: alloc::string::String
@@ -1817,6 +1934,7 @@ pub noctiluca::model::Page::document: u64
 pub noctiluca::model::Page::grids: alloc::vec::Vec<noctiluca::model::Grid>
 pub noctiluca::model::Page::has_ax: bool
 pub noctiluca::model::Page::height: f64
+pub noctiluca::model::Page::indicators: alloc::vec::Vec<noctiluca::model::Indicator>
 pub noctiluca::model::Page::inline_pictures: std::collections::hash::map::HashMap<alloc::string::String, rich_art::picture::Picture>
 pub noctiluca::model::Page::logs: alloc::vec::Vec<noctiluca::model::Log>
 pub noctiluca::model::Page::media: alloc::vec::Vec<noctiluca::model::Media>
@@ -1912,6 +2030,7 @@ pub noctiluca::model::Run::control: core::option::Option<usize>
 pub noctiluca::model::Run::italic: bool
 pub noctiluca::model::Run::picture: core::option::Option<noctiluca::model::Picture>
 pub noctiluca::model::Run::text: alloc::string::String
+pub noctiluca::model::Run::twin: core::option::Option<noctiluca::model::Twin>
 impl noctiluca::model::Run
 pub fn noctiluca::model::Run::plain(impl core::convert::Into<alloc::string::String>) -> noctiluca::model::Run
 impl core::clone::Clone for noctiluca::model::Run
@@ -1954,7 +2073,9 @@ pub const noctiluca::model::MAX_ENTRIES: usize
 pub fn noctiluca::model::build(&noctiluca::engine::PageSnapshot, &mut noctiluca::model::Revisions) -> noctiluca::model::Page
 pub fn noctiluca::model::build_with(&noctiluca::engine::PageSnapshot, &mut noctiluca::model::Revisions, &std::collections::hash::set::HashSet<noctiluca::engine::NodeId>) -> noctiluca::model::Page
 pub fn noctiluca::model::live_runs(&serde_json::value::Value, &str) -> alloc::vec::Vec<noctiluca::model::Run>
+pub fn noctiluca::model::number_text(f64) -> alloc::string::String
 pub fn noctiluca::model::plain(&[noctiluca::model::Run]) -> alloc::string::String
+pub fn noctiluca::model::rating_of(&str) -> core::option::Option<(f64, f64)>
 pub mod noctiluca::pictures
 pub struct noctiluca::pictures::Cells
 impl noctiluca::pictures::Cells

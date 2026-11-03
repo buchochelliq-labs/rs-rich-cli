@@ -240,6 +240,7 @@ fn tall_picture() -> noctiluca::model::Page {
         in_label: false,
         revision: 0,
         text: String::new(),
+        pending: false,
     });
     page.blocks.push(Block {
         kind: BlockKind::Media(0),

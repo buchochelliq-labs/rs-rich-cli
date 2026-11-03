@@ -385,6 +385,7 @@ mod tests {
             in_label: false,
             revision: 0,
             text: String::new(),
+            pending: false,
         });
         page
     }
