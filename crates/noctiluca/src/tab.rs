@@ -69,6 +69,9 @@ const QUIET: Duration = Duration::from_millis(400);
 /// How often the tab looks for the browser's next frame while one is due
 /// and has not come.
 const FRAME_POLL: Duration = Duration::from_millis(3);
+/// The pixel view's frames are looked for this often (30 a second at
+/// most; the app's byte budget drops what the terminal cannot take).
+const SCREEN_EVERY: Duration = Duration::from_millis(33);
 
 /// What an action does to its control.
 #[derive(Clone, Debug, PartialEq)]
@@ -135,6 +138,21 @@ pub enum Command {
     Resize(u16, u16),
     /// Read the page again now.
     Refresh,
+    /// The pixel view (#818) is shown, or left: while it is, the
+    /// screencast runs at full scale and every frame comes as an
+    /// [`Update::Screen`] (the video regions get none, as none are drawn).
+    Pixels(bool),
+    /// A left click at `x`, `y` CSS pixels of the viewport
+    /// ([`PageAction::ClickPoint`]): the pixel view's pointer.
+    Point {
+        x: f64,
+        y: f64,
+    },
+    /// A key pressed in the page ([`PageAction::Key`]).
+    Key(rich_intuituive::interact::Key),
+    /// Text typed into what has the page's focus
+    /// ([`PageAction::InsertText`]).
+    Type(String),
     /// The media regions the view shows now, how long the app's pacing
     /// wants between two frames of each (none: [`crate::video::MAX_FPS`]),
     /// and the screencast's scale: the fraction of the page's pixels the
@@ -199,6 +217,8 @@ pub enum Update {
     Frame(Arc<VideoFrame>),
     /// The region stopped moving: paused, ended, gone or off screen.
     Still(NodeId),
+    /// A frame of the whole viewport, for the pixel view.
+    Screen(Arc<rich_embed::ScreencastFrame>),
     /// The about page was asked for ([`crate::about::ADDRESS`]): the
     /// browser's answers to `canPlayType` for each of
     /// [`crate::about::CODECS`], in order, and its name and version.
@@ -412,6 +432,12 @@ struct Worker<'a> {
     /// one batch takes, or Chrome's view moved. The next tick takes the
     /// next batch, with no new reading.
     stills_pending: bool,
+    /// The pixel view is shown: the whole viewport's frames go to the
+    /// app, and whether the screencast was started for it.
+    pixels: bool,
+    pixels_cast: bool,
+    /// When the pixel view's last frame was looked for.
+    screen_at: Option<Instant>,
 }
 
 /// A key of where the page's boxes are: it changes when its layout moves.
@@ -778,6 +804,44 @@ impl Worker<'_> {
             .collect()
     }
 
+    /// Show or leave the pixel view: the screencast runs for it at full
+    /// scale, or stops, and the video regions' pacing starts again.
+    fn set_pixels(&mut self, on: bool) {
+        if on == self.pixels {
+            return;
+        }
+        self.pixels = on;
+        if on {
+            let _ = self.engine.set_screencast_scale(TabId(0), 1.0);
+            self.pixels_cast = self.engine.set_screencast(TabId(0), true).is_ok();
+            self.scale_given = 1.0;
+            self.screen_at = None;
+        } else {
+            if self.pixels_cast {
+                let _ = self.engine.set_screencast(TabId(0), false);
+            }
+            self.pixels_cast = false;
+            // The regions' screencast is planned afresh.
+            self.frames = Frames::default();
+            self.last_frame = None;
+        }
+    }
+
+    /// The pixel view's frame, when one is due and the browser has one.
+    fn screen(&mut self) {
+        let now = Instant::now();
+        if self
+            .screen_at
+            .is_some_and(|at| now.duration_since(at) < SCREEN_EVERY)
+        {
+            return;
+        }
+        self.screen_at = Some(now);
+        if let Some(frame) = self.engine.screencast_frame(TabId(0)) {
+            (self.update)(Update::Screen(Arc::new(frame)));
+        }
+    }
+
     /// Run the screencast while a region plays on screen, and send each
     /// region's frames when they are due.
     fn video(&mut self) {
@@ -841,6 +905,9 @@ impl Worker<'_> {
     /// taken on their slots, not on the tick after), a moment while a due
     /// frame has not come, else the tick.
     fn wait(&self) -> Duration {
+        if self.pixels {
+            return SCREEN_EVERY.min(TICK);
+        }
         if !self.frames.on {
             return TICK;
         }
@@ -921,6 +988,22 @@ impl Worker<'_> {
                 self.read();
                 Ok(())
             }
+            Command::Pixels(on) => {
+                self.set_pixels(on);
+                Ok(())
+            }
+            Command::Point { x, y } => self
+                .engine
+                .act(TabId(0), &PageAction::ClickPoint { x, y })
+                .map_err(failed),
+            Command::Key(key) => self
+                .engine
+                .act(TabId(0), &PageAction::Key(key))
+                .map_err(failed),
+            Command::Type(text) => self
+                .engine
+                .act(TabId(0), &PageAction::InsertText(text))
+                .map_err(failed),
             Command::Regions {
                 on_screen,
                 intervals,
@@ -1125,6 +1208,9 @@ fn run(
         appended: HashSet::new(),
         settle: None,
         stills_pending: false,
+        pixels: false,
+        pixels_cast: false,
+        screen_at: None,
     };
     let mut live_due = false;
     // Read once at the start, then whenever something says to.
@@ -1143,6 +1229,9 @@ fn run(
                         | Command::Scroll(_)
                         | Command::Media { .. }
                         | Command::ClickAt { .. }
+                        | Command::Point { .. }
+                        | Command::Key(_)
+                        | Command::Type(_)
                 );
                 let result = worker.run_command(command);
                 update(Update::Done(id, result));
@@ -1180,7 +1269,11 @@ fn run(
             probed = Instant::now();
             worker.follow_playback();
         }
-        worker.video();
+        if worker.pixels {
+            worker.screen();
+        } else {
+            worker.video();
+        }
         let due = worker
             .dirty
             .is_some_and(|since| since.elapsed() >= DEBOUNCE)

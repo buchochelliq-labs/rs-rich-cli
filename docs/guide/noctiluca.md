@@ -66,6 +66,7 @@ for reader mode and **q** to quit.
 | [Live logs and adaptations](noctiluca/adaptations.md) | Chats and logs that follow their newest entries, and the terminal adaptations, each of which can be switched off |
 | [Configuration](noctiluca/config.md) | Every key of `config.toml`, with its type, default and meaning |
 | [Privacy and security](noctiluca/privacy.md) | The browser profile, downloads, the sandbox, cleaned page text, bot checks, and what is sent where |
+| [Scripts and coding agents](noctiluca/agents.md) | The control socket, `noctiluca ls` and `noctiluca action`, `--read-only`, and Ctrl+G's "send to agent" |
 | [Using it as a library](noctiluca/library.md) | The engine trait, the tab, the page model, and a fake engine for tests |
 | [Troubleshooting and FAQ](noctiluca/troubleshooting.md) | What to do when something does not work |
 | [What works today and what's next](noctiluca/status.md) | The phases, and what each release brings |
@@ -78,6 +79,9 @@ for reader mode and **q** to quit.
   stay side by side.
 - **Reader mode** (`r`, or `--reader`): one readable column, in reading
   order, with controls as live widgets and still images as pictures.
+- **The pixel view** (`Alt+X`, or `--pixels`): the page as Chrome paints
+  it, in Kitty graphics, sent as tiles only where it changes. See
+  [the pixel view](noctiluca/media.md#the-pixel-view).
 - **The raster view** (`--raster`): the page as Chrome paints it, in half
   blocks. It is for debugging.
 

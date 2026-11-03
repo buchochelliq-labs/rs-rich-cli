@@ -1,0 +1,34 @@
+ 1 Greeting by name   · demo-agent 1.0
+
+❯ Greet by name in @src/main.rs please
+  with @src/main.rs
+
+▸ Thinking
+  The program prints a fixed greeting; the name can come from …
+
+The change
+
+main prints a fixed Hello. I will read the name from the first argument, with world as the default:
+
+
+ let name = std::env::args()
+     .nth(1)
+     .unwrap_or("world".into());
+
+
+▸ edit Edit src/main.rs                                                                                      ✓
+  diff src/main.rs
+Wrote src/main.rs
+▸ execute Run the tests                                                                                      ✓
+  test result: ok. 3 passed
+
+Done: cargo run -- Ada now prints Hello, Ada!, and the tests pass.
+
+Plan
+ ✓ Read src/main.rs
+ ✓ Take the name from the arguments
+ ✓ Run the tests
+╭─ Prompt · mode ask ────────────────────────────────────────────────────────────────────────────────────────╮
+│Ask the agent…  @ names a file                                                                              │
+╰────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+Enter send · Alt+Enter line · @ file · Ctrl+N new · Alt+N/P switch · Ctrl+T shell · F2 log · Ctrl+Q quit

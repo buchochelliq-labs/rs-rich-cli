@@ -175,3 +175,38 @@ fn placeholder_snapshot() {
     driver.settle();
     assert_screen!(driver, "placeholder");
 }
+
+/// The key panel lists the help's sections (#813): a heading for each
+/// named section, its bindings under it, those with none first.
+#[test]
+fn key_panel_lists_the_helps_sections() {
+    let app = App::new(|| {
+        row([
+            label("files")
+                .name("files")
+                .bind("d", "Delete", |_| {})
+                .section("selection", |node| node.bind("v", "Select", |_| {}))
+                .focusable(),
+            key_panel(),
+        ])
+        .bind("q", "Quit", |_| {})
+    });
+    let mut driver = app.driver(60, 8);
+    driver.settle();
+    let lines: Vec<String> = driver
+        .screen()
+        .plain()
+        .iter()
+        .map(|line| line.split('│').nth(1).unwrap_or("").trim().to_string())
+        .filter(|cell| !cell.is_empty())
+        .collect();
+    let at = |text: &str| lines.iter().position(|l| l == text);
+    let (files, delete) = (at("files").unwrap(), at("d  Delete").unwrap());
+    let (selection, select) = (at("selection").unwrap(), at("v  Select").unwrap());
+    let quit = at("q  Quit").unwrap();
+    assert!(quit < files && files < delete, "{lines:?}");
+    assert!(selection < select, "{lines:?}");
+    // The heading is styled as a heading.
+    let styled = intuituive::testing::styled(&driver);
+    assert!(styled.contains("[bold underline]files"), "{styled}");
+}

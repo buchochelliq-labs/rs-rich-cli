@@ -167,6 +167,7 @@ impl core::marker::UnsafeUnpin for rich_embed::chrome::ScreencastFrame
 impl core::panic::unwind_safe::RefUnwindSafe for rich_embed::chrome::ScreencastFrame
 impl core::panic::unwind_safe::UnwindSafe for rich_embed::chrome::ScreencastFrame
 pub const rich_embed::chrome::BINARY_NAMES: &[&str]
+pub fn rich_embed::chrome::key_events(rich_interact::event::Key) -> alloc::vec::Vec<serde_json::value::Value>
 pub mod rich_embed::keys
 pub fn rich_embed::keys::key_bytes(rich_interact::event::Key, bool) -> alloc::vec::Vec<u8>
 pub fn rich_embed::keys::mouse_bytes(rich_interact::event::Mouse, vt100::screen::MouseProtocolMode, vt100::screen::MouseProtocolEncoding) -> core::option::Option<alloc::vec::Vec<u8>>

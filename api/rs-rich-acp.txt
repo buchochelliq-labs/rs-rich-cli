@@ -2,6 +2,67 @@ pub mod rich_acp
 pub mod rich_acp::fs
 pub fn rich_acp::fs::read_text_file(&rich_acp::Workspace, &rich_acp::ReadTextFileRequest) -> core::result::Result<rich_acp::ReadTextFileResponse, rich_acp::RpcError>
 pub fn rich_acp::fs::write_text_file(&rich_acp::Workspace, &rich_acp::WriteTextFileRequest) -> core::result::Result<rich_acp::WriteTextFileResponse, rich_acp::RpcError>
+pub mod rich_acp::replay
+pub struct rich_acp::replay::FakeAgent
+impl rich_acp::replay::FakeAgent
+pub fn rich_acp::replay::FakeAgent::finish(self) -> core::result::Result<(), rich_acp::replay::ReplayError>
+pub fn rich_acp::replay::FakeAgent::is_finished(&self) -> bool
+impl core::marker::Freeze for rich_acp::replay::FakeAgent
+impl core::marker::Send for rich_acp::replay::FakeAgent
+impl core::marker::Sync for rich_acp::replay::FakeAgent
+impl core::marker::Unpin for rich_acp::replay::FakeAgent
+impl core::marker::UnsafeUnpin for rich_acp::replay::FakeAgent
+impl !core::panic::unwind_safe::RefUnwindSafe for rich_acp::replay::FakeAgent
+impl !core::panic::unwind_safe::UnwindSafe for rich_acp::replay::FakeAgent
+pub struct rich_acp::replay::ReplayError
+pub rich_acp::replay::ReplayError::message: alloc::string::String
+pub rich_acp::replay::ReplayError::step: usize
+impl core::clone::Clone for rich_acp::replay::ReplayError
+pub fn rich_acp::replay::ReplayError::clone(&self) -> rich_acp::replay::ReplayError
+impl core::cmp::Eq for rich_acp::replay::ReplayError
+impl core::cmp::PartialEq for rich_acp::replay::ReplayError
+pub fn rich_acp::replay::ReplayError::eq(&self, &rich_acp::replay::ReplayError) -> bool
+impl core::error::Error for rich_acp::replay::ReplayError
+impl core::fmt::Debug for rich_acp::replay::ReplayError
+pub fn rich_acp::replay::ReplayError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::fmt::Display for rich_acp::replay::ReplayError
+pub fn rich_acp::replay::ReplayError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for rich_acp::replay::ReplayError
+impl core::marker::Freeze for rich_acp::replay::ReplayError
+impl core::marker::Send for rich_acp::replay::ReplayError
+impl core::marker::Sync for rich_acp::replay::ReplayError
+impl core::marker::Unpin for rich_acp::replay::ReplayError
+impl core::marker::UnsafeUnpin for rich_acp::replay::ReplayError
+impl core::panic::unwind_safe::RefUnwindSafe for rich_acp::replay::ReplayError
+impl core::panic::unwind_safe::UnwindSafe for rich_acp::replay::ReplayError
+pub struct rich_acp::replay::Transcript
+impl rich_acp::replay::Transcript
+pub fn rich_acp::replay::Transcript::is_empty(&self) -> bool
+pub fn rich_acp::replay::Transcript::len(&self) -> usize
+pub fn rich_acp::replay::Transcript::parse(&str) -> core::result::Result<rich_acp::replay::Transcript, rich_acp::Error>
+pub fn rich_acp::replay::Transcript::read(impl core::convert::AsRef<std::path::Path>) -> core::result::Result<rich_acp::replay::Transcript, rich_acp::Error>
+pub fn rich_acp::replay::Transcript::steps(&self) -> &[serde_json::value::Value]
+pub fn rich_acp::replay::Transcript::var(self, &str, &str) -> rich_acp::replay::Transcript
+impl core::clone::Clone for rich_acp::replay::Transcript
+pub fn rich_acp::replay::Transcript::clone(&self) -> rich_acp::replay::Transcript
+impl core::cmp::PartialEq for rich_acp::replay::Transcript
+pub fn rich_acp::replay::Transcript::eq(&self, &rich_acp::replay::Transcript) -> bool
+impl core::default::Default for rich_acp::replay::Transcript
+pub fn rich_acp::replay::Transcript::default() -> rich_acp::replay::Transcript
+impl core::fmt::Debug for rich_acp::replay::Transcript
+pub fn rich_acp::replay::Transcript::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for rich_acp::replay::Transcript
+impl core::marker::Freeze for rich_acp::replay::Transcript
+impl core::marker::Send for rich_acp::replay::Transcript
+impl core::marker::Sync for rich_acp::replay::Transcript
+impl core::marker::Unpin for rich_acp::replay::Transcript
+impl core::marker::UnsafeUnpin for rich_acp::replay::Transcript
+impl core::panic::unwind_safe::RefUnwindSafe for rich_acp::replay::Transcript
+impl core::panic::unwind_safe::UnwindSafe for rich_acp::replay::Transcript
+pub const rich_acp::replay::STEP_TIMEOUT: core::time::Duration
+pub fn rich_acp::replay::connect(rich_acp::replay::Transcript, impl rich_acp::Client) -> core::result::Result<(rich_acp::Connection, rich_acp::replay::FakeAgent), rich_acp::Error>
+pub fn rich_acp::replay::connect_with(rich_acp::replay::Transcript, impl rich_acp::Client, core::option::Option<core::time::Duration>) -> core::result::Result<(rich_acp::Connection, rich_acp::replay::FakeAgent), rich_acp::Error>
+pub fn rich_acp::replay::matches(&serde_json::value::Value, &serde_json::value::Value) -> bool
 #[non_exhaustive] pub enum rich_acp::ContentBlock
 pub rich_acp::ContentBlock::Audio(rich_acp::AudioContent)
 pub rich_acp::ContentBlock::Image(rich_acp::ImageContent)

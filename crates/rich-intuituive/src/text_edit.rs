@@ -41,6 +41,11 @@ pub(crate) struct Editing {
     pub cursor_line: bool,
     pub caret_shape: Option<CaretShape>,
     pub draw_caret: bool,
+    /// The bracket at the caret and its match are styled
+    /// ([`Node::match_brackets`]).
+    pub match_brackets: bool,
+    /// The area's own look ([`Node::editor_theme`]).
+    pub editor_theme: Option<crate::editor_theme::EditorTheme>,
     /// The keymap before the app's keymap went over it, and the app
     /// keymap's generation it has.
     pub declared_keymap: Option<Keymap>,
@@ -59,6 +64,8 @@ impl Default for Editing {
             cursor_line: false,
             caret_shape: None,
             draw_caret: false,
+            match_brackets: false,
+            editor_theme: None,
             declared_keymap: None,
             keymap_generation: 0,
         }
@@ -75,6 +82,8 @@ impl fmt::Debug for Editing {
             .field("cursor_line", &self.cursor_line)
             .field("caret_shape", &self.caret_shape)
             .field("draw_caret", &self.draw_caret)
+            .field("match_brackets", &self.match_brackets)
+            .field("editor_theme", &self.editor_theme)
             .finish()
     }
 }
@@ -542,7 +551,7 @@ impl Node {
         }
     }
 
-    fn editing(self, f: impl FnOnce(&mut Editing)) -> Node {
+    pub(crate) fn editing(self, f: impl FnOnce(&mut Editing)) -> Node {
         self.widget_mut(|area: &mut TextArea| {
             f(&mut area.options.editing);
             area.touch();

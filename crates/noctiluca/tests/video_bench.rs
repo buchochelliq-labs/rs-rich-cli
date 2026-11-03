@@ -216,6 +216,7 @@ fn run(images: Images, link: (&'static str, Option<u64>), fps: u32, seconds: f64
         view: Some(View::Projection),
         images: Some(images),
         tunnel: None,
+        control: None,
     };
     let mut driver = app(Box::new(engine), options).driver(100, 40);
     // Woken by the tab as the real loop is.

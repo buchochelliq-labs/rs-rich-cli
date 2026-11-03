@@ -5,6 +5,22 @@ terminal for. The phases and their tests are in
 [the design note](../../design/browser.md#phases). This page says what the
 0.0.22 and 0.0.23 releases have, and what comes next.
 
+## Coming in 0.0.24 (Noctiluca 0.0.3)
+
+Merged for the next release so far (with the rest of 0.0.24's items in
+[the plan](../../plans/0.0.24.md)):
+
+| Works | Notes |
+|---|---|
+| Scripts and coding agents | `--control` and `--read-only`; `noctiluca ls` and `noctiluca action` (open, snapshot with control ids, click, type, key, scroll, find, back, forward); `Ctrl+G` sends a picked element to the clipboard or an agent's pane. Unix only for now. See [Scripts and coding agents](agents.md) |
+| The pixel view | `Alt+X` or `--pixels`: Chrome's pixels in Kitty graphics, sent as tiles only where they change, within the byte budget; clicks, the wheel and keys go to the page. See [the pixel view](media.md#the-pixel-view) |
+
+Known limits: the control socket has no Windows named pipe yet; `click`
+takes an id or an accessible name, not a CSS selector; nothing records an
+agent's actions beyond the status bar; and the pixel view draws through
+Kitty only, at the usual 8 by 16 pixel cell (a terminal with larger cells
+scales the tiles up), and scrolling in it costs nearly a whole frame.
+
 ## In 0.0.23 (Noctiluca 0.0.2): pictures, video and live logs
 
 | Works | Notes |
@@ -96,8 +112,9 @@ the same pages through a real Chrome in CI.
   pinned, a raster view from Chrome's screencast, a canvas as a region
   inside projected text.
 - **Tabs**, once rs-rich-embed drives several pages.
-- **Automation.** Scripts that drive a page through the same actions a
-  person runs, viewable live while they run.
+- **Automation, further.** Recorded scripts that replay a session's
+  agent actions, CSS selectors as targets, and a log of what an agent
+  did.
 
 ## Never
 

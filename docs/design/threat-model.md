@@ -23,6 +23,8 @@ other programs:
 6. [TLS, certificates and redirects](#6-tls-certificates-and-redirects).
 7. [ACP agents for Cornacai](#7-acp-agents-for-cornacai) (designed, not
    built yet).
+8. [The log console](#8-the-log-console-rich-console): `rich console`
+   and an intuiTUIve app's events on a local socket.
 
 ## How to read this page
 
@@ -346,8 +348,9 @@ link goes where); the DevTools channel, which controls the whole browser.
   the page says arrives as DevTools JSON;
 - Noctiluca and the user's terminal;
 - other local processes and users and the DevTools endpoint;
-- (planned) an agent or script and the control socket of
-  [#816](https://github.com/buchochelliq-labs/rs-rich-cli/issues/816);
+- an agent or script and the control socket
+  ([#816](https://github.com/buchochelliq-labs/rs-rich-cli/issues/816),
+  `--control`), and other local users and that socket;
 - with `--ssh HOST`: this machine and the SSH server, which carries every
   request; and other local users and the tunnel's loopback port.
 
@@ -356,7 +359,8 @@ targets, alt text, option labels, dialog text, download names; the
 bookmarks file; DevTools events (`Runtime.bindingCalled`,
 `Browser.downloadWillBegin`); the address bar; Chrome's switches; `--chrome`
 and `RICH_EMBED_CHROME`; `--ssh HOST`, `--ssh-arg` and what ssh writes on
-standard error.
+standard error; the control socket's requests; the screencast's pixels in
+the pixel view.
 
 | | Threat | Mitigation | State |
 |---|---|---|---|
@@ -372,10 +376,17 @@ standard error.
 | I | Noctiluca phones home | No telemetry, update check or account; searches go to the configured engine | documented |
 | E | `--ssh`'s host is read as an ssh option (`-oProxyCommand=…` runs a command) | A host starting with `-`, or with spaces or control characters, is refused; the host goes after `--`; the user's own options only through `--ssh-arg` ([`ssh.rs`](https://github.com/buchochelliq-labs/rs-rich-cli/blob/main/crates/noctiluca/src/ssh.rs), `check_host`) | verified |
 | I | `--ssh`'s tunnel is reachable from the network | `-D 127.0.0.1:PORT`: loopback only, whatever `GatewayPorts` says; nothing listens on any other address | verified (arguments) |
+| I | Another local user finds the tunnel's port | The port is drawn at random from the system's randomness among 10 000–65 535, not taken in the kernel's order (`random_port`); a Unix-socket forward is not an option, as Chrome takes only a TCP SOCKS proxy. This narrows the gap below; it does not close it | verified (the draw) |
 | S, I | Another local user's program takes the tunnel's port first and sees every request | `ExitOnForwardFailure=yes`, so ssh fails rather than run without the port; ready only once the port answers SOCKS5 while ssh lives; on Linux the listener's owner in `/proc/net/tcp` must be this user, or Chrome is not started (`listener_uid`) | verified (Linux) |
 | I | Requests leave this machine directly despite `--ssh` (DNS, WebRTC, QUIC, loopback) | Chrome's resolver maps every name to "not found" but the proxy's own address, so names go to the far side (SOCKS5 remote DNS); `<-loopback>` sends loopback through the proxy; WebRTC only over the proxy (`disable_non_proxied_udp`); QUIC off (`chrome_switches`) | verified (switches), unverified (Chrome's behaviour: the live test needs Chrome) |
 | T | ssh's messages corrupt the screen, or carry escapes | ssh's standard error is read on a thread, kept (eight lines) and cleaned (`clean`) before the status bar shows one; prompts go to `/dev/tty` before the browser takes the screen; a reconnect never prompts (`BatchMode=yes`) | verified |
 | D | A killed Noctiluca leaves the tunnel running | The tunnel is a child, killed when the `Tunnel` drops; on Linux `PR_SET_PDEATHSIG` stops it if Noctiluca dies | verified (drop), documented (death signal) |
+| S, E | Another local user drives the browser through the control socket | Off unless asked (`--control`, `--read-only`, `[agent] control`); the socket's directory is the user's own, mode 700, made with that mode before the bind, and an existing one that is another user's, open to others or a link is refused; each peer's user is checked where the platform tells (`SO_PEERCRED`, `getpeereid`), and the client checks the server's (`rich_interact::control`: `private_dir`, `peer_allowed`) | verified (tests: the mode, an open or linked directory refused, the peer check) |
+| T | A symbolic link redirects the socket to another file | The socket path and its directory are read without following links; a link is refused by the server and the client, and a file that is not a left-over socket of the user's is never replaced | verified (tests) |
+| E | A read-only session changes the page | The server refuses every verb marked as changing anything before the handler runs; unknown verbs are refused too | verified (tests: every changing verb refused, the page untouched) |
+| D | A client holds the socket or floods it | Requests of at most 64 kB, replies of at most 16 MB, 5-second read and write timeouts, at most 8 connections answered at once | verified (tests: an oversized request, a silent client) |
+| I | The control socket is reachable from the network | A Unix socket only; nothing listens on a port | verified (by construction) |
+| T | The pixel view's frames carry escapes to the terminal | The page's pixels are only pixels: Noctiluca encodes them itself into Kitty's protocol (`rich_art::tiles`, `Picture`); nothing the page says reaches those escapes | documented |
 
 **Gaps:**
 
@@ -388,19 +399,19 @@ standard error.
 - **Downloads by quarantine** are designed (ask first, a cleaned name, never
   run) but not wired into Noctiluca; when they are, the review covers the
   quarantine's location, its permissions and the move. **planned**.
-- **The agent-control CLI (#816):** a control socket, `noctiluca ls` and
-  `action`, Ctrl+G and `--read-only`, off by default and generic in the
-  framework, with the agent's verbs in Noctiluca. To review when it lands:
-  - the socket's location and mode (this user only), and that it refuses
-    other users' connections (peer credentials on Unix; a named pipe's
-    ACL on Windows);
-  - `--read-only` enforced by the server, not by the client asking nicely;
-  - an agent driving a kept, signed-in profile: page text is attacker
-    input to the agent (prompt injection), so what a page says must not
-    turn into actions the user did not approve; consider refusing control
-    with a kept profile unless the user says so;
-  - every action recorded somewhere the user can read (repudiation).
-  **planned**.
+- **The agent-control CLI (#816):** in, with the rows above. What is
+  left:
+  - **Windows** has no control socket yet (a named pipe with an ACL for
+    the user): the commands say "Unix only for now". **gap** (low).
+  - **Page text reaches the agent.** A snapshot is the page's own text,
+    cleaned of control characters but not of meaning, so a page can write
+    instructions aimed at an agent. The agent must treat it as data. With
+    a kept profile, a session that is not read-only lets an agent act
+    signed in; Noctiluca prints a note when both are on. **gap** (medium):
+    consider refusing control with a kept profile unless the user says so.
+  - **Repudiation.** Every action shows in the status bar as it happens,
+    but nothing is written to a log that outlives the session. **gap**
+    (low).
 - **The SGR-Pixels mouse (#819):** no new parser. A report in pixels has
   the same shape as one in cells (`CSI < b ; x ; y M`), so crossterm's,
   termion's and termwiz's own SGR parsers read it; the session divides it
@@ -422,8 +433,8 @@ standard error.
     before anything is written. **verified** (a fake socket server).
   - **Only this user's socket:** a path that is not a socket, or is
     another user's, is refused; a reply is read up to 1 MB with a 5 s
-    timeout, and parsed by serde_json (no fuzz target of its own).
-    **verified**.
+    timeout, and parsed by serde_json; the reply and its panes have a
+    fuzz target (`terminal_host`). **verified**.
   - **Who calls it:** Noctiluca only for `--split`, which runs its own
     binary with the user's own command line. `send_text` is for #816's
     "send to agent", and must stay a user's action, never driven by page
@@ -437,9 +448,11 @@ standard error.
   Gaps that remain:
   - **Other local users can use the tunnel** while it runs: `ssh -D`
     takes SOCKS5 with no authentication, and Chrome cannot speak SOCKS5's
-    password method, so a user of this machine who finds the port reaches
-    the remote's network as you. Documented in the guide (on a shared
-    machine, run Noctiluca on the remote instead). The fix is a relay of
+    password method (nor use a Unix-socket proxy), so a user of this
+    machine who finds the port reaches the remote's network as you. The
+    port is now drawn at random, which makes it harder to find, not
+    impossible. Documented in the guide (on a shared machine, run
+    Noctiluca on the remote instead). The fix is a relay of
     Noctiluca's own on the port that checks each connection's owner (in
     `/proc/net/tcp` on Linux) and forwards over ssh's control socket
     (`-W`). **gap** (medium, shared machines only).
@@ -584,6 +597,43 @@ confined at all (it runs as the user); an audit log of every approved
 action; and the session store's location and permissions once sessions are
 saved.
 
+## 8. The log console (`rich console`)
+
+Code: [`console.rs`](https://github.com/buchochelliq-labs/rs-rich-cli/blob/main/crates/rich-cli/src/console.rs)
+in the CLI, and intuiTUIve's
+[`log/console.rs`](https://github.com/buchochelliq-labs/rs-rich-cli/blob/main/crates/rich-intuituive/src/log/console.rs)
+(the `tracing` plugin, 0.0.24, #815). An app run with `INTUITUIVE_CONSOLE`
+sends its `tracing` events, and the inspector's trace (keys, focus,
+signal writes), as JSON lines to a Unix domain socket where `rich console`
+listens. Unix only for now.
+
+**Assets:** what the app logs (which may hold the user's data, and the keys
+typed while the trace is on); the user's terminal, where the console
+prints.
+
+**Trust boundaries:** other local users and the socket; the app and the
+console (the same user); the events' text and the terminal.
+
+**Entry points:** connections to the socket and the lines they send; the
+socket's path (`--socket`, `INTUITUIVE_CONSOLE`).
+
+| | Threat | Mitigation | State |
+|---|---|---|---|
+| I, T | Another local user connects to the console, or the app connects to another user's console | The socket's directory must be the user's alone (made 0700 when missing; one others can enter or write is refused, never changed); the socket is made 0600 and checked right after the bind, inside that directory, so no one else can reach it before (the process-wide umask is left alone); the console drops a connection whose peer is another user, and the app refuses a path that is not a socket of its own user or a listener of another user (`SO_PEERCRED` on Linux and Android, `getpeereid` on macOS and the BSDs; the directory's mode elsewhere). Never a TCP port | verified (Linux tests: modes, refusals, the user's own peer) |
+| T | A path planted at the socket's place: a symbolic link, or a file the console would delete | A symbolic link at the path, or as the directory, is refused, by both sides; anything at the path but a stale socket of the user's is refused and left alone | verified |
+| T | Event text drives the terminal | The console prints events through rs-rich-ext's structured event presentation, as `rich log` does | documented |
+| D | A slow console stalls the app | Events go through a bounded queue on a thread of their own; a full queue drops them | documented |
+
+**Gaps:**
+
+- **Windows:** no named pipe yet; `rich console` refuses to run and
+  `install_console` does nothing there. A pipe needs an ACL for the user
+  alone, `PIPE_REJECT_REMOTE_CLIENTS`, and a check of the server's owner
+  from the client. **planned**.
+- **Another user's peer** is refused by code that tests cannot reach
+  without a second account; the decision itself is unit-tested. **verified
+  (logic)**, unverified (a live second user).
+
 ## The review checklist
 
 For [stage 4](../plans/1.0.0.md#stage-4-hardening-01x). For each item:
@@ -665,9 +715,14 @@ says, not in a public issue.
 - [ ] `--ssh`: the host never read as an option, the tunnel on loopback
       only, the port's owner checked, no direct DNS, WebRTC or QUIC (the
       live test with Chrome), and the shared-machine gap.
+- [x] `--ssh`: the tunnel's port drawn at random, not in the kernel's
+      order (0.0.24, `random_port`); the relay that checks each
+      connection's owner is still open.
 - [ ] The terminal hosts' API client (#820): commands as words, tmux's
       quoting, methods only from `hello`, the socket's owner, and that
       `send_text` stays a user's action.
+- [x] The terminal hosts' reply parser has a fuzz target
+      (`terminal_host`: `host::parse_reply` and `host::panes_of`; 0.0.24).
 - [ ] The pixel mouse (#819): pixel mode only with a known cell size, and
       `RICH_PIXEL_MOUSE=0` turns it off.
 
@@ -700,6 +755,19 @@ says, not in a public issue.
 - [ ] Agent text sanitized; no fetches without the user.
 - [ ] Cancellation answers pending requests.
 - [ ] The marketplace's `agent` kind.
+
+### The log console
+
+- [x] The socket's directory the user's alone, made before the bind and
+      refused (not changed) when others can use it; the socket made 0600
+      in it right after the bind, the umask untouched (0.0.24, tests in
+      `console.rs`).
+- [x] The peer's user checked on both sides where the platform says
+      (`SO_PEERCRED`, `getpeereid`); a symbolic link or a file at the path
+      refused and left alone (0.0.24).
+- [ ] A live test with a second user account, on Linux and macOS.
+- [ ] The Windows named pipe: its ACL, remote clients refused, the
+      server's owner checked by the app, once it is built.
 
 ### Across surfaces
 

@@ -1068,8 +1068,9 @@ fn key_parts(key: Key) -> (String, u32, Option<String>) {
 }
 
 /// The `Input.dispatchKeyEvent` parameters for a key press: down (with its
-/// text, if it types one) and up.
-pub(crate) fn key_events(key: Key) -> Vec<Value> {
+/// text, if it types one) and up. Public for programs that drive a page
+/// over DevTools themselves (Noctiluca's pixel view passes keys through).
+pub fn key_events(key: Key) -> Vec<Value> {
     let (name, code, text) = key_parts(key);
     let mut modifiers = modifier_bits(key.modifiers);
     if key.code == KeyCode::BackTab {

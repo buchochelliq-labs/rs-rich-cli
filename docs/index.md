@@ -261,6 +261,7 @@ published or not. Each crate versions independently; see
 | [`rs-rich-marketplace`](https://crates.io/crates/rs-rich-marketplace) | `0.0.3` |
 | [`rs-rich-acp`](https://crates.io/crates/rs-rich-acp) | `0.0.1` |
 | [`noctiluca`](https://crates.io/crates/noctiluca) | `0.0.3` |
+| [`cornacai`](https://crates.io/crates/cornacai) | `0.0.1` |
 <!-- END MANIFEST VERSIONS -->
 
 ## Where next

@@ -4,16 +4,16 @@
 │    ✓ Widget trait v2           │││Mo Tu We Th Fr Sa Su   intuiTUIve                              │
 │    ✓ Owning the lo╭─ Commands ───────────────────────────────────────────────╮                   │
 │    ✓ Examples     │? Command ›                                               │                   │
-│    · Release 0.0.2│❯  mark the task done or open                       space │                   │
-│▾ rs-rich 2        │   add a task to the project                            n │                   │
-│    · Sync upstream│   open the menus                                     f10 │                   │
-│    · Golden fixtur│   quit                                                 q │                   │
-│▾ Home 1           │   Screenshot                                             │───────────────────╯
-│    · Water the pla│                                                          │────────────────────
-│                   │                                                          │───────────────────╮
-│                   │                                                          │                   │
-│                   │                                                          │                   │
-│                   │  5/5 · ↑↓ move · enter run · esc close                   │                   │
+│    · Release 0.0.2│❯     mark the task done or open                    space │                   │
+│▾ rs-rich 2        │      add a task to the project                         n │                   │
+│    · Sync upstream│      open the menus                                  f10 │                   │
+│    · Golden fixtur│      quit                                              q │                   │
+│▾ Home 1           │  app Theme  Change the theme                             │───────────────────╯
+│    · Water the pla│  app Keys  Show or hide the keys                         │────────────────────
+│                   │  app Maximize  Show the focused pane alone               │───────────────────╮
+│                   │  app Screenshot  Save an SVG of the screen               │                   │
+│                   │  app Quit  Quit the app                                  │                   │
+│                   │  9 · ↑↓ move · enter run · esc close                     │                   │
 │                   ╰──────────────────────────────────────────────────────────╯                   │
 │                                │││2026-09-06 09:26 deployed #99998                               │
 │                                │││2026-09-06 10:03 reviewed #99999                               │

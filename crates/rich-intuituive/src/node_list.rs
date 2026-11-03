@@ -36,8 +36,10 @@ pub(crate) struct Shared {
     padding: Cell<usize>,
     /// Each row's node, by its item's key, as last built.
     rows: RefCell<HashMap<u64, NodeId>>,
-    /// Each key's item now.
+    /// Each key's item now (in a [`list_of_virtual`], the items built).
     index: RefCell<HashMap<u64, usize>>,
+    /// How many items there are, for [`locate`](Self::locate).
+    len: RefCell<Option<Rc<dyn Fn() -> usize>>>,
 }
 
 impl Shared {
@@ -53,10 +55,35 @@ impl Shared {
         Self::read(&self.key, i, i as u64)
     }
 
-    /// The item keyed `key` now.
+    /// The item keyed `key` now: where it was last seen, else looked for
+    /// near there (items inserted or removed above it, in a
+    /// [`list_of_virtual`], whose rows are kept while their items move).
     fn item(&self, key: u64) -> Option<usize> {
-        self.index.borrow().get(&key).copied()
+        let seen = self.index.borrow().get(&key).copied()?;
+        if self.key(seen) == key {
+            return Some(seen);
+        }
+        let len = self.len.borrow().as_ref().map_or(0, |len| len());
+        let found = (1..=SEARCH).find_map(|d| {
+            [seen.checked_add(d), seen.checked_sub(d)]
+                .into_iter()
+                .flatten()
+                .find(|&i| i < len && self.key(i) == key)
+        })?;
+        self.index.borrow_mut().insert(key, found);
+        Some(found)
     }
+}
+
+/// How far either side of where an item was it is looked for.
+const SEARCH: usize = 4096;
+
+/// Where a list's rows are: a [`scroll`](crate::scroll) of every row, its
+/// offset; or a [`scroll_virtual`](crate::scroll_virtual) of those near the
+/// view.
+enum Body {
+    Scroll(Signal<u16>),
+    Virtual,
 }
 
 /// The list: the scroll it shows its rows in, and the cursor's keys.
@@ -64,7 +91,7 @@ pub(crate) struct NodeList {
     child: Node,
     len: Rc<dyn Fn() -> usize>,
     selected: Signal<usize>,
-    offset: Signal<u16>,
+    body: Body,
     pub(crate) shared: Rc<Shared>,
 }
 
@@ -135,51 +162,141 @@ pub fn list_of(
         let shared = shared.clone();
         move |(key, disabled, separated): (u64, bool, bool)| {
             let i = shared.item(key).unwrap_or(0);
-            let mut parts = vec![build_row(i)];
-            if separated {
-                parts.push(crate::rule::rule().fixed(1));
-            }
-            let here = shared.clone();
-            let mut row = crate::node::column(parts)
-                .auto()
-                .selected_when(move || here.item(key) == Some(selected.get()))
-                .disabled_when(move || disabled);
-            if disabled {
-                row = row.style("dim");
-            }
-            let (pick, menu) = (shared.clone(), shared.clone());
-            let row = row
-                .on_click(move |cx| {
-                    if let Some(i) = pick.item(key).filter(|i| !pick.disabled(*i)) {
-                        selected.set(i);
-                        call(&pick.on_highlight, i, cx);
-                        call(&pick.on_select, i, cx);
-                    }
-                })
-                .on_mouse(move |cx, mouse| {
-                    let Some(i) = menu.item(key) else {
-                        return false;
-                    };
-                    if mouse.kind != MouseKind::Down(Button::Right) {
-                        return false;
-                    }
-                    let used = menu.on_context.borrow().is_some();
-                    call(&menu.on_context, i, cx);
-                    used
-                });
-            shared.rows.borrow_mut().insert(key, row.id());
-            row
+            make_row(&shared, &build_row, selected, i, key, disabled, separated)
         }
     };
     let offset = signal(0u16);
     let content = crate::node::each(keys, build);
     let child = crate::node::scroll_with(content, offset).no_focus();
+    *shared.len.borrow_mut() = Some(len.clone());
     Node::from_widget(
         Box::new(NodeList {
             child,
             len,
             selected,
-            offset,
+            body: Body::Scroll(offset),
+            shared,
+        }),
+        "list_of",
+    )
+    .focusable()
+}
+
+/// Row `i`'s node, keyed `key`: `build_row(i)`, a rule under it when
+/// `separated`, dim and skipped when `disabled`, matching `:selected`
+/// while it is the selected item, and selecting it on a click.
+fn make_row(
+    shared: &Rc<Shared>,
+    build_row: &Rc<dyn Fn(usize) -> Node>,
+    selected: Signal<usize>,
+    i: usize,
+    key: u64,
+    disabled: bool,
+    separated: bool,
+) -> Node {
+    let mut parts = vec![build_row(i)];
+    if separated {
+        parts.push(crate::rule::rule().fixed(1));
+    }
+    let here = shared.clone();
+    let mut row = crate::node::column(parts)
+        .auto()
+        .selected_when(move || here.item(key) == Some(selected.get()))
+        .disabled_when(move || disabled);
+    if disabled {
+        row = row.style("dim");
+    }
+    let (pick, menu) = (shared.clone(), shared.clone());
+    let row = row
+        .on_click(move |cx| {
+            if let Some(i) = pick.item(key).filter(|i| !pick.disabled(*i)) {
+                selected.set(i);
+                call(&pick.on_highlight, i, cx);
+                call(&pick.on_select, i, cx);
+            }
+        })
+        .on_mouse(move |cx, mouse| {
+            let Some(i) = menu.item(key) else {
+                return false;
+            };
+            if mouse.kind != MouseKind::Down(Button::Right) {
+                return false;
+            }
+            let used = menu.on_context.borrow().is_some();
+            call(&menu.on_context, i, cx);
+            used
+        });
+    shared.rows.borrow_mut().insert(key, row.id());
+    row
+}
+
+/// A [`list_of`] that builds only the rows near the view, on
+/// [`scroll_virtual`](crate::scroll_virtual): for long lists. Row `i` is
+/// estimated `height_of(i)` lines tall (a separator adds one) until it is
+/// drawn and measured. It takes the same keys and options as `list_of`
+/// ([`item_key`](Node::item_key), [`separator_after`](Node::separator_after),
+/// [`item_disabled_when`](Node::item_disabled_when),
+/// [`on_select`](Node::on_select), [`on_highlight`](Node::on_highlight),
+/// [`on_context`](Node::on_context), [`scroll_padding`](Node::scroll_padding));
+/// a row's state goes with it once it leaves the view, as in
+/// `scroll_virtual`.
+///
+/// ```
+/// use intuituive::prelude::*;
+/// use intuituive::list_of_virtual;
+///
+/// let app = App::new(|| {
+///     let picked = signal(0usize);
+///     list_of_virtual(|| 1_000_000, |_| 1, |i| label(format!("row {i}")), picked)
+/// });
+/// let mut driver = app.driver(16, 3);
+/// driver.press("end");
+/// assert!(driver.screen().plain()[2].starts_with("row 999999"));
+/// ```
+pub fn list_of_virtual(
+    len: impl Fn() -> usize + 'static,
+    height_of: impl Fn(usize) -> u16 + 'static,
+    build_row: impl Fn(usize) -> Node + 'static,
+    selected: Signal<usize>,
+) -> Node {
+    let shared = Rc::new(Shared::default());
+    let len: Rc<dyn Fn() -> usize> = Rc::new(len);
+    let build_row: Rc<dyn Fn(usize) -> Node> = Rc::new(build_row);
+    *shared.len.borrow_mut() = Some(len.clone());
+    let separated = |shared: &Shared, i: usize| Shared::read(&shared.separator, i, false);
+    let row = {
+        let shared = shared.clone();
+        move |i: usize| {
+            let key = shared.key(i);
+            shared.index.borrow_mut().insert(key, i);
+            let (disabled, separated) = (shared.disabled(i), separated(&shared, i));
+            make_row(&shared, &build_row, selected, i, key, disabled, separated)
+        }
+    };
+    let estimate = {
+        let shared = shared.clone();
+        move |i: usize| height_of(i).saturating_add(u16::from(separated(&shared, i)))
+    };
+    let count = len.clone();
+    let child = crate::scroll_virtual::scroll_virtual(move || count(), estimate, row).no_focus();
+    // A row is kept by its item's key, and built again when whether it is
+    // disabled or followed by a separator changes.
+    {
+        let shared = shared.clone();
+        child.widget_mut(|view: &mut crate::scroll_virtual::VirtualScroll| {
+            view.set_key(Box::new(move |i| {
+                let mut hash = shared.key(i).wrapping_mul(0x9e37_79b9_7f4a_7c15);
+                hash ^= u64::from(shared.disabled(i)) << 1 | u64::from(separated(&shared, i));
+                hash
+            }));
+        });
+    }
+    Node::from_widget(
+        Box::new(NodeList {
+            child,
+            len,
+            selected,
+            body: Body::Virtual,
             shared,
         }),
         "list_of",
@@ -220,6 +337,16 @@ impl NodeList {
     /// in view.
     fn reveal(&self, i: usize, len: usize) {
         let pad = self.shared.padding.get();
+        let offset = match self.body {
+            Body::Scroll(offset) => offset,
+            Body::Virtual => {
+                self.child
+                    .widget_mut(|view: &mut crate::scroll_virtual::VirtualScroll| {
+                        view.reveal(i, pad, len)
+                    });
+                return;
+            }
+        };
         let span = |j: usize| self.row_rect(j);
         let (Some(at), view) = (span(i), self.view_height()) else {
             return;
@@ -230,16 +357,16 @@ impl NodeList {
         let top = span(i.saturating_sub(pad)).map_or(at.y, |r| r.y.min(at.y));
         let bottom = span((i + pad).min(len.saturating_sub(1)))
             .map_or(at.bottom(), |r| r.bottom().max(at.bottom()));
-        let offset = self.offset.get_untracked();
-        let next = if top < offset {
+        let at_offset = offset.get_untracked();
+        let next = if top < at_offset {
             top
-        } else if bottom > offset.saturating_add(view) {
+        } else if bottom > at_offset.saturating_add(view) {
             // Its top stays in view when it is taller than the view.
             bottom.saturating_sub(view).min(at.y)
         } else {
             return;
         };
-        self.offset.set(next);
+        offset.set(next);
     }
 
     /// The next item from `from` that is not disabled, `step` at a time
@@ -321,7 +448,14 @@ impl Widget for NodeList {
         }
         let at = self.selected.get_untracked().min(len - 1);
         let page = || {
-            let height = self.row_rect(at).map_or(1, |r| r.height.max(1));
+            let height = match self.body {
+                Body::Scroll(_) => self.row_rect(at).map_or(1, |r| r.height.max(1)),
+                Body::Virtual => self
+                    .child
+                    .widget_mut(|view: &mut crate::scroll_virtual::VirtualScroll| view.rows_of(at))
+                    .unwrap_or(1)
+                    .max(1),
+            };
             (self.view_height() / height).max(1) as usize
         };
         let to = match key.code {

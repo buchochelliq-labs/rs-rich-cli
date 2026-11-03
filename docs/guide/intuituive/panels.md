@@ -327,11 +327,46 @@ panel table:hover { text-style: underline; }
 - `:selected` and `:disabled`, while `.selected_when(…)` or
   `.disabled_when(…)` holds;
 - `:error` (or CSS's `:invalid`), while `.error_when(…)` holds (see
-  [Errors](#errors)).
+  [Errors](#errors));
+- `:blur` (not focused), `:enabled` (not disabled) and `:can-focus`;
+- `:first-child`, `:last-child`, `:odd`, `:even` (counted from the first,
+  as CSS's `:nth-child(odd)` is) and `:empty` (no children): where the
+  node is among its parent's children, which follows rows an `each` adds
+  or moves;
+- `:dark` and `:light`, by the theme: `:dark #logo` holds while the theme
+  is dark, at the top of the app too.
 
-Spaces separate a node from its ancestors (`panel label`). Sibling
-selectors and `!important` are not supported. The more specific rule wins,
-then the later one.
+States, structural and theme ones among them, change colours and text
+styles, not layout.
+
+Spaces separate a node from its ancestors (`panel label`), and `>` from
+its parent only (`#sidebar > list`); `*` is any node. Sibling selectors
+(`+`, `~`) and `!important` are not supported. The more specific rule
+wins, then the later one: `#a > .b` beats `.b`.
+
+**Nesting.** A rule may hold rules, as in Textual and CSS: `&` is the rule
+around it, and a nested selector without one is a descendant (or, after a
+`>`, a child). A nested rule reads as its flattened form, after the rule
+around it.
+
+```css
+.card {
+    padding: 0 1;
+    &:hover { background: $panel-bg; }   /* .card:hover */
+    & .title { text-style: bold; }        /* .card .title */
+    > .foot { size: 1; }                  /* .card > .foot */
+}
+```
+
+**Variables.** `$name: value;` at the top level declares a variable, which
+any later value may use (a variable's value may use earlier ones). A `$name`
+not declared is a theme style's colour, as before (`$accent`).
+
+```css
+$panel-bg: #101830;
+$edge: round $panel-bg;
+#help { background: $panel-bg; border: $edge; }
+```
 
 `.class("warn big")` gives a node fixed classes, and
 `.class_when("danger", move || load.get() > 90)` gives it a class while a
@@ -368,6 +403,9 @@ and other `@` rules are an error.
 | `text-align`, `text-wrap`, `text-overflow` | a text's `left`, `center`, `right` or `justify`; `wrap` or `nowrap`; `fold`, `clip` or `ellipsis` |
 | `size`, `min-size`, `max-size` | `3`, `50%`, `1/3`, `2fr`, `auto`, along the parent's axis |
 | `padding` | one to four numbers, as in CSS |
+| `margin` | one to four numbers: room kept round the node's border, which its colours do not fill |
+| `visibility` | `hidden` keeps the node's room but draws nothing in it and takes it out of the Tab order (`display: none` gives the room up); `visible` |
+| `scrollbar-color`, `scrollbar-background` | the thumb's colour, and the track's ground, of a node's scrollbars (a `scroll`, a list, a table, a log, …), as theme styles over the node: `scrollbar.thumb`, `scrollbar` |
 | `gap`, `grid-columns`, `grid-rows` | a stack's or grid's spacing; a grid's tracks |
 | `display` | `none` hides the node and what is inside, in any container (a split's pane, a scroll's or a switch's child), takes it out of the Tab order, and out of a grid's cells |
 | `dock` | `top` or `bottom` in a column, `left` or `right` in a row: kept at that edge |

@@ -4,7 +4,10 @@
 //!
 //! - **The tunnel** is `ssh -N -D 127.0.0.1:PORT … -- HOST`, a child of
 //!   Noctiluca, with `ExitOnForwardFailure=yes` and keep-alives. It listens
-//!   on the loopback address only: nothing on the network reaches it.
+//!   on the loopback address only: nothing on the network reaches it. The
+//!   port is drawn at random from the system's randomness
+//!   ([`random_port`]), not handed out in order. (Chrome takes only a TCP
+//!   SOCKS proxy, so a Unix-socket forward is not an option.)
 //! - **Chrome** gets `--proxy-server=socks5://127.0.0.1:PORT`, with names
 //!   resolved on the far side (`--host-resolver-rules`), loopback sent
 //!   through the proxy too (`<-loopback>`), and WebRTC and QUIC kept off
@@ -419,11 +422,53 @@ fn port_taken(line: &str) -> bool {
         || line.contains("port was taken")
 }
 
-/// A port of `127.0.0.1` free now (bound and let go: ssh's
-/// `ExitOnForwardFailure` catches one taken in between).
+/// The ports the tunnel's is drawn from: unprivileged, and above the ones
+/// local services most often use.
+pub const TUNNEL_PORTS: std::ops::RangeInclusive<u16> = 10_000..=65_535;
+
+/// A port of `127.0.0.1` free now, drawn at random ([`random_port`]); the
+/// system's own choice if none of a few draws is free.
 fn free_port() -> io::Result<u16> {
+    for _ in 0..32 {
+        let port = random_port();
+        if TcpListener::bind(SocketAddrV4::new(Ipv4Addr::LOCALHOST, port)).is_ok() {
+            return Ok(port);
+        }
+    }
     let listener = TcpListener::bind(SocketAddrV4::new(Ipv4Addr::LOCALHOST, 0))?;
     Ok(listener.local_addr()?.port())
+}
+
+/// A port in [`TUNNEL_PORTS`] from the system's randomness (bound and let
+/// go by the caller: ssh's `ExitOnForwardFailure` catches one taken in
+/// between). The draw is uniform, not the next port in the kernel's order.
+pub fn random_port() -> u16 {
+    let (low, high) = (*TUNNEL_PORTS.start() as u64, *TUNNEL_PORTS.end() as u64);
+    (low + random_u64() % (high - low + 1)) as u16
+}
+
+/// 64 random bits: `/dev/urandom` on Unix; elsewhere std's per-process
+/// hash keys (seeded from the system's randomness), over the time.
+fn random_u64() -> u64 {
+    #[cfg(unix)]
+    {
+        let mut bytes = [0u8; 8];
+        if std::fs::File::open("/dev/urandom")
+            .and_then(|mut file| file.read_exact(&mut bytes))
+            .is_ok()
+        {
+            return u64::from_ne_bytes(bytes);
+        }
+    }
+    use std::hash::{BuildHasher, Hasher};
+    let mut hasher = std::collections::hash_map::RandomState::new().build_hasher();
+    hasher.write_u128(
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_or(0, |d| d.as_nanos()),
+    );
+    hasher.write_u32(std::process::id());
+    hasher.finish()
 }
 
 /// Whether a SOCKS5 server on `127.0.0.1:port` answers the greeting "no
@@ -607,6 +652,21 @@ mod tests {
         // A listener on another address (10.0.0.1) is not the tunnel's.
         let other = "header\n   0: 0100000A:A028 00000000:0000 0A 0:0 0:0 0 5 0 1";
         assert_eq!(listener_uid_in(other, 41000), None);
+    }
+
+    #[test]
+    fn the_tunnels_port_is_drawn_at_random_and_free() {
+        let drawn: Vec<u16> = (0..16).map(|_| random_port()).collect();
+        assert!(drawn.iter().all(|port| TUNNEL_PORTS.contains(port)));
+        let mut distinct = drawn.clone();
+        distinct.sort_unstable();
+        distinct.dedup();
+        // Sixteen draws from 55 536 ports: all alike only if not random.
+        assert!(distinct.len() > 8, "{drawn:?}");
+        let port = free_port().unwrap();
+        assert!(TUNNEL_PORTS.contains(&port));
+        // Free: it binds on loopback.
+        assert!(TcpListener::bind(SocketAddrV4::new(Ipv4Addr::LOCALHOST, port)).is_ok());
     }
 
     #[test]

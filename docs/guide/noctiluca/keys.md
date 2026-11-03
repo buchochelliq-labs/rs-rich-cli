@@ -56,11 +56,14 @@ last. See [the address bar](getting-started.md#the-address-bar).
 ```text
 noctiluca [OPTIONS] [URL | FILE | KEYWORD WORDS…]
 noctiluca keys [--site HOST] [--config PATH]
+noctiluca ls [--json]
+noctiluca action [--session PID] [--json] [--no-wait] VERB [ARGS…]
 ```
 
 | Switch | What it does |
 |---|---|
-| `--reader`, `--projection`, `--raster` | The first view (default: the config's `[startup] view`, else the projection). Choose one |
+| `--reader`, `--projection`, `--pixels`, `--raster` | The first view (default: the config's `[startup] view`, else the projection). Choose one. `--pixels` needs Kitty graphics: see [the pixel view](media.md#the-pixel-view) |
+| `--view NAME` | The same, by name: `projection`, `reader`, `pixels` or `raster` |
 | `--audio` | Let pages play sound. Off by default. It plays where Chrome runs, never over SSH |
 | `--profile NAME` | Keep a profile, with its cookies and storage, between runs (opt-in). A name of letters, digits, `-` and `_` |
 | `--chrome PATH` | The browser to run (default: [the one found](getting-started.md#the-chrome-it-needs)) |
@@ -73,6 +76,8 @@ noctiluca keys [--site HOST] [--config PATH]
 | `--ssh [USER@]HOST` | Run Chrome here, but make every request through HOST over an SSH tunnel: its `localhost` is `localhost`. See [Over SSH](ssh.md) |
 | `--ssh-arg ARG` | One more word for that ssh, repeatable: `--ssh-arg=-p --ssh-arg=2222` |
 | `--split DIR` | Open in a new pane beside this one (`right`, `left`, `up`, `down`) and return: `noctiluca --split right http://localhost:3000` beside a coding agent. Works in tmux, WezTerm, kitty (with `allow_remote_control`), zellij (right and down) and terminals with terminal-browser's socket. See [the terminal host](../interact/index.md#the-terminal-host-splits-panes-and-focus) |
+| `--control` | Listen for `noctiluca action`: a socket of your own user, no network listener (Unix only for now). See [Scripts and coding agents](agents.md) |
+| `--read-only` | Listen, but refuse every action that changes anything: scripts may only read |
 | `--dump HOW` | Print the page's model and exit: `text`, `ax` (its controls) or `json` (all of it). Needs a page |
 | `--no-js` | Turn the page's script off |
 | `--config PATH` | Read another config file |
@@ -92,6 +97,9 @@ loaded and stayed still for a moment (up to a minute), prints, and exits:
   link, where they apply;
 - `json`: the address, the title, the blocks, the controls and the media,
   with their positions.
+
+**`noctiluca ls`** and **`noctiluca action`** list and drive the sessions
+started with `--control`: see [Scripts and coding agents](agents.md).
 
 **`noctiluca keys`** prints every action with its keys, after your
 config, and then your site keys. `noctiluca keys --site github.com` prints
@@ -239,6 +247,7 @@ keys with a space (`g g`) is a sequence: press one, then the other.
 | `bottom` | To the bottom | `G` | `end` |
 | `reader` | Reader mode on or off | `r` | `alt+r` |
 | `adapt` | Adapted or faithful projection (terminal adaptations on or off) | `a` | `alt+a` |
+| `view.pixels` | Pixel view on or off: Chrome's own pixels (Kitty graphics) | `alt+x` | `alt+x` |
 | `log.older` | Scroll the live log up (it holds still) | `{` | `alt+pageup` |
 | `log.newer` | Scroll the live log down (at its end it follows again) | `}` | `alt+pagedown` |
 | `media.play_pause` | Play or pause the media | `p` | `alt+p` |
@@ -252,6 +261,7 @@ keys with a space (`g g`) is a sequence: press one, then the other.
 | `bookmarks` | Bookmarks | `M` | `ctrl+b` |
 | `site.bind` | Bind a key on this site… | `ctrl+k` | `ctrl+k` |
 | `site.keys` | Site shortcuts… | `K` | `ctrl+shift+k` |
+| `agent.send` | Send an element to the agent: pick it with a hint | `ctrl+g` | `ctrl+g` |
 | `actions` | Actions (this list) | `f1` | `f1` |
 | `about` | About: the version, the adaptations and which are on, and the codecs (`about:noctiluca`) | `?` | `alt+i` |
 | `quit` | Quit | `q` | `ctrl+q` |

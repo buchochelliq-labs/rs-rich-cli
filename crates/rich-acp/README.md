@@ -37,6 +37,10 @@ decides.
   `controls_execution` (files to ask about before a write: VCS hooks,
   editor and agent settings, MCP configuration), and `Terminals`, which
   runs `terminal/*` commands on pipes with the output byte limit.
+- **A fake agent for tests:** `replay` plays a recorded transcript (JSON
+  Lines: what the agent writes, and what the client must send) over
+  in-process pipes, so a client is tested, or an app shown, with no agent
+  installed.
 
 Threads, no async runtime: a reader thread per connection, and a thread per
 request from the agent, so a handler may block on the user.

@@ -221,11 +221,13 @@ nav:
       - Live logs and adaptations: guide/noctiluca/adaptations.md
       - Configuration: guide/noctiluca/config.md
       - Over SSH: guide/noctiluca/ssh.md
+      - Scripts and coding agents: guide/noctiluca/agents.md
       - Privacy and security: guide/noctiluca/privacy.md
       - Using it as a library: guide/noctiluca/library.md
       - Troubleshooting and FAQ: guide/noctiluca/troubleshooting.md
       - "What works today and what's next": guide/noctiluca/status.md
       - Noctiluca on real sites: guide/noctiluca/real-sites.md
+  - Cornacai: guide/cornacai.md
   - Gallery: gallery.md
   - Terminal recordings: recordings.md
   - CLI and art videos: demos.md

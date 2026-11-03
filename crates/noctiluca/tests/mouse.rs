@@ -38,6 +38,7 @@ fn options(view: View, url: &str) -> Options {
         view: Some(view),
         images: Some(Images::Ansi),
         tunnel: None,
+        control: None,
     }
 }
 

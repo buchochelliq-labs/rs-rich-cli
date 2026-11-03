@@ -24,6 +24,42 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   and the out-of-workspace lockfiles with them, so they are taken by hand in
   a release.
 
+### Wave 3d: Textual parity leftovers, CLI divergences and hardening
+
+- **Frozen rows** (#814): `TableOptions::freeze_rows(n)` and
+  `Node::freeze_rows(n)` keep the first rows in view under the header while
+  the rest scroll, in tables, virtual tables, lists and virtual lists
+  (Textual's `fixed_rows`). The cursor still moves through them.
+- **Bracket matching and editor themes** (#814): `Node::match_brackets()`
+  styles the bracket at a text area's caret and its match;
+  `EditorTheme` (with `named("monokai" | "dracula" | "vscode_dark" |
+  "github_light")`, `styles()` and `apply(theme)`) styles the base, the
+  gutter, the caret, its line, the selection and the matched bracket as one
+  theme, on one area (`Node::editor_theme`) or in the app theme as
+  `editor.*` styles over the `text_area.*` ones.
+- **`list_of_virtual`** (#811): `list_of(…)`'s rows over `scroll_virtual`,
+  built only near the view, with the same keys, skips and options.
+- **The key panel's sections** (#813): `key_panel()` groups the bindings
+  under the help's sections, each with a heading (`key_panel.section`).
+- **`rich console` is Unix only for now** (#815): on Windows it says so and
+  `install_console` does nothing; a named pipe is a follow-up. The default
+  socket is now `console/console.sock` in intuiTUIve's state directory.
+- **The log console's socket is now protected:** it is only ever the
+  user's own, from the moment it exists, and takes connections only from
+  the user's own processes; the app sends its events only to a console of
+  its own user. A `--socket` in a directory others can use is refused, with
+  how to fix it ([threat model §8](docs/design/threat-model.md#8-the-log-console-rich-console)).
+- **Noctiluca `--ssh`:** the tunnel's local port is now drawn at random.
+  The guide says what remains on a machine shared with other users.
+- **A fuzz target for the terminal host client's replies**
+  (`terminal_host`), and `rich_interact::host::panes_of`, which reads the
+  panes in a `listPanes` reply.
+- **DIVERGENCES §51 to §53** record the CLI's three meaning differences
+  from rich-cli 1.8.1: `--theme` (a style theme; the code theme is
+  `--code-theme`), `--inspect` (structured data, not a Python expression)
+  and `rich` with no arguments (the capability demo). PORTING's CLI rows
+  are all complete.
+
 ### Versions: the 0.0.24 versions are open
 
 - Every package moves one patch past the 0.0.23 cohort, as the
@@ -86,6 +122,58 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   on, and names added with the new `Server::allow_host` or `rich serve
   --allow-host HOST` (repeatable). Reaching the server by a LAN name it does
   not know as its own now needs `--allow-host`.
+
+### intuiTUIve: palette providers, a Markdown viewer, stylesheet coverage (wave 3, #803, #805, #812)
+
+- **Command palette providers (#803).** A `Provider` (`name`, `discover`,
+  `search(query, &HitSink)`) adds `Hit`s to the palette, registered with
+  `App::provider`. A hit has an id, a label, a help line, a shortcut, a
+  score, the characters to highlight and a closure run once the palette
+  closes; `Hit::matching(query)` scores and highlights it with
+  rs-rich-interact's fuzzy match. The palette lists the focused path's
+  bindings at once and merges each provider's hits by score as they
+  arrive; `HitSink::background` moves a slow search to a thread of its
+  own, and the next query cancels it (`HitSink::cancelled`, and what it
+  sends after is dropped). `cx.palette_of(provider)` opens a palette of
+  one provider alone.
+- **System commands (#803).** The palette offers Textual's system
+  commands: *Theme* (a picker of the built-in `Themes`), *Keys* (shows or
+  hides the `key_panel`, or opens the help), *Maximize* or *Minimize*,
+  *Screenshot* and *Quit*. `App::system_commands(SystemCommands)` turns
+  them off one by one (`without`, `with`, `none`). The palette's rows now
+  show a hit's help line, and its footer counts the hits listed (and says
+  when a search is still running).
+- **A Markdown viewer (#805).** `markdown_viewer(load)` is a
+  `MarkdownViewer`: a `markdown` document in a view that scrolls, with a
+  table of contents of its headings (Enter scrolls one to the top, the one
+  in view is marked, `t` toggles it), links followed between documents
+  (`b.md#usage`, relative to the document shown) and to `#anchors`, and
+  `go`, `back` and `forward` (Backspace or Alt+←, Alt+→) coming back at the
+  same scroll offset. Links with a scheme go to `.on_link`. The loader is
+  the app's and runs off the app's thread; a failure shows in the view.
+  `files::markdown_loader(root)` reads files under a directory.
+- **Stylesheets: child combinators, nesting and variables (#812, slice
+  1).** A selector takes `>` (`#sidebar > list`) beside descendants and
+  `*`; `#a > .b` beats `.b`. A rule may nest rules, Textual's and CSS's
+  way (`&:hover { … }`, `& .title { … }`, `.title { … }`, `> .foot { … }`),
+  each read as its flattened form. `$name: value;` at the top level
+  declares a variable, which later values (and variables) use; a `$name`
+  not declared still names a theme style. Sibling combinators (`+`, `~`)
+  are still an error, which now says so.
+- **Stylesheets: more pseudo-classes (#812, slice 2).** `:first-child`,
+  `:last-child`, `:odd`, `:even` and `:empty` follow where a node is among
+  its siblings (an `each`'s stripes move when a row is inserted); `:dark`
+  and `:light` follow the theme (`:dark #logo` holds at the top of the app
+  too); `:blur`, `:enabled` and `:can-focus`. Like the other states, they
+  change colours and text styles, not layout.
+- **Stylesheets: `margin`, `visibility` and scrollbar colours (#812, slice
+  3).** `margin` (one to four numbers) keeps room round a node's border,
+  which its colours do not fill; `visibility: hidden` keeps the node's
+  room but draws nothing there and takes it out of the Tab order, where
+  `display: none` gives the room up; `scrollbar-color` and
+  `scrollbar-background` colour a node's scrollbars, through the theme
+  styles `scrollbar.thumb` and `scrollbar` the sheet gives the node (code's
+  `theme_styles` go over them).
 
 ### intuiTUIve: maximize, modes, Pilot helpers, screenshots and more (#807 to #815)
 
@@ -342,6 +430,45 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   fake agent; `examples/agent.rs` drives a real agent named by
   `RICH_ACP_AGENT` and skips otherwise.
 
+### Cornacai, the app (#794, phases 3 and 4)
+
+- **cornacai 0.0.1 (new crate, the `cornacai` binary and its library):** a
+  terminal client for coding agents over ACP, on rs-rich-acp, intuiTUIve
+  and rs-rich-embed, written clean-room. One connection to the agent, its
+  sessions as tabs (Ctrl+N opens one, Alt+N/Alt+P or Alt+1…9 switch). Each
+  conversation streams in as Markdown (intuiTUIve's `markdown` node, #797)
+  and follows its end until the reader scrolls up (`follow_end`, #798);
+  thoughts and tool calls are folded cards whose title and status follow
+  their updates (`collapsible_with`, #804); the plan is shown whole; the
+  agent's `session_info_update` titles the tab. The prompt editor (#800)
+  completes `@` file mentions over the workspace (`files::path_completer`)
+  and sends each as a `resource_link`. Permission prompts show the
+  operation, its files and command in full, mark the agent's own words, and
+  offer one button per option (1–9; Esc rejects once). Every
+  `fs/write_text_file` is reviewed as a diff (`widgets::diff_view_with`,
+  #799), hunk by hunk: what is accepted is written, a write rejected whole
+  is refused, and files that control execution are flagged. Each
+  `terminal/create` is asked about, then runs on rs-rich-acp's `Terminals`;
+  its output shows in its card. Ctrl+T opens a shell pane (rs-rich-embed's
+  `LocalPty`), the user's own: nothing typed there reaches the agent. F2
+  shows the agent's log. Agent text is untrusted: control characters are
+  neutralised and hidden characters revealed. The first run picks a known
+  agent on `PATH` and saves it in `cornacai/config.toml`. Tests drive the
+  app on intuiTUIve's `Driver` against transcripts: a streamed reply, a
+  permission prompt answered, edits accepted, rejected and decided hunk by
+  hunk, a command asked about, an `@` mention, a session switch and the
+  shell pane. A `fake-agent` feature lets the binary replay a transcript
+  (the docs tape). [The guide](docs/guide/cornacai.md).
+- **rs-rich-acp: `replay`, the fake agent, is public:** `Transcript`
+  (`parse`, `read`, `var` for `$WORKSPACE`-style placeholders), `connect`
+  and `connect_with` (a step timeout, or none for a person typing),
+  `FakeAgent::finish` with a `ReplayError`, and `matches`. The crate's own
+  tests run on it.
+- **Not yet:** the marketplace's `agent` kind (a new listing kind with no
+  artifact, a `requires.acp` and the launch command: schema, validator,
+  client and CLI changes), resume (`session/load`) and a session store,
+  agent terminals on a PTY, and "send to the agent" from the shell pane.
+
 ### Animated banners and Noctiluca's start page
 
 - **rs-rich-art:** `animate::AnimatedBanner`, FIGlet text with an effect
@@ -425,6 +552,61 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   (tmux's quoted for its shell). Noctiluca's `--split DIR` opens the same
   command line in a new pane beside this one and returns. Tested against a
   fake socket server and a real tmux server.
+
+### Noctiluca's agent control and pixel view (wave 3, WS6 part 2)
+
+- **Scripts and coding agents drive a running Noctiluca (#816).**
+  rs-rich-interact's new, off-by-default `control` feature has
+  `rich_interact::control`, a generic control socket: JSON lines over a
+  Unix socket in a private directory (`runtime_dir`, `private_dir`: the
+  user's own, mode 700, made before the bind), each peer's user checked
+  where the platform tells (`peer_uid`, `peer_allowed`), symbolic links
+  never followed, read-only sessions that refuse every mutating `Verb`
+  before the handler runs, requests and replies bounded (`MAX_REQUEST`,
+  `MAX_REPLY`), timeouts (`IO_TIMEOUT`) and at most `MAX_CONNECTIONS` at
+  once; `ControlServer`, `Closer`, `call` and `sessions`. Unix only for
+  now. Noctiluca listens with `--control`, `--read-only` or `[agent]
+  control = true`, and answers `info`, `snapshot` (the projection's or
+  reader mode's text, each usable control marked `[ID]`, and the controls
+  as JSON), `find`, `open`, `click` (by id or accessible name), `type`
+  (into a field, or where the focus is), `key`, `scroll`, `back` and
+  `forward`; each action shows in the status bar. `noctiluca ls` lists
+  the sessions and `noctiluca action …` drives one, waiting for the page
+  to be read after an action. `Ctrl+G` (`agent.send`) picks an element
+  with a hint and sends its role, name, link and the page's address to
+  the clipboard or, through the terminal host (#820), to the pane beside
+  this one or a named pane (`[agent] send`). A kept profile with a
+  session that may act prints a note. The new guide page "Scripts and
+  coding agents" and the threat model's rows say what is protected and
+  what is not (page text reaching an agent, no action log, no Windows
+  named pipe yet).
+- **The pixel view (#818).** `--pixels`, `--view pixels`, `[startup] view
+  = "pixels"` or `Alt+X` (`view.pixels`) shows the page as Chrome paints
+  it, in Kitty graphics. rs-rich-art's new `tiles` module (`frames`
+  feature) fits each frame to its cells and cuts it into tiles of 8 by 4
+  cells (`Tiler`, `Tile`), each a `Picture` that gets a new version only
+  when its pixels change; intuiTUIve's new `tiles_of` draws them, so with
+  `image_graphics` only the changed tiles reach the terminal (a test shows
+  one changed tile is one Kitty upload). Noctiluca runs the screencast at
+  full scale while the view shows (`Command::Pixels`, `Update::Screen`),
+  keeps frames within the byte budget and drops those it has no room for;
+  a click goes to its point of the viewport (`PageAction::ClickPoint`,
+  `Command::Point`), the wheel scrolls, and keys without Ctrl or Alt go to
+  the page (`PageAction::Key`, `Command::Key`; rs-rich-embed's
+  `chrome::key_events` is now public). Without Kitty graphics it says so
+  and the projection shows. A benchmark (`tests/pixels.rs`) measures bytes
+  a frame, whole frames against tiles: scrolling 2.46 MB against 1.85 MB,
+  a blinking caret 2.46 MB against 16 kB.
+- **Breaking (noctiluca 0.0.x):** `Options` gains `control`, `Config`
+  gains `agent` (`Agent`, `SendTo`), `Args` gains `control` and
+  `read_only`, `Run` gains `Ls`, `Action` and `ControlHelp` (and is no
+  longer `Eq`), and `View`, `PageAction`, `Command` and `Update` gain
+  variants. Recorded in `api/semver-breaks.toml`.
+- **Not verified here:** a real Kitty, WezTerm or Ghostty showing the
+  pixel view (the tests read the escapes); the pixel view against a live
+  Chrome's screencast (its live test runs in CI only); Ctrl+G into a real
+  tmux or WezTerm pane; macOS's and the BSDs' `getpeereid` path (built and
+  tested on Linux only). No tape was recorded for either feature.
 
 ## 0.0.23 cohort — published 2026-10-27
 

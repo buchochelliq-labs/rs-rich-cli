@@ -96,6 +96,8 @@ pub mod clipboard;
 pub mod component;
 pub mod components;
 pub mod compose;
+#[cfg(all(feature = "control", unix))]
+pub mod control;
 pub mod dates;
 pub mod datetime;
 pub mod edit;

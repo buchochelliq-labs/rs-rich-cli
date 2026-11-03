@@ -1,0 +1,8 @@
+{"note": "An @ mention: the prompt goes as its text and a resource_link to the file."}
+{"client": {"id": 0, "method": "initialize"}}
+{"agent": {"jsonrpc": "2.0", "id": 0, "result": {"protocolVersion": 1}}}
+{"client": {"id": 1, "method": "session/new"}}
+{"agent": {"jsonrpc": "2.0", "id": 1, "result": {"sessionId": "sess_m"}}}
+{"client": {"id": 2, "method": "session/prompt", "params": {"sessionId": "sess_m", "prompt": [{"type": "text", "text": "Read @src/main.rs please"}, {"type": "resource_link", "uri": "file://$WORKSPACE/src/main.rs", "name": "main.rs", "title": "src/main.rs", "size": 12}]}}}
+{"agent": {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "sess_m", "update": {"sessionUpdate": "agent_message_chunk", "content": {"type": "text", "text": "It prints nothing."}}}}}
+{"agent": {"jsonrpc": "2.0", "id": 2, "result": {"stopReason": "end_turn"}}}

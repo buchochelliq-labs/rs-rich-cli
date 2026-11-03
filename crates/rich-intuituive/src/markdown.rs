@@ -32,6 +32,9 @@ use crate::widget::{Canvas, DrawCx, EventCx, MeasureCx, Used, Widget, WidgetEven
 
 type OnLink = Box<dyn FnMut(&str, &mut Ctx)>;
 
+/// Told each block's first row (from the node's top) as it is laid out.
+type OnRows = Box<dyn FnMut(&[u16])>;
+
 /// A block's rendered lines.
 type Lines = Rc<Vec<Vec<Segment>>>;
 
@@ -40,6 +43,7 @@ type Lines = Rc<Vec<Vec<Segment>>>;
 struct Shared {
     code_theme: RefCell<Option<String>>,
     on_link: RefCell<Option<OnLink>>,
+    on_rows: RefCell<Option<OnRows>>,
 }
 
 /// Markdown `doc` holds (CommonMark, as rs-rich's
@@ -88,6 +92,16 @@ impl Node {
     pub fn on_link(self, on_link: impl FnMut(&str, &mut Ctx) + 'static) -> Node {
         self.widget_mut(|view: &mut MarkdownView| {
             *view.shared.on_link.borrow_mut() = Some(Box::new(on_link));
+        });
+        self
+    }
+
+    /// On a [`markdown`] node: call `on_rows` with each block's first row,
+    /// counted from the node's top, each time it is laid out (the
+    /// [`markdown_viewer`](crate::markdown_viewer) finds its headings so).
+    pub(crate) fn on_block_rows(self, on_rows: impl FnMut(&[u16]) + 'static) -> Node {
+        self.widget_mut(|view: &mut MarkdownView| {
+            *view.shared.on_rows.borrow_mut() = Some(Box::new(on_rows));
         });
         self
     }
@@ -297,9 +311,12 @@ impl Widget for MarkdownView {
         self.reconcile();
         let mut y = rect.y as u32;
         let bottom = rect.bottom() as u32;
-        self.children
+        let mut starts = Vec::with_capacity(self.children.len());
+        let areas = self
+            .children
             .iter()
             .map(|child| {
+                starts.push((y - rect.y as u32).min(u16::MAX as u32) as u16);
                 if y >= bottom {
                     return Rect::default();
                 }
@@ -309,7 +326,11 @@ impl Widget for MarkdownView {
                 y += rows + 1;
                 area
             })
-            .collect()
+            .collect();
+        if let Some(on_rows) = self.shared.on_rows.borrow_mut().as_mut() {
+            on_rows(&starts);
+        }
+        areas
     }
 
     fn draw(&mut self, _cx: &mut DrawCx, _canvas: &mut Canvas) {}

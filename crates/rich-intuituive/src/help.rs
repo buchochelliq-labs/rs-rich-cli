@@ -236,6 +236,10 @@ pub(crate) struct Hint {
     pub description: String,
     /// Its [`bind_when`](crate::Node::bind_when) condition does not hold.
     pub disabled: bool,
+    /// The help's section it is listed under: its
+    /// [`section`](crate::Node::section), else its node's name; empty for
+    /// none.
+    pub section: String,
 }
 
 /// The text of a hint: what a hint's keys and description become, given

@@ -59,6 +59,7 @@ fn options() -> Options {
         view: Some(View::Projection),
         images: Some(noctiluca::config::Images::Ansi),
         tunnel: None,
+        control: None,
     }
 }
 

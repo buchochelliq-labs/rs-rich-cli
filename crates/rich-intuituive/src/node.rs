@@ -485,6 +485,11 @@ struct SheetNode {
     selected: bool,
     disabled: bool,
     error: bool,
+    /// Its place among its parent's children and how many there are, and
+    /// how many children it has, as it was last laid out
+    /// (`:first-child`, `:odd`, `:empty`, …).
+    place: (usize, usize),
+    children: usize,
 }
 
 /// The stylesheet as a frame draws with it.
@@ -494,6 +499,8 @@ pub(crate) struct SheetCx<'a> {
     pub vars: &'a dyn Fn(&str) -> Option<Style>,
     /// The app's [`viewport`](crate::viewport()), for `@media` rules.
     pub viewport: (u16, u16),
+    /// The theme is dark (`:dark`, `:light`).
+    pub dark: bool,
 }
 
 /// A node's widget, and what the framework keeps for it between frames.
@@ -2759,7 +2766,8 @@ impl Node {
     /// made again when they changed; `None` without theme styles. While
     /// measuring, `theme` is not at hand: any copy made already does.
     fn scope_over(&self, console: &Console, theme: Option<&Theme>) -> Option<Rc<Scope>> {
-        if self.theme_styles.is_empty() {
+        let from_sheet = self.sheet.borrow().layout.theme_styles.clone();
+        if self.theme_styles.is_empty() && from_sheet.is_empty() {
             return None;
         }
         let size = (console.width(), console.height());
@@ -2775,7 +2783,10 @@ impl Node {
                 return Some(scope.clone());
             }
         }
-        let scope = Rc::new(Scope::new(console, theme, &self.theme_styles));
+        // The sheet's first: code's go over them.
+        let mut styles = from_sheet;
+        styles.extend(self.theme_styles.iter().cloned());
+        let scope = Rc::new(Scope::new(console, theme, &styles));
         *self.scope.borrow_mut() = Some(scope.clone());
         Some(scope)
     }
@@ -2916,6 +2927,20 @@ impl Node {
             selected: sheet.selected,
             disabled: sheet.disabled,
             error: sheet.error,
+            focusable: self.focusable,
+            index: sheet.place.0,
+            siblings: sheet.place.1.max(1),
+            children: sheet.children,
+        }
+    }
+
+    /// Tell it where it is among its parent's `count` children; a change
+    /// draws it again, for the structural states (`:odd`, `:last-child`).
+    fn place_among(&self, index: usize, count: usize, dirty: &mut HashSet<NodeId>) {
+        let mut sheet = self.sheet.borrow_mut();
+        if sheet.place != (index, count) {
+            sheet.place = (index, count);
+            dirty.insert(self.id);
         }
     }
 
@@ -3001,13 +3026,17 @@ impl Node {
             .or_else(|| self.widget_mut(|grid: &mut Grid| collapse(&mut grid.collapse)))
             .unwrap_or(false);
         let (decor, insets) = if is_panel {
-            (None, [0; 4])
+            (None, layout.margin)
         } else if collapsed {
             (None, layout.padding)
         } else {
             (layout.border.clone(), layout.insets())
         };
         let mut sheet = self.sheet.borrow_mut();
+        if sheet.layout.theme_styles != layout.theme_styles {
+            // Its scope is made again with the sheet's theme styles.
+            *self.scope.borrow_mut() = None;
+        }
         sheet.generation = cx.generation;
         sheet.layout = layout;
         sheet.watch = watch;
@@ -3054,7 +3083,10 @@ impl Node {
         accessible: bool,
         f: &mut dyn FnMut(&Node, &[NodeId]),
     ) {
-        if self.hidden() || (accessible && self.access_hidden) {
+        if self.hidden()
+            || (accessible && self.access_hidden)
+            || self.sheet.borrow().layout.invisible
+        {
             // A stylesheet's `display: none`: not shown, nor anything inside.
             return;
         }
@@ -3178,6 +3210,15 @@ impl Node {
             self.hide();
             return;
         }
+        // `visibility: hidden`: its room is kept, empty.
+        if self.sheet.borrow().layout.invisible {
+            if self.drawn.get().is_some() || force {
+                screen.clear(rect);
+                frame.damage.push(rect);
+            }
+            self.hide();
+            return;
+        }
         // While the inspector is open: how long this node takes, less what
         // its children take.
         let clock = frame.timings.is_some().then(|| {
@@ -3267,7 +3308,9 @@ impl Node {
             // The children's layout from the stylesheet, before they are
             // laid out.
             if let Some(sheet) = &frame.sheet {
-                for child in widget.children() {
+                let count = widget.children().len();
+                for (index, child) in widget.children().iter().enumerate() {
+                    child.place_among(index, count, &mut frame.dirty);
                     child.resolve(sheet, &mut frame.chain);
                 }
             }
@@ -3286,7 +3329,10 @@ impl Node {
             // with what that says (`display: none`, a size).
             if let Some(sheet) = &frame.sheet {
                 let mut fresh = false;
-                for child in widget.children() {
+                let count = widget.children().len();
+                self.sheet.borrow_mut().children = count;
+                for (index, child) in widget.children().iter().enumerate() {
+                    child.place_among(index, count, &mut frame.dirty);
                     fresh |= child.resolve(sheet, &mut frame.chain);
                 }
                 if fresh {
@@ -3358,7 +3404,8 @@ impl Node {
                     titles: &titles,
                     flush: false,
                 };
-                for edge in crate::border::draw_frame(screen, console, &look, rect) {
+                let boxed = self.sheet.borrow().layout.boxed(rect);
+                for edge in crate::border::draw_frame(screen, console, &look, boxed) {
                     frame.damage.push(edge);
                 }
             }
@@ -3589,6 +3636,8 @@ impl Node {
             (sheet, own) => own.or(sheet),
         };
         if let Some(style) = under {
+            // Inside the margin, if the sheet gave it one.
+            let rect = self.sheet.borrow().layout.boxed(rect);
             let mut parts: Vec<Rect> = frame.damage[mark..]
                 .iter()
                 .map(|area| area.intersection(rect))
@@ -3750,6 +3799,7 @@ impl Node {
             let states = States {
                 focus: &focus_path,
                 hover: &hover_path,
+                dark: cx.dark,
             };
             cx.sheet.style(&frame.chain, &states, cx.vars, cx.viewport)
         } else {
