@@ -9,7 +9,7 @@
 # Independent SemVer from 0.0.1. See AGENTS.md → Versioning.
 [package]
 name = "rs-rich-acp"
-version = "0.0.1"
+version = "0.0.2"
 description = "A client for the Agent Client Protocol (ACP): drive coding agents over JSON-RPC on stdio, with typed messages, permission requests and sandboxed file and terminal capabilities"
 edition.workspace = true
 license.workspace = true

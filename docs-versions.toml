@@ -18,3 +18,7 @@
 # 0.0.23's notes (the publication), the last commit before the 0.0.24
 # versions open.
 "0.0.23" = "bcd0829376d99d80f2ee8873e86a9421e4b1dfb7"
+# 0.0.24's notes: the release PR's merge (#844). The tags are on c2d6588,
+# the commit before it merged, with the same code; the publication notes
+# come after.
+"0.0.24" = "9a02fdb126fb6fd65b33c0c39c8d3a9c5285e1e8"

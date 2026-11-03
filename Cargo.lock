@@ -689,7 +689,7 @@ dependencies = [
 
 [[package]]
 name = "cornacai"
-version = "0.0.1"
+version = "0.0.2"
 dependencies = [
  "rs-rich-acp",
  "rs-rich-embed",
@@ -2263,7 +2263,7 @@ dependencies = [
 
 [[package]]
 name = "noctiluca"
-version = "0.0.3"
+version = "0.0.4"
 dependencies = [
  "image",
  "libc",
@@ -3148,7 +3148,7 @@ dependencies = [
 
 [[package]]
 name = "rs-rich"
-version = "0.0.14"
+version = "0.0.15"
 dependencies = [
  "anstyle-query",
  "compact_str",
@@ -3161,7 +3161,7 @@ dependencies = [
 
 [[package]]
 name = "rs-rich-acp"
-version = "0.0.1"
+version = "0.0.2"
 dependencies = [
  "serde",
  "serde_json",
@@ -3169,7 +3169,7 @@ dependencies = [
 
 [[package]]
 name = "rs-rich-art"
-version = "0.0.17"
+version = "0.0.18"
 dependencies = [
  "flate2",
  "icy_sixel",
@@ -3179,7 +3179,7 @@ dependencies = [
 
 [[package]]
 name = "rs-rich-cli"
-version = "0.0.24"
+version = "0.0.25"
 dependencies = [
  "cap-fs-ext",
  "cap-std",
@@ -3218,7 +3218,7 @@ dependencies = [
 
 [[package]]
 name = "rs-rich-data"
-version = "0.0.8"
+version = "0.0.9"
 dependencies = [
  "arrow-array",
  "arrow-ipc",
@@ -3232,7 +3232,7 @@ dependencies = [
 
 [[package]]
 name = "rs-rich-diagram"
-version = "0.0.7"
+version = "0.0.8"
 dependencies = [
  "rs-rich",
  "rs-rich-ext",
@@ -3241,7 +3241,7 @@ dependencies = [
 
 [[package]]
 name = "rs-rich-embed"
-version = "0.0.7"
+version = "0.0.8"
 dependencies = [
  "command-fds",
  "image",
@@ -3257,7 +3257,7 @@ dependencies = [
 
 [[package]]
 name = "rs-rich-ext"
-version = "0.0.21"
+version = "0.0.22"
 dependencies = [
  "anyhow",
  "chrono",
@@ -3292,7 +3292,7 @@ dependencies = [
 
 [[package]]
 name = "rs-rich-interact"
-version = "0.0.12"
+version = "0.0.13"
 dependencies = [
  "crossterm",
  "fancy-regex 0.19.2",
@@ -3314,7 +3314,7 @@ dependencies = [
 
 [[package]]
 name = "rs-rich-intuituive"
-version = "0.0.9"
+version = "0.0.10"
 dependencies = [
  "alsa-sys",
  "cpal",
@@ -3337,7 +3337,7 @@ dependencies = [
 
 [[package]]
 name = "rs-rich-lumis"
-version = "0.0.8"
+version = "0.0.9"
 dependencies = [
  "lumis",
  "rs-rich",
@@ -3347,7 +3347,7 @@ dependencies = [
 
 [[package]]
 name = "rs-rich-macros"
-version = "0.0.8"
+version = "0.0.9"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -3357,7 +3357,7 @@ dependencies = [
 
 [[package]]
 name = "rs-rich-marketplace"
-version = "0.0.3"
+version = "0.0.4"
 dependencies = [
  "flate2",
  "minisign",
@@ -3375,7 +3375,7 @@ dependencies = [
 
 [[package]]
 name = "rs-rich-mermaid"
-version = "0.0.10"
+version = "0.0.11"
 dependencies = [
  "rs-rich",
  "rs-rich-art",
@@ -3386,7 +3386,7 @@ dependencies = [
 
 [[package]]
 name = "rs-rich-micro"
-version = "0.0.10"
+version = "0.0.11"
 dependencies = [
  "flate2",
  "portable-pty",
@@ -3404,7 +3404,7 @@ dependencies = [
 
 [[package]]
 name = "rs-rich-plugin-api"
-version = "0.0.8"
+version = "0.0.9"
 dependencies = [
  "inventory",
  "rs-rich",
@@ -3412,7 +3412,7 @@ dependencies = [
 
 [[package]]
 name = "rs-rich-ratatui"
-version = "0.0.9"
+version = "0.0.10"
 dependencies = [
  "ratatui-core",
  "ratatui-widgets",
@@ -3423,7 +3423,7 @@ dependencies = [
 
 [[package]]
 name = "rs-rich-record"
-version = "0.0.12"
+version = "0.0.13"
 dependencies = [
  "color_quant 2.0.0",
  "fancy-regex 0.19.2",
@@ -3443,7 +3443,7 @@ dependencies = [
 
 [[package]]
 name = "rs-rich-web"
-version = "0.0.7"
+version = "0.0.8"
 dependencies = [
  "data-encoding",
  "flate2",
