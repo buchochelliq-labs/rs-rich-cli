@@ -238,6 +238,8 @@ fn tall_picture() -> noctiluca::model::Page {
         empty_alt: false,
         aria_hidden: false,
         in_label: false,
+        revision: 0,
+        text: String::new(),
     });
     page.blocks.push(Block {
         kind: BlockKind::Media(0),

@@ -137,9 +137,10 @@ fn a_click_on_a_canvas_reaches_the_page_where_the_pointer_was() {
         let engine = engine(view);
         let state = engine.state.clone();
         let mut driver = app(Box::new(engine), options(view)).driver(80, 30);
-        // The projection draws the canvas where Chrome lays it out (a
-        // pattern until its still comes); reader mode names a picture,
-        // then draws it in the rows under its name.
+        // The projection draws the canvas where Chrome lays it out (its
+        // still of Chrome's pixels, in half blocks at `--images ansi`);
+        // reader mode names a picture, then draws it in the rows under
+        // its name.
         let (column, top) = if view == View::Reader {
             wait(&mut driver, "the picture", |d| {
                 screen(d).contains("image: Field")
@@ -147,8 +148,8 @@ fn a_click_on_a_canvas_reaches_the_page_where_the_pointer_was() {
             let (column, name) = find(&driver, "image: Field");
             (column, name + 1)
         } else {
-            wait(&mut driver, "the canvas", |d| screen(d).contains('░'));
-            find(&driver, "░")
+            wait(&mut driver, "the canvas", |d| screen(d).contains('▀'));
+            find(&driver, "▀")
         };
         let (_, above) = find(&driver, "Above the canvas");
         // A terminal with cells of 10 by 20 pixels: 4 and 9 pixels into

@@ -53,9 +53,14 @@ rs-rich-embed, which is still to come.
 
 ## Pictures and sound
 
-**A picture shows as its alt text.** An inline SVG drawing, a canvas
-and a frame show as their alt text. A site table with `images = false`,
-or `--images none`, turns pictures off.
+**A picture shows as its alt text.** A frame shows as its alt text, and
+so does a canvas or an inline SVG drawing in reader mode. A site table
+with `images = false`, or `--images none`, turns pictures off.
+
+**A canvas stops moving.** Only four canvases are live at once (those on
+screen nearest the view), none while `F4` freezes moving pictures, and a
+canvas that has held still is looked at every two seconds, not twice a
+second.
 
 **Moving pictures stutter, or turn to half blocks.** GIFs and video
 share a byte budget, and step down when the terminal is short of it. Over

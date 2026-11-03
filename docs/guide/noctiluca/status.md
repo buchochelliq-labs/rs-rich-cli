@@ -36,7 +36,8 @@ scales the tiles up), and scrolling in it costs nearly a whole frame.
 
 - **One tab.**
 - **No fixed or sticky layer** and no paint order in the projection.
-- **An inline SVG drawing, a canvas and a frame** show as their alt text.
+- **A frame** shows as its alt text. (A canvas and an inline SVG drawing
+  are drawn, and stay live, from 0.0.25.)
 - **The byte budget starts as a guess** (4 MB a second, 256 kB over
   SSH), then follows the rate your terminal takes output at once measured
   (lowered to it, and on this machine raised to it, up to 32 MB a
@@ -66,7 +67,7 @@ Expected limits on real sites:
   note the wall and move on.
 - **DRM never plays.** A protected video shows its poster and nothing
   else, and always will.
-- **An inline SVG drawing, a canvas and a frame** show as their alt text.
+- **A frame** shows as its alt text.
 - **Logs and chats** that a page fills in with a canvas, or in a frame,
   are not followed.
 

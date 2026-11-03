@@ -1791,8 +1791,10 @@ pub noctiluca::model::Media::picture: core::option::Option<rich_art::picture::Pi
 pub noctiluca::model::Media::playback: core::option::Option<noctiluca::engine::Playback>
 pub noctiluca::model::Media::poster: alloc::string::String
 pub noctiluca::model::Media::rect: noctiluca::engine::Rect
+pub noctiluca::model::Media::revision: u64
 pub noctiluca::model::Media::src: alloc::string::String
 pub noctiluca::model::Media::still: core::option::Option<alloc::sync::Arc<[u8]>>
+pub noctiluca::model::Media::text: alloc::string::String
 impl core::clone::Clone for noctiluca::model::Media
 pub fn noctiluca::model::Media::clone(&self) -> noctiluca::model::Media
 impl core::cmp::PartialEq for noctiluca::model::Media
@@ -2326,7 +2328,12 @@ impl core::marker::Unpin for noctiluca::tab::Tab
 impl core::marker::UnsafeUnpin for noctiluca::tab::Tab
 impl core::panic::unwind_safe::RefUnwindSafe for noctiluca::tab::Tab
 impl core::panic::unwind_safe::UnwindSafe for noctiluca::tab::Tab
+pub const noctiluca::tab::CANVAS_BUSY: core::time::Duration
+pub const noctiluca::tab::CANVAS_IDLE: core::time::Duration
+pub const noctiluca::tab::CANVAS_POLL: core::time::Duration
+pub const noctiluca::tab::CANVAS_QUIET: u32
 pub const noctiluca::tab::DEBOUNCE: core::time::Duration
+pub const noctiluca::tab::MAX_LIVE_CANVASES: usize
 pub const noctiluca::tab::SETTLE_MAX: core::time::Duration
 pub const noctiluca::tab::SETTLE_MIN: core::time::Duration
 pub const noctiluca::tab::SETTLE_STEP: core::time::Duration
@@ -2371,6 +2378,7 @@ impl !core::panic::unwind_safe::UnwindSafe for noctiluca::testing::FakeEngine
 pub struct noctiluca::testing::FakeState
 pub noctiluca::testing::FakeState::actions: alloc::vec::Vec<noctiluca::engine::PageAction>
 pub noctiluca::testing::FakeState::at: usize
+pub noctiluca::testing::FakeState::captures: alloc::vec::Vec<noctiluca::engine::Rect>
 pub noctiluca::testing::FakeState::codecs: std::collections::hash::map::HashMap<alloc::string::String, alloc::string::String>
 pub noctiluca::testing::FakeState::current: core::option::Option<alloc::string::String>
 pub noctiluca::testing::FakeState::events: alloc::vec::Vec<noctiluca::engine::EngineEvent>
@@ -2380,6 +2388,7 @@ pub noctiluca::testing::FakeState::media: std::collections::hash::map::HashMap<i
 pub noctiluca::testing::FakeState::not_loaded: std::collections::hash::set::HashSet<i64>
 pub noctiluca::testing::FakeState::opened: alloc::vec::Vec<alloc::string::String>
 pub noctiluca::testing::FakeState::pages: std::collections::hash::map::HashMap<alloc::string::String, noctiluca::engine::PageSnapshot>
+pub noctiluca::testing::FakeState::paint: core::option::Option<[u8; 3]>
 pub noctiluca::testing::FakeState::recorded: core::option::Option<std::path::PathBuf>
 pub noctiluca::testing::FakeState::resource_root: core::option::Option<std::path::PathBuf>
 pub noctiluca::testing::FakeState::resources: std::collections::hash::map::HashMap<alloc::string::String, alloc::vec::Vec<u8>>
@@ -2454,6 +2463,7 @@ pub noctiluca::video::Frames::on: bool
 impl noctiluca::video::Frames
 pub fn noctiluca::video::Frames::cut(&mut self, &[noctiluca::video::Region], core::option::Option<&rich_embed::chrome::ScreencastFrame>, std::time::Instant) -> (alloc::vec::Vec<noctiluca::video::VideoFrame>, alloc::vec::Vec<noctiluca::video::Region>)
 pub fn noctiluca::video::Frames::next_due(&self, &[noctiluca::video::Region], std::time::Instant) -> core::option::Option<core::time::Duration>
+pub fn noctiluca::video::Frames::number(&mut self) -> u64
 pub fn noctiluca::video::Frames::plan(&mut self, &[noctiluca::video::Region], std::time::Instant) -> noctiluca::video::Plan
 pub fn noctiluca::video::Frames::stamp(&mut self, noctiluca::engine::NodeId, rich_embed::pixels::Pixels, std::time::Instant) -> noctiluca::video::VideoFrame
 impl core::default::Default for noctiluca::video::Frames

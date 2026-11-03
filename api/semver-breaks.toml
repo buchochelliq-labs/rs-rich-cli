@@ -107,6 +107,13 @@ items = ["variant View:Pixels", "variant Update:Screen", "variant PageAction:Cli
 why = "the pixel view (#818): the view, its screencast frames, and clicks at a point of the viewport"
 
 [[break]]
+crate = "noctiluca"
+version = "0.0.3"
+lint = "constructible_struct_adds_field"
+items = ["field Media.revision", "field Media.text"]
+why = "live regions (0.0.25 plan, Noctiluca real sites fixes 1 and 6): an inline svg's content revision keys its still, and its <text> is read as its text"
+
+[[break]]
 crate = "rs-rich-intuituive"
 version = "0.0.9"
 lint = "constructible_struct_adds_field"

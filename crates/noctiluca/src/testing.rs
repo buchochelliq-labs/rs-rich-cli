@@ -65,6 +65,11 @@ pub struct FakeState {
     playing_since: HashMap<i64, std::time::Instant>,
     /// The viewport's width in CSS pixels.
     pub viewport_width: f64,
+    /// The colour a capture of Chrome's pixels shows (`None`: blue): a
+    /// test changes it, as a canvas's script draws.
+    pub paint: Option<[u8; 3]>,
+    /// The regions captured of Chrome's pixels, in order.
+    pub captures: Vec<Rect>,
 }
 
 impl FakeState {
@@ -754,9 +759,15 @@ impl Engine for FakeEngine {
     }
 
     fn capture(&mut self, _tab: TabId, region: Rect, format: Format) -> io::Result<Frame> {
-        // A blue picture of the region's size, as PNG.
+        // A blue picture of the region's size (or the test's colour), as
+        // PNG.
+        let paint = {
+            let mut state = self.lock();
+            state.captures.push(region);
+            state.paint.unwrap_or([30, 90, 220])
+        };
         let (w, h) = (region.width.max(1.0) as u32, region.height.max(1.0) as u32);
-        let image = image::RgbImage::from_pixel(w, h, image::Rgb([30, 90, 220]));
+        let image = image::RgbImage::from_pixel(w, h, image::Rgb(paint));
         let mut bytes = Vec::new();
         image
             .write_to(
