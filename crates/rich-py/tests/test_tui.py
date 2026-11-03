@@ -1289,21 +1289,29 @@ def test_spawn_runs_python_work_on_a_thread():
 
 def test_spawn_lets_the_app_draw_while_work_runs():
     release = threading.Event()
+    tasks = []
 
     def build():
         status = signal("working")
-        task = spawn(lambda: release.wait(5), lambda ok, cx: status.set(f"done {ok}"))
+        task = spawn(lambda: release.wait(30), lambda ok, cx: status.set(f"done {ok}"))
         assert not task.is_finished()
+        tasks.append(task)
         return text(lambda: status.get())
 
     driver = App(build).driver(20, 1)
     turn(driver)
     assert rows(driver) == ["working"]
     release.set()
-    deadline = time.monotonic() + 5
+    # The work runs on a thread of its own and needs the GIL to return:
+    # the loop sleeps between turns so a busy runner gives it a chance,
+    # and the wait is generous.
+    deadline = time.monotonic() + 20
     while rows(driver) != ["done True"] and time.monotonic() < deadline:
+        time.sleep(0.01)
         turn(driver)
-    assert rows(driver) == ["done True"]
+    assert rows(driver) == ["done True"], (
+        f"the work {'returned' if tasks[0].is_finished() else 'had not returned'}"
+    )
 
 
 def test_spawn_async_awaits_a_coroutine():
