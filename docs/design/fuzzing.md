@@ -113,15 +113,28 @@ happens:
 - **Before it landed** (2026-10-26, locally, nightly-2026-05-20 and
   cargo-fuzz 0.13.2): every target ran 60 seconds, which found the three
   bugs below, then 120 seconds each after the fixes, clean.
-- **First nightly run:** not yet: the first scheduled run of `fuzz.yml`
-  on `main` after the 0.0.23 extras pull request merges.
+- **First nightly run:** 2026-10-28, on `main` at `2624ce5b`. Clean for
+  six nights, to 2026-11-02.
+- **Stopped:** 2026-11-03, by the `stylesheet` finding below. The clock
+  starts again with the first clean nightly run after its fix.
 - **Earliest the criterion can be met:** four weeks after that date, with
   no open finding below. A new finding restarts the clock once it is fixed.
 
 ## Known findings
 
-None open. Fixed while the targets were written (0.0.23), each with a
-regression test in its crate:
+Open:
+
+- `stylesheet` (2026-11-03, [run 41604039967](https://github.com/buchochelliq-labs/rs-rich-cli/actions/runs/41604039967)):
+  a timeout. A 1.4 KB stylesheet with long runs of `&` nesting selectors
+  and `,` lists took 12 seconds and 1.4 GB to parse. Not yet
+  root-caused; the likely place is the nesting added in 0.0.24 (#812),
+  which joins each `&` with its parent's selectors. A stylesheet comes from
+  the app's author, not from outside, so this is a slow start, not an
+  attack surface; it is fixed in [0.0.25](../plans/0.0.25.md), with the
+  input as a regression test.
+
+Fixed while the targets were written (0.0.23), each with a regression
+test in its crate:
 
 - `ansi`: `AnsiDecoder` panicked on a multi-byte character after a
   charset-select escape (`ESC (`), slicing inside the character. It now
