@@ -11,7 +11,7 @@ const ROWS: usize = 3;
 
 /// The three rows of character `c`'s glyph, or `None` for a character
 /// without one.
-fn glyph(c: char) -> Option<[&'static str; ROWS]> {
+pub(crate) fn glyph(c: char) -> Option<[&'static str; ROWS]> {
     Some(match c.to_ascii_uppercase() {
         '0' => ["┌─┐", "│ │", "└─┘"],
         '1' => [" ┐ ", " │ ", "╶┴╴"],
