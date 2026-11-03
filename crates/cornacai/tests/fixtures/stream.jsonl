@@ -1,0 +1,13 @@
+{"note": "A streamed reply: the client offers reads, writes and terminals; the agent sends a plan, a thought, an answer in Markdown chunks and a title."}
+{"client": {"id": 0, "method": "initialize", "params": {"protocolVersion": 1, "clientCapabilities": {"fs": {"readTextFile": true, "writeTextFile": true}, "terminal": true}, "clientInfo": {"name": "cornacai"}}}}
+{"agent": {"jsonrpc": "2.0", "id": 0, "result": {"protocolVersion": 1, "agentInfo": {"name": "replay-agent", "version": "0.1"}}}}
+{"client": {"id": 1, "method": "session/new", "params": {"cwd": "$WORKSPACE", "mcpServers": []}}}
+{"agent": {"jsonrpc": "2.0", "id": 1, "result": {"sessionId": "sess_a", "modes": {"currentModeId": "default", "availableModes": [{"id": "default", "name": "Ask"}]}}}}
+{"client": {"id": 2, "method": "session/prompt", "params": {"sessionId": "sess_a", "prompt": [{"type": "text", "text": "Explain the plan"}]}}}
+{"agent": {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "sess_a", "update": {"sessionUpdate": "plan", "entries": [{"content": "Read the code", "priority": "high", "status": "completed"}, {"content": "Run the tests", "priority": "medium", "status": "in_progress"}]}}}}
+{"agent": {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "sess_a", "update": {"sessionUpdate": "agent_thought_chunk", "content": {"type": "text", "text": "The user wants a short plan."}}}}}
+{"agent": {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "sess_a", "update": {"sessionUpdate": "agent_message_chunk", "content": {"type": "text", "text": "# Steps\n\nFirst **read** the"}}}}}
+{"agent": {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "sess_a", "update": {"sessionUpdate": "agent_message_chunk", "content": {"type": "text", "text": " code, then test.\n\n```rust\nfn main() {}\n"}}}}}
+{"agent": {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "sess_a", "update": {"sessionUpdate": "agent_message_chunk", "content": {"type": "text", "text": "```\n\nDone \u001b[2Jhere."}}}}}
+{"agent": {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "sess_a", "update": {"sessionUpdate": "session_info_update", "title": "Planning"}}}}
+{"agent": {"jsonrpc": "2.0", "id": 2, "result": {"stopReason": "end_turn"}}}

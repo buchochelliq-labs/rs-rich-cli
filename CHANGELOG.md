@@ -9,6 +9,57 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Fixes from wave 2's review
+
+- **intuiTUIve's diff view:** when either text changes, every hunk's
+  decision goes back to pending. A decision belongs to the hunk it was made
+  on, so it no longer moves onto another hunk that took its place.
+- **intuiTUIve's keymaps:** a binding a keymap unbinds (`none`) is no longer
+  listed in the command palette, the help or the footer, and can't be run
+  from them. Running one panicked before.
+- **Noctiluca:** a new document is watched for at least a second
+  (`tab::SETTLE_MIN`) before its layout counts as settled. A script that
+  moves the layout a little after the first reading is now read.
+- **Dependabot** no longer proposes major versions. They need code changes,
+  and the out-of-workspace lockfiles with them, so they are taken by hand in
+  a release.
+
+### Wave 3d: Textual parity leftovers, CLI divergences and hardening
+
+- **Frozen rows** (#814): `TableOptions::freeze_rows(n)` and
+  `Node::freeze_rows(n)` keep the first rows in view under the header while
+  the rest scroll, in tables, virtual tables, lists and virtual lists
+  (Textual's `fixed_rows`). The cursor still moves through them.
+- **Bracket matching and editor themes** (#814): `Node::match_brackets()`
+  styles the bracket at a text area's caret and its match;
+  `EditorTheme` (with `named("monokai" | "dracula" | "vscode_dark" |
+  "github_light")`, `styles()` and `apply(theme)`) styles the base, the
+  gutter, the caret, its line, the selection and the matched bracket as one
+  theme, on one area (`Node::editor_theme`) or in the app theme as
+  `editor.*` styles over the `text_area.*` ones.
+- **`list_of_virtual`** (#811): `list_of(…)`'s rows over `scroll_virtual`,
+  built only near the view, with the same keys, skips and options.
+- **The key panel's sections** (#813): `key_panel()` groups the bindings
+  under the help's sections, each with a heading (`key_panel.section`).
+- **`rich console` is Unix only for now** (#815): on Windows it says so and
+  `install_console` does nothing; a named pipe is a follow-up. The default
+  socket is now `console/console.sock` in intuiTUIve's state directory.
+- **The log console's socket is now protected:** it is only ever the
+  user's own, from the moment it exists, and takes connections only from
+  the user's own processes; the app sends its events only to a console of
+  its own user. A `--socket` in a directory others can use is refused, with
+  how to fix it ([threat model §8](docs/design/threat-model.md#8-the-log-console-rich-console)).
+- **Noctiluca `--ssh`:** the tunnel's local port is now drawn at random.
+  The guide says what remains on a machine shared with other users.
+- **A fuzz target for the terminal host client's replies**
+  (`terminal_host`), and `rich_interact::host::panes_of`, which reads the
+  panes in a `listPanes` reply.
+- **DIVERGENCES §51 to §53** record the CLI's three meaning differences
+  from rich-cli 1.8.1: `--theme` (a style theme; the code theme is
+  `--code-theme`), `--inspect` (structured data, not a Python expression)
+  and `rich` with no arguments (the capability demo). PORTING's CLI rows
+  are all complete.
+
 ### Versions: the 0.0.24 versions are open
 
 - Every package moves one patch past the 0.0.23 cohort, as the
@@ -26,6 +77,162 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 - `api/semver-breaks.toml`'s 0.0.23 entries are spent (their versions are
   on crates.io) and removed; its test now accepts an empty list, as the
   check itself does.
+
+### Security hardening
+
+- **TLS: the bundled roots no longer override the system.**
+  `rich_marketplace::tls::with_fallback` (marketplace downloads, `rich URL`,
+  download statistics) retries with Mozilla's bundled roots only when the
+  system's certificate store cannot be used at all (no CA certificates
+  loaded, or no platform verifier), never after the system's verifier
+  refused a certificate, so a distrusted root or a revocation the platform
+  enforces is honoured. `may_be_trust` now says exactly that. A machine
+  whose store is present but lacks a root the bundled list has now sees
+  the system's refusal; adding the root to the system store, or
+  `SSL_CERT_FILE` on Linux, is the fix.
+- **`rich URL`: no HTTPS downgrade, and a URL's content is sanitized.** A
+  redirect from an `https://` hop to an `http://` one is refused before it
+  is requested, with an error naming both (an `http://` URL given as such
+  is still fetched). Content fetched from a URL is sanitized by default in
+  every mode (`rich chart` and `rich profile` too), as `--sanitize` does:
+  its terminal controls are shown as inert text; `--no-sanitize` opts out.
+  Both differ from rich-cli 1.8.1: DIVERGENCES §50.
+- **The marketplace signer's supply chain is pinned.**
+  `docs/marketplace-repo`'s `sign-index.yml` pins every action to a full
+  commit SHA, installs `jsonschema` and its dependencies only from the new
+  hash-pinned `.github/requirements-signer.txt` (`--require-hashes`), and
+  defaults `RS_RICH_CLI_REF` to the commit of `release-0.0.23` instead of
+  `main` (`check-listings.yml` too). For the marketplace repository to take.
+- **Marketplace key chain: kept per trust root, verified on every read.**
+  `marketplace.state.json` keeps the key generations accepted after each
+  trust root as their `keys-N.json` files and signatures (`key_chains`),
+  shared by every location, and verifies them again from the root whenever
+  it is read; a chain that does not verify is dropped with a warning. A
+  location that withholds a newer `keys-N.json` can no longer bring back a
+  main key another location's chain revoked, and an index signed by such a
+  key is refused with an error naming the location as stale. The state
+  file can no longer add a trusted key: the cached key set 0.0.23 wrote is
+  not read (the chain is fetched again). Directories the marketplace
+  creates (the install directory, package folders) are mode 700 on Unix:
+  `rich_marketplace::create_private_dir_all` (new).
+- **`rich serve` keeps its `Host` check on every interface.** Bound to
+  `0.0.0.0` or `::`, rs-rich-web accepted any `Host` whose origin matched
+  it; it now answers only to the loopback addresses, `localhost`, the
+  machine's name (and `NAME.local`), the address each connection arrived
+  on, and names added with the new `Server::allow_host` or `rich serve
+  --allow-host HOST` (repeatable). Reaching the server by a LAN name it does
+  not know as its own now needs `--allow-host`.
+
+### intuiTUIve: palette providers, a Markdown viewer, stylesheet coverage (wave 3, #803, #805, #812)
+
+- **Command palette providers (#803).** A `Provider` (`name`, `discover`,
+  `search(query, &HitSink)`) adds `Hit`s to the palette, registered with
+  `App::provider`. A hit has an id, a label, a help line, a shortcut, a
+  score, the characters to highlight and a closure run once the palette
+  closes; `Hit::matching(query)` scores and highlights it with
+  rs-rich-interact's fuzzy match. The palette lists the focused path's
+  bindings at once and merges each provider's hits by score as they
+  arrive; `HitSink::background` moves a slow search to a thread of its
+  own, and the next query cancels it (`HitSink::cancelled`, and what it
+  sends after is dropped). `cx.palette_of(provider)` opens a palette of
+  one provider alone.
+- **System commands (#803).** The palette offers Textual's system
+  commands: *Theme* (a picker of the built-in `Themes`), *Keys* (shows or
+  hides the `key_panel`, or opens the help), *Maximize* or *Minimize*,
+  *Screenshot* and *Quit*. `App::system_commands(SystemCommands)` turns
+  them off one by one (`without`, `with`, `none`). The palette's rows now
+  show a hit's help line, and its footer counts the hits listed (and says
+  when a search is still running).
+- **A Markdown viewer (#805).** `markdown_viewer(load)` is a
+  `MarkdownViewer`: a `markdown` document in a view that scrolls, with a
+  table of contents of its headings (Enter scrolls one to the top, the one
+  in view is marked, `t` toggles it), links followed between documents
+  (`b.md#usage`, relative to the document shown) and to `#anchors`, and
+  `go`, `back` and `forward` (Backspace or Alt+←, Alt+→) coming back at the
+  same scroll offset. Links with a scheme go to `.on_link`. The loader is
+  the app's and runs off the app's thread; a failure shows in the view.
+  `files::markdown_loader(root)` reads files under a directory.
+- **Stylesheets: child combinators, nesting and variables (#812, slice
+  1).** A selector takes `>` (`#sidebar > list`) beside descendants and
+  `*`; `#a > .b` beats `.b`. A rule may nest rules, Textual's and CSS's
+  way (`&:hover { … }`, `& .title { … }`, `.title { … }`, `> .foot { … }`),
+  each read as its flattened form. `$name: value;` at the top level
+  declares a variable, which later values (and variables) use; a `$name`
+  not declared still names a theme style. Sibling combinators (`+`, `~`)
+  are still an error, which now says so.
+- **Stylesheets: more pseudo-classes (#812, slice 2).** `:first-child`,
+  `:last-child`, `:odd`, `:even` and `:empty` follow where a node is among
+  its siblings (an `each`'s stripes move when a row is inserted); `:dark`
+  and `:light` follow the theme (`:dark #logo` holds at the top of the app
+  too); `:blur`, `:enabled` and `:can-focus`. Like the other states, they
+  change colours and text styles, not layout.
+- **Stylesheets: `margin`, `visibility` and scrollbar colours (#812, slice
+  3).** `margin` (one to four numbers) keeps room round a node's border,
+  which its colours do not fill; `visibility: hidden` keeps the node's
+  room but draws nothing there and takes it out of the Tab order, where
+  `display: none` gives the room up; `scrollbar-color` and
+  `scrollbar-background` colour a node's scrollbars, through the theme
+  styles `scrollbar.thumb` and `scrollbar` the sheet gives the node (code's
+  `theme_styles` go over them).
+
+### intuiTUIve: maximize, modes, Pilot helpers, screenshots and more (#807 to #815)
+
+- **Maximize a pane** (#807): `Node::maximizable()` and
+  `maximizable_when(..)`, `Ctx::maximize()` (the nearest maximizable node
+  on the focus's path), `maximize_node(id)`, `minimize()` and
+  `is_maximized()`, and `App::maximize_key(..)` (off unless set). The node
+  draws over the whole screen with its state and focus; the rest keeps its
+  state but neither draws nor takes clicks, and Tab stays inside. Esc that
+  nothing used restores it. The inspector marks it, and assistive
+  technology hears "maximized" and "restored".
+- **Modes and screen results** (#808): `App::mode(name, build)`,
+  `Ctx::switch_mode(name)` and `Ctx::mode()` keep several stacks of
+  screens, each built on first use and kept with its state while another
+  shows (its timers wait); `DEFAULT_MODE` names the first.
+  `Ctx::push_for::<T>(build, then)`, `modal_for::<T>(..)` and
+  `Ctx::dismiss(value)` hand a value back from a screen of your own:
+  `Some(value)` on a dismiss, `None` on a plain pop.
+- **Pilot-style test helpers** (#810): `Driver::click_on(name)`,
+  `click_on_at(name, offset)`, `double_click_on`, `hover_on`, `scroll_on`,
+  `drag_on`, `rect_of` and `wait_for_animations`. A node is found by its
+  `.name(..)`, then its accessible name; none or several panic listing the
+  named nodes. They sit beside `click(column, row)`, which is unchanged.
+- **Screenshots and SVG snapshots** (#809): rs-rich-ext's
+  `surface::Screen::to_svg(&SvgOptions)` and builder methods on
+  `frame::SvgOptions` (`title`, `theme`, `window`, `width`, `cursor`,
+  `caption`, `unique_id`, `font_aspect_ratio`). In intuiTUIve,
+  `Ctx::screenshot(path)`, the palette's *Screenshot* command into
+  `App::screenshot_dir(..)`, `App::title(..)`, and `assert_screen_svg!`
+  (pass or fail from the styled rows, the SVG kept beside them, an HTML
+  report of both pictures in `target/intuituive-snapshots/` on a
+  difference).
+- **Lists of node rows** (#811): `list_of(len, build_row, selected)`, with
+  `Node::separator_after(..)`, `item_disabled_when(..)` and
+  `on_highlight(..)`; `on_select`, `on_context`, `scroll_padding` and
+  `item_key` reach it too. Rows are any nodes, the selected one matches
+  `:selected`, and a click a node inside the row took does not select.
+- **Small widgets after Textual's** (#813): `link(text, url)`
+  (`.on_activate`, `.open_with`), `progress_bar(done, total)`
+  (`.show_percentage`, `.show_eta`, a pulse with no total), `header()`
+  (`App::title`, `Ctx::set_subtitle`, `.clock()`, `.tall()`),
+  `key_panel()` with `Ctx::toggle_key_panel()`, `masked_input(value,
+  template)` and `placeholder(label)` with `PlaceholderVariant`.
+- **Easings and a directory tree** (#814): `Easing` gains Textual's
+  standard set (sine, quad, cubic, quart, quint, expo, circ, back, elastic
+  and bounce, each in, out and in-out) and `Easing::ALL`, checked against
+  Textual's values; it is `#[non_exhaustive]` from this release (listed in
+  `api/semver-breaks.toml`). The `files` plugin's `dir_tree(root)`
+  (`.filter`, `.on_open`, `.view()`) loads folders off-thread on
+  `tree_lazy`.
+- **A log console in another terminal** (#815): with the `tracing`
+  feature, `log::install_console()` (on when `INTUITUIVE_CONSOLE` is set),
+  `log::console_layer(path)`, `console_socket()`,
+  `default_console_socket()` and `Ctx::log(..)` send an app's `tracing`
+  events, and the inspector's trace, as JSON lines over a Unix socket. The
+  CLI's new `rich console [--socket PATH] [--trace] [-v] [-x TARGET]`
+  listens (socket 0600, never TCP) and prints them as `rich log` does; a
+  binary-boundary convenience (`docs/PORTING.md`). No new dependencies.
+  Windows is a documented no-op for now.
 
 ### The docs on Zensical
 
@@ -52,6 +259,67 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   Chrome, the embed PTY, TLS and redirects, and Cornacai's ACP agents, and
   ends with the checklist stage 4's security review works through. A root
   [`SECURITY.md`](SECURITY.md) says how to report a vulnerability privately.
+
+### intuiTUIve: a diff to review, themes, keymaps (wave 2)
+
+- **`widgets::diff_view(old, new)` and `diff_view_with(.., DiffOptions)`**
+  (#799): an interactive diff of two `Signal<String>`s on rs-rich-ext's
+  line diff, unified or side by side (`side_by_side_at(columns)` switches
+  by width), highlighted with `.language(..)`. Unchanged runs fold to
+  `context` lines around each hunk (Enter or a click opens them), `]` `[`
+  (`n` `p`) move the hunk cursor, and with `.decide(signal)` `a` `r` `A`
+  `R` accept or reject a hunk or all of them, a status row counting what
+  is decided; `.on_done(..)` runs when none is pending.
+  `accepted_text(old, new, decisions)` applies the accepted hunks. Only
+  the rows in view are rendered, so a 10,000-line diff scrolls as a short
+  one does.
+- **`Palette`, `Theme::from_palette`, `Theme::named`, `Theme::builtin`
+  and `Ctx::set_theme_named`** (#801): semantic colours (primary,
+  secondary, accent, warning, error, success, foreground, background,
+  surface, panel, boost, dark) from which the shades are generated as
+  Textual's `ColorSystem` generates them, by its names and to its values
+  (`primary-lighten-2`, `primary-muted`, `text-primary`, `text-muted`,
+  `surface`, …; a golden table captured from Textual 8.2.8 by
+  `scripts/capture_textual_themes.py`). Each is a named style for markup
+  and `$name` in stylesheets, and the presets' names (`accent`, `muted`,
+  `good`, `warn`, `bad`, `selected`, the buttons, the borders) are derived
+  from the palette. Textual's 21 themes are built in beside `dark`,
+  `light` and `mono`, which are unchanged; their palettes are Textual's
+  (MIT), credited in the crate's new `THIRD_PARTY.md`.
+- **User keymaps** (#806): `Node::bind_id(id, ..)`, `.binding_id(id)` and
+  `.sequence_id(id)` give a binding, a scaled binding or a sequence an id;
+  `App::keymap([(id, keys)])`, `App::keymap_file(path)` (one `id = keys` a
+  line, TOML's quoted strings read too, checked for changes as the app
+  runs), `Ctx::set_keymap` and `Ctx::reload_keymap` remap them, and the
+  editors' actions by `text_area.<action>`. The help, the palette,
+  `key_hints` and which-key show the new keys. Unknown ids and keys two ids
+  share on one path are reported once in a warning toast (and by
+  `Driver::keymap_report`); the deeper binding still wins. The diff view's
+  keys have ids (`diff.next`, `diff.accept`, …).
+- **`Log::write(renderable)` and `Log::write_with(renderable, line)`**
+  (#802): any rich renderable in a log (a `Table`, `Syntax`, a `Panel`),
+  laid out at the view's width and again when it changes, only while in
+  view; it counts as one line for the capacity, and filters match its
+  plain text. A log holding one draws its rows in full and scrolls by
+  entries, and still follows its end.
+
+### The call for a community plugin (docs, templates, wave 2, WS10)
+
+- **`templates/wasm-plugin/`**, a cargo-generate template for a sandboxed
+  WASM plugin in Rust: a crate with no dependencies whose module imports
+  nothing, its manifest read from the package's name and version, three
+  example capabilities (a `title-case` transform, a `todo` highlighter, a
+  `callout` fence), a `cargo wasm` alias and a release workflow that
+  attaches the module to a tag's GitHub release. rs-rich-ext's
+  `tests/wasm_plugin_template.rs` expands it, runs its unit tests, builds
+  it for `wasm32-unknown-unknown` and loads the module in the sandbox, as
+  `--plugin` and `rich plugin install` do; CI's "WASM plugins (release)"
+  job installs the target and requires the test to run. The maintainer
+  makes a GitHub template repository from it.
+- **A guide page, [Write a plugin](docs/guide/write-a-plugin.md):** from
+  the template to a build, a try with `rich --plugin`, a listing written
+  by `rich plugin publish` and a pull request to the marketplace, with
+  what the host enforces and how the plugin's version and the ABI relate.
 
 ### intuiTUIve: Cornacai's parity items (wave 1, WS2)
 
@@ -162,6 +430,45 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   fake agent; `examples/agent.rs` drives a real agent named by
   `RICH_ACP_AGENT` and skips otherwise.
 
+### Cornacai, the app (#794, phases 3 and 4)
+
+- **cornacai 0.0.1 (new crate, the `cornacai` binary and its library):** a
+  terminal client for coding agents over ACP, on rs-rich-acp, intuiTUIve
+  and rs-rich-embed, written clean-room. One connection to the agent, its
+  sessions as tabs (Ctrl+N opens one, Alt+N/Alt+P or Alt+1…9 switch). Each
+  conversation streams in as Markdown (intuiTUIve's `markdown` node, #797)
+  and follows its end until the reader scrolls up (`follow_end`, #798);
+  thoughts and tool calls are folded cards whose title and status follow
+  their updates (`collapsible_with`, #804); the plan is shown whole; the
+  agent's `session_info_update` titles the tab. The prompt editor (#800)
+  completes `@` file mentions over the workspace (`files::path_completer`)
+  and sends each as a `resource_link`. Permission prompts show the
+  operation, its files and command in full, mark the agent's own words, and
+  offer one button per option (1–9; Esc rejects once). Every
+  `fs/write_text_file` is reviewed as a diff (`widgets::diff_view_with`,
+  #799), hunk by hunk: what is accepted is written, a write rejected whole
+  is refused, and files that control execution are flagged. Each
+  `terminal/create` is asked about, then runs on rs-rich-acp's `Terminals`;
+  its output shows in its card. Ctrl+T opens a shell pane (rs-rich-embed's
+  `LocalPty`), the user's own: nothing typed there reaches the agent. F2
+  shows the agent's log. Agent text is untrusted: control characters are
+  neutralised and hidden characters revealed. The first run picks a known
+  agent on `PATH` and saves it in `cornacai/config.toml`. Tests drive the
+  app on intuiTUIve's `Driver` against transcripts: a streamed reply, a
+  permission prompt answered, edits accepted, rejected and decided hunk by
+  hunk, a command asked about, an `@` mention, a session switch and the
+  shell pane. A `fake-agent` feature lets the binary replay a transcript
+  (the docs tape). [The guide](docs/guide/cornacai.md).
+- **rs-rich-acp: `replay`, the fake agent, is public:** `Transcript`
+  (`parse`, `read`, `var` for `$WORKSPACE`-style placeholders), `connect`
+  and `connect_with` (a step timeout, or none for a person typing),
+  `FakeAgent::finish` with a `ReplayError`, and `matches`. The crate's own
+  tests run on it.
+- **Not yet:** the marketplace's `agent` kind (a new listing kind with no
+  artifact, a `requires.acp` and the launch command: schema, validator,
+  client and CLI changes), resume (`session/load`) and a session store,
+  agent terminals on a PTY, and "send to the agent" from the shell pane.
+
 ### Animated banners and Noctiluca's start page
 
 - **rs-rich-art:** `animate::AnimatedBanner`, FIGlet text with an effect
@@ -207,6 +514,99 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 - **Docs:** a guide page, [Inspect](docs/guide/ext/inspect.md), with
   Python's report next to ours; DIVERGENCES §19 says what differs (no
   runtime reflection, no `dunder`, methods only from a marked `impl`).
+
+### Noctiluca's larger features (wave 2, WS6 part 1)
+
+- **The mouse to the pixel (#819):** a terminal that knows SGR-Pixels
+  (mode 1016) reports the mouse in pixels. rs-rich-interact asks for it in
+  the start-up query (DECRQM), turns it on after 1006 when the terminal
+  knows it and the window size gives the cells' size in pixels, and reads
+  each report back into cells: `Mouse::pixel` (a `Subcell`) says where in
+  the cell the pointer was, `Mouse::precise` gives fractional cells (the
+  cell's centre without pixels), `Mouse::from_pixels` builds one, and
+  `RICH_PIXEL_MOUSE=0` turns it off. intuiTUIve passes it to nodes as it
+  is (it is relative to the cell, so it survives every move into a node's
+  coordinates) and adds `Driver::click_pixel`. Noctiluca sends a click on
+  a picture, a canvas, a drawing or a frame to the page at that point of
+  it (`PageAction::ClickAt`, `Command::ClickAt`), to the pixel where the
+  terminal reports pixels and at the cell's centre elsewhere.
+- **Noctiluca's `--ssh HOST` (#817):** Chrome runs here and every request
+  goes through HOST, so the remote's `localhost` opens as if it were
+  local. Noctiluca runs `ssh -N -D 127.0.0.1:PORT -- HOST` (loopback only,
+  `ExitOnForwardFailure`, keep-alives; `--ssh-arg` passes the user's own
+  options, and `~/.ssh/config` applies), waits for the SOCKS port (and on
+  Linux checks it is the user's own), and gives Chrome a SOCKS5 proxy with
+  names resolved on the far side, loopback through the proxy, and no
+  direct WebRTC or QUIC. The status bar says `via ssh HOST`; a dropped
+  tunnel says so and reconnects without prompting, at once on reload.
+  Errors are one line: no ssh, a refused login, a port taken. The new
+  guide page "Over SSH" says when to use it and when to run Noctiluca on
+  the remote; the threat model has its rows and its gaps.
+- **A terminal host client (#820):** rs-rich-interact's new, off-by-default
+  `host` feature has `rich_interact::host`: a `TerminalHost` that opens a
+  split beside the program, lists panes, finds a neighbour, types into a
+  pane and moves the focus. `SocketHost` speaks terminal-browser's socket
+  protocol (JSON lines, `hello` first, only the methods it lists);
+  `Tmux`, `WezTerm`, `Kitty` and `Zellij` adapt the terminals that do not;
+  `detect` picks one from the environment. Commands are passed as words
+  (tmux's quoted for its shell). Noctiluca's `--split DIR` opens the same
+  command line in a new pane beside this one and returns. Tested against a
+  fake socket server and a real tmux server.
+
+### Noctiluca's agent control and pixel view (wave 3, WS6 part 2)
+
+- **Scripts and coding agents drive a running Noctiluca (#816).**
+  rs-rich-interact's new, off-by-default `control` feature has
+  `rich_interact::control`, a generic control socket: JSON lines over a
+  Unix socket in a private directory (`runtime_dir`, `private_dir`: the
+  user's own, mode 700, made before the bind), each peer's user checked
+  where the platform tells (`peer_uid`, `peer_allowed`), symbolic links
+  never followed, read-only sessions that refuse every mutating `Verb`
+  before the handler runs, requests and replies bounded (`MAX_REQUEST`,
+  `MAX_REPLY`), timeouts (`IO_TIMEOUT`) and at most `MAX_CONNECTIONS` at
+  once; `ControlServer`, `Closer`, `call` and `sessions`. Unix only for
+  now. Noctiluca listens with `--control`, `--read-only` or `[agent]
+  control = true`, and answers `info`, `snapshot` (the projection's or
+  reader mode's text, each usable control marked `[ID]`, and the controls
+  as JSON), `find`, `open`, `click` (by id or accessible name), `type`
+  (into a field, or where the focus is), `key`, `scroll`, `back` and
+  `forward`; each action shows in the status bar. `noctiluca ls` lists
+  the sessions and `noctiluca action …` drives one, waiting for the page
+  to be read after an action. `Ctrl+G` (`agent.send`) picks an element
+  with a hint and sends its role, name, link and the page's address to
+  the clipboard or, through the terminal host (#820), to the pane beside
+  this one or a named pane (`[agent] send`). A kept profile with a
+  session that may act prints a note. The new guide page "Scripts and
+  coding agents" and the threat model's rows say what is protected and
+  what is not (page text reaching an agent, no action log, no Windows
+  named pipe yet).
+- **The pixel view (#818).** `--pixels`, `--view pixels`, `[startup] view
+  = "pixels"` or `Alt+X` (`view.pixels`) shows the page as Chrome paints
+  it, in Kitty graphics. rs-rich-art's new `tiles` module (`frames`
+  feature) fits each frame to its cells and cuts it into tiles of 8 by 4
+  cells (`Tiler`, `Tile`), each a `Picture` that gets a new version only
+  when its pixels change; intuiTUIve's new `tiles_of` draws them, so with
+  `image_graphics` only the changed tiles reach the terminal (a test shows
+  one changed tile is one Kitty upload). Noctiluca runs the screencast at
+  full scale while the view shows (`Command::Pixels`, `Update::Screen`),
+  keeps frames within the byte budget and drops those it has no room for;
+  a click goes to its point of the viewport (`PageAction::ClickPoint`,
+  `Command::Point`), the wheel scrolls, and keys without Ctrl or Alt go to
+  the page (`PageAction::Key`, `Command::Key`; rs-rich-embed's
+  `chrome::key_events` is now public). Without Kitty graphics it says so
+  and the projection shows. A benchmark (`tests/pixels.rs`) measures bytes
+  a frame, whole frames against tiles: scrolling 2.46 MB against 1.85 MB,
+  a blinking caret 2.46 MB against 16 kB.
+- **Breaking (noctiluca 0.0.x):** `Options` gains `control`, `Config`
+  gains `agent` (`Agent`, `SendTo`), `Args` gains `control` and
+  `read_only`, `Run` gains `Ls`, `Action` and `ControlHelp` (and is no
+  longer `Eq`), and `View`, `PageAction`, `Command` and `Update` gain
+  variants. Recorded in `api/semver-breaks.toml`.
+- **Not verified here:** a real Kitty, WezTerm or Ghostty showing the
+  pixel view (the tests read the escapes); the pixel view against a live
+  Chrome's screencast (its live test runs in CI only); Ctrl+G into a real
+  tmux or WezTerm pane; macOS's and the BSDs' `getpeereid` path (built and
+  tested on Linux only). No tape was recorded for either feature.
 
 ## 0.0.23 cohort — published 2026-10-27
 

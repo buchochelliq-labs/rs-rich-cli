@@ -1,0 +1,13 @@
+{"note": "Two sessions on one connection: the second opened with Ctrl+N and prompted, then the first."}
+{"client": {"id": 0, "method": "initialize"}}
+{"agent": {"jsonrpc": "2.0", "id": 0, "result": {"protocolVersion": 1}}}
+{"client": {"id": 1, "method": "session/new"}}
+{"agent": {"jsonrpc": "2.0", "id": 1, "result": {"sessionId": "sess_one"}}}
+{"client": {"id": 2, "method": "session/new"}}
+{"agent": {"jsonrpc": "2.0", "id": 2, "result": {"sessionId": "sess_two"}}}
+{"client": {"id": 3, "method": "session/prompt", "params": {"sessionId": "sess_two", "prompt": [{"type": "text", "text": "Second"}]}}}
+{"agent": {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "sess_two", "update": {"sessionUpdate": "agent_message_chunk", "content": {"type": "text", "text": "Answer from two."}}}}}
+{"agent": {"jsonrpc": "2.0", "id": 3, "result": {"stopReason": "end_turn"}}}
+{"client": {"id": 4, "method": "session/prompt", "params": {"sessionId": "sess_one", "prompt": [{"type": "text", "text": "First"}]}}}
+{"agent": {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "sess_one", "update": {"sessionUpdate": "agent_message_chunk", "content": {"type": "text", "text": "Answer from one."}}}}}
+{"agent": {"jsonrpc": "2.0", "id": 4, "result": {"stopReason": "end_turn"}}}

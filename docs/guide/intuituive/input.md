@@ -258,6 +258,35 @@ bubbles up through its ancestors until one uses it.
   over it, the way `.focus_style(style)` does for the focus. It works on
   containers too.
 
+### To the pixel
+
+A terminal that reports the mouse in pixels (SGR-Pixels, mode 1016) lets a
+node tell where in a cell it was clicked: a picture, a canvas or a map can
+then act on the exact pixel. Nothing needs turning on.
+
+- **The session asks** at the start (DECRQM, in the same query as the
+  kitty keyboard protocol's) and turns 1016 on, after 1006, when the
+  terminal knows it and gives its cells' size in pixels (`TIOCGWINSZ`'s
+  pixel fields). The size is measured again on a resize.
+- **Events stay in cells.** `mouse.column` and `mouse.row` are the cell, as
+  ever, and `mouse.pixel` says where in that cell the pointer was (a
+  `Subcell`: the offset from the cell's top left and the cell's size).
+  It is relative to the cell, so it is still right in a node's own
+  coordinates.
+- **`mouse.precise()`** gives the position in fractional cells: to the
+  pixel where the terminal reports pixels, the cell's centre elsewhere. A
+  node that uses it works the same in both.
+- **`RICH_PIXEL_MOUSE=0`** keeps the mouse in cells whatever the terminal
+  answers.
+- **Tests** click a pixel with `Driver::click_pixel(x, y, (width, height))`.
+
+Terminals known to report pixels (none verified on this project's build
+machine, which has no graphical terminal): kitty, WezTerm, foot, Ghostty
+and xterm.
+Terminals that do not answer the question (and multiplexers that answer it
+themselves, tmux among them) keep reporting cells, and every click
+behaves as before. termion's backend asks nothing, so it stays in cells.
+
 ### Tooltips
 
 `.tooltip(markup)` shows a small box by the pointer once the pointer has
@@ -431,6 +460,46 @@ and no key reaches the screen beneath while it is open.
 })
 ```
 
+### Providers and system commands
+
+The palette also lists the app's **system commands**, after Textual's:
+*Theme* (a picker of the built-in themes), *Keys* (shows or hides the
+`key_panel()`, or opens the help when there is none), *Maximize* or
+*Minimize* (the focused pane), *Screenshot* and *Quit*.
+`App::system_commands(SystemCommands::default().without("quit"))` turns
+one off, and `SystemCommands::none()` all of them.
+
+A **`Provider`** adds hits of its own (files, symbols, sessions): its
+`discover()` gives the hits shown before anything is typed, and its
+`search(query, sink)` sends a `Hit` for each match to the sink. A hit has
+an id, a label, a help line, a shortcut, a score and the characters to
+highlight, and a closure that runs once the palette closes;
+`Hit::matching(query)` scores and highlights it with the palette's fuzzy
+match. The palette merges every hit by score as it arrives. A slow search
+moves to a thread of its own with `sink.background(|sink| …)`; typing again
+cancels it (`sink.cancelled()` turns true, and what it sends after is
+dropped), and an app that waits for its tasks waits for it.
+
+```rust
+struct Colours;
+impl Provider for Colours {
+    fn name(&self) -> &str { "colour" }
+    fn search(&self, query: &str, sink: &HitSink) {
+        for name in ["red", "green", "blue"] {
+            let hit = Hit::new(name, name, move |cx| cx.toast(name));
+            if let Some(hit) = hit.matching(query) {
+                sink.send(hit);
+            }
+        }
+    }
+}
+
+App::new(build).provider(Colours).palette_key("ctrl+p")
+```
+
+`cx.palette_of(provider)` opens a palette of one provider alone, as
+*Theme* opens one of `Themes`.
+
 ### Bindings in a state, sections and help options
 
 ```rust
@@ -543,3 +612,45 @@ label("scope")
   it in a test. **`bind_hidden(keys, name, handler)`** is both at once
   (Textual's `show=False`). An empty description still hides a binding
   with no name.
+
+### User keymaps
+
+New in 0.0.24: a binding with an id can be remapped by its users, from a
+keys file or from code, without the app being rebuilt (Textual's
+`Binding(id=…)` and `App.set_keymap`).
+
+```rust
+label("editor")
+    .bind_id("editor.save", "ctrl+s", "Save", save)      // or .bind(..).binding_id(..)
+    .bind_sequence("g g", "Top", top)
+    .sequence_id("nav.top");
+App::new(build)
+    .keymap([("editor.save", "ctrl+s f2"), ("app.quit", "ctrl+q")])
+    .keymap_file(state_dir("myapp")?.join("keys.toml"));  // read again on change
+cx.set_keymap([("editor.save", "f2")])?;                 // at run time
+cx.reload_keymap();                                      // read the file now
+```
+
+- **Ids** go on a binding (`bind_id`, or `.binding_id(id)` after `bind`,
+  `bind_in`, `bind_scaled`, `bind_when`, …) or on a sequence
+  (`.sequence_id(id)`, whose keys in the map are the new sequence:
+  `"space t"`). An editor's actions are in the same map as
+  `text_area.<action>` (`text_area.undo`, `text_area.word-left`), for every
+  text area and input. The diff view's keys are `diff.next`,
+  `diff.previous`, `diff.fold`, `diff.accept`, `diff.reject`,
+  `diff.accept_all` and `diff.reject_all`.
+- **The map** gives each id its keys, as `on_key` names them, separated by
+  spaces or commas, or `none` to unbind. The keys file holds one
+  `id = keys` a line, with `#` comments; `[section]` lines are skipped and
+  a quoted list is read inside its quotes, so a TOML file of strings
+  works (`editor.save = "ctrl+s f2"`). The file's entries go over the ones
+  in code. A file that does not parse is reported in a toast and the last
+  good map stays; the file is checked for changes as the app runs, as a
+  theme file is.
+- **Everywhere:** the help, the command palette, a `key_hints` footer and
+  the which-key pop-up show the keys the map gives.
+- **Reports.** After each change of map, one warning toast lists the ids no
+  binding has (on the screens open then) and the keys two ids now share on
+  one path of the tree: the deeper node's binding takes the key, as it
+  does without a map, and on one node the first. `driver.keymap_report()`
+  returns the same lines in a test.

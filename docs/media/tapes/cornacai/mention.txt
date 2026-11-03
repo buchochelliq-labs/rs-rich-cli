@@ -1,0 +1,34 @@
+ 1 Session 1   · demo-agent 1.0
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+╭─ Prompt · mode ask ────────────────────────────────────────────────────────────────────────────────────────╮
+│Greet by name in @src/main.rs                                                                               │
+╰───────────────── src/main.rs  ─────────────────────────────────────────────────────────────────────────────╯
+Enter send · Alt+Enter line · @ file · Ctrl+N new · Alt+N/P switch · Ctrl+T shell · F2 log · Ctrl+Q quit

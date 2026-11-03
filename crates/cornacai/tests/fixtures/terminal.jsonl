@@ -1,0 +1,15 @@
+{"note": "A command the agent runs through the client: asked about, run on pipes, its output shown in its tool call; a second command refused."}
+{"client": {"id": 0, "method": "initialize", "params": {"clientCapabilities": {"terminal": true}}}}
+{"agent": {"jsonrpc": "2.0", "id": 0, "result": {"protocolVersion": 1}}}
+{"client": {"id": 1, "method": "session/new"}}
+{"agent": {"jsonrpc": "2.0", "id": 1, "result": {"sessionId": "sess_t"}}}
+{"client": {"id": 2, "method": "session/prompt"}}
+{"agent": {"jsonrpc": "2.0", "id": 30, "method": "terminal/create", "params": {"sessionId": "sess_t", "command": "echo", "args": ["tests", "passed"]}}}
+{"client": {"id": 30, "result": {"terminalId": "term_1"}}}
+{"agent": {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "sess_t", "update": {"sessionUpdate": "tool_call", "toolCallId": "call_t", "title": "Run the tests", "kind": "execute", "status": "in_progress", "rawInput": {"command": "echo tests passed"}, "content": [{"type": "terminal", "terminalId": "term_1"}]}}}}
+{"agent": {"jsonrpc": "2.0", "id": 31, "method": "terminal/wait_for_exit", "params": {"sessionId": "sess_t", "terminalId": "term_1"}}}
+{"client": {"id": 31, "result": {"exitCode": 0}}}
+{"agent": {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "sess_t", "update": {"sessionUpdate": "tool_call_update", "toolCallId": "call_t", "status": "completed"}}}}
+{"agent": {"jsonrpc": "2.0", "id": 32, "method": "terminal/create", "params": {"sessionId": "sess_t", "command": "rm", "args": ["-rf", "build"]}}}
+{"client": {"id": 32, "error": {"code": -32800}}}
+{"agent": {"jsonrpc": "2.0", "id": 2, "result": {"stopReason": "end_turn"}}}

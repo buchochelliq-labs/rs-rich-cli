@@ -737,11 +737,13 @@ jobs:
       # needs, `viz` (meters, sparklines and spectra), `wav` (the music
       # example, with `art`), and rs-rich-ext's `yaml` and `jsonpath` (the
       # http example) and `data` (the tasks example), named by the
-      # dependency's name, as their `required-features` name them.
+      # dependency's name, as their `required-features` name them; and
+      # Noctiluca and Cornacai with their test-only replays (`fake-engine`,
+      # `fake-agent`), so their tapes need no browser and no agent.
       - name: Build the CLI and the examples the tapes run
         run: >-
           cargo build -p rs-rich-cli -p rs-rich-interact -p rs-rich-intuituive
-          -p rs-rich-embed -p noctiluca --features rs-rich-cli/serve,rs-rich-intuituive/files,rs-rich-intuituive/archive,rs-rich-intuituive/watch,rs-rich-intuituive/art,rs-rich-intuituive/pcm,rs-rich-intuituive/viz,rs-rich-intuituive/wav,rs-rich-intuituive/vim,rich-ext/yaml,rich-ext/jsonpath,rich-ext/data,noctiluca/fake-engine
+          -p rs-rich-embed -p noctiluca -p cornacai --features rs-rich-cli/serve,rs-rich-intuituive/files,rs-rich-intuituive/archive,rs-rich-intuituive/watch,rs-rich-intuituive/art,rs-rich-intuituive/pcm,rs-rich-intuituive/viz,rs-rich-intuituive/wav,rs-rich-intuituive/vim,rich-ext/yaml,rich-ext/jsonpath,rich-ext/data,noctiluca/fake-engine,cornacai/fake-agent
           --bins --examples --locked
 
       # rs-rich-ext's examples are guide programs; the surface tape runs one.
@@ -923,7 +925,9 @@ jobs:
   # showed only with `--release` (wasmi's dispatch differs from a debug
   # build's). rs-rich-ext's sandbox tests, and the CLI's tests that load
   # modules: the test marketplace's installs, the official artifacts and
-  # `--plugin`.
+  # `--plugin`. And the WASM plugin template (templates/wasm-plugin), built
+  # for wasm32-unknown-unknown and loaded in the sandbox; elsewhere that
+  # test passes without the target, here it must have it.
   wasm-plugins-release:
     name: WASM plugins (release)
     runs-on: ubuntu-latest
@@ -935,14 +939,19 @@ jobs:
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
 
       - name: Cache cargo
         uses: Swatinem/rust-cache@v2
 
       - name: The WASM plugin tests (release)
+        env:
+          RICH_WASM_TEMPLATE_TEST: require
         run: >-
           cargo test --release --locked
           -p rs-rich-ext --features wasm-plugins --test wasm_plugins
+          --test wasm_plugin_template
 
       - name: The CLI's tests that load WASM plugins (release)
         run: >-

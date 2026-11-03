@@ -1,5 +1,7 @@
-//! `HttpsTransport` trusts the system's certificate store, and follows a
-//! redirect whose headers arrive a piece at a time.
+//! `HttpsTransport` trusts the system's certificate store, falls back to
+//! the bundled roots only when that store has nothing in it (never after it
+//! refused a certificate), and follows a redirect whose headers arrive a
+//! piece at a time.
 //!
 //! A local HTTPS server presents a certificate from a test CA
 //! (tests/fixtures/tls) that no bundled root knows: a stand-in for a
@@ -164,4 +166,42 @@ fn the_system_store_is_trusted_and_redirects_survive_fragmented_headers() {
         matches!(error, FetchError::TooLarge { limit: 4, .. }),
         "{error}"
     );
+
+    // A store that does not trust the server's CA refuses it, and that
+    // refusal stands: the bundled roots are not asked instead.
+    set_store(&fixture("other-ca.pem"));
+    let port = serve(2);
+    let error = HttpsTransport::new()
+        .get(&format!("https://127.0.0.1:{port}/file"), 1024)
+        .unwrap_err();
+    let message = error.to_string();
+    assert!(
+        message.contains("UnknownIssuer") && !message.contains("bundled"),
+        "a refusal by the system store: {message}"
+    );
+
+    // No usable store (no certificates in it): the bundled roots are tried,
+    // and refuse the test CA too.
+    let empty = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("https-trust-empty.pem");
+    std::fs::write(&empty, "").unwrap();
+    set_store(&empty);
+    let port = serve(2);
+    let error = HttpsTransport::new()
+        .get(&format!("https://127.0.0.1:{port}/file"), 1024)
+        .unwrap_err();
+    let message = error.to_string();
+    assert!(
+        message.contains("(with the bundled root certificates)")
+            && message.contains("UnknownIssuer"),
+        "no system store: {message}"
+    );
+}
+
+/// Make `file` the whole "system" store.
+fn set_store(file: &std::path::Path) {
+    // SAFETY: the server threads read no environment variables.
+    #[allow(unsafe_code)]
+    unsafe {
+        std::env::set_var("SSL_CERT_FILE", file);
+    }
 }

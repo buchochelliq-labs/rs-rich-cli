@@ -1,0 +1,46 @@
+# crates/cornacai — Cornacai, a terminal client for coding agents on
+# intuiTUIve, over the Agent Client Protocol (#794, phases 3 and 4).
+#
+# Not a port of anything upstream: an rs-rich addition, written clean-room
+# from the public ACP specification. Its design is docs/design/cornacai.md.
+# Independent SemVer from 0.0.1.
+[package]
+name = "cornacai"
+version = "0.0.1"
+description = "A terminal client for coding agents over the Agent Client Protocol: streamed answers, permission prompts, reviewed edits and a shell beside them"
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+authors.workspace = true
+rust-version.workspace = true
+readme = "README.md"
+documentation = "https://docs.rs/cornacai"
+keywords = ["acp", "agent", "terminal", "tui", "rich"]
+categories = ["command-line-utilities", "development-tools"]
+include = ["src/**/*", "README.md", "LICENSE", "Cargo.toml"]
+
+[lints]
+workspace = true
+
+[[bin]]
+name = "cornacai"
+path = "src/main.rs"
+
+[features]
+# Test-only: the binary replays the transcript the variable
+# `CORNACAI_FAKE_AGENT` names (rs-rich-acp's fake agent) instead of starting
+# an agent: the docs tape, with no agent installed. Off, the variable is
+# ignored.
+fake-agent = []
+
+[dependencies]
+rich-acp.workspace = true
+# `files`: the `@` completer over the workspace (`files::path_completer`).
+rich-intuituive = { workspace = true, features = ["files"] }
+# The walk the `@` completer reads.
+rich-ext.workspace = true
+# The shell pane: a persistent shell on a PTY (`LocalPty`).
+rich-embed.workspace = true
+serde_json.workspace = true
+toml = "1.1"

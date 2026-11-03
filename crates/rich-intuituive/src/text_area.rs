@@ -1189,10 +1189,15 @@ impl Widget for TextArea {
         } else {
             self.left.get()
         };
-        let number = cx.style("text_area.line_number", "dim");
+        use crate::editor_theme::{Part, part_style};
+        let own = self.options.editing.editor_theme.clone();
+        let part =
+            |part, old, fallback| part_style(cx.console(), own.as_ref(), part, old, fallback);
+        let number = part(Part::Gutter, "text_area.line_number", "dim");
         let hint = cx.style("text_area.placeholder", "dim");
+        let base = crate::editor_theme::base_style(cx.console(), own.as_ref());
         let looks = Looks {
-            selection: cx.style("text_area.selection", "reverse"),
+            selection: part(Part::Selection, "text_area.selection", "reverse"),
             search: cx.style("text_area.search", "black on yellow"),
             current: cx.style("text_area.search.current", "bold black on bright_yellow"),
             matches: match (rows.first(), rows.last()) {
@@ -1203,9 +1208,17 @@ impl Widget for TextArea {
             },
         };
         let cursor_line = (self.options.editing.cursor_line)
-            .then(|| cx.style("text_area.cursor_line", "underline"));
-        // Highlighted, every row is filled with the code's own background.
-        let fill = self.highlight.borrow().as_ref().map(|h| h.default.clone());
+            .then(|| part(Part::CursorLine, "text_area.cursor_line", "underline"));
+        let bracket = (self.options.editing.match_brackets)
+            .then(|| part(Part::Bracket, "text_area.bracket", "bold underline"));
+        // Highlighted, every row is filled with the code's own background;
+        // else with the editor theme's base, where one is set.
+        let fill = self
+            .highlight
+            .borrow()
+            .as_ref()
+            .map(|h| h.default.clone())
+            .or_else(|| base.clone());
         let blank_gutter = (gutter > 0).then(|| {
             Segment::new(
                 format!("{} │ ", " ".repeat(gutter as usize - 3)),
@@ -1231,7 +1244,17 @@ impl Widget for TextArea {
                     line.push(Segment::new(placeholder.clone(), Some(hint.clone())));
                 }
             } else {
-                line.extend(self.row_segments(*row, first_line, left, text_width, &looks));
+                let segments = self.row_segments(*row, first_line, left, text_width, &looks);
+                match &base {
+                    Some(base) => line.extend(segments.into_iter().map(|mut segment| {
+                        segment.style = Some(match &segment.style {
+                            Some(style) => base.combine(style),
+                            None => base.clone(),
+                        });
+                        segment
+                    })),
+                    None => line.extend(segments),
+                }
             }
             let used = |line: &[Segment]| -> usize {
                 line.iter().map(|s| rich::cells::cell_len(&s.text)).sum()
@@ -1284,6 +1307,25 @@ impl Widget for TextArea {
                 self.bar_at.set(None);
             }
         }
+        // The bracket at the caret and its match.
+        if let Some(look) = &bracket
+            && let Some((here, there)) = crate::editor_theme::matching_bracket(&self.buffer, caret)
+        {
+            for pos in [here, there] {
+                let Some((y, row)) = rows.iter().enumerate().find(|(_, row)| {
+                    row.line == pos.line && pos.at >= row.start && pos.at < row.end
+                }) else {
+                    continue;
+                };
+                let text = self.buffer.line(row.line);
+                let column = self.shown_cells(&text[row.start..pos.at]);
+                if column < left || column - left >= text_width {
+                    continue;
+                }
+                let x = origin + gutter + (column - left).min(u16::MAX as usize) as u16;
+                canvas.restyle(x, y as u16, 1, 1, look);
+            }
+        }
         // The caret drawn in the cells, rather than the terminal's.
         let drawn = self.options.editing.draw_caret;
         if let (true, true, Some((x, y))) = (drawn, cx.focused(), caret_cell) {
@@ -1291,7 +1333,7 @@ impl Widget for TextArea {
                 Some(CaretShape::Underline) => "underline",
                 _ => "reverse",
             };
-            let look = cx.style("text_area.caret", fallback);
+            let look = part(Part::Cursor, "text_area.caret", fallback);
             let (symbol, style) = match canvas.cell(x, y) {
                 Some(cell) if !cell.symbol().is_empty() && !cell.is_continuation() => {
                     (cell.symbol().to_string(), cell.style().cloned())

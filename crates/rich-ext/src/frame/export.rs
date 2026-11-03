@@ -74,6 +74,64 @@ pub struct SvgOptions<'a> {
     pub font_aspect_ratio: f64,
 }
 
+impl<'a> SvgOptions<'a> {
+    /// The terminal colours.
+    #[must_use]
+    pub fn theme(mut self, theme: &'a TerminalTheme) -> Self {
+        self.theme = theme;
+        self
+    }
+
+    /// The window title; empty for none.
+    #[must_use]
+    pub fn title(mut self, title: &'a str) -> Self {
+        self.title = title;
+        self
+    }
+
+    /// The prefix of every id and class.
+    #[must_use]
+    pub fn unique_id(mut self, unique_id: &'a str) -> Self {
+        self.unique_id = unique_id;
+        self
+    }
+
+    /// The terminal width in cells.
+    #[must_use]
+    pub fn width(mut self, width: usize) -> Self {
+        self.width = Some(width);
+        self
+    }
+
+    /// Whether to draw the window round the terminal.
+    #[must_use]
+    pub fn window(mut self, on: bool) -> Self {
+        self.window = on;
+        self
+    }
+
+    /// A block cursor at `column`, `row`.
+    #[must_use]
+    pub fn cursor(mut self, column: usize, row: usize) -> Self {
+        self.cursor = Some((column, row));
+        self
+    }
+
+    /// A line of text under the terminal.
+    #[must_use]
+    pub fn caption(mut self, caption: &'a str) -> Self {
+        self.caption = Some(caption);
+        self
+    }
+
+    /// A cell's width over its height.
+    #[must_use]
+    pub fn font_aspect_ratio(mut self, ratio: f64) -> Self {
+        self.font_aspect_ratio = ratio;
+        self
+    }
+}
+
 impl Default for SvgOptions<'_> {
     fn default() -> Self {
         SvgOptions {

@@ -367,6 +367,7 @@ mod tests {
             column: 0,
             row: 0,
             modifiers: Default::default(),
+            pixel: None,
         });
         assert!(viewport.handle_scroll(&wheel, 10));
         assert_eq!(viewport.offset(), 3);

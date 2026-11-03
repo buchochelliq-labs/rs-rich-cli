@@ -62,6 +62,7 @@ iterm = ["image"]
 # keeps moving pictures within a byte budget.
 picture = ["image", "sixel", "kitty", "iterm"]
 # `frames`: video frame display on `picture`. RGBA frames to every protocol,
+# whole frames as tiles that are sent only when they change (`tiles`),
 # frame pacing within a byte budget, the step down from Kitty to cells, and
 # byte accounting. No new dependencies; decoding video files is out of
 # scope (a browser's screencast or an emulator supplies the frames).

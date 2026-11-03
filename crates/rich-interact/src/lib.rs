@@ -96,6 +96,8 @@ pub mod clipboard;
 pub mod component;
 pub mod components;
 pub mod compose;
+#[cfg(all(feature = "control", unix))]
+pub mod control;
 pub mod dates;
 pub mod datetime;
 pub mod edit;
@@ -104,6 +106,8 @@ pub mod event;
 pub mod event_loop;
 pub mod fuzzy;
 pub mod headless;
+#[cfg(all(feature = "host", not(target_arch = "wasm32")))]
+pub mod host;
 pub mod item;
 pub mod keymap;
 pub mod kit;
@@ -137,6 +141,7 @@ pub use compose::{
 };
 pub use event::{
     Button, Event, HeldButton, Key, KeyCode, ModifierKey, Modifiers, Mouse, MouseKind, Releases,
+    Subcell,
 };
 pub use event_loop::{
     Error, EventLoop, Handle, LoopOptions, Outcome, RunOptions, degrade, run, run_with_graphics,
@@ -239,6 +244,15 @@ pub(crate) mod crossterm_stub {
             super::no()
         }
         pub fn supports_keyboard_enhancement() -> std::io::Result<bool> {
+            super::no()
+        }
+        pub struct WindowSize {
+            pub rows: u16,
+            pub columns: u16,
+            pub width: u16,
+            pub height: u16,
+        }
+        pub fn window_size() -> std::io::Result<WindowSize> {
             super::no()
         }
     }

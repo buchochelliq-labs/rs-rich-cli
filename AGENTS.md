@@ -78,6 +78,10 @@ rich-cli ─ ─ ▶ rich-web ──▶ rich-intuituive, rich-embed   (serving t
              rich-acp                            (the Agent Client Protocol client, Cornacai's protocol layer:
                                                  JSON-RPC over stdio, typed messages, a sandboxed workspace;
                                                  serde only, no crate of ours and no terminal code)
+             cornacai ──▶ rich-acp, rich-intuituive, rich-embed   (Cornacai, the terminal client for coding
+                  └──▶ rich-ext                  agents: sessions, streamed answers, permission prompts,
+                                                 writes reviewed as diffs, a shell pane. A leaf: nothing
+                                                 depends on it, and it adds nothing to intuiTUIve core)
 rich-py  ──▶ rich, rich-ext, rich-art, rich-mermaid, rich-diagram, rich-micro, rich-interact, rich-cli,
              rich-intuituive, rich-web, rich-embed
                            (Python bindings; outside the workspace, released to PyPI only)
@@ -115,6 +119,7 @@ possible, and keep the boundary free of core back-dependencies.
 | `rs-rich-marketplace` | independent SemVer | whenever we ship anything       |
 | `rs-rich-acp`  | independent SemVer | whenever we ship anything              |
 | `noctiluca`    | independent SemVer | whenever we ship anything              |
+| `cornacai`     | independent SemVer | whenever we ship anything              |
 | `rs-rich-macros` | independent SemVer | whenever we ship anything            |
 | `rs-rich-art`  | independent SemVer | whenever we ship anything              |
 | `rs-rich` (PyPI, `crates/rich-py`) | independent SemVer, `python-v…` tags | whenever we ship anything |

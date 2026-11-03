@@ -404,7 +404,7 @@ made by any other key is refused before it is checked.
 |---|---|
 | Refreshing the index (`rich plugin update`, `search` with a stale cache) | First the key chain (below), then `index.json.minisig` against the current main key, the trusted comment's serial, `schema_version`, the serial against the last accepted one, and `expires`. The verified index is cached with its signature. |
 | Reading a listing (`search`, `info`, `install`) | Its SHA-256 against the index, then the schema and the rules beyond it, and that its `id` is the key it is filed under. |
-| Installing | The version resolves (below) and is not yanked. The artifact is downloaded over HTTPS only (redirects too, at most five, followed one request at a time), trusting the system's certificate store first and Mozilla's bundled roots as the fallback (TLS is transport only: the trust is the signatures' and the SHA-256's), reading at most `size` bytes, into a temporary file beside the destination; its size and SHA-256 must match. Then by kind: a WASM module is loaded in the sandbox (`load_wasm`), and its manifest's name, version, ABI and capabilities must equal the listing's; a micro pack is read with the default limits, and its `pack.json` name and version must equal the id and version; a theme file must parse. Only then is it moved into place and written to the lockfile (id, kind, version, URL, SHA-256, tier and the index serial). |
+| Installing | The version resolves (below) and is not yanked. The artifact is downloaded over HTTPS only (redirects too, at most five, followed one request at a time), trusting the system's certificate store, and Mozilla's bundled roots only when that store cannot be used, never after it refused a certificate (TLS is transport only: the trust is the signatures' and the SHA-256's), reading at most `size` bytes, into a temporary file beside the destination; its size and SHA-256 must match. Then by kind: a WASM module is loaded in the sandbox (`load_wasm`), and its manifest's name, version, ABI and capabilities must equal the listing's; a micro pack is read with the default limits, and its `pack.json` name and version must equal the id and version; a theme file must parse. Only then is it moved into place and written to the lockfile (id, kind, version, URL, SHA-256, tier and the index serial). |
 | Every load (each run) | The installed file's SHA-256 against the lockfile; a file changed on disk is not loaded. No network. |
 | `rich plugin verify` | Every installed file against the lockfile, and against the current index: a version yanked since is reported with its reason. |
 
@@ -459,11 +459,23 @@ another generation:
 `minisign -S -s backup.key -m keys-2.json -x keys-2.json.backup.minisig -t "rs-rich-marketplace keys generation=2"`.
 A revoked key stays revoked in every later generation.
 
-A client holds the newest generation it has verified. On refresh it fetches
-the generations after it and accepts them one at a time, each against the
-one before, before it verifies the index with the newest main key. A
-release of the crate compiles in the newest generation, so a new install
-does not walk the whole chain.
+A client holds the generations it has verified after its trust root. On
+refresh it fetches the generations after the newest and accepts them one at
+a time, each against the one before, before it verifies the index with the
+newest main key. A release of the crate compiles in the newest generation,
+so a new install does not walk the whole chain.
+
+What it holds is kept per trust root, not per location: a location that
+does not serve a newer `keys-N.json` (a stale mirror, a `RICH_MARKETPLACE`
+someone else chose) starts from the newest generation any location gave,
+so a main key revoked there stays revoked, and an index it signed is
+refused with an error saying the location is stale or withholding keys.
+The chain is stored as the `keys-N.json` files and their signatures, and
+verified again from the trust root each time it is read, so the state file
+can lose generations but never add a key. (A client that has never seen a
+revoking generation still depends on the location it is given, or on a
+release compiling that generation in: after a revocation, ship a release
+with the new generation.)
 
 **The test key.** The crate's tests sign a fixture marketplace with key
 pairs checked into its test fixtures

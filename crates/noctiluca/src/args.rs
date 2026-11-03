@@ -40,10 +40,23 @@ pub struct Args {
     /// `--transparent`: where a page sets no background, the terminal's
     /// own shows.
     pub transparent: bool,
+    /// `--ssh HOST`: Chrome runs here, its network goes through HOST
+    /// ([`crate::ssh`]).
+    pub ssh: Option<String>,
+    /// `--ssh-arg ARG`, repeatable: the user's own options for that ssh.
+    pub ssh_args: Vec<String>,
+    /// `--split DIR`: open in a new pane of the terminal, beside this one
+    /// (`right`, `left`, `up`, `down`), and return.
+    pub split: Option<rich_interact::host::Direction>,
+    /// `--control`: listen on the control socket, for `noctiluca action`
+    /// ([`crate::control`]).
+    pub control: bool,
+    /// `--read-only`: listen, and refuse every verb that changes anything.
+    pub read_only: bool,
 }
 
 /// What the command line asks for.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum Run {
     Browse(Args),
     /// `noctiluca keys [--site HOST]`: the keys, and a site's.
@@ -51,6 +64,14 @@ pub enum Run {
         site: Option<String>,
         config: Option<PathBuf>,
     },
+    /// `noctiluca ls [--json]`: the sessions listening.
+    Ls {
+        json: bool,
+    },
+    /// `noctiluca action …`: one verb to a running session.
+    Action(crate::control::ActionArgs),
+    /// `noctiluca ls --help` or `noctiluca action --help`.
+    ControlHelp,
     Help,
     Version,
 }
@@ -60,8 +81,13 @@ noctiluca: a terminal web browser
 
 usage: noctiluca [OPTIONS] [URL | FILE | KEYWORD WORDS…]
        noctiluca keys [--site HOST] [--config PATH]
+       noctiluca ls [--json]
+       noctiluca action [--session PID] [--json] VERB [ARGS…]
 
-  --reader | --projection | --raster   the first view (default: projection)
+  --reader | --projection | --pixels | --raster
+                                       the first view (default: projection;
+                                       pixels needs Kitty graphics)
+  --view NAME                          the same: projection, reader, pixels, raster
   --audio                              let pages play sound (off by default;
                                        it plays where Chrome runs, never over SSH)
   --profile NAME                       keep a profile between runs (opt-in)
@@ -75,10 +101,21 @@ usage: noctiluca [OPTIONS] [URL | FILE | KEYWORD WORDS…]
                                        clicks; its own text selection)
   --transparent                        let the terminal's background show where a
                                        page sets none of its own
+  --ssh [USER@]HOST                    run Chrome here, but make every request
+                                       through HOST (its localhost is localhost)
+  --ssh-arg ARG                        an option for that ssh (repeatable:
+                                       --ssh-arg=-p --ssh-arg=2222)
+  --split right|left|up|down           open in a new pane beside this one (tmux,
+                                       WezTerm, kitty, zellij, or a terminal with
+                                       terminal-browser's socket) and return
   --adapt -RULE,+RULE,…                switch terminal adaptations off or on
                                        (decorative-images, collapse-nav, …;
                                        ? while browsing lists them)
   --no-adapt                           every adaptation off: the faithful view
+  --control                            listen for `noctiluca action` (a socket of
+                                       your own user; Unix only for now)
+  --read-only                          listen, but refuse every action that
+                                       changes anything
   --config PATH                        another config file
   -h, --help | -V, --version
 
@@ -100,6 +137,24 @@ fn value_of(
 
 /// The command line `args` (without the program's name).
 pub fn parse_args(args: &[String]) -> Result<Run, String> {
+    let help = |rest: &[String]| rest.iter().any(|a| a == "-h" || a == "--help");
+    match args.first().map(String::as_str) {
+        Some("ls") if help(&args[1..]) => return Ok(Run::ControlHelp),
+        Some("ls") => {
+            return match &args[1..] {
+                [] => Ok(Run::Ls { json: false }),
+                [flag] if flag == "--json" => Ok(Run::Ls { json: true }),
+                other => Err(format!("ls: unknown switch {:?}", other[0])),
+            };
+        }
+        Some("action") if help(&args[1..]) => return Ok(Run::ControlHelp),
+        Some("action") => {
+            return crate::control::parse_action(&args[1..])
+                .map(Run::Action)
+                .map_err(|e| format!("action: {e}"));
+        }
+        _ => {}
+    }
     if args.first().is_some_and(|a| a == "keys") {
         let (mut site, mut config) = (None, None);
         let mut rest = args[1..].iter();
@@ -125,7 +180,7 @@ pub fn parse_args(args: &[String]) -> Result<Run, String> {
         let (name, inline) = split(arg);
         let mut view = |v: View| -> Result<(), String> {
             if parsed.view.is_some_and(|w| w != v) {
-                return Err("--reader, --projection and --raster: choose one".into());
+                return Err("--reader, --projection, --pixels and --raster: choose one".into());
             }
             parsed.view = Some(v);
             Ok(())
@@ -137,6 +192,16 @@ pub fn parse_args(args: &[String]) -> Result<Run, String> {
             "--reader" => view(View::Reader)?,
             "--projection" => view(View::Projection)?,
             "--raster" => view(View::Raster)?,
+            "--pixels" => view(View::Pixels)?,
+            "--view" => {
+                let value = value_of(name, inline, &mut rest)?;
+                let chosen = View::parse(&value).ok_or_else(|| {
+                    format!("--view takes projection, reader, pixels or raster, not {value:?}")
+                })?;
+                view(chosen)?
+            }
+            "--control" => parsed.control = true,
+            "--read-only" => parsed.read_only = true,
             "--audio" => parsed.audio = true,
             "--no-js" => parsed.no_js = true,
             "--no-mouse" => parsed.no_mouse = true,
@@ -163,6 +228,18 @@ pub fn parse_args(args: &[String]) -> Result<Run, String> {
                     return Err("--profile takes a name: letters, digits, - and _".into());
                 }
                 parsed.profile = Some(name);
+            }
+            "--ssh" => {
+                let host = value_of(name, inline, &mut rest)?;
+                crate::ssh::check_host(&host)?;
+                parsed.ssh = Some(host);
+            }
+            "--ssh-arg" => parsed.ssh_args.push(value_of(name, inline, &mut rest)?),
+            "--split" => {
+                let value = value_of(name, inline, &mut rest)?;
+                parsed.split = Some(rich_interact::host::Direction::parse(&value).ok_or_else(
+                    || format!("--split takes right, left, up or down, not {value:?}"),
+                )?);
             }
             "--chrome" => parsed.chrome = Some(PathBuf::from(value_of(name, inline, &mut rest)?)),
             "--config" => parsed.config = Some(PathBuf::from(value_of(name, inline, &mut rest)?)),
@@ -203,6 +280,9 @@ pub fn parse_args(args: &[String]) -> Result<Run, String> {
     if parsed.dump.is_some() && parsed.target.is_empty() {
         return Err("--dump needs a page".into());
     }
+    if !parsed.ssh_args.is_empty() && parsed.ssh.is_none() {
+        return Err("--ssh-arg needs --ssh HOST".into());
+    }
     Ok(Run::Browse(parsed))
 }
 
@@ -221,6 +301,29 @@ pub fn adapt_of(
         adapt = crate::adapt::Adapt::none();
     }
     Ok(adapt)
+}
+
+/// The command line `args` without `--split` and its value: what the new
+/// pane runs.
+pub fn without_split(args: &[String]) -> Vec<String> {
+    let mut out = Vec::new();
+    let mut rest = args.iter();
+    while let Some(arg) = rest.next() {
+        if arg == "--" {
+            out.push(arg.clone());
+            out.extend(rest.cloned());
+            break;
+        }
+        if arg == "--split" {
+            rest.next();
+            continue;
+        }
+        if arg.starts_with("--split=") {
+            continue;
+        }
+        out.push(arg.clone());
+    }
+    out
 }
 
 /// `--name=value` as the name and the value.
@@ -279,6 +382,79 @@ mod tests {
     }
 
     #[test]
+    fn ssh_takes_a_host_and_the_user_s_own_options() {
+        let Run::Browse(args) = parse(&[
+            "--ssh",
+            "me@devbox",
+            "--ssh-arg=-p",
+            "--ssh-arg",
+            "2222",
+            "http://localhost:3000",
+        ])
+        .unwrap() else {
+            panic!()
+        };
+        assert_eq!(args.ssh.as_deref(), Some("me@devbox"));
+        assert_eq!(args.ssh_args, ["-p", "2222"]);
+        assert_eq!(args.target, ["http://localhost:3000"]);
+    }
+
+    #[test]
+    fn split_opens_beside_with_the_rest_of_the_line() {
+        let Run::Browse(args) = parse(&["--split", "right", "--reader", "x.html"]).unwrap() else {
+            panic!()
+        };
+        assert_eq!(args.split, Some(rich_interact::host::Direction::Right));
+        assert!(
+            parse(&["--split=sideways"])
+                .unwrap_err()
+                .contains("right, left")
+        );
+        let line = |words: &[&str]| words.iter().map(|w| w.to_string()).collect::<Vec<_>>();
+        assert_eq!(
+            without_split(&line(&["--split", "right", "--reader", "x.html"])),
+            ["--reader", "x.html"]
+        );
+        assert_eq!(
+            without_split(&line(&["--split=down", "--", "--split"])),
+            ["--", "--split"]
+        );
+    }
+
+    #[test]
+    fn the_pixel_view_and_the_control_socket() {
+        let Run::Browse(args) = parse(&["--view", "pixels", "--read-only", "x.html"]).unwrap()
+        else {
+            panic!()
+        };
+        assert_eq!(args.view, Some(View::Pixels));
+        assert!(args.read_only && !args.control);
+        let Run::Browse(args) = parse(&["--pixels", "--control"]).unwrap() else {
+            panic!()
+        };
+        assert_eq!(args.view, Some(View::Pixels));
+        assert!(args.control);
+        assert!(
+            parse(&["--pixels", "--reader"])
+                .unwrap_err()
+                .contains("choose one")
+        );
+        assert!(parse(&["--view=sideways"]).is_err());
+        assert_eq!(parse(&["ls"]).unwrap(), Run::Ls { json: false });
+        assert_eq!(parse(&["ls", "--json"]).unwrap(), Run::Ls { json: true });
+        assert_eq!(parse(&["action", "--help"]).unwrap(), Run::ControlHelp);
+        let Run::Action(action) = parse(&["action", "click", "12"]).unwrap() else {
+            panic!()
+        };
+        assert_eq!(action.verb, "click");
+        assert!(
+            parse(&["action", "dance"])
+                .unwrap_err()
+                .starts_with("action:")
+        );
+    }
+
+    #[test]
     fn adaptations_switch_off_one_by_one_or_all() {
         let Run::Browse(args) =
             parse(&["--adapt=-decorative-images,-collapse-nav", "x.html"]).unwrap()
@@ -320,6 +496,16 @@ mod tests {
                 .contains("needs a page")
         );
         assert!(parse(&["--nope"]).unwrap_err().contains("unknown switch"));
+        assert!(
+            parse(&["--ssh", "-oProxyCommand=x"])
+                .unwrap_err()
+                .contains("--ssh-arg")
+        );
+        assert!(
+            parse(&["--ssh-arg", "-p", "x.html"])
+                .unwrap_err()
+                .contains("needs --ssh")
+        );
         let Run::Browse(args) = parse(&["--", "--reader"]).unwrap() else {
             panic!()
         };

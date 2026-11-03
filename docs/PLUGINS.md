@@ -241,6 +241,12 @@ or linked with `export_plugin!`, and `rich plugins list` shows it as
   `rich_plugin_manifest` and `rich_plugin_call` (see `abi::wasm`) and imports
   nothing. See the hand-written
   [`examples/wasm/shout.wat`](https://github.com/buchochelliq-labs/rs-rich-cli/blob/main/crates/rich-plugin-api/examples/wasm/shout.wat).
+  To write one in Rust, start from the template,
+  [`templates/wasm-plugin/`](https://github.com/buchochelliq-labs/rs-rich-cli/tree/main/templates/wasm-plugin)
+  (0.0.24): a crate with no dependencies whose module the host loads, built
+  and loaded by rs-rich-ext's `tests/wasm_plugin_template.rs`. The guide,
+  [Write a plugin](guide/write-a-plugin.md), goes from the template to a
+  listing on the marketplace.
 
 The ABI is versioned separately from `PLUGIN_API_VERSION`: it is
 `abi::ABI_MAJOR.abi::ABI_MINOR`, 1.0. A host refuses a plugin built for
@@ -291,7 +297,8 @@ live:
 - **Installing.** `Installer` downloads over HTTPS only, through a
   `Transport` (`HttpsTransport`, ureq, behind the default `http` feature;
   it trusts the system's certificate store first, so a TLS-inspecting
-  proxy's root CA works, and Mozilla's bundled roots as the fallback: see
+  proxy's root CA works, and Mozilla's bundled roots only when that store
+  cannot be used (a certificate the system refuses stays refused): see
   `rich_marketplace::tls`),
   reads at most the declared size, checks the SHA-256, then checks the
   artifact by kind: a WASM module's header (a host with the sandbox passes
@@ -435,8 +442,10 @@ maintainer can also mark any package `★ recommended`, with a short reason
   `$XDG_DATA_HOME/rich/plugins` (`~/.local/share/rich/plugins`;
   `%LOCALAPPDATA%\rich\plugins` on Windows), as `ID/ID-VERSION.EXT` beside
   `marketplace.lock.json`. `marketplace.state.json` there keeps the disabled
-  packages, the last index each marketplace served, the newest key
-  generation verified and the yank reasons last seen.
+  packages, the last index each marketplace served, the key generations
+  verified after each trust root (verified again from the root whenever
+  they are read) and the yank reasons last seen. On Unix the directory is
+  created private (mode 700); an existing one keeps its mode.
 - **Which marketplace.** `--marketplace LOCATION`, else `RICH_MARKETPLACE`,
   else the official one. A location is an `https://` base URL, or a
   directory (a path or a `file://` URL) laid out as the marketplace

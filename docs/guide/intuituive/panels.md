@@ -179,6 +179,59 @@ presets also name the [stock buttons](controls.md#buttons)' faces,
 [form controls](controls.md#the-theme-styles) fall back to `accent`,
 `good` and `muted`.
 
+### Semantic palettes and built-in themes
+
+New in 0.0.24: a theme can be generated from a `Palette` of semantic
+colours, as Textual's themes are, and the 21 Textual themes are built in.
+
+```rust
+use intuituive::{Palette, Theme};
+use rich::Color;
+
+let palette = Palette::new(Color::parse("#0178D4")?)
+    .secondary(Color::parse("#004578")?)
+    .accent(Color::parse("#ffa62b")?)
+    .dark(true);
+App::new(build).theme(Theme::from_palette(palette));
+App::new(build).theme(Theme::named("nord").unwrap());
+cx.set_theme_named("gruvbox");        // at run time; false for an unknown name
+Theme::builtin()                      // [(name, Theme)], for a picker
+```
+
+- **The roles** are Textual's: `primary`, `secondary`, `accent`,
+  `warning`, `error`, `success`, `foreground`, `background`, `surface`,
+  `panel` and `boost`, and whether it is dark. Only `primary` is needed;
+  the others default as Textual's do.
+- **The shades** are generated as Textual's `ColorSystem` generates them,
+  by its names and to its values (checked against Textual 8.2.8 for every
+  built-in theme): `primary-lighten-1` to `-3`, `primary-darken-1` to
+  `-3`, `primary-muted`, `text-primary`, `text`, `text-muted`,
+  `text-disabled`, `foreground-muted`, `border`, `border-blurred`,
+  `surface-active`, `scrollbar`, `block-cursor-background`, and the same
+  for each role. Each is a named style: a foreground, or for the grounds
+  (`background`, `surface`, `panel`, `boost` and their shades) a
+  background. So they work in markup (`[primary-muted]…[/]`) and as
+  `$name` in a stylesheet (`background: $surface;`). A colour with an
+  alpha is laid over the background.
+- **The names the presets have** come from the palette, so an app written
+  for them follows a palette theme: `accent`, `muted` (`text-muted`),
+  `good`, `warn` and `bad` (`text-success`, `text-warning`, bold
+  `text-error`), `selected` (the block cursor), the buttons' faces, and
+  the borders (`border.focused` is `border`). `screen` is the foreground
+  on the background: `.style("screen")` on the app's root paints the
+  whole screen in the theme.
+- **Built in:** `dark`, `light` and `mono` (the presets, unchanged), then
+  `textual-dark`, `textual-light`, `nord`, `gruvbox`, `catppuccin-mocha`,
+  `dracula`, `tokyo-night`, `monokai`, `flexoki`, `catppuccin-latte`,
+  `catppuccin-frappe`, `catppuccin-macchiato`, `solarized-light`,
+  `solarized-dark`, `rose-pine`, `rose-pine-moon`, `rose-pine-dawn`,
+  `atom-one-dark`, `atom-one-light`, `ansi-dark` and `ansi-light` (the
+  last two in the terminal's own colours). The palettes are Textual's (MIT,
+  credited in the crate's `THIRD_PARTY.md`). No text style of any of them
+  is under 3:1 against its background in rs-rich-ext's contrast check; a
+  few warning and success texts of the light ones are under AA's 4.5:1,
+  as they are in Textual.
+
 ### Theme files, reloaded live
 
 ```rust
@@ -274,11 +327,46 @@ panel table:hover { text-style: underline; }
 - `:selected` and `:disabled`, while `.selected_when(…)` or
   `.disabled_when(…)` holds;
 - `:error` (or CSS's `:invalid`), while `.error_when(…)` holds (see
-  [Errors](#errors)).
+  [Errors](#errors));
+- `:blur` (not focused), `:enabled` (not disabled) and `:can-focus`;
+- `:first-child`, `:last-child`, `:odd`, `:even` (counted from the first,
+  as CSS's `:nth-child(odd)` is) and `:empty` (no children): where the
+  node is among its parent's children, which follows rows an `each` adds
+  or moves;
+- `:dark` and `:light`, by the theme: `:dark #logo` holds while the theme
+  is dark, at the top of the app too.
 
-Spaces separate a node from its ancestors (`panel label`). Sibling
-selectors and `!important` are not supported. The more specific rule wins,
-then the later one.
+States, structural and theme ones among them, change colours and text
+styles, not layout.
+
+Spaces separate a node from its ancestors (`panel label`), and `>` from
+its parent only (`#sidebar > list`); `*` is any node. Sibling selectors
+(`+`, `~`) and `!important` are not supported. The more specific rule
+wins, then the later one: `#a > .b` beats `.b`.
+
+**Nesting.** A rule may hold rules, as in Textual and CSS: `&` is the rule
+around it, and a nested selector without one is a descendant (or, after a
+`>`, a child). A nested rule reads as its flattened form, after the rule
+around it.
+
+```css
+.card {
+    padding: 0 1;
+    &:hover { background: $panel-bg; }   /* .card:hover */
+    & .title { text-style: bold; }        /* .card .title */
+    > .foot { size: 1; }                  /* .card > .foot */
+}
+```
+
+**Variables.** `$name: value;` at the top level declares a variable, which
+any later value may use (a variable's value may use earlier ones). A `$name`
+not declared is a theme style's colour, as before (`$accent`).
+
+```css
+$panel-bg: #101830;
+$edge: round $panel-bg;
+#help { background: $panel-bg; border: $edge; }
+```
 
 `.class("warn big")` gives a node fixed classes, and
 `.class_when("danger", move || load.get() > 90)` gives it a class while a
@@ -315,6 +403,9 @@ and other `@` rules are an error.
 | `text-align`, `text-wrap`, `text-overflow` | a text's `left`, `center`, `right` or `justify`; `wrap` or `nowrap`; `fold`, `clip` or `ellipsis` |
 | `size`, `min-size`, `max-size` | `3`, `50%`, `1/3`, `2fr`, `auto`, along the parent's axis |
 | `padding` | one to four numbers, as in CSS |
+| `margin` | one to four numbers: room kept round the node's border, which its colours do not fill |
+| `visibility` | `hidden` keeps the node's room but draws nothing in it and takes it out of the Tab order (`display: none` gives the room up); `visible` |
+| `scrollbar-color`, `scrollbar-background` | the thumb's colour, and the track's ground, of a node's scrollbars (a `scroll`, a list, a table, a log, …), as theme styles over the node: `scrollbar.thumb`, `scrollbar` |
 | `gap`, `grid-columns`, `grid-rows` | a stack's or grid's spacing; a grid's tracks |
 | `display` | `none` hides the node and what is inside, in any container (a split's pane, a scroll's or a switch's child), takes it out of the Tab order, and out of a grid's cells |
 | `dock` | `top` or `bottom` in a column, `left` or `right` in a row: kept at that edge |

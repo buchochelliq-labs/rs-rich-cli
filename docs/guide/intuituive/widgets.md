@@ -82,6 +82,42 @@ column([
   the cap and drops the changes between, the next draw showing the newest,
   and a change within the cap waits its turn, so the last one is shown.
 
+### Small widgets after Textual's
+
+```rust
+use intuituive::{header, key_panel, link, masked_input, placeholder, progress_bar};
+
+header().clock()                                  // the app's title, the screen's subtitle
+link("Docs", "https://example.com")               // Enter or a click opens it
+progress_bar(done, total).show_percentage(true).show_eta(true)
+masked_input(date, "9999-99-99")                  // 20261027 shows 2026-10-27
+key_panel()                                       // the keys that work now, one a row
+placeholder("sidebar")                            // a coloured block for a prototype
+```
+
+- **`header()`** shows `App::title(..)` and the top screen's
+  `cx.set_subtitle(..)`, centred, in the theme's `header` style.
+  `.clock()` adds the time (UTC, moving with the app's clock), `.tall()`
+  makes it three rows; a click toggles tall.
+- **`link(text, url)`** can take the focus; Enter or a click opens the URL
+  with the system's opener (`$OPENER`, `xdg-open`, `open`), or runs
+  `.on_activate(|cx| ..)` instead. `.open_with(|url| ..)` opens it another
+  way, as a test's stub does. It is an OSC 8 hyperlink too.
+- **`progress_bar(done, total)`** draws `done` of `total` (signals of
+  `f64` and `Option<f64>`); with no total it pulses on the app's clock.
+  The ETA counts from its first frame, at the rate so far.
+- **`masked_input(value, template)`** keeps to a template as Textual's
+  `MaskedInput` does: `9`/`0` a digit (required, optional), `A`/`a` a
+  letter, `N`/`n` a letter or digit, `X`/`x` anything, `>`/`<` upper or
+  lower case, `;_` the blank. Separators are fixed, the caret and Backspace
+  skip them, and the node is `:invalid` while partly filled.
+- **`key_panel()`** lists the focused path's bindings as `key  description`,
+  greying those that do not apply; `cx.toggle_key_panel()` hides and shows
+  it.
+- **`placeholder(label)`** fills its area with the next of twelve colours
+  and its label; `.placeholder_variant(PlaceholderVariant::Size)` shows its
+  size, `Text` a paragraph, and a click cycles them.
+
 ## Your own widgets
 
 Anything the built-in nodes do, a widget of yours can do too. It

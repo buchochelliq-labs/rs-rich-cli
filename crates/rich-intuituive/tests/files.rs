@@ -908,8 +908,10 @@ fn z_and_big_z_look_the_same_and_big_z_jumps_to_a_directory_visited() {
     );
     driver.press("esc");
     // The store is kept for the next session, in the state directory
-    // (which the tests running beside this one write too).
-    assert!(state_dir().join("intuituive/frecency.tsv").is_file());
+    // (which the tests running beside this one write too). It is asked of
+    // the library: macOS's state directory does not follow XDG_STATE_HOME.
+    let store = intuituive::files::state_dir().unwrap().join("frecency.tsv");
+    assert!(store.is_file(), "{}", store.display());
 }
 
 #[test]

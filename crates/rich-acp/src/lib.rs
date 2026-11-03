@@ -22,6 +22,8 @@
 //!   client did not offer before the client sees it.
 //! - [`Workspace`], [`fs`] and [`Terminals`] answer those requests inside
 //!   the session's root set, if the app wants them.
+//! - [`replay`] is a fake agent that replays a recorded transcript, for
+//!   testing a client (or showing an app) with no agent installed.
 //!
 //! Threads, no async runtime: one reader thread per connection, and a
 //! thread per request from the agent, so a handler may block on the user.
@@ -68,6 +70,7 @@ mod client;
 mod connection;
 mod error;
 pub mod fs;
+pub mod replay;
 mod schema;
 mod terminals;
 mod workspace;

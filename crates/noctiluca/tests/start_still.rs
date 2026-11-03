@@ -20,6 +20,8 @@ fn with_no_motion_the_start_page_is_still_from_the_start() {
         url: None,
         view: None,
         images: Some(noctiluca::config::Images::Ansi),
+        tunnel: None,
+        control: None,
     };
     let mut driver = app(Box::new(FakeEngine::from_dir(&dir).unwrap()), options).driver(120, 40);
     driver.settle();

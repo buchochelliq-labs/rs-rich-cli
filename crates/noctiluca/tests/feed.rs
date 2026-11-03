@@ -58,6 +58,8 @@ fn options() -> Options {
         url: Some(URL.to_string()),
         view: Some(View::Projection),
         images: Some(noctiluca::config::Images::Ansi),
+        tunnel: None,
+        control: None,
     }
 }
 

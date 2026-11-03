@@ -2578,6 +2578,106 @@ pub fn C::boxed<'a>(self) -> rich_interact::compose::Child<'a, Self::Output> whe
 pub fn C::map<'a, M>(self, impl core::ops::function::FnMut(Self::Output) -> rich_interact::component::Flow<M> + 'a) -> rich_interact::compose::Map<'a, Self, M> where Self: 'a
 pub fn C::with_overlays<'a>(self) -> rich_interact::overlay::Overlays<'a, Self::Output> where Self: 'a, Self::Output: 'a
 pub type rich_interact::compose::Child<'a, M> = alloc::boxed::Box<(dyn rich_interact::component::Component<Output = M> + 'a)>
+pub mod rich_interact::control
+pub struct rich_interact::control::Closer
+impl rich_interact::control::Closer
+pub fn rich_interact::control::Closer::close(&self)
+pub fn rich_interact::control::Closer::path(&self) -> &std::path::Path
+impl core::clone::Clone for rich_interact::control::Closer
+pub fn rich_interact::control::Closer::clone(&self) -> rich_interact::control::Closer
+impl core::fmt::Debug for rich_interact::control::Closer
+pub fn rich_interact::control::Closer::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Freeze for rich_interact::control::Closer
+impl core::marker::Send for rich_interact::control::Closer
+impl core::marker::Sync for rich_interact::control::Closer
+impl core::marker::Unpin for rich_interact::control::Closer
+impl core::marker::UnsafeUnpin for rich_interact::control::Closer
+impl core::panic::unwind_safe::RefUnwindSafe for rich_interact::control::Closer
+impl core::panic::unwind_safe::UnwindSafe for rich_interact::control::Closer
+pub struct rich_interact::control::ControlServer
+impl rich_interact::control::ControlServer
+pub fn rich_interact::control::ControlServer::bind(impl core::convert::AsRef<std::path::Path>, &[rich_interact::control::Verb]) -> std::io::error::Result<rich_interact::control::ControlServer>
+pub fn rich_interact::control::ControlServer::closer(&self) -> rich_interact::control::Closer
+pub fn rich_interact::control::ControlServer::is_read_only(&self) -> bool
+pub fn rich_interact::control::ControlServer::path(&self) -> &std::path::Path
+pub fn rich_interact::control::ControlServer::read_only(self, bool) -> rich_interact::control::ControlServer
+pub fn rich_interact::control::ControlServer::serve(self, impl core::ops::function::Fn(&rich_interact::control::Request) -> rich_interact::control::Reply + core::marker::Send + core::marker::Sync + 'static)
+pub fn rich_interact::control::ControlServer::timeout(self, core::time::Duration) -> rich_interact::control::ControlServer
+pub fn rich_interact::control::ControlServer::verbs(&self) -> &[rich_interact::control::Verb]
+impl core::fmt::Debug for rich_interact::control::ControlServer
+pub fn rich_interact::control::ControlServer::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::ops::drop::Drop for rich_interact::control::ControlServer
+pub fn rich_interact::control::ControlServer::drop(&mut self)
+impl core::marker::Freeze for rich_interact::control::ControlServer
+impl core::marker::Send for rich_interact::control::ControlServer
+impl core::marker::Sync for rich_interact::control::ControlServer
+impl core::marker::Unpin for rich_interact::control::ControlServer
+impl core::marker::UnsafeUnpin for rich_interact::control::ControlServer
+impl core::panic::unwind_safe::RefUnwindSafe for rich_interact::control::ControlServer
+impl core::panic::unwind_safe::UnwindSafe for rich_interact::control::ControlServer
+pub struct rich_interact::control::Request
+pub rich_interact::control::Request::args: serde_json::value::Value
+pub rich_interact::control::Request::verb: alloc::string::String
+impl rich_interact::control::Request
+pub fn rich_interact::control::Request::new(impl core::convert::Into<alloc::string::String>, serde_json::value::Value) -> rich_interact::control::Request
+pub fn rich_interact::control::Request::parse(&str) -> std::io::error::Result<rich_interact::control::Request>
+pub fn rich_interact::control::Request::to_line(&self) -> alloc::string::String
+impl core::clone::Clone for rich_interact::control::Request
+pub fn rich_interact::control::Request::clone(&self) -> rich_interact::control::Request
+impl core::cmp::PartialEq for rich_interact::control::Request
+pub fn rich_interact::control::Request::eq(&self, &rich_interact::control::Request) -> bool
+impl core::fmt::Debug for rich_interact::control::Request
+pub fn rich_interact::control::Request::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for rich_interact::control::Request
+impl core::marker::Freeze for rich_interact::control::Request
+impl core::marker::Send for rich_interact::control::Request
+impl core::marker::Sync for rich_interact::control::Request
+impl core::marker::Unpin for rich_interact::control::Request
+impl core::marker::UnsafeUnpin for rich_interact::control::Request
+impl core::panic::unwind_safe::RefUnwindSafe for rich_interact::control::Request
+impl core::panic::unwind_safe::UnwindSafe for rich_interact::control::Request
+pub struct rich_interact::control::Verb
+pub rich_interact::control::Verb::about: &'static str
+pub rich_interact::control::Verb::mutates: bool
+pub rich_interact::control::Verb::name: &'static str
+impl rich_interact::control::Verb
+pub const fn rich_interact::control::Verb::read(&'static str, &'static str) -> rich_interact::control::Verb
+pub const fn rich_interact::control::Verb::write(&'static str, &'static str) -> rich_interact::control::Verb
+impl core::clone::Clone for rich_interact::control::Verb
+pub fn rich_interact::control::Verb::clone(&self) -> rich_interact::control::Verb
+impl core::cmp::Eq for rich_interact::control::Verb
+impl core::cmp::PartialEq for rich_interact::control::Verb
+pub fn rich_interact::control::Verb::eq(&self, &rich_interact::control::Verb) -> bool
+impl core::fmt::Debug for rich_interact::control::Verb
+pub fn rich_interact::control::Verb::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::hash::Hash for rich_interact::control::Verb
+pub fn rich_interact::control::Verb::hash<__H: core::hash::Hasher>(&self, &mut __H)
+impl core::marker::Copy for rich_interact::control::Verb
+impl core::marker::StructuralPartialEq for rich_interact::control::Verb
+impl core::marker::Freeze for rich_interact::control::Verb
+impl core::marker::Send for rich_interact::control::Verb
+impl core::marker::Sync for rich_interact::control::Verb
+impl core::marker::Unpin for rich_interact::control::Verb
+impl core::marker::UnsafeUnpin for rich_interact::control::Verb
+impl core::panic::unwind_safe::RefUnwindSafe for rich_interact::control::Verb
+impl core::panic::unwind_safe::UnwindSafe for rich_interact::control::Verb
+pub const rich_interact::control::IO_TIMEOUT: core::time::Duration
+pub const rich_interact::control::MAX_CONNECTIONS: usize
+pub const rich_interact::control::MAX_REPLY: u64
+pub const rich_interact::control::MAX_REQUEST: u64
+pub fn rich_interact::control::call(&std::path::Path, &rich_interact::control::Request, core::time::Duration) -> std::io::error::Result<rich_interact::control::Reply>
+pub fn rich_interact::control::check_private_dir(&std::path::Path) -> std::io::error::Result<()>
+pub fn rich_interact::control::check_socket(&std::path::Path) -> std::io::error::Result<()>
+pub fn rich_interact::control::current_uid() -> u32
+pub fn rich_interact::control::parse_reply(&str) -> std::io::error::Result<rich_interact::control::Reply>
+pub fn rich_interact::control::peer_allowed(std::io::error::Result<u32>, u32) -> std::io::error::Result<()>
+pub fn rich_interact::control::peer_uid(&std::os::unix::net::stream::UnixStream) -> std::io::error::Result<u32>
+pub fn rich_interact::control::private_dir(&std::path::Path) -> std::io::error::Result<()>
+pub fn rich_interact::control::reply_line(&rich_interact::control::Reply) -> alloc::string::String
+pub fn rich_interact::control::runtime_dir(&str) -> std::io::error::Result<std::path::PathBuf>
+pub fn rich_interact::control::runtime_dir_in(&str, core::option::Option<std::path::PathBuf>) -> std::io::error::Result<std::path::PathBuf>
+pub fn rich_interact::control::sessions(&std::path::Path, &str) -> std::io::error::Result<alloc::vec::Vec<std::path::PathBuf>>
+pub type rich_interact::control::Reply = core::result::Result<serde_json::value::Value, alloc::string::String>
 pub mod rich_interact::dates
 pub struct rich_interact::dates::DateError
 pub rich_interact::dates::DateError::text: alloc::string::String
@@ -3329,10 +3429,14 @@ pub struct rich_interact::event::Mouse
 pub rich_interact::event::Mouse::column: u16
 pub rich_interact::event::Mouse::kind: rich_interact::event::MouseKind
 pub rich_interact::event::Mouse::modifiers: rich_interact::event::Modifiers
+pub rich_interact::event::Mouse::pixel: core::option::Option<rich_interact::event::Subcell>
 pub rich_interact::event::Mouse::row: u16
 impl rich_interact::event::Mouse
+pub fn rich_interact::event::Mouse::from_pixels(rich_interact::event::MouseKind, u32, u32, (u16, u16)) -> core::option::Option<rich_interact::event::Mouse>
 pub fn rich_interact::event::Mouse::is_click(&self) -> bool
 pub const fn rich_interact::event::Mouse::new(rich_interact::event::MouseKind, u16, u16) -> rich_interact::event::Mouse
+pub fn rich_interact::event::Mouse::precise(&self) -> (f32, f32)
+pub fn rich_interact::event::Mouse::reread_as_pixels(self, (u16, u16)) -> core::option::Option<rich_interact::event::Mouse>
 impl core::clone::Clone for rich_interact::event::Mouse
 pub fn rich_interact::event::Mouse::clone(&self) -> rich_interact::event::Mouse
 impl core::cmp::Eq for rich_interact::event::Mouse
@@ -3351,6 +3455,29 @@ impl core::marker::Unpin for rich_interact::event::Mouse
 impl core::marker::UnsafeUnpin for rich_interact::event::Mouse
 impl core::panic::unwind_safe::RefUnwindSafe for rich_interact::event::Mouse
 impl core::panic::unwind_safe::UnwindSafe for rich_interact::event::Mouse
+pub struct rich_interact::event::Subcell
+pub rich_interact::event::Subcell::height: u16
+pub rich_interact::event::Subcell::width: u16
+pub rich_interact::event::Subcell::x: u16
+pub rich_interact::event::Subcell::y: u16
+impl core::clone::Clone for rich_interact::event::Subcell
+pub fn rich_interact::event::Subcell::clone(&self) -> rich_interact::event::Subcell
+impl core::cmp::Eq for rich_interact::event::Subcell
+impl core::cmp::PartialEq for rich_interact::event::Subcell
+pub fn rich_interact::event::Subcell::eq(&self, &rich_interact::event::Subcell) -> bool
+impl core::fmt::Debug for rich_interact::event::Subcell
+pub fn rich_interact::event::Subcell::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::hash::Hash for rich_interact::event::Subcell
+pub fn rich_interact::event::Subcell::hash<__H: core::hash::Hasher>(&self, &mut __H)
+impl core::marker::Copy for rich_interact::event::Subcell
+impl core::marker::StructuralPartialEq for rich_interact::event::Subcell
+impl core::marker::Freeze for rich_interact::event::Subcell
+impl core::marker::Send for rich_interact::event::Subcell
+impl core::marker::Sync for rich_interact::event::Subcell
+impl core::marker::Unpin for rich_interact::event::Subcell
+impl core::marker::UnsafeUnpin for rich_interact::event::Subcell
+impl core::panic::unwind_safe::RefUnwindSafe for rich_interact::event::Subcell
+impl core::panic::unwind_safe::UnwindSafe for rich_interact::event::Subcell
 pub fn rich_interact::event::from_crossterm(crossterm::event::Event) -> core::option::Option<rich_interact::event::Event>
 pub fn rich_interact::event::from_crossterm_kitty(crossterm::event::Event) -> core::option::Option<rich_interact::event::Event>
 pub fn rich_interact::event::from_termion(termion::event::Event, &mut rich_interact::event::HeldButton) -> core::option::Option<rich_interact::event::Event>
@@ -3591,6 +3718,307 @@ impl core::marker::UnsafeUnpin for rich_interact::headless::Script
 impl core::panic::unwind_safe::RefUnwindSafe for rich_interact::headless::Script
 impl core::panic::unwind_safe::UnwindSafe for rich_interact::headless::Script
 pub fn rich_interact::headless::run<C: rich_interact::component::Component>(C, rich_interact::headless::Script, u16, u16) -> (std::io::error::Result<rich_interact::event_loop::Outcome<<C as rich_interact::component::Component>::Output>>, rich_interact::headless::Record)
+pub mod rich_interact::host
+pub enum rich_interact::host::Direction
+pub rich_interact::host::Direction::Down
+pub rich_interact::host::Direction::Left
+pub rich_interact::host::Direction::Right
+pub rich_interact::host::Direction::Up
+impl rich_interact::host::Direction
+pub fn rich_interact::host::Direction::name(self) -> &'static str
+pub fn rich_interact::host::Direction::parse(&str) -> core::option::Option<rich_interact::host::Direction>
+impl core::clone::Clone for rich_interact::host::Direction
+pub fn rich_interact::host::Direction::clone(&self) -> rich_interact::host::Direction
+impl core::cmp::Eq for rich_interact::host::Direction
+impl core::cmp::PartialEq for rich_interact::host::Direction
+pub fn rich_interact::host::Direction::eq(&self, &rich_interact::host::Direction) -> bool
+impl core::fmt::Debug for rich_interact::host::Direction
+pub fn rich_interact::host::Direction::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::hash::Hash for rich_interact::host::Direction
+pub fn rich_interact::host::Direction::hash<__H: core::hash::Hasher>(&self, &mut __H)
+impl core::marker::Copy for rich_interact::host::Direction
+impl core::marker::StructuralPartialEq for rich_interact::host::Direction
+impl core::marker::Freeze for rich_interact::host::Direction
+impl core::marker::Send for rich_interact::host::Direction
+impl core::marker::Sync for rich_interact::host::Direction
+impl core::marker::Unpin for rich_interact::host::Direction
+impl core::marker::UnsafeUnpin for rich_interact::host::Direction
+impl core::panic::unwind_safe::RefUnwindSafe for rich_interact::host::Direction
+impl core::panic::unwind_safe::UnwindSafe for rich_interact::host::Direction
+pub enum rich_interact::host::HostError
+pub rich_interact::host::HostError::Io(std::io::error::Error)
+pub rich_interact::host::HostError::Refused(alloc::string::String)
+pub rich_interact::host::HostError::Unsupported(&'static str)
+impl core::convert::From<std::io::error::Error> for rich_interact::host::HostError
+pub fn rich_interact::host::HostError::from(std::io::error::Error) -> rich_interact::host::HostError
+impl core::error::Error for rich_interact::host::HostError
+impl core::fmt::Debug for rich_interact::host::HostError
+pub fn rich_interact::host::HostError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::fmt::Display for rich_interact::host::HostError
+pub fn rich_interact::host::HostError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Freeze for rich_interact::host::HostError
+impl core::marker::Send for rich_interact::host::HostError
+impl core::marker::Sync for rich_interact::host::HostError
+impl core::marker::Unpin for rich_interact::host::HostError
+impl core::marker::UnsafeUnpin for rich_interact::host::HostError
+impl !core::panic::unwind_safe::RefUnwindSafe for rich_interact::host::HostError
+impl !core::panic::unwind_safe::UnwindSafe for rich_interact::host::HostError
+pub enum rich_interact::host::Method
+pub rich_interact::host::Method::FocusPane
+pub rich_interact::host::Method::GetCurrentPane
+pub rich_interact::host::Method::ListPanes
+pub rich_interact::host::Method::Neighbor
+pub rich_interact::host::Method::PasteKey
+pub rich_interact::host::Method::SendText
+pub rich_interact::host::Method::Split
+impl rich_interact::host::Method
+pub const rich_interact::host::Method::ALL: [rich_interact::host::Method; 7]
+pub fn rich_interact::host::Method::name(self) -> &'static str
+impl core::clone::Clone for rich_interact::host::Method
+pub fn rich_interact::host::Method::clone(&self) -> rich_interact::host::Method
+impl core::cmp::Eq for rich_interact::host::Method
+impl core::cmp::PartialEq for rich_interact::host::Method
+pub fn rich_interact::host::Method::eq(&self, &rich_interact::host::Method) -> bool
+impl core::fmt::Debug for rich_interact::host::Method
+pub fn rich_interact::host::Method::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::hash::Hash for rich_interact::host::Method
+pub fn rich_interact::host::Method::hash<__H: core::hash::Hasher>(&self, &mut __H)
+impl core::marker::Copy for rich_interact::host::Method
+impl core::marker::StructuralPartialEq for rich_interact::host::Method
+impl core::marker::Freeze for rich_interact::host::Method
+impl core::marker::Send for rich_interact::host::Method
+impl core::marker::Sync for rich_interact::host::Method
+impl core::marker::Unpin for rich_interact::host::Method
+impl core::marker::UnsafeUnpin for rich_interact::host::Method
+impl core::panic::unwind_safe::RefUnwindSafe for rich_interact::host::Method
+impl core::panic::unwind_safe::UnwindSafe for rich_interact::host::Method
+pub struct rich_interact::host::Kitty
+impl rich_interact::host::Kitty
+pub fn rich_interact::host::Kitty::new(core::option::Option<alloc::string::String>) -> rich_interact::host::Kitty
+pub fn rich_interact::host::Kitty::split_args(&self, &rich_interact::host::Split) -> core::option::Option<alloc::vec::Vec<alloc::string::String>>
+impl core::clone::Clone for rich_interact::host::Kitty
+pub fn rich_interact::host::Kitty::clone(&self) -> rich_interact::host::Kitty
+impl core::fmt::Debug for rich_interact::host::Kitty
+pub fn rich_interact::host::Kitty::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl rich_interact::host::TerminalHost for rich_interact::host::Kitty
+pub fn rich_interact::host::Kitty::current_pane(&self) -> rich_interact::host::Result<rich_interact::host::Pane>
+pub fn rich_interact::host::Kitty::focus_pane(&self, &rich_interact::host::Pane) -> rich_interact::host::Result<()>
+pub fn rich_interact::host::Kitty::list_panes(&self) -> rich_interact::host::Result<alloc::vec::Vec<rich_interact::host::Pane>>
+pub fn rich_interact::host::Kitty::name(&self) -> &str
+pub fn rich_interact::host::Kitty::neighbor(&self, rich_interact::host::Direction) -> rich_interact::host::Result<core::option::Option<rich_interact::host::Pane>>
+pub fn rich_interact::host::Kitty::send_text(&self, &rich_interact::host::Pane, &str) -> rich_interact::host::Result<()>
+pub fn rich_interact::host::Kitty::split(&self, &rich_interact::host::Split) -> rich_interact::host::Result<rich_interact::host::Pane>
+pub fn rich_interact::host::Kitty::supports(&self, rich_interact::host::Method) -> bool
+impl core::marker::Freeze for rich_interact::host::Kitty
+impl core::marker::Send for rich_interact::host::Kitty
+impl core::marker::Sync for rich_interact::host::Kitty
+impl core::marker::Unpin for rich_interact::host::Kitty
+impl core::marker::UnsafeUnpin for rich_interact::host::Kitty
+impl core::panic::unwind_safe::RefUnwindSafe for rich_interact::host::Kitty
+impl core::panic::unwind_safe::UnwindSafe for rich_interact::host::Kitty
+pub struct rich_interact::host::Pane
+pub rich_interact::host::Pane::focused: bool
+pub rich_interact::host::Pane::id: alloc::string::String
+pub rich_interact::host::Pane::title: alloc::string::String
+impl rich_interact::host::Pane
+pub fn rich_interact::host::Pane::new(impl core::convert::Into<alloc::string::String>) -> rich_interact::host::Pane
+impl core::clone::Clone for rich_interact::host::Pane
+pub fn rich_interact::host::Pane::clone(&self) -> rich_interact::host::Pane
+impl core::cmp::Eq for rich_interact::host::Pane
+impl core::cmp::PartialEq for rich_interact::host::Pane
+pub fn rich_interact::host::Pane::eq(&self, &rich_interact::host::Pane) -> bool
+impl core::fmt::Debug for rich_interact::host::Pane
+pub fn rich_interact::host::Pane::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for rich_interact::host::Pane
+impl core::marker::Freeze for rich_interact::host::Pane
+impl core::marker::Send for rich_interact::host::Pane
+impl core::marker::Sync for rich_interact::host::Pane
+impl core::marker::Unpin for rich_interact::host::Pane
+impl core::marker::UnsafeUnpin for rich_interact::host::Pane
+impl core::panic::unwind_safe::RefUnwindSafe for rich_interact::host::Pane
+impl core::panic::unwind_safe::UnwindSafe for rich_interact::host::Pane
+pub struct rich_interact::host::SocketHost
+impl rich_interact::host::SocketHost
+pub fn rich_interact::host::SocketHost::connect(impl core::convert::AsRef<std::path::Path>) -> rich_interact::host::Result<rich_interact::host::SocketHost>
+pub fn rich_interact::host::SocketHost::methods(&self) -> &[alloc::string::String]
+impl core::clone::Clone for rich_interact::host::SocketHost
+pub fn rich_interact::host::SocketHost::clone(&self) -> rich_interact::host::SocketHost
+impl core::fmt::Debug for rich_interact::host::SocketHost
+pub fn rich_interact::host::SocketHost::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl rich_interact::host::TerminalHost for rich_interact::host::SocketHost
+pub fn rich_interact::host::SocketHost::current_pane(&self) -> rich_interact::host::Result<rich_interact::host::Pane>
+pub fn rich_interact::host::SocketHost::focus_pane(&self, &rich_interact::host::Pane) -> rich_interact::host::Result<()>
+pub fn rich_interact::host::SocketHost::list_panes(&self) -> rich_interact::host::Result<alloc::vec::Vec<rich_interact::host::Pane>>
+pub fn rich_interact::host::SocketHost::name(&self) -> &str
+pub fn rich_interact::host::SocketHost::neighbor(&self, rich_interact::host::Direction) -> rich_interact::host::Result<core::option::Option<rich_interact::host::Pane>>
+pub fn rich_interact::host::SocketHost::send_text(&self, &rich_interact::host::Pane, &str) -> rich_interact::host::Result<()>
+pub fn rich_interact::host::SocketHost::split(&self, &rich_interact::host::Split) -> rich_interact::host::Result<rich_interact::host::Pane>
+pub fn rich_interact::host::SocketHost::supports(&self, rich_interact::host::Method) -> bool
+impl core::marker::Freeze for rich_interact::host::SocketHost
+impl core::marker::Send for rich_interact::host::SocketHost
+impl core::marker::Sync for rich_interact::host::SocketHost
+impl core::marker::Unpin for rich_interact::host::SocketHost
+impl core::marker::UnsafeUnpin for rich_interact::host::SocketHost
+impl core::panic::unwind_safe::RefUnwindSafe for rich_interact::host::SocketHost
+impl core::panic::unwind_safe::UnwindSafe for rich_interact::host::SocketHost
+pub struct rich_interact::host::Split
+pub rich_interact::host::Split::command: alloc::vec::Vec<alloc::string::String>
+pub rich_interact::host::Split::direction: rich_interact::host::Direction
+pub rich_interact::host::Split::size: core::option::Option<u8>
+impl rich_interact::host::Split
+pub fn rich_interact::host::Split::new(rich_interact::host::Direction, alloc::vec::Vec<alloc::string::String>) -> rich_interact::host::Split
+impl core::clone::Clone for rich_interact::host::Split
+pub fn rich_interact::host::Split::clone(&self) -> rich_interact::host::Split
+impl core::cmp::Eq for rich_interact::host::Split
+impl core::cmp::PartialEq for rich_interact::host::Split
+pub fn rich_interact::host::Split::eq(&self, &rich_interact::host::Split) -> bool
+impl core::fmt::Debug for rich_interact::host::Split
+pub fn rich_interact::host::Split::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for rich_interact::host::Split
+impl core::marker::Freeze for rich_interact::host::Split
+impl core::marker::Send for rich_interact::host::Split
+impl core::marker::Sync for rich_interact::host::Split
+impl core::marker::Unpin for rich_interact::host::Split
+impl core::marker::UnsafeUnpin for rich_interact::host::Split
+impl core::panic::unwind_safe::RefUnwindSafe for rich_interact::host::Split
+impl core::panic::unwind_safe::UnwindSafe for rich_interact::host::Split
+pub struct rich_interact::host::Tmux
+impl rich_interact::host::Tmux
+pub fn rich_interact::host::Tmux::new(core::option::Option<alloc::string::String>) -> rich_interact::host::Tmux
+pub fn rich_interact::host::Tmux::socket(self, impl core::convert::Into<std::path::PathBuf>) -> rich_interact::host::Tmux
+pub fn rich_interact::host::Tmux::split_args(&self, &rich_interact::host::Split) -> alloc::vec::Vec<alloc::string::String>
+impl core::clone::Clone for rich_interact::host::Tmux
+pub fn rich_interact::host::Tmux::clone(&self) -> rich_interact::host::Tmux
+impl core::fmt::Debug for rich_interact::host::Tmux
+pub fn rich_interact::host::Tmux::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl rich_interact::host::TerminalHost for rich_interact::host::Tmux
+pub fn rich_interact::host::Tmux::current_pane(&self) -> rich_interact::host::Result<rich_interact::host::Pane>
+pub fn rich_interact::host::Tmux::focus_pane(&self, &rich_interact::host::Pane) -> rich_interact::host::Result<()>
+pub fn rich_interact::host::Tmux::list_panes(&self) -> rich_interact::host::Result<alloc::vec::Vec<rich_interact::host::Pane>>
+pub fn rich_interact::host::Tmux::name(&self) -> &str
+pub fn rich_interact::host::Tmux::neighbor(&self, rich_interact::host::Direction) -> rich_interact::host::Result<core::option::Option<rich_interact::host::Pane>>
+pub fn rich_interact::host::Tmux::send_text(&self, &rich_interact::host::Pane, &str) -> rich_interact::host::Result<()>
+pub fn rich_interact::host::Tmux::split(&self, &rich_interact::host::Split) -> rich_interact::host::Result<rich_interact::host::Pane>
+pub fn rich_interact::host::Tmux::supports(&self, rich_interact::host::Method) -> bool
+impl core::marker::Freeze for rich_interact::host::Tmux
+impl core::marker::Send for rich_interact::host::Tmux
+impl core::marker::Sync for rich_interact::host::Tmux
+impl core::marker::Unpin for rich_interact::host::Tmux
+impl core::marker::UnsafeUnpin for rich_interact::host::Tmux
+impl core::panic::unwind_safe::RefUnwindSafe for rich_interact::host::Tmux
+impl core::panic::unwind_safe::UnwindSafe for rich_interact::host::Tmux
+pub struct rich_interact::host::WezTerm
+impl rich_interact::host::WezTerm
+pub fn rich_interact::host::WezTerm::new(core::option::Option<alloc::string::String>) -> rich_interact::host::WezTerm
+pub fn rich_interact::host::WezTerm::split_args(&self, &rich_interact::host::Split) -> alloc::vec::Vec<alloc::string::String>
+impl core::clone::Clone for rich_interact::host::WezTerm
+pub fn rich_interact::host::WezTerm::clone(&self) -> rich_interact::host::WezTerm
+impl core::fmt::Debug for rich_interact::host::WezTerm
+pub fn rich_interact::host::WezTerm::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl rich_interact::host::TerminalHost for rich_interact::host::WezTerm
+pub fn rich_interact::host::WezTerm::current_pane(&self) -> rich_interact::host::Result<rich_interact::host::Pane>
+pub fn rich_interact::host::WezTerm::focus_pane(&self, &rich_interact::host::Pane) -> rich_interact::host::Result<()>
+pub fn rich_interact::host::WezTerm::list_panes(&self) -> rich_interact::host::Result<alloc::vec::Vec<rich_interact::host::Pane>>
+pub fn rich_interact::host::WezTerm::name(&self) -> &str
+pub fn rich_interact::host::WezTerm::neighbor(&self, rich_interact::host::Direction) -> rich_interact::host::Result<core::option::Option<rich_interact::host::Pane>>
+pub fn rich_interact::host::WezTerm::send_text(&self, &rich_interact::host::Pane, &str) -> rich_interact::host::Result<()>
+pub fn rich_interact::host::WezTerm::split(&self, &rich_interact::host::Split) -> rich_interact::host::Result<rich_interact::host::Pane>
+pub fn rich_interact::host::WezTerm::supports(&self, rich_interact::host::Method) -> bool
+impl core::marker::Freeze for rich_interact::host::WezTerm
+impl core::marker::Send for rich_interact::host::WezTerm
+impl core::marker::Sync for rich_interact::host::WezTerm
+impl core::marker::Unpin for rich_interact::host::WezTerm
+impl core::marker::UnsafeUnpin for rich_interact::host::WezTerm
+impl core::panic::unwind_safe::RefUnwindSafe for rich_interact::host::WezTerm
+impl core::panic::unwind_safe::UnwindSafe for rich_interact::host::WezTerm
+pub struct rich_interact::host::Zellij
+impl rich_interact::host::Zellij
+pub fn rich_interact::host::Zellij::new() -> rich_interact::host::Zellij
+pub fn rich_interact::host::Zellij::split_args(&self, &rich_interact::host::Split) -> core::option::Option<alloc::vec::Vec<alloc::string::String>>
+impl core::clone::Clone for rich_interact::host::Zellij
+pub fn rich_interact::host::Zellij::clone(&self) -> rich_interact::host::Zellij
+impl core::default::Default for rich_interact::host::Zellij
+pub fn rich_interact::host::Zellij::default() -> rich_interact::host::Zellij
+impl core::fmt::Debug for rich_interact::host::Zellij
+pub fn rich_interact::host::Zellij::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl rich_interact::host::TerminalHost for rich_interact::host::Zellij
+pub fn rich_interact::host::Zellij::current_pane(&self) -> rich_interact::host::Result<rich_interact::host::Pane>
+pub fn rich_interact::host::Zellij::focus_pane(&self, &rich_interact::host::Pane) -> rich_interact::host::Result<()>
+pub fn rich_interact::host::Zellij::list_panes(&self) -> rich_interact::host::Result<alloc::vec::Vec<rich_interact::host::Pane>>
+pub fn rich_interact::host::Zellij::name(&self) -> &str
+pub fn rich_interact::host::Zellij::neighbor(&self, rich_interact::host::Direction) -> rich_interact::host::Result<core::option::Option<rich_interact::host::Pane>>
+pub fn rich_interact::host::Zellij::send_text(&self, &rich_interact::host::Pane, &str) -> rich_interact::host::Result<()>
+pub fn rich_interact::host::Zellij::split(&self, &rich_interact::host::Split) -> rich_interact::host::Result<rich_interact::host::Pane>
+pub fn rich_interact::host::Zellij::supports(&self, rich_interact::host::Method) -> bool
+impl core::marker::Freeze for rich_interact::host::Zellij
+impl core::marker::Send for rich_interact::host::Zellij
+impl core::marker::Sync for rich_interact::host::Zellij
+impl core::marker::Unpin for rich_interact::host::Zellij
+impl core::marker::UnsafeUnpin for rich_interact::host::Zellij
+impl core::panic::unwind_safe::RefUnwindSafe for rich_interact::host::Zellij
+impl core::panic::unwind_safe::UnwindSafe for rich_interact::host::Zellij
+pub const rich_interact::host::SOCKET_ENV: &str
+pub trait rich_interact::host::TerminalHost
+pub fn rich_interact::host::TerminalHost::current_pane(&self) -> rich_interact::host::Result<rich_interact::host::Pane>
+pub fn rich_interact::host::TerminalHost::focus_pane(&self, &rich_interact::host::Pane) -> rich_interact::host::Result<()>
+pub fn rich_interact::host::TerminalHost::list_panes(&self) -> rich_interact::host::Result<alloc::vec::Vec<rich_interact::host::Pane>>
+pub fn rich_interact::host::TerminalHost::name(&self) -> &str
+pub fn rich_interact::host::TerminalHost::neighbor(&self, rich_interact::host::Direction) -> rich_interact::host::Result<core::option::Option<rich_interact::host::Pane>>
+pub fn rich_interact::host::TerminalHost::send_text(&self, &rich_interact::host::Pane, &str) -> rich_interact::host::Result<()>
+pub fn rich_interact::host::TerminalHost::split(&self, &rich_interact::host::Split) -> rich_interact::host::Result<rich_interact::host::Pane>
+pub fn rich_interact::host::TerminalHost::supports(&self, rich_interact::host::Method) -> bool
+impl rich_interact::host::TerminalHost for rich_interact::host::Kitty
+pub fn rich_interact::host::Kitty::current_pane(&self) -> rich_interact::host::Result<rich_interact::host::Pane>
+pub fn rich_interact::host::Kitty::focus_pane(&self, &rich_interact::host::Pane) -> rich_interact::host::Result<()>
+pub fn rich_interact::host::Kitty::list_panes(&self) -> rich_interact::host::Result<alloc::vec::Vec<rich_interact::host::Pane>>
+pub fn rich_interact::host::Kitty::name(&self) -> &str
+pub fn rich_interact::host::Kitty::neighbor(&self, rich_interact::host::Direction) -> rich_interact::host::Result<core::option::Option<rich_interact::host::Pane>>
+pub fn rich_interact::host::Kitty::send_text(&self, &rich_interact::host::Pane, &str) -> rich_interact::host::Result<()>
+pub fn rich_interact::host::Kitty::split(&self, &rich_interact::host::Split) -> rich_interact::host::Result<rich_interact::host::Pane>
+pub fn rich_interact::host::Kitty::supports(&self, rich_interact::host::Method) -> bool
+impl rich_interact::host::TerminalHost for rich_interact::host::SocketHost
+pub fn rich_interact::host::SocketHost::current_pane(&self) -> rich_interact::host::Result<rich_interact::host::Pane>
+pub fn rich_interact::host::SocketHost::focus_pane(&self, &rich_interact::host::Pane) -> rich_interact::host::Result<()>
+pub fn rich_interact::host::SocketHost::list_panes(&self) -> rich_interact::host::Result<alloc::vec::Vec<rich_interact::host::Pane>>
+pub fn rich_interact::host::SocketHost::name(&self) -> &str
+pub fn rich_interact::host::SocketHost::neighbor(&self, rich_interact::host::Direction) -> rich_interact::host::Result<core::option::Option<rich_interact::host::Pane>>
+pub fn rich_interact::host::SocketHost::send_text(&self, &rich_interact::host::Pane, &str) -> rich_interact::host::Result<()>
+pub fn rich_interact::host::SocketHost::split(&self, &rich_interact::host::Split) -> rich_interact::host::Result<rich_interact::host::Pane>
+pub fn rich_interact::host::SocketHost::supports(&self, rich_interact::host::Method) -> bool
+impl rich_interact::host::TerminalHost for rich_interact::host::Tmux
+pub fn rich_interact::host::Tmux::current_pane(&self) -> rich_interact::host::Result<rich_interact::host::Pane>
+pub fn rich_interact::host::Tmux::focus_pane(&self, &rich_interact::host::Pane) -> rich_interact::host::Result<()>
+pub fn rich_interact::host::Tmux::list_panes(&self) -> rich_interact::host::Result<alloc::vec::Vec<rich_interact::host::Pane>>
+pub fn rich_interact::host::Tmux::name(&self) -> &str
+pub fn rich_interact::host::Tmux::neighbor(&self, rich_interact::host::Direction) -> rich_interact::host::Result<core::option::Option<rich_interact::host::Pane>>
+pub fn rich_interact::host::Tmux::send_text(&self, &rich_interact::host::Pane, &str) -> rich_interact::host::Result<()>
+pub fn rich_interact::host::Tmux::split(&self, &rich_interact::host::Split) -> rich_interact::host::Result<rich_interact::host::Pane>
+pub fn rich_interact::host::Tmux::supports(&self, rich_interact::host::Method) -> bool
+impl rich_interact::host::TerminalHost for rich_interact::host::WezTerm
+pub fn rich_interact::host::WezTerm::current_pane(&self) -> rich_interact::host::Result<rich_interact::host::Pane>
+pub fn rich_interact::host::WezTerm::focus_pane(&self, &rich_interact::host::Pane) -> rich_interact::host::Result<()>
+pub fn rich_interact::host::WezTerm::list_panes(&self) -> rich_interact::host::Result<alloc::vec::Vec<rich_interact::host::Pane>>
+pub fn rich_interact::host::WezTerm::name(&self) -> &str
+pub fn rich_interact::host::WezTerm::neighbor(&self, rich_interact::host::Direction) -> rich_interact::host::Result<core::option::Option<rich_interact::host::Pane>>
+pub fn rich_interact::host::WezTerm::send_text(&self, &rich_interact::host::Pane, &str) -> rich_interact::host::Result<()>
+pub fn rich_interact::host::WezTerm::split(&self, &rich_interact::host::Split) -> rich_interact::host::Result<rich_interact::host::Pane>
+pub fn rich_interact::host::WezTerm::supports(&self, rich_interact::host::Method) -> bool
+impl rich_interact::host::TerminalHost for rich_interact::host::Zellij
+pub fn rich_interact::host::Zellij::current_pane(&self) -> rich_interact::host::Result<rich_interact::host::Pane>
+pub fn rich_interact::host::Zellij::focus_pane(&self, &rich_interact::host::Pane) -> rich_interact::host::Result<()>
+pub fn rich_interact::host::Zellij::list_panes(&self) -> rich_interact::host::Result<alloc::vec::Vec<rich_interact::host::Pane>>
+pub fn rich_interact::host::Zellij::name(&self) -> &str
+pub fn rich_interact::host::Zellij::neighbor(&self, rich_interact::host::Direction) -> rich_interact::host::Result<core::option::Option<rich_interact::host::Pane>>
+pub fn rich_interact::host::Zellij::send_text(&self, &rich_interact::host::Pane, &str) -> rich_interact::host::Result<()>
+pub fn rich_interact::host::Zellij::split(&self, &rich_interact::host::Split) -> rich_interact::host::Result<rich_interact::host::Pane>
+pub fn rich_interact::host::Zellij::supports(&self, rich_interact::host::Method) -> bool
+pub fn rich_interact::host::detect() -> core::option::Option<alloc::boxed::Box<dyn rich_interact::host::TerminalHost>>
+pub fn rich_interact::host::detect_in(&dyn core::ops::function::Fn(&str) -> core::option::Option<alloc::string::String>) -> core::option::Option<alloc::boxed::Box<dyn rich_interact::host::TerminalHost>>
+pub fn rich_interact::host::neighbor_of(&str, &[(alloc::string::String, [i64; 4])], rich_interact::host::Direction) -> core::option::Option<alloc::string::String>
+pub fn rich_interact::host::panes_of(&serde_json::value::Value) -> rich_interact::host::Result<alloc::vec::Vec<rich_interact::host::Pane>>
+pub fn rich_interact::host::parse_reply(&str) -> rich_interact::host::Result<serde_json::value::Value>
+pub fn rich_interact::host::shell_quote(&[alloc::string::String]) -> alloc::string::String
+pub type rich_interact::host::Result<T> = core::result::Result<T, rich_interact::host::HostError>
 pub mod rich_interact::item
 pub enum rich_interact::item::Preview
 pub rich_interact::item::Preview::Markup(alloc::string::String)
@@ -4720,6 +5148,7 @@ impl core::panic::unwind_safe::RefUnwindSafe for rich_interact::session::Waker
 impl core::panic::unwind_safe::UnwindSafe for rich_interact::session::Waker
 pub const rich_interact::session::BEGIN_SYNCHRONIZED_UPDATE: &str
 pub const rich_interact::session::END_SYNCHRONIZED_UPDATE: &str
+pub const rich_interact::session::PIXEL_MOUSE_ENV: &str
 pub const rich_interact::session::SYNC_OUTPUT_ENV: &str
 pub trait rich_interact::session::Backend
 pub fn rich_interact::session::Backend::alternate_screen(&self) -> bool
@@ -6724,10 +7153,14 @@ pub struct rich_interact::Mouse
 pub rich_interact::Mouse::column: u16
 pub rich_interact::Mouse::kind: rich_interact::event::MouseKind
 pub rich_interact::Mouse::modifiers: rich_interact::event::Modifiers
+pub rich_interact::Mouse::pixel: core::option::Option<rich_interact::event::Subcell>
 pub rich_interact::Mouse::row: u16
 impl rich_interact::event::Mouse
+pub fn rich_interact::event::Mouse::from_pixels(rich_interact::event::MouseKind, u32, u32, (u16, u16)) -> core::option::Option<rich_interact::event::Mouse>
 pub fn rich_interact::event::Mouse::is_click(&self) -> bool
 pub const fn rich_interact::event::Mouse::new(rich_interact::event::MouseKind, u16, u16) -> rich_interact::event::Mouse
+pub fn rich_interact::event::Mouse::precise(&self) -> (f32, f32)
+pub fn rich_interact::event::Mouse::reread_as_pixels(self, (u16, u16)) -> core::option::Option<rich_interact::event::Mouse>
 impl core::clone::Clone for rich_interact::event::Mouse
 pub fn rich_interact::event::Mouse::clone(&self) -> rich_interact::event::Mouse
 impl core::cmp::Eq for rich_interact::event::Mouse
@@ -7431,6 +7864,29 @@ impl<M> core::marker::Unpin for rich_interact::chrome::StatusBar<M>
 impl<M> core::marker::UnsafeUnpin for rich_interact::chrome::StatusBar<M>
 impl<M> !core::panic::unwind_safe::RefUnwindSafe for rich_interact::chrome::StatusBar<M>
 impl<M> !core::panic::unwind_safe::UnwindSafe for rich_interact::chrome::StatusBar<M>
+pub struct rich_interact::Subcell
+pub rich_interact::Subcell::height: u16
+pub rich_interact::Subcell::width: u16
+pub rich_interact::Subcell::x: u16
+pub rich_interact::Subcell::y: u16
+impl core::clone::Clone for rich_interact::event::Subcell
+pub fn rich_interact::event::Subcell::clone(&self) -> rich_interact::event::Subcell
+impl core::cmp::Eq for rich_interact::event::Subcell
+impl core::cmp::PartialEq for rich_interact::event::Subcell
+pub fn rich_interact::event::Subcell::eq(&self, &rich_interact::event::Subcell) -> bool
+impl core::fmt::Debug for rich_interact::event::Subcell
+pub fn rich_interact::event::Subcell::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::hash::Hash for rich_interact::event::Subcell
+pub fn rich_interact::event::Subcell::hash<__H: core::hash::Hasher>(&self, &mut __H)
+impl core::marker::Copy for rich_interact::event::Subcell
+impl core::marker::StructuralPartialEq for rich_interact::event::Subcell
+impl core::marker::Freeze for rich_interact::event::Subcell
+impl core::marker::Send for rich_interact::event::Subcell
+impl core::marker::Sync for rich_interact::event::Subcell
+impl core::marker::Unpin for rich_interact::event::Subcell
+impl core::marker::UnsafeUnpin for rich_interact::event::Subcell
+impl core::panic::unwind_safe::RefUnwindSafe for rich_interact::event::Subcell
+impl core::panic::unwind_safe::UnwindSafe for rich_interact::event::Subcell
 pub struct rich_interact::Suggestion
 pub rich_interact::Suggestion::description: core::option::Option<alloc::string::String>
 pub rich_interact::Suggestion::value: alloc::string::String

@@ -287,6 +287,87 @@ scroll(
   lists of one item each (a line indented under an item stays with it).
   A table draws as a table once its delimiter row arrives.
 
+### A Markdown viewer
+
+New in 0.0.24: `markdown_viewer(load)` reads documents with a table of
+contents and a history, as Textual's `MarkdownViewer` does. How a
+document is loaded is the app's: `load` takes a location (`guide/a.md`)
+and gives its text or an error, and runs off the app's thread. The
+`files` plugin's `files::markdown_loader(root)` reads files under `root`.
+
+```rust
+use intuituive::markdown_viewer;
+
+let viewer = markdown_viewer(intuituive::files::markdown_loader("docs"))
+    .on_link(|url, cx| cx.copy(url.to_string()))   // `https:` and the like
+    .open("guide/index.md");
+viewer.view().on_key("ctrl+h", move |_| viewer.go("index.md#install"))
+```
+
+- **Contents.** A list of the headings, docked left, marks the one in
+  view with `▸`; Enter scrolls the one selected to the top. `t` shows or
+  hides it (`.toc(false)` starts it hidden).
+- **Links.** A link with no scheme is followed: `other.md`, `../b.md#usage`
+  (relative to the document shown) or `#install` (an anchor of this one,
+  GitHub's: lower case, spaces as `-`). Any other goes to `.on_link`.
+- **History.** `viewer.go(target)`, `back()` and `forward()` (Backspace or
+  Alt+←, Alt+→), each place coming back at its scroll offset.
+  `location()`, `headings()` and `offset()` read where it is.
+- **Errors.** A loader that fails shows its error in place of the
+  document; the app goes on, and Back returns.
+
+## Diffs to review
+
+New in 0.0.24: `diff_view(old, new)` is an interactive diff of two
+`Signal<String>`s, diffed again when either changes: an agent's edit to
+accept or reject hunk by hunk.
+
+```rust
+use intuituive::widgets::{accepted_text, diff_view_with, Decision, DiffOptions};
+
+let (old, new) = (signal(before), signal(after));
+let decisions = signal(Vec::<Decision>::new());   // one per hunk
+diff_view_with(
+    old,
+    new,
+    DiffOptions::new()
+        .side_by_side_at(100)      // unified below 100 columns
+        .language("rust")          // highlight both sides
+        .context(3)                // unchanged lines around each hunk
+        .decide(decisions)
+        .on_done(move |decisions, cx| {
+            write_back(accepted_text(&old.get(), &new.get(), decisions));
+            cx.pop();
+        }),
+)
+```
+
+- **The diff** is rs-rich-ext's line diff (`rich_ext::diff`): its engine,
+  its word diff for the emphasis inside a changed line, its `@@` headers
+  and its theme styles (`diff.added`, `diff.removed`, `diff.hunk`,
+  `diff.line_number`, …). `.layout(Layout::SideBySide)` sets the layout,
+  and `.side_by_side_at(columns)` switches by width.
+- **A hunk** is one run of changed lines. Unchanged lines show `context`
+  lines around each hunk, and the rest of a run folds into one
+  `⋯ 12 unchanged lines` row.
+- **Keys** (listed in the help, under `diff`): `]` or `n` and `[` or `p`
+  move the hunk cursor, which starts before the first hunk and marks the
+  rows of its hunk with `▌` (`diff.cursor`). Enter opens the folds around
+  the cursor's hunk, or folds them again. Up, Down, `j`, `k`, PageUp,
+  PageDown, Home, End and the wheel scroll. A click puts the cursor on a
+  hunk or opens a fold.
+- **Decisions.** With `.decide(signal)`, `a` and `r` accept or reject the
+  cursor's hunk, and `A` and `R` decide every hunk. Headers say
+  `✓ accepted` or `✗ rejected`, and a status row counts the decided hunks.
+  `.on_done(..)` runs when the last pending hunk is decided.
+  `accepted_text(old, new, decisions)` builds the result: the accepted
+  hunks' new lines and the old lines everywhere else, the start and end of
+  the file included (a missing final newline is a change too).
+- **Long diffs.** Only the rows in view are rendered and highlighted, so
+  a 10,000-line diff scrolls as fast as a short one.
+  `.cursor(signal)` keeps the hunk cursor where the app can read or set
+  it.
+
 ## Calendars and dates
 
 ```rust

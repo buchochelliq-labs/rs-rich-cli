@@ -243,6 +243,71 @@ pub fn picture_of(picture: impl Fn() -> Option<Picture> + 'static, view: ImageVi
     .what("image")
 }
 
+/// A tile's picture version and the lines drawn of it.
+type TileLines = (u32, Vec<Vec<Segment>>);
+
+/// A node over a whole frame cut into tiles (#818): `tiles` returns them
+/// (a closure that may read signals; [`rich_art::tiles::Tiler::tiles`]),
+/// each drawn at its place in cells through `pixels`. A tile that did not
+/// change keeps its picture's id and version, so with [`image_graphics`]
+/// only the tiles that changed reach the terminal again (Kitty's uploads
+/// for its placeholders). A tile that does not fit the node is left out.
+///
+/// ```
+/// use intuituive::prelude::*;
+/// use intuituive::{Pixels, tiles_of};
+/// use rich_art::image::{Rgba, RgbaImage};
+/// use rich_art::tiles::Tiler;
+///
+/// let mut tiler = Tiler::new(2, 1);
+/// tiler.update(&RgbaImage::from_pixel(32, 16, Rgba([255, 0, 0, 255])), 4, 1);
+/// let tiles = tiler.tiles().to_vec();
+/// let app = App::new(move || {
+///     let tiles = tiles.clone();
+///     tiles_of(move || tiles.clone(), Pixels::Cells).fixed(1)
+/// });
+/// let screen = app.render_with(&[], 4, 1).unwrap();
+/// assert_eq!(screen[0].chars().count(), 4);
+/// ```
+pub fn tiles_of(tiles: impl Fn() -> Vec<rich_art::tiles::Tile> + 'static, pixels: Pixels) -> Node {
+    // Each tile's lines, by picture id, with the version they are of.
+    let drawn: RefCell<HashMap<u32, TileLines>> = RefCell::new(HashMap::new());
+    leaf(move |console, width, height| {
+        let (width, height) = (width as usize, height as usize);
+        let mut tiles: Vec<_> = tiles()
+            .into_iter()
+            .filter(|t| t.col + t.cols <= width && t.row + t.rows <= height)
+            .collect();
+        tiles.sort_by_key(|t| (t.row, t.col));
+        let view = ImageView::new().pixels(pixels).fit(ImageFit::Stretch);
+        let mut drawn = drawn.borrow_mut();
+        drawn.retain(|id, _| tiles.iter().any(|t| t.picture.id() == *id));
+        let mut rows: Vec<Vec<Segment>> = vec![Vec::new(); height];
+        let mut filled = vec![0usize; height];
+        for tile in &tiles {
+            let picture = &tile.picture;
+            let fresh = drawn
+                .get(&picture.id())
+                .is_none_or(|(version, _)| *version != picture.version());
+            if fresh {
+                let lines = picture.lines(console, view, tile.cols as u16, tile.rows as u16);
+                drawn.insert(picture.id(), (picture.version(), lines));
+            }
+            let (_, lines) = &drawn[&picture.id()];
+            for (k, line) in lines.iter().enumerate().take(tile.rows) {
+                let row = tile.row + k;
+                if filled[row] < tile.col {
+                    rows[row].push(Segment::new(" ".repeat(tile.col - filled[row]), None));
+                }
+                rows[row].extend(line.iter().cloned());
+                filled[row] = tile.col + tile.cols;
+            }
+        }
+        rows
+    })
+    .what("tiles")
+}
+
 /// Decode the picture, shrunk to at most [`rich_art::picture::KEEP`]
 /// pixels a side.
 fn decode(input: &Input) -> Result<Picture, String> {
@@ -763,6 +828,39 @@ mod tests {
         assert!(picture_bytes(id) > 0);
         let finished = driver.finish();
         assert_eq!(finished.matches("a=d").count(), 1, "{finished:?}");
+    }
+
+    #[test]
+    fn one_changed_tile_sends_one_kitty_upload() {
+        use rich_art::tiles::Tiler;
+        // 16 x 4 cells in tiles of 8 x 4: two tiles.
+        let mut tiler = Tiler::new(8, 4);
+        let mut frame = RgbaImage::from_pixel(128, 64, Rgba([255, 255, 255, 255]));
+        tiler.update(&frame, 16, 4);
+        let shown = std::rc::Rc::new(std::cell::Cell::new(None));
+        let seen = shown.clone();
+        let first = tiler.tiles().to_vec();
+        let app = App::new(move || {
+            let tiles = signal(first.clone());
+            seen.set(Some(tiles));
+            tiles_of(move || tiles.get(), Pixels::Kitty).fixed(4)
+        })
+        .graphics(image_graphics());
+        let mut driver = app.driver(16, 4);
+        let out = written(&mut driver, "\u{0}", 20);
+        assert_eq!(out.matches("a=T").count(), 2, "both tiles go up: {out:?}");
+        // A dot in the second tile.
+        frame.put_pixel(100, 20, Rgba([0, 0, 0, 255]));
+        assert_eq!(tiler.update(&frame, 16, 4), [1]);
+        let changed = tiler.tiles()[1].picture.id();
+        shown.get().unwrap().set(tiler.tiles().to_vec());
+        let out = written(&mut driver, "\u{0}", 20);
+        assert_eq!(out.matches("a=T").count(), 1, "one tile goes up: {out:?}");
+        assert!(out.contains(&format!("i={changed},")), "{out:?}");
+        // Nothing changed: nothing goes up.
+        shown.get().unwrap().set(tiler.tiles().to_vec());
+        let out = written(&mut driver, "\u{0}", 5);
+        assert_eq!(out.matches("a=T").count(), 0, "{out:?}");
     }
 
     #[test]

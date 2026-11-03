@@ -325,3 +325,92 @@ fn a_sort_indicator_on_the_sorted_column() {
     driver.settle();
     assert_eq!(plain(&driver), ["a b*", "y 1", "x 2"]);
 }
+
+/// `freeze_rows(1)` (#814): after PageDown, row 0 is still on the first
+/// body line; the cursor still moves through it, and the bar counts the
+/// rows after it.
+#[test]
+fn frozen_rows_stay_under_the_header() {
+    let app = App::new(|| {
+        let selected = signal(0usize);
+        let columns = vec![Column::new("Name", Size::Flex(1))];
+        let rows = || (0..40).map(|i| vec![format!("row {i}")]).collect();
+        column([
+            table_with(
+                columns,
+                rows,
+                selected,
+                TableOptions::default().freeze_rows(1),
+            )
+            .fixed(6),
+            text!("at {selected}").fixed(1),
+        ])
+    });
+    let mut driver = app.driver(16, 7);
+    driver.settle();
+    assert_eq!(plain(&driver)[1], "row 0");
+    assert_eq!(plain(&driver)[2], "row 1");
+    driver.press("pagedown pagedown");
+    let shown = plain(&driver);
+    assert_eq!(shown[1], "row 0", "{shown:?}");
+    assert_ne!(shown[2], "row 1", "{shown:?}");
+    assert!(
+        shown.iter().any(|row| row.starts_with("row 8")),
+        "{shown:?}"
+    );
+    // Back to the top: the frozen row is selected, and the view returns.
+    driver.press("home");
+    assert_eq!(plain(&driver)[6], "at 0");
+    assert_eq!(plain(&driver)[2], "row 1");
+    // A frozen row the end does not move.
+    driver.press("end");
+    let shown = plain(&driver);
+    assert_eq!(shown[1], "row 0");
+    assert_eq!(shown[5], "row 39", "{shown:?}");
+}
+
+/// Frozen rows in a virtual table and in a multi-line table.
+#[test]
+fn frozen_rows_in_virtual_and_multiline_tables() {
+    let app = App::new(|| {
+        let columns = vec![Column::new("Name", Size::Flex(1))];
+        virtual_table_with(
+            columns,
+            || 1000,
+            |i| vec![format!("row {i}")],
+            signal(500),
+            TableOptions::default().freeze_rows(2),
+        )
+    });
+    let mut driver = app.driver(16, 6);
+    driver.settle();
+    let shown = plain(&driver);
+    assert_eq!(&shown[1..3], ["row 0", "row 1"], "{shown:?}");
+    assert!(
+        shown.iter().any(|row| row.starts_with("row 500")),
+        "{shown:?}"
+    );
+
+    let app = App::new(|| {
+        let columns = vec![Column::new("Name", Size::Fixed(6))];
+        let rows = || {
+            let mut rows = vec![vec!["pinned header".to_string()]];
+            rows.extend((1..30).map(|i| vec![format!("row {i}")]));
+            rows
+        };
+        table_with(
+            columns,
+            rows,
+            signal(20),
+            TableOptions::default().multiline().freeze_rows(1),
+        )
+    });
+    let mut driver = app.driver(16, 7);
+    driver.settle();
+    let shown = plain(&driver);
+    assert_eq!(&shown[1..3], ["pinned", "header"], "{shown:?}");
+    assert!(
+        shown.iter().any(|row| row.starts_with("row 20")),
+        "{shown:?}"
+    );
+}

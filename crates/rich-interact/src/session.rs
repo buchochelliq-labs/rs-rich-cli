@@ -67,6 +67,8 @@ const KITTY: u8 = 16;
 /// Frames are written as synchronized updates: the restore ends one a write
 /// cut short left open.
 const SYNC: u8 = 32;
+/// The mouse is reported in pixels (SGR-Pixels, mode 1016; #819).
+const PIXELS: u8 = 64;
 
 /// The kitty keyboard protocol's flags a session pushes: disambiguate the
 /// keys a legacy terminal sends alike (1) and report releases and repeats
@@ -107,6 +109,20 @@ const ASK_SYNC: &str = "\x1b[?2026$p";
 /// The environment variable that turns synchronized output off (`0`) or on
 /// (`1`) whatever the terminal answers.
 pub const SYNC_OUTPUT_ENV: &str = "RICH_SYNC_OUTPUT";
+/// Asks whether the terminal knows SGR-Pixels mouse reports (mode 1016,
+/// DECRQM), in the start-up query after synchronized output's question.
+#[cfg(unix)]
+const ASK_PIXELS: &str = "\x1b[?1016$p";
+/// The environment variable that turns pixel-precise mouse reports off
+/// (`0`) whatever the terminal answers. On by default where the terminal
+/// knows mode 1016 and says how big its cells are.
+pub const PIXEL_MOUSE_ENV: &str = "RICH_PIXEL_MOUSE";
+
+/// Whether `RICH_PIXEL_MOUSE`'s `value` allows pixel reports: anything but
+/// `0` (unset too).
+fn pixels_allowed(value: Option<&str>) -> bool {
+    value.map(str::trim) != Some("0")
+}
 
 /// `frame` as one synchronized update; nothing for an empty frame.
 pub fn synchronized_update(frame: &str) -> String {
@@ -430,6 +446,9 @@ fn undo(active: u8, library: BackendKind) -> String {
     if active & KITTY != 0 {
         out.push_str(POP_KITTY);
     }
+    if active & PIXELS != 0 {
+        out.push_str("\x1b[?1016l");
+    }
     if active & MOUSE != 0 {
         out.push_str("\x1b[?1006l\x1b[?1015l\x1b[?1003l\x1b[?1002l\x1b[?1000l");
     }
@@ -585,6 +604,9 @@ fn suspend() {
     }
     if active & MOUSE != 0 {
         out.push_str("\x1b[?1000h\x1b[?1002h\x1b[?1015h\x1b[?1006h");
+    }
+    if active & PIXELS != 0 {
+        out.push_str("\x1b[?1016h");
     }
     if active & PASTE != 0 {
         out.push_str("\x1b[?2004h");
@@ -788,18 +810,21 @@ struct Answers {
     kitty: bool,
     /// It knows synchronized output (mode 2026).
     sync: bool,
+    /// It knows SGR-Pixels mouse reports (mode 1016).
+    pixels: bool,
 }
 
 impl Answers {
     /// For [`ANSWERS`]: never 0.
     fn encode(self) -> u8 {
-        1 | (u8::from(self.kitty) << 1) | (u8::from(self.sync) << 2)
+        1 | (u8::from(self.kitty) << 1) | (u8::from(self.sync) << 2) | (u8::from(self.pixels) << 3)
     }
 
     fn decode(bits: u8) -> Answers {
         Answers {
             kitty: bits & 2 != 0,
             sync: bits & 4 != 0,
+            pixels: bits & 8 != 0,
         }
     }
 
@@ -819,6 +844,9 @@ impl Answers {
                     if let Some(state) = answer.parameters.strip_prefix(b"2026;") {
                         answers.sync = matches!(state, b"1" | b"2" | b"3");
                     }
+                    if let Some(state) = answer.parameters.strip_prefix(b"1016;") {
+                        answers.pixels = matches!(state, b"1" | b"2" | b"3");
+                    }
                 }
                 _ => {}
             }
@@ -834,7 +862,7 @@ impl Answers {
 /// session waited (keys pressed as the program opened), for the reader.
 #[cfg(unix)]
 fn ask_start() -> (Answers, Vec<u8>) {
-    let query = format!("{ASK_SYNC}\x1b[?u\x1b[c");
+    let query = format!("{ASK_SYNC}{ASK_PIXELS}\x1b[?u\x1b[c");
     match ask_terminal(&query, |bytes| Answers::read(bytes).is_some()) {
         Some(asked) => {
             let answers = match asked.answered {
@@ -892,6 +920,23 @@ fn ask_cursor_row() -> (Option<u16>, Vec<u8>) {
         }
         None => (None, bytes),
     }
+}
+
+/// The terminal's cell size in pixels (width, height), from the window
+/// size's pixel fields (`TIOCGWINSZ`); `None` where the terminal leaves
+/// them 0 or there is none, and then the mouse stays in cells.
+fn cell_size() -> Option<(u16, u16)> {
+    let size = crossterm::terminal::window_size().ok()?;
+    cell_of(size.columns, size.rows, size.width, size.height)
+}
+
+/// One cell's size for a window of `columns` by `rows` cells and `width`
+/// by `height` pixels; `None` when any is 0.
+fn cell_of(columns: u16, rows: u16, width: u16, height: u16) -> Option<(u16, u16)> {
+    if columns == 0 || rows == 0 || width < columns || height < rows {
+        return None;
+    }
+    Some((width / columns, height / rows))
 }
 
 thread_local! {
@@ -1260,6 +1305,9 @@ pub struct Session {
     kitty: bool,
     /// Whether frames are written as synchronized updates.
     sync: bool,
+    /// The cells' size in pixels while the mouse is reported in pixels
+    /// (mode 1016): each report is read back into cells with it.
+    cell: Option<(u16, u16)>,
     /// `None` until the first `enter`.
     input: Option<Input>,
     /// The [`Waker`] handed out, once one was.
@@ -1335,6 +1383,7 @@ impl Session {
             ),
             kitty: false,
             sync: false,
+            cell: None,
             input: None,
             waker: None,
             typed: Default::default(),
@@ -1395,6 +1444,17 @@ impl Session {
         if self.options.mouse && mouse {
             out.push_str("\x1b[?1000h\x1b[?1002h\x1b[?1015h\x1b[?1006h");
             ACTIVE.fetch_or(MOUSE, Ordering::SeqCst);
+            // Pixels where the terminal knows them and says how big its
+            // cells are, else cells (1006) as ever (#819).
+            self.cell = None;
+            if answers.pixels
+                && pixels_allowed(std::env::var(PIXEL_MOUSE_ENV).ok().as_deref())
+                && let Some(cell) = cell_size()
+            {
+                out.push_str("\x1b[?1016h");
+                ACTIVE.fetch_or(PIXELS, Ordering::SeqCst);
+                self.cell = Some(cell);
+            }
         }
         if self.options.bracketed_paste && paste {
             out.push_str("\x1b[?2004h");
@@ -1436,7 +1496,13 @@ impl Session {
             #[cfg(not(unix))]
             BackendKind::Crossterm => answered(|| {
                 let kitty = crossterm::terminal::supports_keyboard_enhancement().unwrap_or(false);
-                (Answers { kitty, sync: false }, Vec::new())
+                (
+                    Answers {
+                        kitty,
+                        ..Answers::default()
+                    },
+                    Vec::new(),
+                )
             }),
             // termion's reader does not know the protocol's keys.
             #[cfg(all(unix, feature = "termion"))]
@@ -1510,6 +1576,27 @@ impl Session {
     /// The next event within `wait`, or `None`: the wait passed, or the
     /// library read something components do not see (focus changes, a
     /// sequence it does not know).
+    /// `event` with a pixel report read back into cells, while the mouse
+    /// is reported in pixels; a resize measures the cells again.
+    fn in_cells(&mut self, event: Event) -> Event {
+        let Some(cell) = self.cell else {
+            return event;
+        };
+        match event {
+            Event::Mouse(mouse) => match mouse.reread_as_pixels(cell) {
+                Some(read) => Event::Mouse(read),
+                None => Event::Mouse(mouse),
+            },
+            Event::Resize { .. } => {
+                if let Some(size) = cell_size() {
+                    self.cell = Some(size);
+                }
+                event
+            }
+            event => event,
+        }
+    }
+
     fn next_event(&mut self, wait: Duration) -> io::Result<Option<Event>> {
         let kitty = self.kitty;
         #[cfg(unix)]
@@ -1688,7 +1775,7 @@ impl Backend for Session {
                     return Ok(None);
                 }
                 self.looked = Instant::now();
-                return self.next_event(Duration::ZERO);
+                return Ok(self.next_event(Duration::ZERO)?.map(|e| self.in_cells(e)));
             }
             // Short waits, so a resume is noticed without a key; shorter
             // where the waker cannot be waited on with the terminal.
@@ -1704,7 +1791,7 @@ impl Backend for Session {
             // are skipped, not returned as a timeout.
             self.looked = Instant::now();
             if let Some(event) = self.next_event(wait)? {
-                return Ok(Some(event));
+                return Ok(Some(self.in_cells(event)));
             }
             if end.is_some_and(|end| Instant::now() >= end) {
                 return Ok(None);
@@ -1856,10 +1943,11 @@ mod tests {
         let both = Answers {
             kitty: true,
             sync: true,
+            pixels: false,
         };
         let sync = Answers {
-            kitty: false,
             sync: true,
+            ..Answers::default()
         };
         // Supported: set or reset (recognised), or permanently set.
         assert_eq!(read(b"\x1b[?2026;2$y\x1b[?0u\x1b[?62;22c"), Some(both));
@@ -1873,7 +1961,7 @@ mod tests {
             read(b"\x1b[?1u\x1b[?62c"),
             Some(Answers {
                 kitty: true,
-                sync: false,
+                ..Answers::default()
             })
         );
         // Another mode's report says nothing about 2026.
@@ -1889,9 +1977,56 @@ mod tests {
             read(b"j\x1b[A\x1b[?2026;2$yk\x1b[?0u\r\x1b[?62;22c"),
             Some(both)
         );
-        for answers in [Answers::default(), sync, both] {
+        // SGR-Pixels (1016), asked after 2026, read on its own (#819).
+        let pixels = Answers {
+            pixels: true,
+            ..Answers::default()
+        };
+        let all = Answers {
+            pixels: true,
+            ..both
+        };
+        assert_eq!(read(b"\x1b[?1016;2$y\x1b[?62c"), Some(pixels));
+        assert_eq!(read(b"\x1b[?1016;1$y\x1b[?62c"), Some(pixels));
+        assert_eq!(read(b"\x1b[?1016;0$y\x1b[?62c"), Some(Answers::default()));
+        assert_eq!(read(b"\x1b[?1016;4$y\x1b[?62c"), Some(Answers::default()));
+        assert_eq!(
+            read(b"\x1b[?2026;2$y\x1b[?1016;2$y\x1b[?0u\x1b[?62;22c"),
+            Some(all)
+        );
+        // 2026's report says nothing about 1016, and the other way round.
+        assert_eq!(read(b"\x1b[?2026;2$y\x1b[?62c"), Some(sync));
+        for answers in [Answers::default(), sync, both, pixels, all] {
             assert_ne!(answers.encode(), 0);
             assert_eq!(Answers::decode(answers.encode()), answers);
+        }
+    }
+
+    #[test]
+    fn the_cell_size_comes_from_the_window_size_in_pixels() {
+        assert_eq!(cell_of(80, 24, 800, 480), Some((10, 20)));
+        // Rounded down: a window with a margin of a few pixels.
+        assert_eq!(cell_of(80, 24, 805, 490), Some((10, 20)));
+        // A terminal that leaves the pixel fields 0, or no window.
+        assert_eq!(cell_of(80, 24, 0, 0), None);
+        assert_eq!(cell_of(0, 0, 800, 480), None);
+        assert_eq!(cell_of(80, 24, 40, 480), None);
+    }
+
+    #[test]
+    fn pixel_reports_are_allowed_unless_turned_off() {
+        assert!(pixels_allowed(None));
+        assert!(pixels_allowed(Some("1")));
+        assert!(!pixels_allowed(Some("0")));
+        assert!(!pixels_allowed(Some(" 0 ")));
+    }
+
+    #[test]
+    fn the_restore_turns_pixel_reports_off_before_the_mouse() {
+        for kind in BackendKind::ALL {
+            let out = undo(RAW | MOUSE | PIXELS, *kind);
+            assert!(out.starts_with("\x1b[?1016l\x1b[?1006l"), "{kind}: {out:?}");
+            assert!(!undo(RAW | MOUSE, *kind).contains("1016"));
         }
     }
 

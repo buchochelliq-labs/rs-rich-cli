@@ -144,6 +144,14 @@ registry = "crates.io"
 manifest = "crates/noctiluca/Cargo.toml"
 version = "0.0.3"
 
+# Cornacai, the terminal client for coding agents: a leaf, a binary of its
+# own, on rs-rich-acp, intuiTUIve and rs-rich-embed.
+[[package]]
+name = "cornacai"
+registry = "crates.io"
+manifest = "crates/cornacai/Cargo.toml"
+version = "0.0.1"
+
 [[package]]
 name = "rs-rich-cli"
 registry = "crates.io"

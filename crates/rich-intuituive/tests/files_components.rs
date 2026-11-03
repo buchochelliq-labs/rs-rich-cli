@@ -14,10 +14,14 @@ use intuituive::prelude::*;
 /// root/
 ///   alpha/a.txt  beta/  .hidden  notes.md  data.bin  z.txt
 fn tree(name: &str) -> PathBuf {
-    let root = std::env::temp_dir().join(format!(
-        "intuituive-files-components-{name}-{}",
-        std::process::id()
-    ));
+    // A short root: the Miller tests read paths off an 80-column status
+    // row, and macOS's temp directory alone is longer than that.
+    let base = if cfg!(unix) && std::path::Path::new("/tmp").is_dir() {
+        PathBuf::from("/tmp")
+    } else {
+        std::env::temp_dir()
+    };
+    let root = base.join(format!("iu-files-{name}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&root);
     std::fs::create_dir_all(root.join("alpha")).unwrap();
     std::fs::create_dir_all(root.join("beta")).unwrap();
@@ -90,10 +94,17 @@ fn the_model_sorts_hides_filters_and_reads_again() {
         "alpha beta .hidden data.bin notes.md z.txt"
     );
     driver.press("s");
-    // Reversed, ties too: directories stay first.
+    // Reversed, ties too: directories stay first. A directory's size is
+    // the file system's (equal on ext4, by entries on APFS).
+    let size = |name: &str| std::fs::metadata(root.join(name)).unwrap().len();
+    let dirs = if size("alpha") > size("beta") {
+        "alpha beta"
+    } else {
+        "beta alpha"
+    };
     assert_eq!(
         rows(&driver)[0],
-        "beta alpha z.txt notes.md data.bin .hidden"
+        format!("{dirs} z.txt notes.md data.bin .hidden")
     );
     // Smart case: a capital must match a capital.
     driver.press("f");

@@ -155,3 +155,7 @@ png = "0.18"
 # `rich plugin` tests sign a fixture marketplace with rs-rich-marketplace's
 # test keys.
 minisign = "0.10"
+# The local HTTPS server `rich URL`'s redirect tests fetch from, with
+# rs-rich-marketplace's test CA: the rustls ureq already builds on (ring),
+# so the tree gains nothing.
+rustls = { version = "0.23", default-features = false, features = ["ring", "std"] }

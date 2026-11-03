@@ -9,6 +9,7 @@ them could not push there. Copy them across as they are laid out:
 |---|---|
 | `.github/workflows/sign-index.yml` | `.github/workflows/sign-index.yml` |
 | `.github/workflows/check-listings.yml` | `.github/workflows/check-listings.yml` |
+| `.github/requirements-signer.txt` (the signer's Python packages, pinned by hash) | `.github/requirements-signer.txt` |
 | `.github/workflows/publish-artifacts.yml`, `stats.yml`, `discussions.yml` | the same |
 | `scripts/build_index.py` | `scripts/build_index.py` |
 | `scripts/check_artifacts.py`, `scripts/marketplace_common.py` | the same |
@@ -185,11 +186,18 @@ after it, with no secret:
    - Delete the deploy key's private half from the password manager.
 
 5. **Pin the validator.** Set the repository variable `RS_RICH_CLI_REF` to
-   the rs-rich-cli tag whose `scripts/validate_marketplace.py` and
-   `schemas/marketplace` apply. rs-rich-cli's release tags are
-   `release-X.Y.Z` (say `release-0.0.22`); move the variable to the new
-   tag with each release. Without it, `main` is used. The pull request
-   check builds `rich` at the same ref.
+   the rs-rich-cli release whose `scripts/validate_marketplace.py` and
+   `schemas/marketplace` apply: its tag (`release-X.Y.Z`, say
+   `release-0.0.23`) or, better, that tag's commit, which cannot be moved.
+   Move the variable with each release. Without it, the workflows use the
+   commit written in them (`release-0.0.23`'s), never rs-rich-cli's `main`.
+   The pull request check builds `rich` at the same ref.
+
+   The signing workflow's own supply chain is pinned the same way: its
+   actions by full commit SHA (the tag in a comment), and `jsonschema` and
+   its dependencies by version and SHA-256 in
+   `.github/requirements-signer.txt`, installed with `--require-hashes`.
+   Update a pin with a reviewed change to those files.
 
 6. **Create the `tier-approved` label** (Issues, Labels). The pull request
    check refuses a listing whose tier is set or raised above `community`

@@ -1,0 +1,4 @@
+[alias]
+# `cargo wasm`: the plugin, at target/wasm32-unknown-unknown/release/*.wasm.
+# `cargo test` still runs the unit tests natively.
+wasm = "build --release --target wasm32-unknown-unknown"

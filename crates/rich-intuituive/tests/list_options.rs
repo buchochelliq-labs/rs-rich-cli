@@ -282,3 +282,42 @@ fn a_reorderable_list_still_drags_with_a_press() {
     driver.settle();
     assert_eq!(rows(&driver)[2], "apple", "{:?}", rows(&driver));
 }
+
+/// `freeze_rows` on a list and a virtual list (#814): the pinned item stays
+/// at the top while the rest scroll, and the cursor still reaches it.
+#[test]
+fn a_lists_frozen_items_stay_at_the_top() {
+    let app = App::new(|| {
+        let selected = signal(0usize);
+        column([
+            list(|| (0..30).map(|i| format!("item {i}")).collect(), selected)
+                .freeze_rows(1)
+                .fixed(4),
+            text!("at {selected}").fixed(1),
+        ])
+    });
+    let mut driver = app.driver(12, 5);
+    driver.settle();
+    assert_eq!(&rows(&driver)[0..2], ["item 0", "item 1"]);
+    driver.press("pagedown pagedown");
+    let shown = rows(&driver);
+    assert_eq!(shown[0], "item 0", "{shown:?}");
+    assert_ne!(shown[1], "item 1", "{shown:?}");
+    driver.press("end");
+    let shown = rows(&driver);
+    assert_eq!(shown[0], "item 0");
+    assert_eq!(shown[3], "item 29", "{shown:?}");
+    driver.press("home");
+    assert_eq!(rows(&driver)[4], "at 0");
+    assert_eq!(rows(&driver)[1], "item 1");
+
+    let app = App::new(|| {
+        intuituive::widgets::virtual_list(|| 10_000, |i| format!("line {i}"), signal(5000))
+            .freeze_rows(1)
+    });
+    let mut driver = app.driver(12, 4);
+    driver.settle();
+    let shown = rows(&driver);
+    assert_eq!(shown[0], "line 0");
+    assert!(shown.contains(&"line 5000".to_string()), "{shown:?}");
+}

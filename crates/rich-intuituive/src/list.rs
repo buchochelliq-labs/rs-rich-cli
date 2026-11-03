@@ -247,6 +247,8 @@ pub(crate) struct ListOptions {
     /// A range's anchor: the rows from it to the cursor are lit
     /// ([`Node::range`]).
     range: Option<Signal<Option<usize>>>,
+    /// The leading items that stay in view ([`Node::freeze_rows`]).
+    frozen: usize,
 }
 
 /// Where a list's items come from: every item from one closure, or a count
@@ -393,6 +395,9 @@ pub(crate) struct List {
     /// Where the bar was drawn, and what it showed: the first item, the
     /// items and the items in view.
     bar_at: Cell<Option<(Rect, usize, usize, usize)>>,
+    /// The frozen items the last draw kept in view ([`Node::freeze_rows`]):
+    /// the bar counts the items after them.
+    frozen: Cell<usize>,
 }
 
 /// A scrolling list of markup rows, one selected: ratatui's `List` and
@@ -432,7 +437,7 @@ pub(crate) struct List {
 /// assert_eq!(screen[4].trim_end(), "item 8");
 /// ```
 pub fn list(items: impl Fn() -> Vec<String> + 'static, selected: Signal<usize>) -> Node {
-    list_of(Items::All(Rc::new(items)), Selection::One(selected))
+    list_core(Items::All(Rc::new(items)), Selection::One(selected))
 }
 
 /// A [`list`] whose selection may be empty, as ratatui's
@@ -474,7 +479,7 @@ pub fn list_optional(
     items: impl Fn() -> Vec<String> + 'static,
     selected: Signal<Option<usize>>,
 ) -> Node {
-    list_of(Items::All(Rc::new(items)), Selection::Maybe(selected))
+    list_core(Items::All(Rc::new(items)), Selection::Maybe(selected))
 }
 
 /// A [`list`] that asks only for the items it draws: `len` is how many
@@ -508,7 +513,7 @@ pub fn list_lazy(
         item: Rc::new(item),
         reset: None,
     };
-    list_of(items, Selection::One(selected))
+    list_core(items, Selection::One(selected))
 }
 
 /// One row of a [`list_rows`] list: its markup, and what
@@ -632,7 +637,7 @@ pub fn list_rows(
         reset: Some(Rc::new(move || reset.made.borrow_mut().clear())),
     };
     let (trailing, style, selected_style) = (rows.clone(), rows.clone(), rows.clone());
-    list_of(items, Selection::One(selected))
+    list_core(items, Selection::One(selected))
         .trailing(move |i| trailing.get(i, |row| row.trailing.clone()))
         .row_style(move |i| style.get(i, |row| row.style.clone()))
         .selected_style_for(move |i| selected_style.get(i, |row| row.selected_style.clone()))
@@ -641,7 +646,7 @@ pub fn list_rows(
         })
 }
 
-fn list_of(items: Items, selection: Selection) -> Node {
+fn list_core(items: Items, selection: Selection) -> Node {
     let options = Rc::new(RefCell::new(ListOptions::default()));
     let first = Rc::new(Cell::new(0usize));
     let rows = Rc::new(Cell::new(1usize));
@@ -697,6 +702,7 @@ fn list_of(items: Items, selection: Selection) -> Node {
         seen: Cell::new(None),
         bar: Bar::default(),
         bar_at: Cell::new(None),
+        frozen: Cell::new(0),
     };
     // Up and down the screen: with the items bottom to top, ↑ goes on to
     // the next item.
@@ -938,9 +944,13 @@ fn natural_width(markup: &str, all: bool) -> u16 {
 
 /// One draw's layout of a list: the items in view and their lines.
 struct Laid {
+    /// The first scrolled item in view.
     first: usize,
-    /// Each item in view, from `first` on, with its lines.
+    /// Each item in view, the frozen ones then those from `first` on, with
+    /// its lines.
     items: Vec<(usize, Vec<Vec<Segment>>)>,
+    /// How many of `items` are frozen ([`Node::freeze_rows`]).
+    frozen: usize,
 }
 
 impl List {
@@ -975,9 +985,9 @@ impl List {
         selected: Option<usize>,
     ) -> Laid {
         let len = items.len();
-        let (multiline, padding) = {
+        let (multiline, padding, frozen) = {
             let options = self.options.borrow();
-            (options.multiline, options.padding)
+            (options.multiline, options.padding, options.frozen)
         };
         let mut cache: HashMap<usize, Vec<Vec<Segment>>> = HashMap::new();
         let mut lines = |i: usize| -> Vec<Vec<Segment>> {
@@ -986,31 +996,56 @@ impl List {
                 .or_insert_with(|| self.lines_of(console, items, i, width))
                 .clone()
         };
-        let first = {
-            let mut height_of = |i: usize| if multiline { lines(i).len() } else { 1 };
-            first_in_view(
-                len,
-                height as usize,
-                first,
-                selected,
-                padding,
-                &mut height_of,
-            )
-        };
-        let mut used = 0usize;
+        // The frozen items first, as many as fit whole; the rest scroll in
+        // what is left.
         let mut laid = Vec::new();
-        for i in first..len {
+        let mut used = 0usize;
+        for i in 0..frozen.min(len) {
             let item = lines(i);
-            if used > 0 && used + item.len() > height as usize {
+            if used + item.len() > height as usize {
                 break;
             }
             used += item.len();
             laid.push((i, item));
-            if used >= height as usize {
+        }
+        let frozen = laid.len();
+        let view = height as usize - used;
+        let first = {
+            let mut height_of = |i: usize| {
+                if multiline {
+                    lines(i + frozen).len()
+                } else {
+                    1
+                }
+            };
+            frozen
+                + first_in_view(
+                    len - frozen,
+                    view,
+                    first.saturating_sub(frozen),
+                    // A frozen item selected brings the rest back to their start.
+                    selected.map(|s| s.saturating_sub(frozen)),
+                    padding,
+                    &mut height_of,
+                )
+        };
+        let mut used = 0usize;
+        for i in (first..len).take_while(|_| view > 0) {
+            let item = lines(i);
+            if used > 0 && used + item.len() > view {
+                break;
+            }
+            used += item.len();
+            laid.push((i, item));
+            if used >= view {
                 break;
             }
         }
-        Laid { first, items: laid }
+        Laid {
+            first,
+            items: laid,
+            frozen,
+        }
     }
 
     /// Lines all `items` take at `width`.
@@ -1164,7 +1199,7 @@ impl Widget for List {
         );
         let mut bar_rect = None;
         if let Some(look) = &bar
-            && look.wanted(len, laid.items.len())
+            && look.wanted(len - laid.frozen, laid.items.len() - laid.frozen)
         {
             let (rest, at) = look.split(width, height);
             area = rest;
@@ -1179,7 +1214,8 @@ impl Widget for List {
             );
         }
         self.first.set(laid.first);
-        self.rows.set(laid.items.len().max(1));
+        self.rows.set((laid.items.len() - laid.frozen).max(1));
+        self.frozen.set(laid.frozen);
         if let Some(offset) = offset
             && self.seen.get() != Some(laid.first)
         {
@@ -1372,9 +1408,10 @@ impl Widget for List {
             Some(at) => {
                 canvas.lines_at(area.x, area.y, area.width, area.height, &lines);
                 let look = bar.as_ref().expect("a bar was laid out");
-                let view = laid.items.len().max(1);
-                look.paint(console, canvas, at, laid.first, len, view);
-                self.bar_at.set(Some((at, laid.first, len, view)));
+                let view = (laid.items.len() - laid.frozen).max(1);
+                let (first, len) = (laid.first - laid.frozen, len - laid.frozen);
+                look.paint(console, canvas, at, first, len, view);
+                self.bar_at.set(Some((at, first, len, view)));
             }
         }
         if bar_rect.is_none() {
@@ -1411,9 +1448,14 @@ impl Widget for List {
         if let Some((rect, first, len, view)) = self.bar_at.get() {
             match self.bar.mouse(cx, mouse, rect, first, len, view) {
                 Some(Some(to)) => {
-                    // The view moves, and the selection with it, into view.
+                    // The view moves, and the selection with it, into view;
+                    // the bar counts the items after the frozen ones.
+                    let frozen = self.frozen.get();
+                    let to = to + frozen;
                     self.first.set(to);
-                    if let Some(selected) = self.selection.get_untracked() {
+                    if let Some(selected) = self.selection.get_untracked()
+                        && selected >= frozen
+                    {
                         let last = (to + view).saturating_sub(1);
                         let inside = selected.clamp(to, last.max(to));
                         if inside != selected {
@@ -1538,9 +1580,36 @@ impl Node {
     /// they fit: ratatui's `scroll_padding`, Vim's `scrolloff`. On a
     /// [`virtual_list`](crate::widgets::virtual_list) or a table too.
     pub fn scroll_padding(self, items: usize) -> Node {
+        if self.node_list(|list| list.set_padding(items)) {
+            return self;
+        }
         self.list_option("scroll_padding", move |node| {
             let table = table_options(node, |options| options.scroll_padding = items);
             set_list(node, |options| options.padding = items) || table
+        })
+    }
+
+    /// Keep the first `rows` items in view at the top while the rest
+    /// scroll: Textual's `fixed_rows`, for a pinned item. The cursor still
+    /// moves through them. On a
+    /// [`virtual_list`](crate::widgets::virtual_list) or a table too
+    /// ([`TableOptions::freeze_rows`](crate::widgets::TableOptions::freeze_rows)).
+    ///
+    /// ```
+    /// use intuituive::prelude::*;
+    ///
+    /// let app = App::new(|| {
+    ///     list(|| (0..50).map(|i| format!("item {i}")).collect(), signal(0)).freeze_rows(1)
+    /// });
+    /// let mut driver = app.driver(10, 4);
+    /// driver.press("pagedown pagedown");
+    /// assert_eq!(driver.screen().plain()[0].trim_end(), "item 0");
+    /// assert_ne!(driver.screen().plain()[1].trim_end(), "item 1");
+    /// ```
+    pub fn freeze_rows(self, rows: usize) -> Node {
+        self.list_option("freeze_rows", move |node| {
+            let table = table_options(node, |options| options.freeze_rows = rows);
+            set_list(node, |options| options.frozen = rows) || table
         })
     }
 
@@ -1770,6 +1839,13 @@ impl Node {
     /// assert_eq!(driver.screen().plain()[2].trim_end(), "menu on 1");
     /// ```
     pub fn on_context(self, handler: impl FnMut(usize, &mut crate::app::Ctx) + 'static) -> Node {
+        let mut handler = Some(handler);
+        self.node_list(|list| {
+            list.set_on_context(Box::new(handler.take().expect("not taken yet")))
+        });
+        let Some(handler) = handler else {
+            return self;
+        };
         let handler: OnContext = Rc::new(RefCell::new(handler));
         self.list_options("on_context", move |options| {
             options.context = Some(handler.clone())

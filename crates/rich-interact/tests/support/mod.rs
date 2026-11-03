@@ -108,12 +108,42 @@ impl Pty {
         env: &[(&str, &str)],
         cursor: &'static [u8],
     ) -> Pty {
+        Pty::start_answers(mode, answers, false, pipe, backend, env, cursor)
+    }
+
+    /// A terminal that reports the mouse in pixels (SGR-Pixels, mode
+    /// 1016: it answers DECRQM for 1016, reset, and its window is 800 by
+    /// 480 pixels, so cells of 10 by 20), with neither the kitty keyboard
+    /// protocol nor synchronized output.
+    pub fn start_pixels_on(backend: &str, mode: &str, env: &[(&str, &str)]) -> Pty {
+        Pty::start_answers(
+            mode,
+            Some((false, false)),
+            true,
+            "",
+            Some(backend),
+            env,
+            b"",
+        )
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn start_answers(
+        mode: &str,
+        answers: Option<(bool, bool)>,
+        pixels: bool,
+        pipe: &str,
+        backend: Option<&str>,
+        env: &[(&str, &str)],
+        cursor: &'static [u8],
+    ) -> Pty {
+        let (pixel_width, pixel_height) = if pixels { (800, 480) } else { (0, 0) };
         let pty = native_pty_system()
             .openpty(PtySize {
                 rows: 24,
                 cols: 80,
-                pixel_width: 0,
-                pixel_height: 0,
+                pixel_width,
+                pixel_height,
             })
             .unwrap();
         let exe = std::env::current_exe().unwrap();
@@ -131,6 +161,7 @@ impl Pty {
         }
         // Detected unless a test forces it.
         command.env_remove("RICH_SYNC_OUTPUT");
+        command.env_remove("RICH_PIXEL_MOUSE");
         for (name, value) in env {
             command.env(name, value);
         }
@@ -166,6 +197,9 @@ impl Pty {
                     let mut answer = Vec::new();
                     if sync {
                         answer.extend_from_slice(b"\x1b[?2026;2$y");
+                    }
+                    if pixels {
+                        answer.extend_from_slice(b"\x1b[?1016;2$y");
                     }
                     if kitty {
                         answer.extend_from_slice(b"\x1b[?0u");

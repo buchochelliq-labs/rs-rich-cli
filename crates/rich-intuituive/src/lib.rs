@@ -104,11 +104,14 @@ mod calendar;
 mod clock;
 mod collapsible;
 pub mod command_line;
+mod commands;
 pub mod complete;
 mod controls;
 mod datetime;
 mod dialog;
+mod diff_view;
 mod digits;
+mod editor_theme;
 mod effect;
 mod facts;
 mod feed;
@@ -131,12 +134,17 @@ mod lockstep;
 pub mod log;
 #[cfg(feature = "syntax")]
 mod markdown;
+#[cfg(feature = "syntax")]
+mod markdown_viewer;
 pub mod menu;
 #[cfg(feature = "micro")]
 pub mod micro_sprite;
 pub mod miller;
 pub mod node;
+mod node_list;
 mod notify;
+mod palette;
+mod parity;
 pub mod pixels;
 mod place;
 pub mod preview;
@@ -190,6 +198,7 @@ pub use rich_interact as interact;
 pub use rich_interact::dates;
 
 pub use actions::{Action, action_overlay};
+pub use app::DEFAULT_MODE;
 pub use app::{
     Anchor, App, Ctx, Driver, Easing, FrameStats, Handoff, Holds, ModalOptions, Placement,
     StatsHandle, Theme, Timer, after, every, fixed_step, held_keys, plain_key, rate,
@@ -200,6 +209,7 @@ pub use bindings::{ModePage, Scaled, Stepped};
 pub use border::{Border, BorderSet, Edge, Shadow, Sides};
 pub use collapsible::{Status, collapsible, collapsible_with};
 pub use command_line::{CommandLine, CommandLineOptions, command_line, command_line_with};
+pub use commands::{Hit, HitSink, Provider, SystemCommands, Themes};
 pub use complete::{
     CompleteOptions, Completion, InputHistory, complete_words, history_file, history_in,
     history_session,
@@ -210,6 +220,7 @@ pub use controls::{
 };
 pub use dialog::{ConfirmOptions, PickOptions, PromptOptions};
 pub use digits::digits;
+pub use editor_theme::EditorTheme;
 pub use effect::{effect, fill};
 pub use facts::{facts, facts_of};
 pub use feed::{
@@ -222,7 +233,7 @@ pub use help::{HelpOptions, KeyFormat, KeyHintsOptions};
 #[cfg(feature = "art")]
 pub use image::{
     ImageAnchor, ImageFit, ImageMode, ImageView, Picture, Pixels, image, image_bytes,
-    image_bytes_of, image_graphics, image_of, image_with, picture_bytes, picture_of,
+    image_bytes_of, image_graphics, image_of, image_with, picture_bytes, picture_of, tiles_of,
 };
 pub use input::{input, number_input};
 pub use jobs::{
@@ -235,13 +246,20 @@ pub use lockstep::{Lockstep, Steps, stepped_worker, stepped_worker_with};
 pub use log::Log;
 #[cfg(feature = "syntax")]
 pub use markdown::{MarkdownStream, markdown};
+#[cfg(feature = "syntax")]
+pub use markdown_viewer::{MarkdownHeading, MarkdownViewer, markdown_viewer};
 pub use miller::{MillerSource, miller_in, miller_of};
 pub use node::{
     Node, column, component, each, fit_text, grid, keyed, label, layers, leaf, list, renderable,
     repeating, row, scroll, scroll_both, scroll_both_with, scroll_with, scroll_x, switch, text,
 };
 pub use node::{described, drawn, drawn_described};
+pub use node_list::{list_of, list_of_virtual};
 pub use notify::{Corner, Level};
+pub use palette::Palette;
+pub use parity::{
+    PlaceholderVariant, header, key_panel, link, masked_input, placeholder, progress_bar,
+};
 pub use place::{Offset, Origin, RectHandle};
 pub use preview::{PreviewOfOptions, preview_of, preview_of_with};
 pub use reactive::{Memo, Proxy, Signal, memo, on_write, on_write_ref, signal, viewport, watch};

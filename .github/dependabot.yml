@@ -3,6 +3,9 @@
 # opens one pull request a week for minor and patch updates (majors still
 # arrive one by one). A central sync would drop them; keep them.
 # Ecosystems below are only those whose manifests actually exist in this repo.
+# Major versions are not proposed (the `ignore` blocks): each needs code
+# changes, and the out-of-workspace lockfiles (playground, its spike, fuzz,
+# rich-py) with it, so a major is taken by hand in a release pull request.
 version: 2
 
 updates:
@@ -20,6 +23,9 @@ updates:
       cargo-dependencies:
         patterns: ["*"]
         update-types: ["minor", "patch"]
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
 
   - package-ecosystem: "github-actions"
     directory: "/"
@@ -35,3 +41,6 @@ updates:
       github-actions:
         patterns: ["*"]
         update-types: ["minor", "patch"]
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]

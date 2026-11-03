@@ -18,7 +18,7 @@ readme = "README.md"
 documentation = "https://docs.rs/rs-rich-intuituive"
 keywords = ["terminal", "tui", "reactive", "framework", "rich"]
 categories = ["command-line-interface"]
-include = ["src/**/*", "README.md", "LICENSE", "Cargo.toml"]
+include = ["src/**/*", "README.md", "LICENSE", "THIRD_PARTY.md", "Cargo.toml"]
 
 # The image nodes, the file watcher, the file components, raw PCM and the
 # meters and spectra on docs.rs too; `audio` is left out, as its ALSA
@@ -99,7 +99,7 @@ archive = ["files", "rich-ext/archive"]
 # `tracing_subscriber` layer feeding a `Log`, so an app shows its own
 # `tracing` events, through rs-rich-ext's `EventLayer` and `ChannelSink`.
 # A plugin. Off by default.
-tracing = ["rich-ext/tracing", "dep:tracing", "dep:tracing-subscriber"]
+tracing = ["rich-ext/tracing", "dep:tracing", "dep:tracing-subscriber", "dep:libc"]
 
 # ratatui-textarea's examples as one gallery; its Vim tab needs `vim`.
 [[example]]
@@ -131,6 +131,11 @@ tracing-subscriber = { version = "0.3", default-features = false, features = ["r
 
 # The `audio` feature's ALSA error handler (`snd_lib_error_set_local`);
 # cpal links the same library already.
+# The `tracing` plugin's log console: the socket's owner and the peer's
+# credentials (`geteuid`, `SO_PEERCRED`, `getpeereid`).
+[target.'cfg(unix)'.dependencies]
+libc = { version = "0.2", optional = true }
+
 [target.'cfg(target_os = "linux")'.dependencies]
 alsa-sys = { version = "0.4", optional = true }
 

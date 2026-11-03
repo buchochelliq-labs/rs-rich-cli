@@ -1,0 +1,203 @@
+pub mod cornacai
+pub mod cornacai::app
+pub enum cornacai::app::Launch
+pub cornacai::app::Launch::Command(alloc::vec::Vec<alloc::string::String>)
+pub cornacai::app::Launch::Replay
+pub cornacai::app::Launch::Replay::timeout: core::option::Option<core::time::Duration>
+pub cornacai::app::Launch::Replay::transcript: rich_acp::replay::Transcript
+impl core::marker::Freeze for cornacai::app::Launch
+impl core::marker::Send for cornacai::app::Launch
+impl core::marker::Sync for cornacai::app::Launch
+impl core::marker::Unpin for cornacai::app::Launch
+impl core::marker::UnsafeUnpin for cornacai::app::Launch
+impl core::panic::unwind_safe::RefUnwindSafe for cornacai::app::Launch
+impl core::panic::unwind_safe::UnwindSafe for cornacai::app::Launch
+pub struct cornacai::app::Handle
+impl cornacai::app::Handle
+pub fn cornacai::app::Handle::connection(&self) -> core::option::Option<&rich_acp::connection::Connection>
+pub fn cornacai::app::Handle::finish_replay(&self) -> core::option::Option<core::result::Result<(), rich_acp::replay::ReplayError>>
+pub fn cornacai::app::Handle::replay_finished(&self) -> bool
+impl core::clone::Clone for cornacai::app::Handle
+pub fn cornacai::app::Handle::clone(&self) -> cornacai::app::Handle
+impl core::marker::Freeze for cornacai::app::Handle
+impl core::marker::Send for cornacai::app::Handle
+impl core::marker::Sync for cornacai::app::Handle
+impl core::marker::Unpin for cornacai::app::Handle
+impl core::marker::UnsafeUnpin for cornacai::app::Handle
+impl !core::panic::unwind_safe::RefUnwindSafe for cornacai::app::Handle
+impl !core::panic::unwind_safe::UnwindSafe for cornacai::app::Handle
+pub struct cornacai::app::Options
+pub cornacai::app::Options::cwd: std::path::PathBuf
+pub cornacai::app::Options::launch: cornacai::app::Launch
+pub cornacai::app::Options::read: bool
+pub cornacai::app::Options::shell: core::option::Option<cornacai::app::ShellPane>
+pub cornacai::app::Options::terminal: bool
+pub cornacai::app::Options::write: bool
+impl cornacai::app::Options
+pub fn cornacai::app::Options::new(cornacai::app::Launch, impl core::convert::Into<std::path::PathBuf>) -> cornacai::app::Options
+pub fn cornacai::app::Options::shell_command(self, alloc::vec::Vec<alloc::string::String>) -> cornacai::app::Options
+pub fn cornacai::app::Options::shell_pane(self, impl core::ops::function::FnOnce() -> rich_embed::pane::TerminalPane + 'static) -> cornacai::app::Options
+impl core::marker::Freeze for cornacai::app::Options
+impl !core::marker::Send for cornacai::app::Options
+impl !core::marker::Sync for cornacai::app::Options
+impl core::marker::Unpin for cornacai::app::Options
+impl core::marker::UnsafeUnpin for cornacai::app::Options
+impl !core::panic::unwind_safe::RefUnwindSafe for cornacai::app::Options
+impl !core::panic::unwind_safe::UnwindSafe for cornacai::app::Options
+pub fn cornacai::app::app(cornacai::app::Options) -> (intuituive::app::App, cornacai::app::Handle)
+pub fn cornacai::app::wait_for(&mut intuituive::app::Driver, &str, core::time::Duration)
+pub type cornacai::app::ShellPane = alloc::boxed::Box<dyn core::ops::function::FnOnce() -> rich_embed::pane::TerminalPane>
+pub mod cornacai::bridge
+pub enum cornacai::bridge::Review
+pub cornacai::bridge::Review::Reject
+pub cornacai::bridge::Review::Write
+pub cornacai::bridge::Review::Write::accepted: (usize, usize)
+pub cornacai::bridge::Review::Write::text: alloc::string::String
+impl core::clone::Clone for cornacai::bridge::Review
+pub fn cornacai::bridge::Review::clone(&self) -> cornacai::bridge::Review
+impl core::cmp::Eq for cornacai::bridge::Review
+impl core::cmp::PartialEq for cornacai::bridge::Review
+pub fn cornacai::bridge::Review::eq(&self, &cornacai::bridge::Review) -> bool
+impl core::fmt::Debug for cornacai::bridge::Review
+pub fn cornacai::bridge::Review::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for cornacai::bridge::Review
+impl core::marker::Freeze for cornacai::bridge::Review
+impl core::marker::Send for cornacai::bridge::Review
+impl core::marker::Sync for cornacai::bridge::Review
+impl core::marker::Unpin for cornacai::bridge::Review
+impl core::marker::UnsafeUnpin for cornacai::bridge::Review
+impl core::panic::unwind_safe::RefUnwindSafe for cornacai::bridge::Review
+impl core::panic::unwind_safe::UnwindSafe for cornacai::bridge::Review
+pub mod cornacai::clean
+pub fn cornacai::clean::clean(&str) -> alloc::string::String
+pub fn cornacai::clean::is_hidden(char) -> bool
+pub fn cornacai::clean::markup(&str) -> alloc::string::String
+pub fn cornacai::clean::reveal(&str) -> alloc::string::String
+pub mod cornacai::config
+pub struct cornacai::config::Config
+pub cornacai::config::Config::agent: core::option::Option<alloc::vec::Vec<alloc::string::String>>
+pub cornacai::config::Config::read: bool
+pub cornacai::config::Config::shell: core::option::Option<alloc::vec::Vec<alloc::string::String>>
+pub cornacai::config::Config::terminal: bool
+pub cornacai::config::Config::write: bool
+impl cornacai::config::Config
+pub fn cornacai::config::Config::load(&std::path::Path) -> core::result::Result<cornacai::config::Config, alloc::string::String>
+pub fn cornacai::config::Config::parse(&str) -> core::result::Result<cornacai::config::Config, alloc::string::String>
+pub fn cornacai::config::Config::save_agent(&std::path::Path, &[alloc::string::String]) -> std::io::error::Result<()>
+impl core::clone::Clone for cornacai::config::Config
+pub fn cornacai::config::Config::clone(&self) -> cornacai::config::Config
+impl core::cmp::Eq for cornacai::config::Config
+impl core::cmp::PartialEq for cornacai::config::Config
+pub fn cornacai::config::Config::eq(&self, &cornacai::config::Config) -> bool
+impl core::default::Default for cornacai::config::Config
+pub fn cornacai::config::Config::default() -> cornacai::config::Config
+impl core::fmt::Debug for cornacai::config::Config
+pub fn cornacai::config::Config::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for cornacai::config::Config
+impl core::marker::Freeze for cornacai::config::Config
+impl core::marker::Send for cornacai::config::Config
+impl core::marker::Sync for cornacai::config::Config
+impl core::marker::Unpin for cornacai::config::Config
+impl core::marker::UnsafeUnpin for cornacai::config::Config
+impl core::panic::unwind_safe::RefUnwindSafe for cornacai::config::Config
+impl core::panic::unwind_safe::UnwindSafe for cornacai::config::Config
+pub struct cornacai::config::KnownAgent
+pub cornacai::config::KnownAgent::command: &'static [&'static str]
+pub cornacai::config::KnownAgent::install: &'static str
+pub cornacai::config::KnownAgent::name: &'static str
+impl core::clone::Clone for cornacai::config::KnownAgent
+pub fn cornacai::config::KnownAgent::clone(&self) -> cornacai::config::KnownAgent
+impl core::cmp::Eq for cornacai::config::KnownAgent
+impl core::cmp::PartialEq for cornacai::config::KnownAgent
+pub fn cornacai::config::KnownAgent::eq(&self, &cornacai::config::KnownAgent) -> bool
+impl core::fmt::Debug for cornacai::config::KnownAgent
+pub fn cornacai::config::KnownAgent::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Copy for cornacai::config::KnownAgent
+impl core::marker::StructuralPartialEq for cornacai::config::KnownAgent
+impl core::marker::Freeze for cornacai::config::KnownAgent
+impl core::marker::Send for cornacai::config::KnownAgent
+impl core::marker::Sync for cornacai::config::KnownAgent
+impl core::marker::Unpin for cornacai::config::KnownAgent
+impl core::marker::UnsafeUnpin for cornacai::config::KnownAgent
+impl core::panic::unwind_safe::RefUnwindSafe for cornacai::config::KnownAgent
+impl core::panic::unwind_safe::UnwindSafe for cornacai::config::KnownAgent
+pub const cornacai::config::KNOWN_AGENTS: &[cornacai::config::KnownAgent]
+pub fn cornacai::config::config_path() -> core::option::Option<std::path::PathBuf>
+pub fn cornacai::config::installed_agents() -> alloc::vec::Vec<cornacai::config::KnownAgent>
+pub fn cornacai::config::on_path(&str) -> bool
+pub mod cornacai::mention
+pub struct cornacai::mention::Mention
+pub cornacai::mention::Mention::path: std::path::PathBuf
+pub cornacai::mention::Mention::text: alloc::string::String
+impl core::clone::Clone for cornacai::mention::Mention
+pub fn cornacai::mention::Mention::clone(&self) -> cornacai::mention::Mention
+impl core::cmp::Eq for cornacai::mention::Mention
+impl core::cmp::PartialEq for cornacai::mention::Mention
+pub fn cornacai::mention::Mention::eq(&self, &cornacai::mention::Mention) -> bool
+impl core::fmt::Debug for cornacai::mention::Mention
+pub fn cornacai::mention::Mention::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for cornacai::mention::Mention
+impl core::marker::Freeze for cornacai::mention::Mention
+impl core::marker::Send for cornacai::mention::Mention
+impl core::marker::Sync for cornacai::mention::Mention
+impl core::marker::Unpin for cornacai::mention::Mention
+impl core::marker::UnsafeUnpin for cornacai::mention::Mention
+impl core::panic::unwind_safe::RefUnwindSafe for cornacai::mention::Mention
+impl core::panic::unwind_safe::UnwindSafe for cornacai::mention::Mention
+pub fn cornacai::mention::file_uri(&std::path::Path) -> alloc::string::String
+pub fn cornacai::mention::mentions(&str, &std::path::Path) -> alloc::vec::Vec<cornacai::mention::Mention>
+pub fn cornacai::mention::prompt_request(rich_acp::schema::SessionId, &str, &std::path::Path) -> rich_acp::schema::PromptRequest
+pub mod cornacai::session
+pub enum cornacai::session::Entry
+pub cornacai::session::Entry::Agent
+pub cornacai::session::Entry::Agent::doc: intuituive::reactive::Signal<alloc::string::String>
+pub cornacai::session::Entry::Agent::message_id: core::option::Option<alloc::string::String>
+pub cornacai::session::Entry::Notice(alloc::string::String)
+pub cornacai::session::Entry::Thought
+pub cornacai::session::Entry::Thought::doc: intuituive::reactive::Signal<alloc::string::String>
+pub cornacai::session::Entry::Thought::message_id: core::option::Option<alloc::string::String>
+pub cornacai::session::Entry::Thought::open: intuituive::reactive::Signal<bool>
+pub cornacai::session::Entry::Tool
+pub cornacai::session::Entry::Tool::call: intuituive::reactive::Signal<rich_acp::schema::ToolCall>
+pub cornacai::session::Entry::Tool::open: intuituive::reactive::Signal<bool>
+pub cornacai::session::Entry::User
+pub cornacai::session::Entry::User::mentions: alloc::vec::Vec<alloc::string::String>
+pub cornacai::session::Entry::User::text: alloc::string::String
+impl core::clone::Clone for cornacai::session::Entry
+pub fn cornacai::session::Entry::clone(&self) -> cornacai::session::Entry
+impl core::marker::Freeze for cornacai::session::Entry
+impl core::marker::Send for cornacai::session::Entry
+impl core::marker::Sync for cornacai::session::Entry
+impl core::marker::Unpin for cornacai::session::Entry
+impl core::marker::UnsafeUnpin for cornacai::session::Entry
+impl core::panic::unwind_safe::RefUnwindSafe for cornacai::session::Entry
+impl core::panic::unwind_safe::UnwindSafe for cornacai::session::Entry
+pub struct cornacai::session::Session
+pub cornacai::session::Session::busy: intuituive::reactive::Signal<bool>
+pub cornacai::session::Session::entries: intuituive::reactive::Signal<alloc::vec::Vec<cornacai::session::Entry>>
+pub cornacai::session::Session::id: intuituive::reactive::Signal<core::option::Option<rich_acp::schema::SessionId>>
+pub cornacai::session::Session::key: u64
+pub cornacai::session::Session::mode: intuituive::reactive::Signal<core::option::Option<alloc::string::String>>
+pub cornacai::session::Session::plan: intuituive::reactive::Signal<alloc::vec::Vec<rich_acp::schema::PlanEntry>>
+pub cornacai::session::Session::prompt: intuituive::reactive::Signal<alloc::string::String>
+pub cornacai::session::Session::terminals: intuituive::reactive::Signal<std::collections::hash::map::HashMap<alloc::string::String, alloc::string::String>>
+pub cornacai::session::Session::title: intuituive::reactive::Signal<alloc::string::String>
+impl cornacai::session::Session
+pub fn cornacai::session::Session::agent_text(&self) -> alloc::string::String
+pub fn cornacai::session::Session::apply(&self, rich_acp::schema::SessionUpdate)
+pub fn cornacai::session::Session::new(u64) -> cornacai::session::Session
+pub fn cornacai::session::Session::notice(&self, impl core::convert::Into<alloc::string::String>)
+pub fn cornacai::session::Session::push(&self, cornacai::session::Entry)
+pub fn cornacai::session::Session::tool(&self, &str) -> core::option::Option<intuituive::reactive::Signal<rich_acp::schema::ToolCall>>
+pub fn cornacai::session::Session::update_tool(&self, &rich_acp::schema::ToolCallUpdate)
+impl core::clone::Clone for cornacai::session::Session
+pub fn cornacai::session::Session::clone(&self) -> cornacai::session::Session
+impl core::marker::Copy for cornacai::session::Session
+impl core::marker::Freeze for cornacai::session::Session
+impl core::marker::Send for cornacai::session::Session
+impl core::marker::Sync for cornacai::session::Session
+impl core::marker::Unpin for cornacai::session::Session
+impl core::marker::UnsafeUnpin for cornacai::session::Session
+impl core::panic::unwind_safe::RefUnwindSafe for cornacai::session::Session
+impl core::panic::unwind_safe::UnwindSafe for cornacai::session::Session
+pub fn cornacai::session::chunk_text(&rich_acp::schema::ContentBlock) -> alloc::string::String

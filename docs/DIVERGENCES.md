@@ -16,9 +16,9 @@ open ones are **permanent**, each for the reason in its entry:
 |---|---|
 | Resolved in 0.0.22 | §5's residual, §7, §12, §24, §28, §29, §33 (one list-marker edge stays, see the entry) |
 | Resolved earlier | §1 (table), §8, §10, §11, §13, §14 (stack), §27 |
-| Permanent: the language or platform | §1 (`UNICODE_VERSION`), §3, §3a, §6, §14 (per console), §14a, §15, §19 (reflection), §20, §25, §30, §38, §41, §42, §43, §44, §45, §47 |
+| Permanent: the language or platform | §1 (`UNICODE_VERSION`), §3, §3a, §6, §14 (per console), §14a, §15, §19 (reflection), §20, §25, §30, §38, §41, §42, §43, §44, §45, §47, §52 (`--inspect`) |
 | Permanent: another engine | §9 and §18 (syntect, not Pygments), §21 (pulldown-cmark's emphasis) |
-| Permanent: an API or CLI choice | §2, §16 (`f64` counts, byte reads), §17 (a `Live` owns its console; proxy writers, not the process's stdout; nested displays drawn from their last rendering), §31, §32, §34, §40, §46, §48, §49 |
+| Permanent: an API or CLI choice | §2, §16 (`f64` counts, byte reads), §17 (a `Live` owns its console; proxy writers, not the process's stdout; nested displays drawn from their last rendering), §31, §32, §34, §40, §46, §48, §49, §50 (`rich URL`'s downgrade refusal and sanitizing, 0.0.24), §51 (`--theme`), §53 (no arguments) |
 | Permanent: ours, opt-in or additive | §22, §23, §26, §35, §36, §37, §39 |
 
 ## Current divergences
@@ -941,6 +941,75 @@ open ones are **permanent**, each for the reason in its entry:
 - **Why:** additive public API (the closure forms keep their names), and
   the Rust form of a subclass override, a context manager or a list.
 - **Remove:** not planned.
+
+### 50. `rich URL`: no HTTPS downgrade, and fetched content is sanitized
+
+- **Differs:** rich-cli 1.8.1 fetches with `requests.get`, which follows a
+  redirect from `https://` to `http://`, and renders the body with its
+  terminal controls intact. This CLI (0.0.24) refuses a redirect from an
+  `https://` hop to an `http://` one, with an error naming both, before
+  that request is made; an `http://` URL given on the command line is still
+  fetched. Content fetched from a URL is sanitized by default in every mode,
+  as `--sanitize` does: ESC, C1 and other controls (window titles, OSC 52
+  clipboard writes, OSC 8 links, cursor moves) are shown as inert text,
+  while `rich`'s own styling is unaffected.
+- **Why:** a server, or anyone on the path of a downgraded hop, controls
+  those bytes; neither should reach the terminal, or be fetched in the
+  clear, without the user asking. Local files and stdin keep upstream's
+  behaviour.
+- **Opt out:** `--no-sanitize` (or `sanitize = false` in the user's own
+  config, not a working-directory `rich.toml`) lets a URL's escapes through.
+  The downgrade has no flag: fetch the `http://` address itself.
+- **Verdict (0.0.24): permanent** (a CLI choice).
+
+### 51. `rich --theme` names a style theme; the code theme is `--code-theme`
+
+- **Upstream (rich-cli 1.8.1):** `--theme THEME` (environment variable
+  `RICH_THEME`, default `ansi_dark`) is the Pygments style that `Syntax`
+  and Markdown code blocks are highlighted with. Read from rich-cli 1.8.1's
+  `rich_cli/__main__.py` (a copy of the source, not the oracle venv).
+- **Here:** `--theme NAME` selects a named theme of rich styles from the
+  config file (or an installed marketplace theme), applied to the whole
+  console with `--theme-style` and `--theme-file` layered over it; an
+  unknown name is a usage error. The code theme is `--code-theme NAME`
+  (with `--highlighter`), and `RICH_THEME` is not read. With neither
+  option, code is highlighted as before.
+- **Why:** the CLI's config themes (0.0.9) took `--theme` before the
+  rich-cli options were ported, and a theme for every style is the wider
+  meaning. Moving it would break configs and scripts written for this CLI;
+  the code theme has a name of its own instead.
+- **Verdict (0.0.24): permanent** (a CLI choice) until a major CLI
+  release.
+
+### 52. `rich --inspect` reads structured data, not a Python expression
+
+- **Upstream (rich-cli 1.8.1):** `--inspect` `eval`s the resource as a
+  Python expression and shows `rich.inspect` of the object (its methods,
+  not its dunders); a failed `eval` prints the traceback and exits with an
+  error. Read from rich-cli 1.8.1's `rich_cli/__main__.py`.
+- **Here:** `--inspect` (and `rich inspect`) reads the resource (a path,
+  or `-` for standard input) as structured data (JSON, YAML, TOML, XML,
+  INI, dotenv) and shows it as a tree through rs-rich-ext's data views,
+  with `--format`, `--filter`, `--redact` and `--select`.
+- **Why:** a Rust program has no interpreter to evaluate an expression in,
+  nor live objects to reflect on (§19); and evaluating a command-line
+  argument as code is a hazard this CLI does not take on. Structured data
+  is what the flag is used for here.
+- **Verdict (0.0.24): permanent** (the language, and a CLI choice).
+
+### 53. `rich` with no arguments shows the capability demo
+
+- **Upstream (rich-cli 1.8.1):** with no resource and no mode, it prints
+  `Usage: rich [OPTIONS] <PATH,TEXT,URL, or '-'>` and `See rich --help for
+  options`, and exits 0. Read from rich-cli 1.8.1's
+  `rich_cli/__main__.py` (`print_usage`).
+- **Here:** with no resource and no mode (and not `--batch`), it shows
+  the capability demo, as `--demo` does without its delay, and exits 0.
+  `rich --help` is the usage.
+- **Why:** this CLI's first run was its demo before the rich-cli options
+  were ported; a tour of what it renders tells a new user more than a
+  usage line, and nothing scripted depends on the usage line's text.
+- **Verdict (0.0.24): permanent** (a CLI choice).
 
 ## Feature-flagged divergences
 

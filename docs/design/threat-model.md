@@ -23,6 +23,8 @@ other programs:
 6. [TLS, certificates and redirects](#6-tls-certificates-and-redirects).
 7. [ACP agents for Cornacai](#7-acp-agents-for-cornacai) (designed, not
    built yet).
+8. [The log console](#8-the-log-console-rich-console): `rich console`
+   and an intuiTUIve app's events on a local socket.
 
 ## How to read this page
 
@@ -44,6 +46,8 @@ Each surface has the same parts:
     enough to confirm it;
   - **unverified:** neither could be confirmed;
   - **gap:** no mitigation, or only a partial one;
+  - **mitigated:** a gap the 0.0.24 hardening round closed, linked to
+    the fix and its test;
   - **planned:** the feature is designed but not built.
 - **Gaps:** what the review should decide on: fix, accept or record.
 
@@ -205,26 +209,51 @@ packages a user believes are official.
 
 **Gaps:**
 
-- **Supply chain of the signing job.** Its actions are pinned by tag, not
-  by commit; `jsonschema` is installed from PyPI unpinned and `minisign`
-  from apt, in the same job that later receives the key; the validator is
-  fetched from rs-rich-cli at `RS_RICH_CLI_REF`, `main` unless the variable
-  is set. Pin actions by commit, pin the Python package with a hash, and set
-  `RS_RICH_CLI_REF` to a tag. **gap**.
+- **Supply chain of the signing job.** Its actions were pinned by tag, not
+  by commit; `jsonschema` was installed from PyPI unpinned, in the same job
+  that later receives the key; the validator was fetched from rs-rich-cli
+  at `RS_RICH_CLI_REF`, `main` unless the variable was set. Now every
+  action in [`sign-index.yml`](https://github.com/buchochelliq-labs/rs-rich-cli/blob/main/docs/marketplace-repo/.github/workflows/sign-index.yml)
+  is pinned to a full commit SHA, `jsonschema` and its dependencies are
+  installed only from
+  [`requirements-signer.txt`](https://github.com/buchochelliq-labs/rs-rich-cli/blob/main/docs/marketplace-repo/.github/requirements-signer.txt)
+  with `--require-hashes`, and `RS_RICH_CLI_REF` defaults to the commit of
+  rs-rich-cli's `release-0.0.23` tag (`check-listings.yml` too). Applies
+  once the marketplace repository takes the change. **mitigated**
+  (0.0.24). Left: `minisign` still comes from Ubuntu's signed apt archive,
+  and the other marketplace workflows (no signing secrets) still pin
+  actions by tag.
 - **Revocation needs the client to see the next generation.** Key
   generations are fetched from the same location as the index. A client
   pointed at a location that withholds `keys-N+1.json` (a stale mirror, a
-  `RICH_MARKETPLACE` the attacker chose) keeps trusting a revoked main key
-  for as long as that key can sign fresh indexes. The expiry limits replay,
-  not a leaked key. Consider a compiled-in minimum generation per release,
-  and a warning when the official location's generation is behind. **gap**.
-- **The state file is a trust anchor.** `marketplace.state.json` caches the
-  newest verified key generation and is read back without re-verification,
-  checked only against the root's main key id. Anything that can write the
-  install directory can replace the trusted keys, as it can the lockfile.
-  The install directory is made with the default permissions (`umask`). The
-  review should decide whether to re-verify the cached chain from the root
-  on load, and make the directory private. **gap**.
+  `RICH_MARKETPLACE` the attacker chose) kept trusting a revoked main key,
+  even when another location had already shown it the revocation, because
+  the walk's starting point was kept per location. It is now kept per trust
+  root, so once any location has served a revoking generation, an index
+  signed by the revoked key is refused everywhere, with an error saying the
+  location is stale or withholding keys
+  ([`marketplace.rs`](https://github.com/buchochelliq-labs/rs-rich-cli/blob/main/crates/rich-cli/src/marketplace.rs),
+  `open`, `stale_keys_hint`; tested in
+  [`plugin_marketplace.rs`](https://github.com/buchochelliq-labs/rs-rich-cli/blob/main/crates/rich-cli/tests/plugin_marketplace.rs)).
+  **mitigated** (0.0.24) for a client that has seen the revocation. Left,
+  by design: a client that never has depends on the compiled-in generation,
+  so a revocation is followed by a release that compiles in the new one. A
+  signed "current generation" field in the index was considered and not
+  added: the index is signed by the main key, so a holder of a leaked main
+  key could write any value there.
+- **The state file was a trust anchor.** `marketplace.state.json` cached
+  the newest verified key generation as a key set, read back without
+  re-verification and checked only against the root's main key id, and the
+  install directory was made with the default permissions (`umask`). The
+  state now keeps the generations as their `keys-N.json` files and
+  signatures, verified again from the trust root (compiled in, or the one
+  named) whenever they are read; a chain that does not verify is dropped
+  with a warning, so the file can take the walk back to the root but never
+  add a key. A 0.0.23 cached key set is not read. Directories the
+  marketplace creates are mode 700 on Unix (`create_private_dir_all`). Same
+  links as above. **mitigated** (0.0.24). Write access to the install
+  directory still lets someone change what is installed, as the lockfile's
+  entry below says.
 - **`RICH_MARKETPLACE_KEYS` and `--marketplace-keys` replace the trust
   root** with any file. That is their purpose; an environment variable is,
   however, easy to set in a shared shell profile or CI. Consider a warning
@@ -265,8 +294,8 @@ process connects back to; `RS_RICH_WEB_SESSION`.
 |---|---|---|---|
 | E | Someone on the network opens a session | Listens on `127.0.0.1` by default; any other address prints a warning ([`serve.rs`](https://github.com/buchochelliq-labs/rs-rich-cli/blob/main/crates/rich-cli/src/serve.rs)) | verified |
 | S | A request without the printed address opens a session | A 128-bit token from the OS's random source, required by the page and the upgrade, compared in constant time ([`server.rs`](https://github.com/buchochelliq-labs/rs-rich-cli/blob/main/crates/rich-web/src/server.rs), [`http.rs`](https://github.com/buchochelliq-labs/rs-rich-cli/blob/main/crates/rich-web/src/http.rs), `same_token`) | verified |
-| S | Another site's page opens a WebSocket to the local port (cross-site WebSocket hijacking) | The `Origin` must be `http://` plus the `Host` the request was sent to, and that `Host` must be the bound address (or `localhost`) unless bound to all interfaces; or an origin given with `--allow-origin`. No origin, no session (`origin_allowed`) | verified |
-| S | DNS rebinding makes the attacker's name resolve to `127.0.0.1` | For a loopback or specific address, `Host` must be that address or `localhost` | verified |
+| S | Another site's page opens a WebSocket to the local port (cross-site WebSocket hijacking) | The `Origin` must be `http://` plus the `Host` the request was sent to, and that `Host` must be one the server answers to (the bound address or `localhost`; bound to all interfaces, the machine's names and addresses and `--allow-host` names); or an origin given with `--allow-origin`. No origin, no session (`origin_allowed`) | verified |
+| S | DNS rebinding makes the attacker's name resolve to `127.0.0.1` | For a loopback or specific address, `Host` must be that address or `localhost`; bound to all interfaces, one of the machine's names and addresses or an `allow_host` name (0.0.24) | verified |
 | T | The page is framed, or loads another site's script | CSP `default-src 'none'`, scripts and styles from itself, `connect-src` to itself, `frame-ancestors 'none'`, `X-Frame-Options: DENY`; xterm.js is vendored, nothing from a CDN; the title is HTML-escaped and the `Host` filtered before it enters the CSP | verified |
 | D | Slow or many connections, or many tabs | 10 seconds to send a request; 64 pending at most, then `503`; sessions capped (8 by default) | verified |
 | D | A huge frame or a flood of input | WebSocket messages and frames at most 1 MiB; terminal size bounded (`MAX_CELLS`); output backpressure (`max_buffered`) and 1 MiB of unread input | verified (limits), documented (backpressure) |
@@ -281,9 +310,16 @@ process connects back to; `RS_RICH_WEB_SESSION`.
   long as the server. Behind a reverse proxy, the proxy's logs need care.
   Consider moving the token to a cookie or the first WebSocket message after
   the page loads. **gap** (documented as "use a proxy with TLS").
-- **Bound to all interfaces,** any `Host` is accepted as long as the origin
-  matches it, so DNS rebinding is stopped by the token alone. **gap**
-  (low; the bind already warns).
+- **Bound to all interfaces,** any `Host` was accepted as long as the
+  origin matched it, so DNS rebinding was stopped by the token alone. The
+  server now keeps a `Host` allow-list there too: the loopback addresses,
+  `localhost`, the machine's name (and `NAME.local`), the address each
+  connection arrived on, and names given with `Server::allow_host` (`rich
+  serve --allow-host`)
+  ([`http.rs`](https://github.com/buchochelliq-labs/rs-rich-cli/blob/main/crates/rich-web/src/http.rs),
+  `allowed_hosts`, `connection_hosts`; tested in
+  [`serve.rs`](https://github.com/buchochelliq-labs/rs-rich-cli/blob/main/crates/rich-web/tests/serve.rs)).
+  **mitigated** (0.0.24).
 - **Session processes inherit the server's whole environment,** secrets
   included; a served program can read them. Document it, or offer an
   allow-list. **gap** (low).
@@ -312,14 +348,19 @@ link goes where); the DevTools channel, which controls the whole browser.
   the page says arrives as DevTools JSON;
 - Noctiluca and the user's terminal;
 - other local processes and users and the DevTools endpoint;
-- (planned) an agent or script and the control socket of
-  [#816](https://github.com/buchochelliq-labs/rs-rich-cli/issues/816).
+- an agent or script and the control socket
+  ([#816](https://github.com/buchochelliq-labs/rs-rich-cli/issues/816),
+  `--control`), and other local users and that socket;
+- with `--ssh HOST`: this machine and the SSH server, which carries every
+  request; and other local users and the tunnel's loopback port.
 
 **Entry points:** DOM snapshots and accessibility trees; titles, URLs, link
 targets, alt text, option labels, dialog text, download names; the
 bookmarks file; DevTools events (`Runtime.bindingCalled`,
 `Browser.downloadWillBegin`); the address bar; Chrome's switches; `--chrome`
-and `RICH_EMBED_CHROME`.
+and `RICH_EMBED_CHROME`; `--ssh HOST`, `--ssh-arg` and what ssh writes on
+standard error; the control socket's requests; the screencast's pixels in
+the pixel view.
 
 | | Threat | Mitigation | State |
 |---|---|---|---|
@@ -333,6 +374,19 @@ and `RICH_EMBED_CHROME`.
 | I | Password fields reach the screen, the model or `--dump` | Never read; shown as a fixed mask; the change-watcher leaves them out | documented |
 | E | A page navigates to `file://` or `chrome://` | Links are followed by clicking them in the page, so Chrome's own rules apply; only the user's address bar and bookmarks call `Page.navigate` directly | verified (link path), unverified (Chrome's behaviour for every scheme) |
 | I | Noctiluca phones home | No telemetry, update check or account; searches go to the configured engine | documented |
+| E | `--ssh`'s host is read as an ssh option (`-oProxyCommand=…` runs a command) | A host starting with `-`, or with spaces or control characters, is refused; the host goes after `--`; the user's own options only through `--ssh-arg` ([`ssh.rs`](https://github.com/buchochelliq-labs/rs-rich-cli/blob/main/crates/noctiluca/src/ssh.rs), `check_host`) | verified |
+| I | `--ssh`'s tunnel is reachable from the network | `-D 127.0.0.1:PORT`: loopback only, whatever `GatewayPorts` says; nothing listens on any other address | verified (arguments) |
+| I | Another local user finds the tunnel's port | The port is drawn at random from the system's randomness among 10 000–65 535, not taken in the kernel's order (`random_port`); a Unix-socket forward is not an option, as Chrome takes only a TCP SOCKS proxy. This narrows the gap below; it does not close it | verified (the draw) |
+| S, I | Another local user's program takes the tunnel's port first and sees every request | `ExitOnForwardFailure=yes`, so ssh fails rather than run without the port; ready only once the port answers SOCKS5 while ssh lives; on Linux the listener's owner in `/proc/net/tcp` must be this user, or Chrome is not started (`listener_uid`) | verified (Linux) |
+| I | Requests leave this machine directly despite `--ssh` (DNS, WebRTC, QUIC, loopback) | Chrome's resolver maps every name to "not found" but the proxy's own address, so names go to the far side (SOCKS5 remote DNS); `<-loopback>` sends loopback through the proxy; WebRTC only over the proxy (`disable_non_proxied_udp`); QUIC off (`chrome_switches`) | verified (switches), unverified (Chrome's behaviour: the live test needs Chrome) |
+| T | ssh's messages corrupt the screen, or carry escapes | ssh's standard error is read on a thread, kept (eight lines) and cleaned (`clean`) before the status bar shows one; prompts go to `/dev/tty` before the browser takes the screen; a reconnect never prompts (`BatchMode=yes`) | verified |
+| D | A killed Noctiluca leaves the tunnel running | The tunnel is a child, killed when the `Tunnel` drops; on Linux `PR_SET_PDEATHSIG` stops it if Noctiluca dies | verified (drop), documented (death signal) |
+| S, E | Another local user drives the browser through the control socket | Off unless asked (`--control`, `--read-only`, `[agent] control`); the socket's directory is the user's own, mode 700, made with that mode before the bind, and an existing one that is another user's, open to others or a link is refused; each peer's user is checked where the platform tells (`SO_PEERCRED`, `getpeereid`), and the client checks the server's (`rich_interact::control`: `private_dir`, `peer_allowed`) | verified (tests: the mode, an open or linked directory refused, the peer check) |
+| T | A symbolic link redirects the socket to another file | The socket path and its directory are read without following links; a link is refused by the server and the client, and a file that is not a left-over socket of the user's is never replaced | verified (tests) |
+| E | A read-only session changes the page | The server refuses every verb marked as changing anything before the handler runs; unknown verbs are refused too | verified (tests: every changing verb refused, the page untouched) |
+| D | A client holds the socket or floods it | Requests of at most 64 kB, replies of at most 16 MB, 5-second read and write timeouts, at most 8 connections answered at once | verified (tests: an oversized request, a silent client) |
+| I | The control socket is reachable from the network | A Unix socket only; nothing listens on a port | verified (by construction) |
+| T | The pixel view's frames carry escapes to the terminal | The page's pixels are only pixels: Noctiluca encodes them itself into Kitty's protocol (`rich_art::tiles`, `Picture`); nothing the page says reaches those escapes | documented |
 
 **Gaps:**
 
@@ -345,26 +399,69 @@ and `RICH_EMBED_CHROME`.
 - **Downloads by quarantine** are designed (ask first, a cleaned name, never
   run) but not wired into Noctiluca; when they are, the review covers the
   quarantine's location, its permissions and the move. **planned**.
-- **The agent-control CLI (#816):** a control socket, `noctiluca ls` and
-  `action`, Ctrl+G and `--read-only`, off by default and generic in the
-  framework, with the agent's verbs in Noctiluca. To review when it lands:
-  - the socket's location and mode (this user only), and that it refuses
-    other users' connections (peer credentials on Unix; a named pipe's
-    ACL on Windows);
-  - `--read-only` enforced by the server, not by the client asking nicely;
-  - an agent driving a kept, signed-in profile: page text is attacker
-    input to the agent (prompt injection), so what a page says must not
-    turn into actions the user did not approve; consider refusing control
-    with a kept profile unless the user says so;
-  - every action recorded somewhere the user can read (repudiation).
-  **planned**.
-- **The SGR-Pixels mouse (#819) and terminal hosts' APIs (#820):** new
-  input parsers (fuzz them) and, for #820, a client that talks to the
-  terminal's own control channel (kitty's or WezTerm's remote control, for
-  example), which can run commands in the terminal. It should use only the
-  verbs it needs, and only on the user's own terminal. **planned**.
-- **`--ssh HOST` (#817):** where Chrome and the profile live, and what
-  crosses the connection. **planned**.
+- **The agent-control CLI (#816):** in, with the rows above. What is
+  left:
+  - **Windows** has no control socket yet (a named pipe with an ACL for
+    the user): the commands say "Unix only for now". **gap** (low).
+  - **Page text reaches the agent.** A snapshot is the page's own text,
+    cleaned of control characters but not of meaning, so a page can write
+    instructions aimed at an agent. The agent must treat it as data. With
+    a kept profile, a session that is not read-only lets an agent act
+    signed in; Noctiluca prints a note when both are on. **gap** (medium):
+    consider refusing control with a kept profile unless the user says so.
+  - **Repudiation.** Every action shows in the status bar as it happens,
+    but nothing is written to a log that outlives the session. **gap**
+    (low).
+- **The SGR-Pixels mouse (#819):** no new parser. A report in pixels has
+  the same shape as one in cells (`CSI < b ; x ; y M`), so crossterm's,
+  termion's and termwiz's own SGR parsers read it; the session divides it
+  back into cells by the cell size the kernel's window size gives
+  (never by 0: no size, no pixel mode) and clamps what overflows. The one
+  new answer, DECRQM's for mode 1016, goes through the start-up query's
+  existing reader. A page sees only where it was clicked, inside the box
+  clicked (`ClickAt`, kept inside the element's border box), which a
+  click at the cell's centre already told it. **verified** (PTY tests).
+- **Terminal hosts' APIs (#820):** `rich_interact::host` talks to the
+  terminal's own control channel (terminal-browser's socket, tmux, kitty's
+  or WezTerm's remote control, zellij), which can run commands and type
+  into panes. What holds:
+  - **Commands are words:** every adapter runs its program with an
+    argument list, never `sh -c`; tmux, which hands a pane's command to a
+    shell, gets each word single-quoted (`shell_quote`, tested against
+    `sh` with `$(…)`, `;` and quotes). **verified**.
+  - **Only methods the terminal lists** in `hello` are sent; the rest fail
+    before anything is written. **verified** (a fake socket server).
+  - **Only this user's socket:** a path that is not a socket, or is
+    another user's, is refused; a reply is read up to 1 MB with a 5 s
+    timeout, and parsed by serde_json; the reply and its panes have a
+    fuzz target (`terminal_host`). **verified**.
+  - **Who calls it:** Noctiluca only for `--split`, which runs its own
+    binary with the user's own command line. `send_text` is for #816's
+    "send to agent", and must stay a user's action, never driven by page
+    text. **to review with #816**.
+  - **`TERMINAL_BROWSER_TERMINAL_SOCKET` and `TMUX` come from the
+    environment:** whoever sets them already runs as the user.
+    **accepted**.
+- **`--ssh HOST` (#817):** Chrome and the profile stay on this machine;
+  the SSH server carries every request and resolves every name, as a
+  network would (HTTPS stays end to end; plain HTTP is readable there).
+  Gaps that remain:
+  - **Other local users can use the tunnel** while it runs: `ssh -D`
+    takes SOCKS5 with no authentication, and Chrome cannot speak SOCKS5's
+    password method (nor use a Unix-socket proxy), so a user of this
+    machine who finds the port reaches the remote's network as you. The
+    port is now drawn at random, which makes it harder to find, not
+    impossible. Documented in the guide (on a shared machine, run
+    Noctiluca on the remote instead). The fix is a relay of
+    Noctiluca's own on the port that checks each connection's owner (in
+    `/proc/net/tcp` on Linux) and forwards over ssh's control socket
+    (`-W`). **gap** (medium, shared machines only).
+  - **A kept profile mixes the two `localhost`s:** `--profile` with and
+    without `--ssh` shares one site's cookies and storage between this
+    machine's `localhost` and the remote's. Warned on start and
+    documented. **accepted**.
+  - **macOS and Windows** have no listener-owner check (no
+    `/proc/net/tcp`), and no death signal for ssh. **gap** (low).
 - **Bot checks:** the `Runtime` domain is visible to pages; accepted and
   documented, not a security gap.
 
@@ -421,28 +518,39 @@ store and the bundled roots.
 
 | | Threat | Mitigation | State |
 |---|---|---|---|
-| S | A network attacker serves a forged certificate | rustls through ureq, verification always on; the system's store first (the platform verifier), Mozilla's bundled roots as the fallback | verified |
-| T | A redirect downgrades a marketplace download to `http://` | Marketplace downloads and statistics are HTTPS only, redirects included; ureq's own redirects are off and each hop is checked ([`redirect.rs`](https://github.com/buchochelliq-labs/rs-rich-cli/blob/main/crates/rich-marketplace/src/redirect.rs), `get_following`) | verified |
+| S | A network attacker serves a forged certificate | rustls through ureq, verification always on; the system's store (the platform verifier), Mozilla's bundled roots only when that store cannot be used ([`tls.rs`](https://github.com/buchochelliq-labs/rs-rich-cli/blob/main/crates/rich-marketplace/src/tls.rs), `may_be_trust`) | verified |
+| T | A redirect downgrades a marketplace download, or a `rich URL` fetch, to `http://` | Marketplace downloads and statistics are HTTPS only, redirects included; ureq's own redirects are off and each hop is checked ([`redirect.rs`](https://github.com/buchochelliq-labs/rs-rich-cli/blob/main/crates/rich-marketplace/src/redirect.rs), `get_following`); `rich URL` refuses `https://` to `http://` (0.0.24) | verified |
 | D | Endless redirects or a slow server | At most five hops for the marketplace (ten for `rich URL`, three for statistics); one overall deadline for the whole chain and its body | verified |
 | D | A decompression bomb | `rich URL` caps the decoded body at 16 MiB; the marketplace reads at most the declared size after decoding | verified |
 | T | TLS-inspecting proxies break verification | Accepted: their root is in the system's store, and the marketplace's trust comes from signatures and hashes, not TLS | documented |
 
 **Gaps:**
 
-- **The bundled fallback can override the system's decision.** Any TLS or
-  I/O failure with the system's store is retried with the bundled roots. A
-  root the user or an administrator removed from the system store on
-  purpose, or a revocation the platform verifier enforced, is then
-  overridden by webpki-roots. Consider retrying only when the system store
-  is empty or unusable, not when it refused a certificate. **gap**.
-- **`rich URL` follows a redirect from `https://` to `http://`** (as
-  upstream's `requests` does), and accepts `http://` URLs. **gap** (parity;
-  a warning on a downgrade would not change output).
-- **`rich URL` renders fetched content unsanitized** in upstream's modes,
-  so a server can send escape sequences to the user's terminal (titles,
-  OSC 52 clipboard writes, OSC 8 links, on terminals that honour them).
-  `--sanitize` prevents it. Consider sanitizing by default for content
-  fetched from the network, recorded as a divergence. **gap**.
+- **The bundled fallback could override the system's decision.** Any TLS
+  or I/O failure with the system's store was retried with the bundled
+  roots, so a root removed from the system store on purpose, or a
+  revocation the platform verifier enforced, could be overridden. The
+  bundled roots are now tried only when the system store cannot be used
+  at all (no CA certificates loaded, or no platform verifier); a
+  certificate the system's verifier refused stays refused
+  ([`tls.rs`](https://github.com/buchochelliq-labs/rs-rich-cli/blob/main/crates/rich-marketplace/src/tls.rs),
+  `may_be_trust`; tested in
+  [`https_trust.rs`](https://github.com/buchochelliq-labs/rs-rich-cli/blob/main/crates/rich-marketplace/tests/https_trust.rs)).
+  **mitigated** (0.0.24).
+- **`rich URL` followed a redirect from `https://` to `http://`** (as
+  upstream's `requests` does). It now refuses one before requesting it, with
+  an error naming both addresses; an `http://` URL given as such is still
+  fetched ([`lib.rs`](https://github.com/buchochelliq-labs/rs-rich-cli/blob/main/crates/rich-cli/src/lib.rs),
+  `fetch_url`; tested in
+  [`url_fetch.rs`](https://github.com/buchochelliq-labs/rs-rich-cli/blob/main/crates/rich-cli/tests/url_fetch.rs);
+  [DIVERGENCES §50](../DIVERGENCES.md#50-rich-url-no-https-downgrade-and-fetched-content-is-sanitized)).
+  **mitigated** (0.0.24).
+- **`rich URL` rendered fetched content unsanitized** in upstream's modes,
+  so a server could send escape sequences to the user's terminal (titles,
+  OSC 52 clipboard writes, OSC 8 links). Content fetched from a URL is now
+  sanitized by default in every mode, `rich chart` and `rich profile`
+  included; `--no-sanitize` opts out (same links as above). **mitigated**
+  (0.0.24).
 - **No certificate pinning** for the official marketplace. Not needed while
   signatures carry the trust; recorded so the review confirms it.
 
@@ -488,6 +596,43 @@ command (and, in phase 4, the marketplace's `agent` kind).
 confined at all (it runs as the user); an audit log of every approved
 action; and the session store's location and permissions once sessions are
 saved.
+
+## 8. The log console (`rich console`)
+
+Code: [`console.rs`](https://github.com/buchochelliq-labs/rs-rich-cli/blob/main/crates/rich-cli/src/console.rs)
+in the CLI, and intuiTUIve's
+[`log/console.rs`](https://github.com/buchochelliq-labs/rs-rich-cli/blob/main/crates/rich-intuituive/src/log/console.rs)
+(the `tracing` plugin, 0.0.24, #815). An app run with `INTUITUIVE_CONSOLE`
+sends its `tracing` events, and the inspector's trace (keys, focus,
+signal writes), as JSON lines to a Unix domain socket where `rich console`
+listens. Unix only for now.
+
+**Assets:** what the app logs (which may hold the user's data, and the keys
+typed while the trace is on); the user's terminal, where the console
+prints.
+
+**Trust boundaries:** other local users and the socket; the app and the
+console (the same user); the events' text and the terminal.
+
+**Entry points:** connections to the socket and the lines they send; the
+socket's path (`--socket`, `INTUITUIVE_CONSOLE`).
+
+| | Threat | Mitigation | State |
+|---|---|---|---|
+| I, T | Another local user connects to the console, or the app connects to another user's console | The socket's directory must be the user's alone (made 0700 when missing; one others can enter or write is refused, never changed); the socket is made 0600 and checked right after the bind, inside that directory, so no one else can reach it before (the process-wide umask is left alone); the console drops a connection whose peer is another user, and the app refuses a path that is not a socket of its own user or a listener of another user (`SO_PEERCRED` on Linux and Android, `getpeereid` on macOS and the BSDs; the directory's mode elsewhere). Never a TCP port | verified (Linux tests: modes, refusals, the user's own peer) |
+| T | A path planted at the socket's place: a symbolic link, or a file the console would delete | A symbolic link at the path, or as the directory, is refused, by both sides; anything at the path but a stale socket of the user's is refused and left alone | verified |
+| T | Event text drives the terminal | The console prints events through rs-rich-ext's structured event presentation, as `rich log` does | documented |
+| D | A slow console stalls the app | Events go through a bounded queue on a thread of their own; a full queue drops them | documented |
+
+**Gaps:**
+
+- **Windows:** no named pipe yet; `rich console` refuses to run and
+  `install_console` does nothing there. A pipe needs an ACL for the user
+  alone, `PIPE_REJECT_REMOTE_CLIENTS`, and a check of the server's owner
+  from the client. **planned**.
+- **Another user's peer** is refused by code that tests cannot reach
+  without a second account; the decision itself is unit-tested. **verified
+  (logic)**, unverified (a live second user).
 
 ## The review checklist
 
@@ -567,8 +712,19 @@ says, not in a public issue.
 - [ ] Navigation to `file://`, `chrome://` and `javascript:` from a page.
 - [ ] The control socket (#816), `--read-only`, and prompt injection
       through page text, once it lands.
-- [ ] The terminal hosts' API client (#820) and the pixel mouse parser
-      (#819), once they land.
+- [ ] `--ssh`: the host never read as an option, the tunnel on loopback
+      only, the port's owner checked, no direct DNS, WebRTC or QUIC (the
+      live test with Chrome), and the shared-machine gap.
+- [x] `--ssh`: the tunnel's port drawn at random, not in the kernel's
+      order (0.0.24, `random_port`); the relay that checks each
+      connection's owner is still open.
+- [ ] The terminal hosts' API client (#820): commands as words, tmux's
+      quoting, methods only from `hello`, the socket's owner, and that
+      `send_text` stays a user's action.
+- [x] The terminal hosts' reply parser has a fuzz target
+      (`terminal_host`: `host::parse_reply` and `host::panes_of`; 0.0.24).
+- [ ] The pixel mouse (#819): pixel mode only with a known cell size, and
+      `RICH_PIXEL_MOUSE=0` turns it off.
 
 ### The embed PTY host
 
@@ -599,6 +755,19 @@ says, not in a public issue.
 - [ ] Agent text sanitized; no fetches without the user.
 - [ ] Cancellation answers pending requests.
 - [ ] The marketplace's `agent` kind.
+
+### The log console
+
+- [x] The socket's directory the user's alone, made before the bind and
+      refused (not changed) when others can use it; the socket made 0600
+      in it right after the bind, the umask untouched (0.0.24, tests in
+      `console.rs`).
+- [x] The peer's user checked on both sides where the platform says
+      (`SO_PEERCRED`, `getpeereid`); a symbolic link or a file at the path
+      refused and left alone (0.0.24).
+- [ ] A live test with a second user account, on Linux and macOS.
+- [ ] The Windows named pipe: its ACL, remote clients refused, the
+      server's owner checked by the app, once it is built.
 
 ### Across surfaces
 

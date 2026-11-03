@@ -1501,8 +1501,9 @@ fn output_options() -> Vec<ArgSpec> {
             "sanitize",
             OUTPUT,
             "Replace input terminal controls, JSON/notebook strings, titles and captions \
-             with visible inert text. On by default for `rich view`, `rich schema`, `rich log` \
-             and text `rich diff`; --no-sanitize turns it off there",
+             with visible inert text. On by default for content fetched from a URL, and for \
+             `rich view`, `rich schema`, `rich log` and text `rich diff`; --no-sanitize turns \
+             it off there",
         ),
         option(
             "report",
@@ -1948,6 +1949,7 @@ pub(crate) fn spec() -> CommandSpec {
     }
     spec = spec.subcommand(super::shell::command());
     spec = spec.subcommand(super::spin::command());
+    spec = spec.subcommand(super::console::command());
     #[cfg(feature = "serve")]
     {
         spec = spec.subcommand(super::serve::command());
@@ -2204,6 +2206,7 @@ mod tests {
     const BANNER: &str = include_str!("banner.rs");
     const SHELL: &str = include_str!("shell.rs");
     const SPIN: &str = include_str!("spin.rs");
+    const CONSOLE: &str = include_str!("console.rs");
     const MARKETPLACE: &str = include_str!("marketplace.rs");
 
     /// The source of the item that starts with `start`, up to the next
@@ -2275,6 +2278,7 @@ mod tests {
         out.extend(option_literals(item(BANNER, "fn parse_args(")));
         out.extend(option_literals(item(SHELL, "fn parse_args(")));
         out.extend(option_literals(item(SPIN, "fn parse_args(")));
+        out.extend(option_literals(item(CONSOLE, "fn parse_args(")));
         out.extend(option_literals(item(MARKETPLACE, "fn parse(")));
         out.extend(option_literals(item(MARKETPLACE, "const PUBLISH_OPTIONS")));
         #[cfg(feature = "art")]
@@ -2440,6 +2444,7 @@ mod tests {
             "inspect",
             "shell",
             "spin",
+            "console",
         ] {
             assert!(spec.find_subcommand(name).is_some(), "{name}");
         }

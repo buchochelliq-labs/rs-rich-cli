@@ -771,6 +771,109 @@ turns it on in the headless driver, so tests see the exact bytes, and
 out (see below) the session ends any update left open before it restores
 the other modes.
 
+### Pixel-precise mouse reports
+
+The start-up query also asks whether the terminal knows SGR-Pixels mouse
+reports (mode 1016, DECRQM). When it does, and the window size gives the
+cells' size in pixels, a session with the mouse on turns 1016 on after
+1006 and reads each report back into cells: `Mouse::column` and
+`Mouse::row` are the cell as ever, and `Mouse::pixel` is where in the cell
+the pointer was (`Subcell`). `Mouse::precise` gives fractional cells, the
+cell's centre without pixels. `RICH_PIXEL_MOUSE=0` turns it off, and the
+restore turns 1016 off before the other mouse modes. `Mouse::from_pixels`
+builds one from a pixel position, for a backend or a test of your own.
+
+## The terminal host: splits, panes and focus
+
+Behind the `host` feature, `rich_interact::host` asks the terminal itself
+(or the multiplexer it runs in) to open a split beside the program, type
+into another pane, or move the focus: an app can open itself beside a
+coding agent, or hand it some text.
+
+```rust
+use rich_interact::host::{detect, Direction, Split};
+
+if let Some(host) = detect() {
+    let pane = host.split(&Split::new(Direction::Right, vec!["htop".into()]))?;
+    println!("opened {} in {}", pane.id, host.name());
+}
+```
+
+`detect` reads the environment, innermost first:
+
+| Host | Found by | What it can do |
+|---|---|---|
+| a terminal with terminal-browser's socket protocol (`SocketHost`) | `TERMINAL_BROWSER_TERMINAL_SOCKET` | what its `hello` lists |
+| tmux (`Tmux`) | `TMUX`, `TMUX_PANE` | splits, panes, neighbours, text, focus |
+| zellij (`Zellij`) | `ZELLIJ` | splits right and down |
+| WezTerm (`WezTerm`) | `WEZTERM_PANE` | splits, panes, text, focus |
+| kitty (`Kitty`) | `KITTY_WINDOW_ID`, with `allow_remote_control` on | splits right and down, text, focus |
+
+- **The socket protocol** is one JSON request a connection, ending in a
+  newline, and one JSON reply; `hello` first, which lists the terminal's
+  methods (`getCurrentPane`, `listPanes`, `neighbor`, `split`, `sendText`,
+  `pasteKey`, `focusPane`). A method it does not list is never sent: the
+  call fails with `HostError::Unsupported`, as it does for what an adapter
+  cannot do. An error reply is `HostError::Refused` with its reason.
+- **Commands are words, not shell lines.** A split's command is a list;
+  each adapter passes it as arguments, and tmux, which runs a pane's
+  command through a shell, gets each word quoted (`host::shell_quote`).
+- **Only this user's socket:** `SocketHost::connect` refuses a path that is
+  not a socket or is another user's.
+- **What it can do is real:** a split runs a command and `send_text` types
+  into a pane that may be a shell. Call them for what the user asked, never
+  for what a page, a file or a model's output says.
+
+Not verified here: the socket protocol's exact message shapes against
+terminal-browser's own implementation (the client reads `result` or the
+reply itself, and an `error` as a string or an object with a `message`),
+and the kitty, WezTerm and zellij adapters against those terminals (their
+arguments are unit tested; tmux is tested against a real server).
+
+## A control socket: driven by scripts and agents
+
+Behind the `control` feature (Unix only for now), `rich_interact::control`
+lets a running program answer requests from scripts and agents of the same
+user: one JSON line in, `{"verb": "open", "args": {…}}`, and one JSON line
+out, `{"ok": true, "result": …}` or `{"ok": false, "error": "…"}`. The
+program names its verbs and says which change anything; Noctiluca's
+`noctiluca action` is built on it.
+
+```rust
+use rich_interact::control::{self, ControlServer, Request, Verb};
+use serde_json::json;
+
+const VERBS: &[Verb] = &[Verb::read("info", "who is here"), Verb::write("open", "open it")];
+let dir = control::runtime_dir("my-app")?; // $XDG_RUNTIME_DIR/my-app, mode 700
+let server = ControlServer::bind(dir.join("my-app-1.sock"), VERBS)?.read_only(true);
+std::thread::spawn(move || server.serve(|request: &Request| match request.verb.as_str() {
+    "info" => Ok(json!({"name": "my-app"})),
+    _ => Err("not here".into()),
+}));
+let reply = control::call(&dir.join("my-app-1.sock"), &Request::new("info", json!({})), control::IO_TIMEOUT)?;
+```
+
+What it protects:
+
+- **This user only.** The socket's directory is made the user's own with
+  mode 700 before the socket is bound (`private_dir`); one that is
+  another user's, open to others, or a symbolic link is refused. Where the
+  platform tells (Linux, macOS, the BSDs), each peer's user is checked
+  (`peer_uid`, `peer_allowed`), and `call` checks the server's.
+- **No links followed:** the server and `call` refuse a symbolic link at
+  the socket's path or its directory, and `bind` replaces only a socket of
+  the user's that no one answers.
+- **Read-only sessions** (`ControlServer::read_only`) refuse every verb
+  that mutates before the handler runs; a verb the program did not name is
+  refused too.
+- **Bounded:** requests up to `MAX_REQUEST` (64 kB), replies up to
+  `MAX_REPLY` (16 MB), reads and writes timing out (`IO_TIMEOUT`, 5 s, or
+  `ControlServer::timeout`), at most `MAX_CONNECTIONS` answered at once.
+- **No network listener.**
+
+`sessions(dir, prefix)` lists the sockets of a program's running sessions;
+`Closer::close` stops `serve` from another thread and removes the socket.
+
 ## Several at once: the event loop
 
 `EventLoop` runs several mounted components together:

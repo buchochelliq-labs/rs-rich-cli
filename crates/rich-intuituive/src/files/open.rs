@@ -102,7 +102,9 @@ pub fn open_with(
 /// [`Tasks::on_fail`](crate::files::Tasks::on_fail)). `done` runs once
 /// every archive is extracted. Any other opener is [`open_with`]'s.
 ///
-/// ```
+/// (The example runs with the `archive` feature, which extracts.)
+#[cfg_attr(feature = "archive", doc = "```")]
+#[cfg_attr(not(feature = "archive"), doc = "```ignore")]
 /// use intuituive::files::{open_with_tasks, opener_rules, tasks, tasks_panel};
 /// use intuituive::prelude::*;
 ///

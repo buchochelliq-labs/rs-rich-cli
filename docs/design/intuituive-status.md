@@ -14,6 +14,64 @@ rules are in [the demo gaps](intuituive-demo-gaps.md).
   modern design), and Noctiluca's mouse, 30 fps video, start page and
   lanternfish with the animated banner.
 - **Next:** wave 2 (the plan's Order of work), once wave 1 merges.
+- **Wave 2, W2a is done** on `claude/next-priority-items-3c5p8e-wip-w2a`:
+  #799 `widgets::diff_view` (hunks, folds, decisions, `accepted_text`),
+  #801 `Palette` and `Theme::from_palette`/`named` (Textual's 21 themes,
+  shades checked against Textual 8.2.8), #806 user keymaps (`bind_id`,
+  `App::keymap`, `keymap_file`, `cx.set_keymap`), #802 `Log::write`. Left
+  for later: the Theme and Keys commands of the palette (#803, wave 3),
+  the parity audit's rows, a tape of a review (no media recorded).
+- **Wave 2b** (branch `024-w2b`, backup
+  `claude/next-priority-items-3c5p8e-wip-w2b`): #807 maximize, #808 modes
+  and screen results, #810 Pilot helpers, #809 screenshots (rs-rich-ext's
+  `Screen::to_svg` too), #811 `list_of`, #813 the six small widgets and
+  #815 the log console (`rich console` in the CLI) are done. #814 is in
+  part: easings and `files::dir_tree` done; `freeze_rows` and
+  `match_brackets`/`EditorTheme` left. Also left: `list_of_virtual` (#811's
+  variant on `scroll_virtual`), the key panel's help sections (#813), and
+  #815's Windows named pipe.
+- **Wave 3a** (branch `024-w3a`, backup
+  `claude/next-priority-items-3c5p8e-wip-w3a`): Cornacai (#794) phase 3
+  and most of phase 4. The new `cornacai` crate (binary and library):
+  sessions as tabs on one connection, streamed Markdown that follows the
+  end, folded tool-call cards, permission prompts, writes reviewed as a
+  diff hunk by hunk, commands asked about, `@` mentions as resource
+  links, the shell pane on `PtyHost`, the guide page and a checked tape
+  over a fake agent. rs-rich-acp's `replay` (the fake agent) is public;
+  intuiTUIve core is unchanged. Left: the marketplace's `agent` kind (not
+  a small change: a kind with no artifact, `requires.acp`, the schema,
+  validator, client and CLI), resume and a session store, agent terminals
+  on a PTY, "send to the agent" from the shell.
+- **Wave 3b** (branch `024-w3b`, backup
+  `claude/next-priority-items-3c5p8e-wip-w3b`): #803 palette providers
+  (`Provider`, `Hit`, `HitSink` with background searches cancelled by the
+  next query, `Themes`, `SystemCommands`, `App::provider`,
+  `cx.palette_of`) and #805 the Markdown viewer (`markdown_viewer`,
+  `MarkdownViewer`, `files::markdown_loader`) are done. #812 is in part:
+  slice 1 (`>`, `*`, `&` nesting, `$var: value;`), slice 2 (structural,
+  theme and focus pseudo-classes) and slice 3 (`margin`, `visibility`,
+  `scrollbar-color`/`-background`) are done; left: `offset`, `opacity`,
+  `tint`, `outline`, `hatch`, `keyline`, `layer`, `scrollbar-color-hover`
+  and the scrollbar's size, `:inline`, and states that change layout.
+
+- **Wave 3c** (branch `024-w3c`, backup
+  `claude/next-priority-items-3c5p8e-wip-w3c`): Noctiluca's #816 and #818
+  are done. #816: `rich_interact::control` (feature `control`, Unix only),
+  `--control`/`--read-only`, `noctiluca ls`/`action`, `Ctrl+G`
+  (`agent.send`) and the guide page "Scripts and coding agents". #818:
+  `rich_art::tiles`, intuiTUIve's `tiles_of`, and the pixel view
+  (`--pixels`, `Alt+X`) with its benchmark. Left: the Windows named pipe,
+  CSS selectors as `click` targets, an action log, tapes for both, and the
+  pixel view in a real Kitty and against live Chrome.
+
+- **Wave 3d** (branch `024-w3d`, backup
+  `claude/next-priority-items-3c5p8e-wip-w3d`): wave 2b's leftovers are
+  done: `freeze_rows` (tables and lists), `match_brackets` and
+  `EditorTheme` (#814), `list_of_virtual` (#811), the key panel's
+  sections (#813); #815's console is Unix only for now (the Windows named
+  pipe stays a follow-up). DIVERGENCES §51 to §53 record the CLI's three
+  meaning differences. Hardening round: the console's socket, Noctiluca's
+  tunnel port, and a `terminal_host` fuzz target (threat model §8).
 
 ## Where things stood (2026-11-01)
 

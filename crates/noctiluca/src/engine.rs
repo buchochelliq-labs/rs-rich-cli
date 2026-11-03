@@ -139,6 +139,18 @@ pub enum MediaOp {
 pub enum PageAction {
     /// A real mouse click at the middle of the node, scrolled into view.
     Click(NodeId),
+    /// A real mouse click at a point of the node: `x` and `y` CSS pixels
+    /// from its box's top left corner, scrolled into view. A click on a
+    /// picture, a canvas or a frame lands where the terminal's pointer
+    /// was, to the pixel when the terminal reports pixels (#819).
+    ClickAt { node: NodeId, x: f64, y: f64 },
+    /// A real mouse click at `x`, `y` CSS pixels of the viewport: the
+    /// pixel view's pointer, where the page is drawn as Chrome paints it
+    /// (#818).
+    ClickPoint { x: f64, y: f64 },
+    /// A key pressed in the page, as real input (`Input.dispatchKeyEvent`):
+    /// the pixel view passes keys through, and an agent's `key` verb.
+    Key(rich_intuituive::interact::Key),
     /// Move the page's focus to the node.
     Focus(NodeId),
     /// Type `text` into what has the focus (`Input.insertText`).

@@ -136,8 +136,13 @@ pub fn status(b: Browser) -> Node {
     let keys_for = move |id: &str| b.keymap.with(|k| keys_label(k, id));
     let state = text(move || {
         if let Some(hints) = b.hints.get() {
+            let what = if b.agent_pick.get() {
+                "send to agent: type a label"
+            } else {
+                "type a label"
+            };
             return format!(
-                " [bold black on yellow] hints [/] type a label: {}  [dim]Esc cancels[/]",
+                " [bold black on yellow] hints [/] {what}: {}  [dim]Esc cancels[/]",
                 markup(&hints.typed)
             );
         }
@@ -154,6 +159,10 @@ pub fn status(b: Browser) -> Node {
             );
         }
         let mut parts = vec![b.view.get().name().to_string()];
+        // `--ssh`: where the network goes, and a dropped tunnel.
+        if let Some(tunnel) = b.tunnel.get() {
+            parts.push(tunnel);
+        }
         // A page with more than the model reads says so.
         if b.page.with(|p| p.as_ref().is_some_and(|p| p.truncated)) {
             parts.push("[yellow]page cut: too long to read whole[/]".into());

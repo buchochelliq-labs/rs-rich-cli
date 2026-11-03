@@ -1,8 +1,8 @@
 //! Ready-made widgets, built on the public [`Widget`] trait as an app's own
 //! would be: a [`table`] with a selectable row and sized columns, a
 //! [`virtual_list`] of any length, a [`tabs`] strip, a [`tree`], [`split`]
-//! panes, a [`calendar`], a [`time_picker`], a [`datetime_picker`] and a
-//! [`hex_view`].
+//! panes, a [`calendar`], a [`time_picker`], a [`datetime_picker`], a
+//! [`hex_view`] and an interactive [`diff_view`].
 //!
 //! [`scroll`](crate::scroll) and anchored pop-ups
 //! ([`Ctx::popup`](crate::Ctx::popup)) are part of the framework itself,
@@ -34,6 +34,7 @@ pub use crate::calendar::{
 pub use crate::datetime::{
     DateTimeOptions, TimeOptions, datetime_picker, time_picker, time_picker_with,
 };
+pub use crate::diff_view::{Decision, DiffOptions, accepted_text, diff_view, diff_view_with};
 pub use crate::help::KeyHintsOptions;
 pub use crate::hex::hex_view;
 pub use crate::list::{
@@ -262,6 +263,10 @@ pub(crate) struct Table {
     /// Where the bar was drawn, and what it showed: the first row, the
     /// rows and the rows in view.
     bar_at: Cell<Option<(crate::screen::Rect, usize, usize, usize)>>,
+    /// The frozen rows the last draw kept in view
+    /// ([`freeze_rows`](TableOptions::freeze_rows)): the bar counts the
+    /// rows after them.
+    frozen_rows: Cell<usize>,
     /// The [`offset`](TableOptions::offset) signal's value as last read or
     /// set, and [`offset_x`](TableOptions::offset_x)'s.
     seen: Cell<Option<usize>>,
@@ -399,6 +404,10 @@ pub struct TableOptions {
     pub row_height_for: Option<Box<dyn Fn(usize) -> u16>>,
     /// Where the last draw put the columns and the rows.
     pub layout: Option<TableLayout>,
+    /// The leading rows that stay in view under the header while the rest
+    /// scroll: Textual's `fixed_rows` (a pinned row, totals at the top).
+    /// The cursor still moves through them.
+    pub freeze_rows: usize,
 }
 
 /// A sorted column's title, from its title and the order.
@@ -516,6 +525,30 @@ impl TableOptions {
     pub fn freeze_columns(mut self, columns: usize) -> TableOptions {
         self.scroll_x = true;
         self.freeze = columns;
+        self
+    }
+
+    /// Keep the first `rows` rows in view under the header while the rest
+    /// scroll: Textual's `DataTable(fixed_rows=n)`. ↑/↓ and PgUp/PgDn still
+    /// move the cursor through them; the scrolled rows have what is left of
+    /// the body. [`Node::freeze_rows`] does the same on a list.
+    ///
+    /// ```
+    /// use intuituive::prelude::*;
+    /// use intuituive::widgets::{table_with, Column, TableOptions};
+    ///
+    /// let app = App::new(|| {
+    ///     let columns = vec![Column::new("Name", Size::Flex(1))];
+    ///     let rows = || (0..50).map(|i| vec![format!("row {i}")]).collect();
+    ///     table_with(columns, rows, signal(0), TableOptions::default().freeze_rows(1))
+    /// });
+    /// let mut driver = app.driver(12, 5);
+    /// driver.press("pagedown pagedown");
+    /// assert_eq!(driver.screen().plain()[1].trim_end(), "row 0");
+    /// assert_ne!(driver.screen().plain()[2].trim_end(), "row 1");
+    /// ```
+    pub fn freeze_rows(mut self, rows: usize) -> TableOptions {
+        self.freeze_rows = rows;
         self
     }
 
@@ -1098,6 +1131,7 @@ pub fn virtual_list(
         across: Default::default(),
         bar: Bar::default(),
         bar_at: Cell::new(None),
+        frozen_rows: Cell::new(0),
         seen: Cell::new(None),
         seen_x: Cell::new(None),
         rects: None,
@@ -1212,6 +1246,7 @@ fn table_options(
         across: Default::default(),
         bar: Bar::default(),
         bar_at: Cell::new(None),
+        frozen_rows: Cell::new(0),
         seen: Cell::new(None),
         seen_x: Cell::new(None),
         rects: None,
@@ -1873,7 +1908,7 @@ impl Widget for Table {
         self.refresh_columns();
         let (width, height) = (canvas.width(), canvas.height());
         let (top, footer_lines) = self.chrome();
-        let body = height.saturating_sub(top + footer_lines) as usize;
+        let full_body = height.saturating_sub(top + footer_lines) as usize;
         let len = self.rows.len();
         let selected = self
             .selection
@@ -1920,11 +1955,38 @@ impl Widget for Table {
             // One line a row: fetched once the first row is known.
             (true, _) => Fetch::All(Vec::new()),
         };
+        // Frozen rows (`freeze_rows`) stay under the header, as many as
+        // fit; the rows after them scroll in what is left of the body.
+        let frozen_heights: Vec<usize> = match self.options.freeze_rows.min(len) {
+            0 => Vec::new(),
+            n if single => vec![1; n],
+            n => {
+                let near: Vec<Vec<String>> = (0..n).map(|i| fetch.row(i)).collect();
+                let room = width.saturating_sub(gutter + indent);
+                let tracks = self.tracks(&near, &titles, room);
+                let widths = solve(room, spacing, &tracks);
+                near.iter()
+                    .enumerate()
+                    .map(|(i, row)| self.height_of(console, i, row, &widths))
+                    .collect()
+            }
+        };
+        let (mut frozen, mut frozen_lines) = (0usize, 0usize);
+        for h in &frozen_heights {
+            if frozen_lines + h > full_body {
+                break;
+            }
+            frozen_lines += h;
+            frozen += 1;
+        }
+        let body = full_body - frozen_lines;
+        let rows_top = top + frozen_lines as u16;
+        self.frozen_rows.set(frozen);
         // Keep the selection in view: with one line a row as it always was;
         // else by the rows' heights at the widths the rows near the old
         // first row give.
         let padding = self.options.scroll_padding;
-        let guess = self.first.get().min(len.saturating_sub(1));
+        let guess = self.first.get().max(frozen).min(len.saturating_sub(1));
         let widths_at = |fetch: &mut Fetch, room: u16| -> Vec<u16> {
             let near: Vec<Vec<String>> = (guess..(guess + body.max(1)).min(len))
                 .map(|i| fetch.row(i))
@@ -1933,9 +1995,24 @@ impl Widget for Table {
             let tracks = self.tracks(&near, &titles, room);
             solve(room, spacing, &tracks)
         };
+        // The first scrolled row, the frozen ones aside.
+        let scrolled = |height: &mut dyn FnMut(usize) -> usize| -> usize {
+            let mut height = |i: usize| height(i + frozen);
+            let from = self.first.get().saturating_sub(frozen);
+            // A frozen row selected brings the rest back to their start.
+            let selected = selected.map(|s| s.saturating_sub(frozen));
+            frozen
+                + crate::list::first_in_view(
+                    len - frozen,
+                    body,
+                    from,
+                    selected,
+                    padding,
+                    &mut height,
+                )
+        };
         let first_at = |fetch: &mut Fetch, widths: &[u16]| -> usize {
-            let mut height = |i: usize| self.height_of(console, i, &fetch.row(i), widths);
-            crate::list::first_in_view(len, body, self.first.get(), selected, padding, &mut height)
+            scrolled(&mut |i: usize| self.height_of(console, i, &fetch.row(i), widths))
         };
         // The rows from `first` that fit in the body.
         let in_view = |fetch: &mut Fetch, first: usize, widths: &[u16]| -> usize {
@@ -1958,7 +2035,7 @@ impl Widget for Table {
         let mut content_width = width.saturating_sub(gutter);
         let mut widths = Vec::new();
         let mut first = if single {
-            crate::list::first_in_view(len, body, self.first.get(), selected, padding, &mut |_| 1)
+            scrolled(&mut |_| 1)
         } else {
             widths = widths_at(&mut fetch, content_width);
             first_at(&mut fetch, &widths)
@@ -1966,11 +2043,11 @@ impl Widget for Table {
         // The bar keeps a column once the rows do not all fit.
         let mut bar_rect = None;
         if let Some(look) = self.bar.look.clone()
-            && look.wanted(len, in_view(&mut fetch, first, &widths))
+            && look.wanted(len - frozen, in_view(&mut fetch, first, &widths))
         {
             let (rest, at) = look.split(width, height);
             content_width = rest.width.saturating_sub(gutter);
-            let at = crate::screen::Rect::new(at.x, top, at.width, body as u16);
+            let at = crate::screen::Rect::new(at.x, rows_top, at.width, body as u16);
             bar_rect = Some((rest.x, at));
             if !single {
                 widths = widths_at(&mut fetch, content_width);
@@ -1988,7 +2065,23 @@ impl Widget for Table {
         }
         // The rows in view, and their heights.
         let mut placed: Vec<(usize, u16, u16)> = Vec::new();
-        let mut rows: Vec<Vec<String>> = if single {
+        // The frozen rows first, under the header.
+        let mut frozen_rows: Vec<Vec<String>> = Vec::new();
+        if frozen > 0 {
+            frozen_rows = match &mut fetch {
+                Fetch::All(all) if !all.is_empty() => all.iter().take(frozen).cloned().collect(),
+                Fetch::All(_) => self.shown(0, frozen),
+                lazy => (0..frozen).map(|i| lazy.row(i)).collect(),
+            };
+            let mut y = top;
+            for (i, h) in frozen_heights.iter().take(frozen).enumerate() {
+                placed.push((i, y, *h as u16));
+                y += *h as u16;
+            }
+        }
+        let scrolled_rows: Vec<Vec<String>> = if body == 0 {
+            Vec::new()
+        } else if single {
             let rows = match &fetch {
                 Fetch::All(all) if !all.is_empty() => {
                     all.iter().skip(first).take(body).cloned().collect()
@@ -1996,7 +2089,7 @@ impl Widget for Table {
                 _ => self.shown(first, body),
             };
             for i in 0..rows.len() {
-                placed.push((first + i, top + i as u16, 1));
+                placed.push((first + i, rows_top + i as u16, 1));
             }
             rows
         } else {
@@ -2008,7 +2101,7 @@ impl Widget for Table {
                 if !rows.is_empty() && used + h > body {
                     break;
                 }
-                placed.push((i, top + used as u16, h as u16));
+                placed.push((i, rows_top + used as u16, h as u16));
                 used += h;
                 rows.push(row);
                 if used >= body {
@@ -2021,8 +2114,11 @@ impl Widget for Table {
         self.body.set(if single {
             body.max(1)
         } else {
-            rows.len().max(1)
+            scrolled_rows.len().max(1)
         });
+        let scrolled_count = scrolled_rows.len();
+        let mut rows = frozen_rows;
+        rows.extend(scrolled_rows);
         // Column widths: content columns fit their title and the rows in
         // view; a column the user dragged keeps that width.
         let room = content_width.saturating_sub(indent);
@@ -2302,7 +2398,8 @@ impl Widget for Table {
         match bar_rect {
             Some((_, at)) => {
                 let look = self.bar.look.clone().expect("a bar was laid out");
-                let view = rows.len().max(1);
+                let view = scrolled_count.max(1);
+                let (first, len) = (first - frozen, len - frozen);
                 look.paint(console, canvas, at, first, len, view);
                 self.bar_at.set(Some((at, first, len, view)));
             }
@@ -2319,8 +2416,13 @@ impl Widget for Table {
         {
             match self.bar.mouse(cx, mouse, rect, first, len, view) {
                 Some(Some(to)) => {
+                    // The bar counts the rows after the frozen ones.
+                    let frozen = self.frozen_rows.get();
+                    let to = to + frozen;
                     self.first.set(to);
-                    if let Some(selected) = self.selection.get_untracked() {
+                    if let Some(selected) = self.selection.get_untracked()
+                        && selected >= frozen
+                    {
                         let last = (to + view).saturating_sub(1);
                         let inside = selected.clamp(to, last.max(to));
                         if inside != selected {
@@ -2877,7 +2979,14 @@ impl Node {
     /// assert_eq!(driver.screen().plain()[1].trim_end(), "1 after 1");
     /// ```
     pub fn on_select(self, handler: impl FnMut(usize, &mut crate::app::Ctx) + 'static) -> Node {
-        self.widget_mut(|tabs: &mut Tabs| tabs.on_select = Some(Box::new(handler)));
+        let mut handler = Some(handler);
+        self.widget_mut(|tabs: &mut Tabs| {
+            tabs.on_select = handler.take().map(|h| Box::new(h) as _)
+        });
+        if let Some(handler) = handler.take() {
+            // A [`list_of`](crate::list_of): Enter or a click on a row.
+            self.node_list(|list| list.set_on_select(Box::new(handler)));
+        }
         self
     }
 }

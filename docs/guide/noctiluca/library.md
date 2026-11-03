@@ -53,8 +53,16 @@ profile, `no_js`, and the size in cells. Downloads are denied unless
 
 `Tab::spawn(engine, update)` runs the engine on a thread of its own.
 Send it a `Command` (`Open`, `History`, `Act`, `Activate`, `Media`,
-`Resize`, `Refresh`), and it calls `update` with each `Update`: a new
-`Page`, the address and loading state, an action's result, a download.
+`Resize`, `Refresh`; `Pixels`, `Point`, `Key` and `Type` for the pixel
+view and agents), and it calls `update` with each `Update`: a new `Page`,
+the address and loading state, an action's result, a download, a frame of
+the whole viewport (`Screen`) while the pixel view shows.
+
+`noctiluca::control` is the control socket's side in the browser: its
+`VERBS`, `snapshot` (a page as text with control ids, usable on its own on
+a `Page`), `resolve` (a control by id or name), and the client
+`noctiluca ls` and `noctiluca action` are made of (`parse_action`, `call`,
+`ls`, `action`).
 
 When the page changes, the tab waits a moment (100 ms) and reads it once,
 so a page that changes every frame costs one reading per moment, not one

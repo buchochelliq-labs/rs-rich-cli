@@ -62,6 +62,12 @@ pub struct Options {
     pub view: Option<View>,
     /// How images show; else the config's.
     pub images: Option<Images>,
+    /// `--ssh HOST`'s tunnel, which the app watches and reconnects: the
+    /// status bar says when it drops ([`crate::ssh`]).
+    pub tunnel: Option<crate::ssh::TunnelLink>,
+    /// The control socket the app answers, with `--control` or
+    /// `--read-only` ([`crate::control`]).
+    pub control: Option<crate::control::ControlLink>,
 }
 
 /// The app's state, all of it in signals so it can be copied into every
@@ -126,10 +132,30 @@ pub struct Browser {
     /// Whether the start page shows: started with no address, until the
     /// first page is opened ([`crate::start`]).
     pub start: Signal<bool>,
+    /// What the status bar says about `--ssh`'s tunnel, as markup; `None`
+    /// without one.
+    pub tunnel: Signal<Option<String>>,
+    /// Reconnect a dropped tunnel now, not after its wait (reload asks).
+    tunnel_now: Signal<bool>,
+    /// How many readings of the page have come: an agent waits for the
+    /// next after an action ([`crate::control`]).
+    pub reads: Signal<u64>,
+    /// Whether the control socket refuses every verb that changes
+    /// anything.
+    pub read_only: Signal<bool>,
+    /// The hints under way pick an element to send to the agent
+    /// (`agent.send`), not one to use.
+    pub(crate) agent_pick: Signal<bool>,
+    /// The pixel view's tiler and pace ([`crate::pixel_view`]).
+    pub(crate) screen: Signal<Rc<RefCell<crate::pixel_view::Screen>>>,
+    /// The pixel view's tiles, as shown.
+    pub screen_tiles: Signal<Vec<rich_art::tiles::Tile>>,
+    /// What the pixel view has sent.
+    pub screen_stats: Signal<crate::pixel_view::ScreenStats>,
 }
 
 impl Browser {
-    fn send(&self, command: Command) -> u64 {
+    pub(crate) fn send(&self, command: Command) -> u64 {
         if self.start.get_untracked() && crate::start::leaves(&command) {
             self.start.set(false);
         }
@@ -184,7 +210,7 @@ impl Browser {
         }
     }
 
-    fn url(&self) -> String {
+    pub(crate) fn url(&self) -> String {
         self.page
             .with(|p| p.as_ref().map(|p| p.url.clone()))
             .unwrap_or_else(|| self.state.with(|s| crate::clean::clean(&s.url)))
@@ -243,7 +269,7 @@ impl Browser {
         }
     }
 
-    fn say(&self, markup: impl Into<String>) {
+    pub(crate) fn say(&self, markup: impl Into<String>) {
         self.message.set(markup.into());
     }
 }
@@ -252,7 +278,7 @@ impl Browser {
 /// every piece of reader mode in turn (a media region or a control as its
 /// rows of nothing), or the projection, with each row's key and place on
 /// the page.
-fn lay_out(page: &Page, view: View, width: u16, marks: &Marks) -> Projection {
+pub(crate) fn lay_out(page: &Page, view: View, width: u16, marks: &Marks) -> Projection {
     match view {
         View::Reader => {
             let mut lines = Vec::new();
@@ -417,6 +443,20 @@ pub fn availability(b: Browser, id: &str) -> Result<(), String> {
         {
             Err("No live log on this page.".into())
         }
+        "view.pixels" if !crate::pixel_view::available(b) => {
+            Err(crate::pixel_view::NEEDS_KITTY.into())
+        }
+        "agent.send"
+            if !b.page.with(|p| {
+                p.as_ref()
+                    .is_some_and(|p| p.controls.iter().any(|c| !c.disabled))
+            }) =>
+        {
+            Err(
+                "Nothing on this page to pick: the links and controls are what Ctrl+G sends."
+                    .into(),
+            )
+        }
         "bookmark" | "reload" | "address" | "site.bind" | "site.keys" if !has_page => {
             Err("No page yet.".into())
         }
@@ -468,9 +508,31 @@ pub fn run(b: Browser, id: &str, cx: &mut Ctx) {
         "open" => open_prompt(b, String::new(), cx),
         "address" => open_prompt(b, b.url(), cx),
         "hints" => start_hints(b),
+        "agent.send" => {
+            start_hints(b);
+            b.agent_pick.set(true);
+        }
+        "view.pixels" => {
+            b.view.update(|v| {
+                *v = if *v == View::Pixels {
+                    View::Projection
+                } else {
+                    View::Pixels
+                }
+            });
+            b.say(format!(
+                "{} view · {} leaves",
+                b.view.get_untracked().name(),
+                markup(&keys_label_of(b, "view.pixels"))
+            ));
+        }
         "back" => drop(b.send(Command::History(HistoryStep::Back))),
         "forward" => drop(b.send(Command::History(HistoryStep::Forward))),
-        "reload" => drop(b.send(Command::History(HistoryStep::Reload))),
+        "reload" => {
+            // A dropped tunnel is reconnected first, at once.
+            b.tunnel_now.set(true);
+            b.send(Command::History(HistoryStep::Reload));
+        }
         "media.freeze" => {
             let frozen = !b.frozen.get_untracked();
             b.frozen.set(frozen);
@@ -1125,6 +1187,108 @@ fn activate(b: Browser, index: usize, cx: &mut Ctx) {
     });
 }
 
+/// What "send to agent" sends for control `index`: what it is, where it
+/// goes, and the page it is on.
+pub fn agent_text(page: &Page, index: usize) -> Option<String> {
+    let control = page.controls.get(index)?;
+    let mut text = format!(
+        "[Noctiluca] {} {:?}",
+        control.role.name(),
+        crate::clean::clean(&control.name)
+    );
+    if let Some(href) = &control.href {
+        text.push_str(&format!(" -> {}", crate::clean::clean(href)));
+    }
+    if let Some(value) = control.value.as_deref().filter(|v| !v.is_empty()) {
+        text.push_str(&format!(" = {:?}", crate::clean::clean(value)));
+    }
+    text.push_str(&format!(
+        "\non {} ({})\n",
+        crate::clean::clean(&page.url),
+        crate::clean::clean(&page.title)
+    ));
+    Some(text)
+}
+
+/// Send control `index`'s text and the page's address to where
+/// `[agent] send` says: the clipboard, the pane beside this one, or a
+/// pane by its id, through the terminal's API.
+fn send_to_agent(b: Browser, index: usize, cx: &mut Ctx) {
+    use crate::config::SendTo;
+    let Some(text) = b
+        .page
+        .with_untracked(|p| p.as_ref().and_then(|p| agent_text(p, index)))
+    else {
+        return;
+    };
+    let to = b.config.with_untracked(|c| c.agent.send.clone());
+    let pane = |host: &dyn rich_interact::host::TerminalHost| -> Result<rich_interact::host::Pane, String> {
+        match &to {
+            SendTo::Pane(id) => Ok(rich_interact::host::Pane::new(id.clone())),
+            _ => [
+                rich_interact::host::Direction::Right,
+                rich_interact::host::Direction::Left,
+                rich_interact::host::Direction::Down,
+                rich_interact::host::Direction::Up,
+            ]
+            .into_iter()
+            .find_map(|d| host.neighbor(d).ok().flatten())
+            .ok_or_else(|| "no pane beside this one".to_string()),
+        }
+    };
+    match to {
+        SendTo::Clipboard => {
+            cx.copy(text);
+            b.say("[cyan]Sent to the clipboard[/] for the agent");
+        }
+        SendTo::Neighbor | SendTo::Pane(_) => {
+            let sent = rich_interact::host::detect()
+                .ok_or_else(|| "no terminal API here (tmux, WezTerm, kitty, a socket)".to_string())
+                .and_then(|host| {
+                    let pane = pane(host.as_ref())?;
+                    host.send_text(&pane, &text)
+                        .map(|()| pane.id.clone())
+                        .map_err(|e| e.to_string())
+                });
+            match sent {
+                Ok(id) => b.say(format!("[cyan]Sent to pane {}[/]", markup(&id))),
+                Err(why) => {
+                    cx.copy(text);
+                    cx.toast(format!(
+                        "[yellow]Could not send to a pane ({}): copied instead.[/]",
+                        markup(&why)
+                    ));
+                }
+            }
+        }
+    }
+}
+
+/// Answer the control socket: each request runs on the app's thread
+/// ([`crate::control::handle`]), and its connection waits for the answer.
+#[cfg(unix)]
+fn serve_control(b: Browser, server: rich_interact::control::ControlServer) {
+    spawn_stream(move |stream| {
+        let proxy = std::sync::Mutex::new(stream.proxy().clone());
+        server.serve(move |request| {
+            let (reply, answer) = mpsc::channel();
+            let (verb, args) = (request.verb.clone(), request.args.clone());
+            let posted = proxy
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .run_with(move |cx| {
+                    let _ = reply.send(crate::control::handle(b, &verb, &args, cx));
+                });
+            if !posted {
+                return Err("the browser is closing".into());
+            }
+            answer
+                .recv_timeout(Duration::from_secs(10))
+                .unwrap_or_else(|_| Err("the browser did not answer in time".into()))
+        });
+    });
+}
+
 /// A key while hints are under way: whether it was used.
 fn hint_key(b: Browser, key: Key, cx: &mut Ctx) -> bool {
     let Some(mut hints) = b.hints.get_untracked() else {
@@ -1133,6 +1297,7 @@ fn hint_key(b: Browser, key: Key, cx: &mut Ctx) -> bool {
     match key.code {
         KeyCode::Escape => {
             b.hints.set(None);
+            b.agent_pick.set(false);
         }
         KeyCode::Backspace => {
             hints.typed.pop();
@@ -1143,7 +1308,12 @@ fn hint_key(b: Browser, key: Key, cx: &mut Ctx) -> bool {
             if let Some((_, index)) = hints.labels.iter().find(|(l, _)| *l == hints.typed) {
                 let index = *index;
                 b.hints.set(None);
-                activate(b, index, cx);
+                if b.agent_pick.get_untracked() {
+                    b.agent_pick.set(false);
+                    send_to_agent(b, index, cx);
+                } else {
+                    activate(b, index, cx);
+                }
             } else if hints
                 .labels
                 .iter()
@@ -1152,6 +1322,7 @@ fn hint_key(b: Browser, key: Key, cx: &mut Ctx) -> bool {
                 b.hints.set(Some(hints));
             } else {
                 b.hints.set(None);
+                b.agent_pick.set(false);
                 cx.toast(format!("[yellow]No hint {}.[/]", markup(&hints.typed)));
             }
         }
@@ -1703,6 +1874,7 @@ fn apply_site(b: Browser, url: &str) {
         .as_ref()
         .and_then(|s| s.view)
         .filter(|v| *v != View::Raster)
+        .filter(|v| *v != View::Pixels || crate::pixel_view::available(b))
     {
         b.view.set(view);
     }
@@ -1744,6 +1916,7 @@ fn apply(b: Browser, update: Update, cx: &mut Ctx) {
                 }
             }
             b.page.set(Some(page));
+            b.reads.update(|n| *n += 1);
             b.refresh_controls();
             if new_document {
                 apply_site(b, &url);
@@ -1764,6 +1937,7 @@ fn apply(b: Browser, update: Update, cx: &mut Ctx) {
             }
         }
         Update::Frame(frame) => video_frame(b, &frame),
+        Update::Screen(frame) => crate::pixel_view::frame(b, &frame),
         Update::Still(node) => {
             b.pacing.with_untracked(|p| p.borrow_mut().still(node));
             send_regions(b);
@@ -1959,7 +2133,19 @@ fn reader_view(b: Browser) -> Node {
                         })
                 });
                 let view = rich_intuituive::ImageView::new().pixels(b.pixels.get_untracked());
-                let picture = picture_of(move || shown_picture(b, node).map(|(p, _)| p), view);
+                let picture = picture_of(move || shown_picture(b, node).map(|(p, _)| p), view)
+                    // A click on a picture, a canvas or a frame reaches the
+                    // page where the pointer was in it (#819).
+                    .on_mouse(move |cx, mouse| {
+                        mouse.is_click()
+                            && click_media_at(
+                                b,
+                                node,
+                                mouse.precise(),
+                                (width.into(), rows.into()),
+                                cx,
+                            )
+                    });
                 row([picture.fixed(width), label("").flex(1)]).fixed(rows)
             }
             PieceKey::Controls(nodes) => web_widget(b, nodes),
@@ -2055,6 +2241,45 @@ fn click_row(b: Browser, row: usize, column: usize, cx: &mut Ctx) -> bool {
         }
         None => false,
     }
+}
+
+/// A click at `at` (fractional cells from the drawing's top left) of the
+/// media box `node` drawn in `cells` (columns, rows): a picture, a canvas,
+/// an SVG drawing or a frame is clicked in the page at that point, to the
+/// pixel when the terminal reports the mouse in pixels (#819), else at the
+/// cell's centre. Whether it was one of those.
+fn click_media_at(
+    b: Browser,
+    node: NodeId,
+    at: (f32, f32),
+    cells: (usize, usize),
+    _cx: &mut Ctx,
+) -> bool {
+    let target = b.page.with_untracked(|p| {
+        let page = p.as_ref()?;
+        let media = page.media.iter().find(|m| m.node == node)?;
+        let pointable = matches!(
+            media.kind,
+            MediaKind::Image | MediaKind::Canvas | MediaKind::Svg | MediaKind::Frame
+        );
+        pointable.then(|| (page.document, media.rect.width, media.rect.height))
+    });
+    let Some((document, width, height)) = target else {
+        return false;
+    };
+    let (x, y) = layout::point_in(width, height, cells.0, cells.1, at);
+    let id = b.send(Command::ClickAt {
+        document,
+        node,
+        x,
+        y,
+    });
+    b.after(id, |result, cx| {
+        if let Err(refusal) = result {
+            cx.toast(format!("[red]{}[/]", markup(&refusal.to_string())));
+        }
+    });
+    true
 }
 
 /// A click on the page's control `index`: what a link hint does.
@@ -2163,6 +2388,38 @@ fn projection_view(b: Browser) -> Node {
                     .collect(),
                 None => drawn,
             }
+        })
+        // A click on a picture, a canvas or a frame, not on a control, is
+        // the page's at that point of it (#819).
+        .on_mouse(move |cx, mouse| {
+            if !mouse.is_click() {
+                return false;
+            }
+            let (x, y) = mouse.precise();
+            let column = usize::from(mouse.column);
+            let target = b.layout.with_untracked(|l| {
+                let row = l.rows.get(&key).copied().unwrap_or(i);
+                let line = l.lines.get(row)?;
+                if layout::control_at(line, column).is_some() {
+                    return None;
+                }
+                let region = l
+                    .regions
+                    .iter()
+                    .find(|r| r.on(row) && (r.column..r.column + r.cols).contains(&column))?;
+                let at = (
+                    x - region.column as f32,
+                    (row - region.row) as f32 + (y - f32::from(mouse.row)),
+                );
+                Some((region.media, at, (region.cols, region.rows)))
+            });
+            let Some((media, at, cells)) = target else {
+                return false;
+            };
+            let node = b
+                .page
+                .with_untracked(|p| p.as_ref()?.media.get(media).map(|m| m.node));
+            node.is_some_and(|node| click_media_at(b, node, at, cells, cx))
         })
         .on_click_at(move |cx, column, _| {
             let row = b
@@ -2296,6 +2553,82 @@ fn video_pacing(config: &Config, images: Images) -> Pacing {
     Pacing::new(budget, Pacing::start_for(asked, Pixels::detect()))
 }
 
+/// How often the app looks at `--ssh`'s tunnel.
+const TUNNEL_LOOK: Duration = Duration::from_millis(500);
+/// The first wait before a dropped tunnel is reconnected, doubled after
+/// each failed try up to [`TUNNEL_WAIT_MAX`].
+const TUNNEL_WAIT: Duration = Duration::from_secs(2);
+const TUNNEL_WAIT_MAX: Duration = Duration::from_secs(30);
+
+/// The app's watch over `--ssh`'s tunnel: it says in the status bar what
+/// the tunnel does, and reconnects a dropped one after a wait that grows
+/// (without prompting: ssh's `BatchMode`), or at once on reload.
+struct TunnelWatch {
+    link: crate::ssh::TunnelLink,
+    host: String,
+    wait: Duration,
+    retry_at: Option<Instant>,
+}
+
+impl TunnelWatch {
+    fn new(link: crate::ssh::TunnelLink) -> TunnelWatch {
+        TunnelWatch {
+            host: link.host(),
+            link,
+            wait: TUNNEL_WAIT,
+            retry_at: None,
+        }
+    }
+
+    /// The status bar's words for `state`.
+    fn says(&self, state: &crate::ssh::TunnelState) -> String {
+        use crate::ssh::TunnelState;
+        let host = markup(&self.host);
+        match state {
+            TunnelState::Up => format!("[dim]via ssh {host}[/]"),
+            TunnelState::Connecting => format!("[yellow]ssh {host}: reconnecting…[/]"),
+            TunnelState::Down(why) => {
+                let left = self.retry_at.map_or(0, |at| {
+                    at.saturating_duration_since(Instant::now()).as_secs()
+                });
+                format!(
+                    "[red]ssh {host} dropped: {}[/] · retrying in {left} s (reload: now)",
+                    markup(why)
+                )
+            }
+        }
+    }
+
+    fn look(&mut self, b: Browser) {
+        use crate::ssh::TunnelState;
+        let mut state = self.link.check();
+        if let TunnelState::Down(_) = &state {
+            let now = Instant::now();
+            let retry_at = *self.retry_at.get_or_insert(now + self.wait);
+            if now >= retry_at || b.tunnel_now.get_untracked() {
+                self.retry_at = None;
+                self.wait = (self.wait * 2).min(TUNNEL_WAIT_MAX);
+                state = match self.link.reconnect() {
+                    Ok(()) => TunnelState::Connecting,
+                    Err(error) => TunnelState::Down(error.to_string()),
+                };
+            }
+        } else if state == TunnelState::Up {
+            self.wait = TUNNEL_WAIT;
+            self.retry_at = None;
+        }
+        if b.tunnel_now.get_untracked() {
+            b.tunnel_now.set(false);
+        }
+        let says = self.says(&state);
+        if b.tunnel
+            .with_untracked(|t| t.as_deref() != Some(says.as_str()))
+        {
+            b.tunnel.set(Some(says));
+        }
+    }
+}
+
 /// The browser app over `engine`.
 pub fn app(engine: Box<dyn Engine>, options: Options) -> App {
     let Options {
@@ -2304,6 +2637,8 @@ pub fn app(engine: Box<dyn Engine>, options: Options) -> App {
         url,
         view,
         images,
+        tunnel,
+        control,
     } = options;
     let start_page = url.is_none() && config.home.is_none();
     let start = url
@@ -2326,6 +2661,7 @@ pub fn app(engine: Box<dyn Engine>, options: Options) -> App {
         } else {
             first_view
         });
+        let read_only = control.as_ref().is_some_and(|c| c.is_read_only());
         let hints: Signal<Option<Hints>> = signal(None);
         let find: Signal<Option<String>> = signal(None);
         let adapt = signal(configured_adapt);
@@ -2414,7 +2750,40 @@ pub fn app(engine: Box<dyn Engine>, options: Options) -> App {
             encoder: signal(Rc::new(encoder)),
             regions_sent: signal((Vec::new(), Vec::new(), 1.0)),
             start: signal(false),
+            tunnel: signal(None),
+            tunnel_now: signal(false),
+            reads: signal(0),
+            read_only: signal(read_only),
+            agent_pick: signal(false),
+            screen: signal(crate::pixel_view::state()),
+            screen_tiles: signal(Vec::new()),
+            screen_stats: signal(crate::pixel_view::ScreenStats::default()),
         };
+        // The pixel view needs Kitty graphics; without them it says so and
+        // the projection shows.
+        if b.view.get_untracked() == View::Pixels && !crate::pixel_view::available(b) {
+            b.view.set(View::Projection);
+            b.say(format!("[yellow]{}[/]", crate::pixel_view::NEEDS_KITTY));
+        }
+        // The tab runs the screencast for the pixel view while it shows.
+        if b.view.get_untracked() == View::Pixels {
+            b.send(Command::Pixels(true));
+        }
+        watch(
+            move || b.view.get() == View::Pixels,
+            move |on, _| {
+                b.send(Command::Pixels(on));
+            },
+        );
+        #[cfg(unix)]
+        if let Some(server) = control.as_ref().and_then(|c| c.take()) {
+            serve_control(b, server);
+        }
+        if let Some(link) = tunnel.clone() {
+            let mut watch = TunnelWatch::new(link);
+            b.tunnel.set(Some(watch.says(&crate::ssh::TunnelState::Up)));
+            every(TUNNEL_LOOK, move |_| watch.look(b));
+        }
         spawn_stream(move |stream| {
             let proxy = stream.proxy().clone();
             while let Ok(update) = receive.recv() {
@@ -2468,6 +2837,7 @@ pub fn app(engine: Box<dyn Engine>, options: Options) -> App {
             move || b.view.get(),
             move |view| match view {
                 View::Reader => reader_view(b),
+                View::Pixels => crate::pixel_view::view(b),
                 _ => projection_view(b),
             },
         )
@@ -2512,6 +2882,12 @@ pub fn app(engine: Box<dyn Engine>, options: Options) -> App {
             .on_any_key(move |cx, key| {
                 if b.hints.with_untracked(Option::is_some) {
                     return hint_key(b, key, cx);
+                }
+                // The pixel view passes keys to the page, but for those
+                // with Ctrl or Alt and the F keys.
+                if b.view.with_untracked(|v| *v == View::Pixels) && crate::pixel_view::passes(key) {
+                    b.send(Command::Key(key));
+                    return true;
                 }
                 if let Some(target) = site_key(b, key) {
                     b.message.set(String::new());

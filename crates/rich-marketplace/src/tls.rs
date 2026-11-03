@@ -1,5 +1,5 @@
 //! TLS trust for HTTPS downloads: the system's certificate store first,
-//! Mozilla's bundled roots as the fallback.
+//! Mozilla's bundled roots only when that store cannot be used.
 //!
 //! The one place that chooses, for [`HttpsTransport`](crate::HttpsTransport)
 //! and for the CLI's other ureq clients (`rich <url>`, the marketplace's
@@ -9,9 +9,14 @@
 //! (`invalid peer certificate: UnknownIssuer`). The system store is tried
 //! first (ureq's platform verifier: the OS verifier on Windows and macOS,
 //! the system's CA files on Linux, where `SSL_CERT_FILE` and
-//! `SSL_CERT_DIR` are honoured); when that attempt fails at the transport
-//! or TLS level, the request is made once more with the bundled roots, so
-//! a machine without a usable store still works.
+//! `SSL_CERT_DIR` are honoured).
+//!
+//! The bundled roots are a fallback for a machine with no usable store (no
+//! CA certificates could be loaded, or the platform verifier could not be
+//! set up), never a second opinion: when the system's verifier refuses a
+//! certificate (an issuer it does not trust, a root an administrator
+//! removed, a revoked certificate), that refusal stands. See
+//! [`may_be_trust`].
 //!
 //! TLS is transport only: the marketplace's trust comes from its minisign
 //! signatures and SHA-256 pins, which are checked the same either way.
@@ -52,8 +57,8 @@ impl Trust {
     }
 }
 
-/// A request that failed: with the system's certificates, and, when that
-/// failure was one other roots could change, with the bundled roots too.
+/// A request that failed: with the system's certificates, and, when the
+/// system's store could not be used, with the bundled roots too.
 /// (Boxed: ureq's errors are large.)
 #[derive(Debug)]
 pub struct TrustError {
@@ -108,19 +113,24 @@ impl std::error::Error for TrustError {
     }
 }
 
-/// Whether trying other roots could change `error`'s outcome: a TLS or
-/// I/O failure (an unknown issuer arrives as I/O), not a status, a refused
-/// `http://` URL, a timeout or a host that does not resolve.
+/// Whether the bundled roots may be tried after `error`, the system
+/// store's attempt: only when that store could not be used at all.
+///
+/// ureq reports a rustls error ([`ureq::Error::Rustls`]) only while it
+/// sets a connection up, before any certificate is seen: the platform
+/// verifier could not be built because no CA certificates were loaded
+/// from the system, say. A certificate the verifier refused arrives later,
+/// from the handshake, as an I/O error, and is final: retrying it with
+/// other roots would override the system's decision (a distrusted CA, a
+/// revocation). A status, a refused `http://` URL, a timeout or a host
+/// that does not resolve is not retried either.
 pub fn may_be_trust(error: &ureq::Error) -> bool {
-    matches!(
-        error,
-        ureq::Error::Io(_) | ureq::Error::Tls(_) | ureq::Error::Rustls(_)
-    )
+    matches!(error, ureq::Error::Rustls(_))
 }
 
-/// Run `attempt` trusting the system's certificates and, if that fails as
-/// [`may_be_trust`] says another set of roots could change, once more with
-/// the bundled roots. `attempt` builds its client from
+/// Run `attempt` trusting the system's certificates and, if that store
+/// could not be used at all ([`may_be_trust`]), once more with the bundled
+/// roots. `attempt` builds its client from
 /// [`Trust::tls_config`], so the two tries differ only in their roots.
 pub fn with_fallback<T>(
     mut attempt: impl FnMut(Trust) -> Result<T, ureq::Error>,
@@ -160,10 +170,16 @@ mod tests {
     }
 
     #[test]
-    fn falls_back_only_when_the_roots_could_matter() {
+    fn falls_back_only_when_the_system_store_cannot_be_used() {
         let unknown_issuer = || {
             ureq::Error::Io(std::io::Error::other(
                 "invalid peer certificate: UnknownIssuer",
+            ))
+        };
+        // What ureq reports when the platform verifier has no roots.
+        let no_store = || {
+            ureq::Error::Rustls(rustls::Error::General(
+                "No CA certificates were loaded from the system".into(),
             ))
         };
         // Success first time: one attempt.
@@ -175,12 +191,12 @@ mod tests {
         .unwrap();
         assert_eq!((value, tried.as_slice()), (7, &[Trust::System][..]));
 
-        // A TLS failure is retried with the bundled roots.
+        // No usable system store: the bundled roots are tried.
         let mut tried = Vec::new();
         let value = with_fallback(|trust| {
             tried.push(trust);
             match trust {
-                Trust::System => Err(unknown_issuer()),
+                Trust::System => Err(no_store()),
                 Trust::Bundled => Ok(8),
             }
         })
@@ -188,7 +204,13 @@ mod tests {
         assert_eq!((value, tried.as_slice()), (8, &Trust::ORDER[..]));
 
         // Both failing names both.
-        let error = with_fallback(|_| Err::<(), _>(unknown_issuer())).unwrap_err();
+        let error = with_fallback(|trust| {
+            Err::<(), _>(match trust {
+                Trust::System => no_store(),
+                Trust::Bundled => unknown_issuer(),
+            })
+        })
+        .unwrap_err();
         assert!(error.bundled.is_some());
         let message = error.to_string();
         assert!(
@@ -196,6 +218,21 @@ mod tests {
                 && message.contains("(with the bundled root certificates)"),
             "{message}"
         );
+
+        // A certificate the system's verifier refused stays refused: the
+        // bundled roots are not asked for a second opinion.
+        let mut tried = Vec::new();
+        let error = with_fallback(|trust| {
+            tried.push(trust);
+            match trust {
+                Trust::System => Err(unknown_issuer()),
+                Trust::Bundled => Ok(9),
+            }
+        })
+        .unwrap_err();
+        assert_eq!(tried, [Trust::System]);
+        assert!(error.bundled.is_none());
+        assert!(error.to_string().contains("UnknownIssuer"), "{error}");
 
         // A status, a timeout or a plain-http refusal is not retried.
         for error in [

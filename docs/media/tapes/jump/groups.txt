@@ -1,17 +1,17 @@
 ❯ place=$(rich jump --commands commands --recent .jump-recent docs src)
 ? Jump ›
-Files  +147 more · tab                            │     1 # The rs-rich guide
-❯ docs/guide/index.md                             │     2
-  docs/guide/noctiluca.md                         │     3 rs-rich brings Python's [rich](https://github.com/Te
-  docs/guide/ratatui.md                           │     4 styled text, tables, trees, progress bars, syntax hi
-  docs/guide/art/banners.md                       │     5 in the terminal, plus exports to HTML and SVG. On to
-  docs/guide/art/gifs.md                          │     6 adds Rust-first extensions (diagnostics, structured
-Headings #  +1027 more · tab                      │     7 diffs, test tooling, capability detection, accessibi
-  The rs-rich guide  # docs/guide/index.md:1      │     8 workflow renderables and charts), graph diagrams, in
-  The pieces  ## docs/guide/index.md:83           │     9 micro assets, image and GIF art, and the `rich` comm
-  How it fits together  ## docs/guide/index.md:10 │    10
-  One render, step by step  ### docs/guide/index. │    11 This guide walks through all of it. Every code sampl
-  Features at a glance  ## docs/guide/index.md:14 │    12 from an example program that CI compiles, and every
+Files  +153 more · tab                            │     1 # Cornacai: a terminal client for coding agents
+❯ docs/guide/cornacai.md                          │     2
+  docs/guide/index.md                             │     3 Cornacai (kor-NAH-kai: Portuguese *cornaca*, the ele
+  docs/guide/noctiluca.md                         │     4 guide, plus "AI") is a terminal front end for coding
+  docs/guide/ratatui.md                           │     5 [Agent Client Protocol](https://agentclientprotocol.
+  docs/guide/write-a-plugin.md                    │     6 through its ACP adapter, Gemini CLI, Codex and the o
+Headings #  +1078 more · tab                      │     7 steer; the agent does the heavy lifting. It is a cra
+  Cornacai: a terminal client for coding agents   │     8 [`cornacai`](https://crates.io/crates/cornacai), bui
+  Install and start  ## docs/guide/cornacai.md:27 │     9 [intuiTUIve](intuituive/index.md), rs-rich-acp (the
+  The screen  ## docs/guide/cornacai.md:48        │    10 rs-rich-embed (the shell pane).
+  Keys  ## docs/guide/cornacai.md:67              │    11
+  `@` file mentions  ## docs/guide/cornacai.md:82 │    12 Here it runs against a fake agent that replays a rec
   19 results · tab narrow · ↑↓ move · alt+↑↓ group · enter jump · esc cancel · # headings, @ symbols, > comman
 
 

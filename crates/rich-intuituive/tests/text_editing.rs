@@ -500,3 +500,47 @@ fn the_gallery_shows_each_tab() {
     driver.type_text("fish");
     assert!(rows(&driver).join("\n").contains("1/2"));
 }
+
+/// With the caret on `(` in `f(a[b])`, it and the matching `)` have the
+/// bracket style (#814); the editor theme's bracket style comes first.
+#[test]
+fn the_bracket_at_the_caret_and_its_match_are_styled() {
+    let app = App::new(|| {
+        text_area(signal("f(a[b])".to_string()))
+            .match_brackets()
+            .caret(intuituive::Caret::At(1))
+            .autofocus()
+            .theme_styles([("editor.bracket", "bold")])
+    });
+    let mut driver = app.driver(8, 1);
+    driver.settle();
+    assert_eq!(
+        intuituive::testing::styled(&driver),
+        "f[bold]([/]a\\[b][bold])[/]\n"
+    );
+    // On `[`: its `]`.
+    driver.press("right right");
+    assert_eq!(
+        intuituive::testing::styled(&driver),
+        "f(a[bold][[/]b[bold]][/])\n"
+    );
+    // Off a bracket, with none just before the caret: none.
+    driver.press("home");
+    assert_eq!(intuituive::testing::styled(&driver), "f(a\\[b])\n");
+
+    let app = App::new(|| {
+        let mut theme = intuituive::EditorTheme::new();
+        theme.bracket = Some(intuituive::rich::style::Style::parse("italic").unwrap());
+        text_area(signal("(x)".to_string()))
+            .match_brackets()
+            .editor_theme(theme)
+            .autofocus()
+            .theme_styles([("editor.bracket", "bold")])
+    });
+    let mut driver = app.driver(4, 1);
+    driver.settle();
+    assert_eq!(
+        intuituive::testing::styled(&driver),
+        "[italic]([/]x[italic])[/]\n"
+    );
+}
