@@ -316,6 +316,7 @@ fn a_scroll_box_the_page_appends_to_is_a_log_too() {
     let url = fixture("echo.html");
     live.tab.send(Command::Open(url.clone()));
     live.wait("the page", |p| p.url == url);
+    let opened = Instant::now();
     // A plain scroll box, no ARIA: the page appends rows to it.
     live.page_script(
         "const box = document.createElement('div'); box.id = 'feed'; \
@@ -331,9 +332,23 @@ fn a_scroll_box_the_page_appends_to_is_a_log_too() {
     });
     let log = page.logs.iter().find(|l| !l.entries.is_empty()).unwrap();
     assert_eq!(log.kind, noctiluca::model::LogKind::Appended);
-    // Let the readings the new box set off finish.
-    std::thread::sleep(Duration::from_millis(800));
-    let before = live.snapshots.load(Ordering::SeqCst);
+    // Let the readings finish: the new document's settling (watched for
+    // up to SETTLE_MAX) and those the new box set off, until a second
+    // passes with none.
+    let settled = opened + noctiluca::tab::SETTLE_MAX + Duration::from_millis(250);
+    let mut before = live.snapshots.load(Ordering::SeqCst);
+    let mut quiet_since = Instant::now();
+    while Instant::now() < settled || quiet_since.elapsed() < Duration::from_secs(1) {
+        std::thread::sleep(Duration::from_millis(50));
+        let now = live.snapshots.load(Ordering::SeqCst);
+        if now != before {
+            (before, quiet_since) = (now, Instant::now());
+        }
+        assert!(
+            opened.elapsed() < Duration::from_secs(15),
+            "the readings never settled"
+        );
+    }
     live.page_script("add('row four')");
     live.wait("row four", |p| {
         p.logs
