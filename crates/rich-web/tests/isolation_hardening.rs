@@ -176,22 +176,33 @@ fn a_program_the_app_runs_can_still_serve() {
 /// the address asked for, not an ephemeral loopback port.
 #[test]
 fn an_inherited_variable_does_not_move_the_address() {
-    let free = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
-    let want = free.local_addr().unwrap();
-    drop(free);
-    let out = Command::new(probe_exe())
-        .args(["--nested", &want.to_string()])
-        .env(
-            rich_web::SESSION_ENV,
-            "1 1 00000000000000000000000000000000 7 80 24 xterm - -",
-        )
-        .output()
-        .unwrap();
-    let text = String::from_utf8_lossy(&out.stdout);
-    assert!(
-        text.contains(&format!("BOUND {want}")),
-        "asked for {want}, got {text:?}"
-    );
+    // The free port is found by binding and letting go, so a test running
+    // beside this one can take it first: a bind that fails with the port
+    // in use is tried again on another.
+    for _ in 0..5 {
+        let free = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let want = free.local_addr().unwrap();
+        drop(free);
+        let out = Command::new(probe_exe())
+            .args(["--nested", &want.to_string()])
+            .env(
+                rich_web::SESSION_ENV,
+                "1 1 00000000000000000000000000000000 7 80 24 xterm - -",
+            )
+            .output()
+            .unwrap();
+        let text = String::from_utf8_lossy(&out.stdout);
+        let errors = String::from_utf8_lossy(&out.stderr);
+        if text.is_empty() && errors.to_lowercase().contains("in use") {
+            continue;
+        }
+        assert!(
+            text.contains(&format!("BOUND {want}")),
+            "asked for {want}, got {text:?} (stderr {errors:?})"
+        );
+        return;
+    }
+    panic!("five free ports were each taken before the probe could bind");
 }
 
 // ---------------------------------------------------------------------------
