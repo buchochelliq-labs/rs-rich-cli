@@ -348,6 +348,16 @@ pub struct Media {
     /// It is inside a heading, a link, a button or a label: a picture
     /// that stands for words.
     pub in_label: bool,
+    /// What its content was when read, as a hash: for an inline `<svg>`,
+    /// of its subtree's element names, attributes and text, so a drawing
+    /// a script changes (a dial's arc, needle and number) is captured
+    /// again; 0 for every other kind (a canvas changes no DOM: the tab
+    /// watches its pixels instead).
+    pub revision: u64,
+    /// The words it draws: an inline `<svg>`'s `<text>` (with its
+    /// `<tspan>`s), in document order, cleaned, so a dial's number reads
+    /// as text in reader mode and `--dump`; empty for every other kind.
+    pub text: String,
 }
 
 /// What made a box a live log.
@@ -1053,6 +1063,48 @@ fn background_picture(dom: &Dom, i: usize) -> Option<String> {
     (!has_text).then_some(url)
 }
 
+/// An inline `<svg>`'s content: a hash of its subtree (element names,
+/// attributes, text), its `<text>` runs joined, and its own `<title>`.
+/// What a reading sees of a drawing a script changes: the arc's dash, the
+/// needle's `transform`, the number's text.
+fn svg_content(dom: &Dom, svg: usize) -> (u64, String, String) {
+    let mut hasher = DefaultHasher::new();
+    let mut words: Vec<String> = Vec::new();
+    let mut title = String::new();
+    // Depth first, in document order: (node, inside a <text>).
+    let mut stack = vec![(svg, false)];
+    while let Some((i, in_text)) = stack.pop() {
+        dom.name[i].hash(&mut hasher);
+        dom.attrs[i].hash(&mut hasher);
+        if dom.kind[i] == 3 {
+            dom.value[i].hash(&mut hasher);
+            let word = clean_inline(&dom.value[i]);
+            if in_text && !word.trim().is_empty() {
+                words.push(word.trim().to_string());
+            }
+            continue;
+        }
+        let name = dom.name[i].as_str();
+        if name == "TITLE" && usize::try_from(dom.parent[i]).ok() == Some(svg) {
+            let all: Vec<&str> = dom.children[i]
+                .iter()
+                .filter(|&&c| dom.kind[c] == 3)
+                .map(|&c| dom.value[c].as_str())
+                .collect();
+            all.hash(&mut hasher);
+            if title.is_empty() {
+                title = clean(&all.join(" "));
+            }
+            continue;
+        }
+        let in_text = in_text || name == "TEXT";
+        for &child in dom.children[i].iter().rev() {
+            stack.push((child, in_text));
+        }
+    }
+    (hasher.finish(), clean(&words.join(" ")), title)
+}
+
 /// Whether node `i` is inside a `<figure>` (up to three levels up) that
 /// has a `<figcaption>`.
 fn captioned(dom: &Dom, i: usize) -> bool {
@@ -1580,6 +1632,22 @@ impl Walker<'_> {
             .or_else(|| dom.attr(i, "aria-label").map(clean))
             .filter(|a| !script_value(a))
             .unwrap_or_default();
+        // A drawing's own words: its `<text>`, and its `<title>` as its
+        // name when it has no other (Chrome's AX tree gives it one).
+        let (revision, text, title) = if kind == MediaKind::Svg {
+            svg_content(dom, i)
+        } else {
+            (0, String::new(), String::new())
+        };
+        let alt = if alt.is_empty() && kind == MediaKind::Svg {
+            if title.is_empty() {
+                text.clone()
+            } else {
+                title
+            }
+        } else {
+            alt
+        };
         let src = dom
             .source
             .get(&i)
@@ -1621,6 +1689,8 @@ impl Walker<'_> {
             in_label: context.control.is_some()
                 || context.silent
                 || matches!(context.kind, BlockKind::Heading(_)),
+            revision,
+            text: truncate(&text, 500),
         });
         self.block(BlockKind::Media(index), i, context);
     }

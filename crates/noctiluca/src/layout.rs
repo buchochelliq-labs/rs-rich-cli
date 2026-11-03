@@ -657,6 +657,15 @@ pub fn reader(page: &Page, width: u16, marks: &Marks) -> Vec<Piece> {
                     &quote,
                     &quote,
                 ));
+                // A drawing's own words (a dial's number), as it reads now.
+                if !media.text.is_empty() && media.text != media.alt {
+                    text.extend(wrap(
+                        &[Span::new(media.text.clone(), "")],
+                        width,
+                        &quote,
+                        &quote,
+                    ));
+                }
                 flush(&mut text, &mut pieces);
                 // A video's region shows its poster, then its frames while
                 // it plays, over its controls.

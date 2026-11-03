@@ -27,6 +27,18 @@
 //!   ([`crate::video`]), at most thirty a second, or as the app's pacing
 //!   asks ([`Command::Regions`]), each when its slot comes, at the scale
 //!   the regions are drawn in. A video's still is its poster.
+//! - **Live regions**: a drawing the page changes is drawn again. An
+//!   inline `<svg>`'s still is kept by its content's revision
+//!   ([`Media::revision`](crate::model::Media::revision)), so a reading
+//!   that sees it changed captures it again; its last still shows until
+//!   the new one comes. A `<canvas>` changes no DOM: while the view shows
+//!   it, it is captured at a low rate ([`CANVAS_POLL`], [`CANVAS_IDLE`]
+//!   once it holds still), and each capture that changed goes out as a
+//!   frame, paced within the byte budget as a video's are. At most
+//!   [`MAX_LIVE_CANVASES`] are watched at once, nearest the view; one
+//!   that changes at every capture for [`CANVAS_BUSY`] and is bigger than
+//!   a quarter of the viewport is cut from the screencast, as a playing
+//!   video is. Off screen, or frozen, none is captured.
 
 use std::collections::{HashMap, HashSet};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -41,7 +53,7 @@ use crate::engine::{
     Engine, EngineEvent, Format, HistoryStep, MediaOp, Metrics, NodeId, PageAction, Rect, TabId,
 };
 use crate::model::{
-    Binding, Control, Entry, MediaKind, Page, Revisions, Role, Run, build_with, live_runs,
+    Binding, Control, Entry, Media, MediaKind, Page, Revisions, Role, Run, build_with, live_runs,
 };
 use crate::video::{Frames, Region, VideoFrame};
 use rich_intuituive::Picture;
@@ -72,6 +84,21 @@ const FRAME_POLL: Duration = Duration::from_millis(3);
 /// The pixel view's frames are looked for this often (30 a second at
 /// most; the app's byte budget drops what the terminal cannot take).
 const SCREEN_EVERY: Duration = Duration::from_millis(33);
+/// A live canvas on screen is captured this often while it changes, or
+/// as the app's pacing asks when that is slower.
+pub const CANVAS_POLL: Duration = Duration::from_millis(500);
+/// A live canvas that held still for [`CANVAS_QUIET`] captures in a row
+/// is captured this often, until it changes again.
+pub const CANVAS_IDLE: Duration = Duration::from_secs(2);
+/// How many unchanged captures in a row slow a canvas to [`CANVAS_IDLE`].
+pub const CANVAS_QUIET: u32 = 10;
+/// A canvas that changed at every capture this long, and is bigger than a
+/// quarter of the viewport, is cut from the screencast, as a playing video
+/// is, rather than captured on its own.
+pub const CANVAS_BUSY: Duration = Duration::from_secs(2);
+/// At most this many canvases are live at once: those the view shows,
+/// nearest Chrome's view (a page of animated adverts costs no more).
+pub const MAX_LIVE_CANVASES: usize = 4;
 
 /// What an action does to its control.
 #[derive(Clone, Debug, PartialEq)]
@@ -438,6 +465,31 @@ struct Worker<'a> {
     pixels_cast: bool,
     /// When the pixel view's last frame was looked for.
     screen_at: Option<Instant>,
+    /// The newest still captured of each node, and the newest decoded:
+    /// a drawing that changed shows them until its new one comes.
+    latest: HashMap<NodeId, StillKey>,
+    drawn: HashMap<NodeId, StillKey>,
+    /// Drawings whose still is of an older revision: captured again.
+    stale: HashSet<NodeId>,
+    /// The canvases watched as live regions, by node.
+    canvases: HashMap<NodeId, Watch>,
+}
+
+/// A canvas watched while the view shows it.
+#[derive(Clone, Copy, Debug, Default)]
+struct Watch {
+    /// Its pixels' hash at the last capture.
+    hash: Option<u64>,
+    /// When it is captured next.
+    due: Option<Instant>,
+    /// Captures in a row that found it unchanged.
+    unchanged: u32,
+    /// Since when every capture found it changed.
+    changing_since: Option<Instant>,
+    /// It changes at every capture and is big: the screencast cuts it.
+    busy: bool,
+    /// It was sent frames since it last stopped.
+    moving: bool,
 }
 
 /// A key of where the page's boxes are: it changes when its layout moves.
@@ -465,15 +517,21 @@ impl Worker<'_> {
         let mut page = build_with(&snapshot, &mut self.revisions, &self.appended);
         if self.page.as_ref().map(|p| p.document) != Some(page.document) {
             self.live.clear();
+            self.latest.clear();
+            self.drawn.clear();
+            self.canvases.clear();
         }
         self.follow_logs(&mut page);
         self.dress_inline(&mut page);
+        self.stale.clear();
         for media in &mut page.media {
-            let key = still_key(media.node, picture_source(media), media.rect);
-            if let Some(still) = self.stills.get(&key) {
-                media.still = Some(still.clone());
+            let key = key_of(media);
+            let (still, picture, stale) = self.shown(&key);
+            media.still = still;
+            media.picture = picture;
+            if stale {
+                self.stale.insert(media.node);
             }
-            media.picture = self.pictures.get(&key).cloned();
         }
         self.probe(&mut page);
         // A new document is read again until its layout holds still: the
@@ -502,6 +560,32 @@ impl Worker<'_> {
         self.page = Some(page.clone());
         self.dirty = None;
         Some(page)
+    }
+
+    /// The still and picture to show for `key`, and whether they are of
+    /// an older revision of it (a drawing that changed, captured again at
+    /// the next batch): its last still shows until the new one comes, and
+    /// its last picture until the new one is decoded.
+    fn shown(&self, key: &StillKey) -> (Option<Arc<[u8]>>, Option<Picture>, bool) {
+        let same = |k: &&StillKey| k.1 == key.1 && k.2 == key.2 && k.3 == key.3;
+        let drawn = || {
+            self.drawn
+                .get(&key.0)
+                .filter(same)
+                .and_then(|k| self.pictures.get(k))
+                .cloned()
+        };
+        if let Some(still) = self.stills.get(key) {
+            let picture = self.pictures.get(key).cloned().or_else(drawn);
+            return (Some(still.clone()), picture, false);
+        }
+        match self.latest.get(&key.0).filter(same) {
+            Some(old) => {
+                let picture = self.pictures.get(old).cloned().or_else(drawn);
+                (self.stills.get(old).cloned(), picture, true)
+            }
+            None => (None, None, false),
+        }
     }
 
     /// Read the live logs' new and changed entries into `page`. An engine
@@ -665,13 +749,17 @@ impl Worker<'_> {
         let view = self.metrics.map_or(0.0, |m| m.scroll_y);
         // A video with no poster to fetch shows what Chrome paints in its
         // region: its poster, or its first frame. An inline `<svg>` is a
-        // drawing Noctiluca does not decode: Chrome's pixels of it too.
+        // drawing Noctiluca does not decode, and a `<canvas>` has no file:
+        // Chrome's pixels of them too. A drawing that changed since its
+        // still is captured again.
         let mut candidates: Vec<_> = page
             .media
             .iter()
             .filter(|m| {
-                matches!(m.kind, MediaKind::Image | MediaKind::Video | MediaKind::Svg)
-                    && m.still.is_none()
+                matches!(
+                    m.kind,
+                    MediaKind::Image | MediaKind::Video | MediaKind::Svg | MediaKind::Canvas
+                ) && (m.still.is_none() || self.stale.contains(&m.node))
             })
             .filter(|m| m.rect.width >= 4.0 && m.rect.height >= 4.0)
             .collect();
@@ -684,7 +772,7 @@ impl Worker<'_> {
                 break;
             }
             if self.engine.image_ready(TabId(0), m.node).unwrap_or(true) {
-                wanted.push((m.node, picture_source(m).to_string(), m.rect));
+                wanted.push((m.node, picture_source(m).to_string(), m.rect, key_of(m)));
             }
         }
         if wanted.is_empty() {
@@ -692,10 +780,11 @@ impl Worker<'_> {
         }
         let mut page = (*page).clone();
         let mut any = false;
-        for (node, src, rect) in wanted {
+        for (node, src, rect, key) in wanted {
             if let Some(bytes) = self.picture_bytes(&src, rect) {
                 let still: Arc<[u8]> = bytes.into();
-                let key = still_key(node, &src, rect);
+                self.stale.remove(&node);
+                self.latest.insert(node, key.clone());
                 self.stills.insert(key.clone(), still.clone());
                 let _ = self.decode.send((key, still.clone()));
                 for media in page.media.iter_mut().filter(|m| m.node == node) {
@@ -743,6 +832,17 @@ impl Worker<'_> {
     fn take_decoded(&mut self) {
         let mut any = false;
         while let Ok((key, picture)) = self.decoded.try_recv() {
+            // A still a newer one already replaced: not shown again.
+            if !self.stills.contains_key(&key) {
+                continue;
+            }
+            // The newest of its node: the older revisions go.
+            if self.latest.get(&key.0) == Some(&key) {
+                let older = |k: &StillKey| k.0 == key.0 && k.1 == key.1 && *k != key;
+                self.stills.retain(|k, _| !older(k));
+                self.pictures.retain(|k, _| !older(k));
+            }
+            self.drawn.insert(key.0, key.clone());
             self.pictures.insert(key, picture);
             any = true;
         }
@@ -755,9 +855,9 @@ impl Worker<'_> {
         };
         let mut next = (*page).clone();
         for media in &mut next.media {
-            let key = still_key(media.node, picture_source(media), media.rect);
-            if let Some(picture) = self.pictures.get(&key) {
-                media.picture = Some(picture.clone());
+            let (_, picture, _) = self.shown(&key_of(media));
+            if picture.is_some() {
+                media.picture = picture;
             }
         }
         self.dress_inline(&mut next);
@@ -786,22 +886,148 @@ impl Worker<'_> {
         Ok(())
     }
 
-    /// The video regions now.
+    /// The video regions now, with the busy live canvases (cut from the
+    /// screencast as a playing video is).
     fn regions(&self) -> Vec<Region> {
         let Some(page) = &self.page else {
             return Vec::new();
         };
+        let live = self.live_canvases(page);
         page.media
             .iter()
-            .filter(|m| m.kind == MediaKind::Video)
+            .filter(|m| {
+                m.kind == MediaKind::Video
+                    || m.kind == MediaKind::Canvas
+                        && self.canvases.get(&m.node).is_some_and(|w| w.busy)
+            })
             .map(|m| Region {
                 node: m.node,
                 rect: m.rect,
-                playing: m.playback.is_some_and(|p| p.playing()),
+                playing: if m.kind == MediaKind::Video {
+                    m.playback.is_some_and(|p| p.playing())
+                } else {
+                    live.iter().any(|(node, _)| *node == m.node)
+                },
                 on_screen: self.on_screen.contains(&m.node),
                 interval: self.intervals.get(&m.node).copied(),
             })
             .collect()
+    }
+
+    /// The canvases live now: those the view shows, at most
+    /// [`MAX_LIVE_CANVASES`], nearest Chrome's view first.
+    fn live_canvases(&self, page: &Page) -> Vec<(NodeId, Rect)> {
+        let view = self.metrics.map_or(0.0, |m| m.scroll_y);
+        let mut live: Vec<(NodeId, Rect)> = page
+            .media
+            .iter()
+            .filter(|m| m.kind == MediaKind::Canvas && self.on_screen.contains(&m.node))
+            .filter(|m| m.rect.width >= 4.0 && m.rect.height >= 4.0)
+            .map(|m| (m.node, m.rect))
+            .collect();
+        live.sort_by(|a, b| (a.1.y - view).abs().total_cmp(&(b.1.y - view).abs()));
+        live.truncate(MAX_LIVE_CANVASES);
+        live
+    }
+
+    /// Capture each live canvas whose time has come, and send its pixels
+    /// as a frame when they changed. A canvas no longer live stops.
+    fn poll_canvases(&mut self) {
+        let Some(page) = self.page.clone() else {
+            return;
+        };
+        let live = self.live_canvases(&page);
+        let stopped: Vec<NodeId> = self
+            .canvases
+            .iter()
+            .filter(|(node, _)| !live.iter().any(|(l, _)| l == *node))
+            .map(|(node, _)| *node)
+            .collect();
+        for node in stopped {
+            if let Some(watch) = self.canvases.remove(&node)
+                && watch.moving
+            {
+                (self.update)(Update::Still(node));
+            }
+        }
+        let now = Instant::now();
+        for (node, rect) in live {
+            let watch = self.canvases.entry(node).or_default();
+            if watch.busy || watch.due.is_some_and(|due| now < due) {
+                continue;
+            }
+            watch.due = Some(now + CANVAS_POLL);
+            let Some(pixels) = self.capture_pixels(rect, Format::Png) else {
+                continue;
+            };
+            if self.observe(node, rect, &pixels, now) {
+                let seq = self.frames.number();
+                (self.update)(Update::Frame(Arc::new(VideoFrame { node, pixels, seq })));
+            }
+        }
+    }
+
+    /// Note a capture of canvas `node` at `now`: whether its pixels
+    /// changed since the last, and when it is captured next. One that
+    /// changed at every capture for [`CANVAS_BUSY`] and is big turns busy;
+    /// one that held still for [`CANVAS_QUIET`] captures slows down, and
+    /// stops being busy.
+    fn observe(
+        &mut self,
+        node: NodeId,
+        rect: Rect,
+        pixels: &rich_embed::Pixels,
+        now: Instant,
+    ) -> bool {
+        let hash = {
+            let mut hasher = std::collections::hash_map::DefaultHasher::new();
+            std::hash::Hash::hash(&(pixels.width, pixels.height, &pixels.rgb), &mut hasher);
+            std::hash::Hasher::finish(&hasher)
+        };
+        let width = self.page.as_ref().map_or(0.0, |p| p.width);
+        let height = self.metrics.map_or(0.0, |m| m.viewport_height);
+        let big = rect.width * rect.height * 4.0 >= width * height;
+        let interval = self.intervals.get(&node).copied().unwrap_or_default();
+        let watch = self.canvases.entry(node).or_default();
+        let first = watch.hash.is_none();
+        let changed = watch.hash != Some(hash);
+        watch.hash = Some(hash);
+        if changed && !first {
+            watch.unchanged = 0;
+            let since = *watch.changing_since.get_or_insert(now);
+            watch.busy |= big && now.duration_since(since) >= CANVAS_BUSY;
+        } else if !changed {
+            watch.unchanged = watch.unchanged.saturating_add(1);
+            watch.changing_since = None;
+            if watch.unchanged >= CANVAS_QUIET {
+                watch.busy = false;
+            }
+        }
+        let every = if watch.unchanged >= CANVAS_QUIET {
+            CANVAS_IDLE
+        } else {
+            CANVAS_POLL
+        };
+        watch.due = Some(now + every.max(interval));
+        watch.moving |= changed;
+        changed
+    }
+
+    /// Hand a frame cut or captured for a region to the app: a canvas's
+    /// only when its pixels changed.
+    fn deliver(&mut self, video: VideoFrame, now: Instant) {
+        let canvas = self.page.as_ref().and_then(|p| {
+            p.media
+                .iter()
+                .find(|m| m.node == video.node && m.kind == MediaKind::Canvas)
+                .map(|m| m.rect)
+        });
+        if let Some(rect) = canvas
+            && !self.observe(video.node, rect, &video.pixels, now)
+        {
+            return;
+        }
+        (self.update)(Update::Frame(Arc::new(video)));
     }
 
     /// Show or leave the pixel view: the screencast runs for it at full
@@ -880,7 +1106,7 @@ impl Worker<'_> {
         let (cut, missing) = self.frames.cut(&regions, frame.as_ref(), now);
         for video in cut {
             self.shown_time.remove(&video.node);
-            (self.update)(Update::Frame(Arc::new(video)));
+            self.deliver(video, now);
         }
         if frame.is_some() && !quiet {
             // The frame came; regions out of it wait for the quiet spell
@@ -922,21 +1148,24 @@ impl Worker<'_> {
     /// Frames of regions taken with a capture of each.
     fn capture_regions(&mut self, regions: &[Region], now: Instant) {
         for region in regions {
-            if let Some(pixels) = self.capture_pixels(region.rect) {
+            if let Some(pixels) = self.capture_pixels(region.rect, Format::Jpeg) {
                 let video = self.frames.stamp(region.node, pixels, now);
-                (self.update)(Update::Frame(Arc::new(video)));
+                self.deliver(video, now);
             }
         }
     }
 
-    fn capture_pixels(&mut self, rect: Rect) -> Option<rich_embed::Pixels> {
+    /// Chrome's pixels of `rect`, as RGB: JPEG for a video's frame, PNG
+    /// for a canvas's (its edges and text kept, and its bytes the same
+    /// while its pixels are).
+    fn capture_pixels(&mut self, rect: Rect, format: Format) -> Option<rich_embed::Pixels> {
         let region = Rect::new(
             rect.x,
             rect.y,
             rect.width.min(4000.0),
             rect.height.min(4000.0),
         );
-        let frame = self.engine.capture(TabId(0), region, Format::Jpeg).ok()?;
+        let frame = self.engine.capture(TabId(0), region, format).ok()?;
         let image = image::load_from_memory(&frame.bytes).ok()?.to_rgb8();
         rich_embed::Pixels::new(image.width(), image.height(), image.into_raw())
     }
@@ -1097,8 +1326,9 @@ impl Worker<'_> {
 /// At most this many sources of small pictures in lines are read.
 const MAX_INLINE: usize = 2000;
 
-/// What a still is kept by: the node, its address and its size.
-type StillKey = (NodeId, String, u64, u64);
+/// What a still is kept by: the node, its address, its size and its
+/// content's revision (a drawing's).
+type StillKey = (NodeId, String, u64, u64, u64);
 /// Pictures decoded, by what they were asked for by.
 type Decoded<K> = Receiver<(K, Picture)>;
 /// Bytes to decode, by what asks for them.
@@ -1155,7 +1385,7 @@ fn decoder<K: Send + 'static>() -> (ToDecode<K>, Decoded<K>) {
 
 /// Where a media region's picture comes from: a video's poster when it has
 /// one (else what Chrome paints in its region), an image's source.
-fn picture_source(media: &crate::model::Media) -> &str {
+fn picture_source(media: &Media) -> &str {
     if media.kind == MediaKind::Video {
         &media.poster
     } else {
@@ -1163,12 +1393,14 @@ fn picture_source(media: &crate::model::Media) -> &str {
     }
 }
 
-fn still_key(node: NodeId, src: &str, rect: Rect) -> StillKey {
+/// The key of `media`'s still as it is now.
+fn key_of(media: &Media) -> StillKey {
     (
-        node,
-        src.to_string(),
-        rect.width.round() as u64,
-        rect.height.round() as u64,
+        media.node,
+        picture_source(media).to_string(),
+        media.rect.width.round() as u64,
+        media.rect.height.round() as u64,
+        media.revision,
     )
 }
 
@@ -1211,6 +1443,10 @@ fn run(
         pixels: false,
         pixels_cast: false,
         screen_at: None,
+        latest: HashMap::new(),
+        drawn: HashMap::new(),
+        stale: HashSet::new(),
+        canvases: HashMap::new(),
     };
     let mut live_due = false;
     // Read once at the start, then whenever something says to.
@@ -1273,6 +1509,7 @@ fn run(
             worker.screen();
         } else {
             worker.video();
+            worker.poll_canvases();
         }
         let due = worker
             .dirty

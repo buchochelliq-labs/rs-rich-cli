@@ -860,8 +860,9 @@ fn show_frame(b: Browser, node: NodeId, live: Live) {
     b.live.set(Rc::new(shown));
 }
 
-/// The video regions the view shows: those whose box meets the page's
-/// rows in view.
+/// The moving regions the view shows (videos, and canvases, which the
+/// tab watches as live regions): those whose box meets the page's rows in
+/// view.
 fn regions_on_screen(b: Browser) -> Vec<NodeId> {
     let rows = b.viewport.get().1 as usize;
     let first = b.scroll.get() as usize;
@@ -879,7 +880,7 @@ fn regions_on_screen(b: Browser) -> Vec<NodeId> {
             .map(|p| {
                 p.media
                     .iter()
-                    .filter(|m| m.kind == MediaKind::Video)
+                    .filter(|m| matches!(m.kind, MediaKind::Video | MediaKind::Canvas))
                     .filter(|m| m.rect.bottom() > top && m.rect.y < bottom)
                     .map(|m| m.node)
                     .collect()
