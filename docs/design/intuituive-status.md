@@ -3,7 +3,16 @@
 Status: handoff note, updated when a session ends mid-round. The loop and its
 rules are in [the demo gaps](intuituive-demo-gaps.md).
 
-## Where things stand (2026-11-03)
+## Where things stand (2026-11-03, evening)
+
+- **0.0.24 is tagged** (`release-0.0.24`, `python-v0.0.12`, on `c2d65880`)
+  and publishing. Next: the publication pull request, which pins the 0.0.24
+  docs to `9a02fdb1` and opens the 0.0.25 versions.
+- **0.0.25 is planned** ([the plan](../plans/0.0.25.md)): the last release
+  before 0.1.0, released with release-kit v1.2.0. Wave 1 is its
+  workstreams 1 to 5.
+
+## Where things stood (2026-11-03)
 
 - **0.0.24 is in release.** Every wave is merged (#828, #829, #830, #839,
   #841), with the Dependabot updates (#826, #827, #842) and three flaky
