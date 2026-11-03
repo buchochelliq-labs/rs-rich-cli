@@ -21,12 +21,14 @@ pub intuituive::a11y::Role::ComboBox
 pub intuituive::a11y::Role::Dialog
 pub intuituive::a11y::Role::Grid
 pub intuituive::a11y::Role::Group
+pub intuituive::a11y::Role::Img
 pub intuituive::a11y::Role::List
 pub intuituive::a11y::Role::ListItem
 pub intuituive::a11y::Role::Log
 pub intuituive::a11y::Role::Menu
 pub intuituive::a11y::Role::MenuBar
 pub intuituive::a11y::Role::MenuItem
+pub intuituive::a11y::Role::Meter
 pub intuituive::a11y::Role::RadioGroup
 pub intuituive::a11y::Role::Region
 pub intuituive::a11y::Role::Row
@@ -3091,6 +3093,15 @@ pub fn intuituive::node::Node::unless(self, impl core::ops::function::Fn() -> co
 pub fn intuituive::node::Node::unlisted(self) -> intuituive::node::Node
 pub fn intuituive::node::Node::when(self, impl core::ops::function::Fn() -> bool + 'static, impl core::ops::function::FnOnce(intuituive::node::Node) -> intuituive::node::Node) -> intuituive::node::Node
 impl intuituive::node::Node
+pub fn intuituive::node::Node::arc_mode(self, intuituive::pixels::PixelMode) -> intuituive::node::Node
+pub fn intuituive::node::Node::bands(self, f64, f64, f64) -> intuituive::node::Node
+pub fn intuituive::node::Node::caption(self, impl core::convert::Into<alloc::string::String>) -> intuituive::node::Node
+pub fn intuituive::node::Node::range_labels(self, bool) -> intuituive::node::Node
+pub fn intuituive::node::Node::readout(self, impl core::ops::function::Fn() -> alloc::string::String + 'static) -> intuituive::node::Node
+pub fn intuituive::node::Node::sweep(self, f64) -> intuituive::node::Node
+pub fn intuituive::node::Node::unit(self, impl core::convert::Into<alloc::string::String>) -> intuituive::node::Node
+pub fn intuituive::node::Node::zones<'a>(self, impl core::iter::traits::collect::IntoIterator<Item = (f64, &'a str)>) -> intuituive::node::Node
+impl intuituive::node::Node
 pub fn intuituive::node::Node::auto_hide(self) -> intuituive::node::Node
 pub fn intuituive::node::Node::divider(self, &str) -> intuituive::node::Node
 pub fn intuituive::node::Node::fit(self) -> intuituive::node::Node
@@ -3192,6 +3203,10 @@ impl intuituive::node::Node
 pub fn intuituive::node::Node::item_disabled_when(self, impl core::ops::function::Fn(usize) -> bool + 'static) -> intuituive::node::Node
 pub fn intuituive::node::Node::on_highlight(self, impl core::ops::function::FnMut(usize, &mut intuituive::app::Ctx) + 'static) -> intuituive::node::Node
 pub fn intuituive::node::Node::separator_after(self, impl core::ops::function::Fn(usize) -> bool + 'static) -> intuituive::node::Node
+impl intuituive::node::Node
+pub fn intuituive::node::Node::item_width(self, u16) -> intuituive::node::Node
+pub fn intuituive::node::Node::on_page(self, impl core::ops::function::FnMut(usize) + 'static) -> intuituive::node::Node
+pub fn intuituive::node::Node::per_page(self, usize) -> intuituive::node::Node
 impl intuituive::node::Node
 pub fn intuituive::node::Node::key_style(self, &str) -> intuituive::node::Node
 pub fn intuituive::node::Node::value_style(self, &str) -> intuituive::node::Node
@@ -4436,6 +4451,15 @@ pub fn intuituive::node::Node::unless(self, impl core::ops::function::Fn() -> co
 pub fn intuituive::node::Node::unlisted(self) -> intuituive::node::Node
 pub fn intuituive::node::Node::when(self, impl core::ops::function::Fn() -> bool + 'static, impl core::ops::function::FnOnce(intuituive::node::Node) -> intuituive::node::Node) -> intuituive::node::Node
 impl intuituive::node::Node
+pub fn intuituive::node::Node::arc_mode(self, intuituive::pixels::PixelMode) -> intuituive::node::Node
+pub fn intuituive::node::Node::bands(self, f64, f64, f64) -> intuituive::node::Node
+pub fn intuituive::node::Node::caption(self, impl core::convert::Into<alloc::string::String>) -> intuituive::node::Node
+pub fn intuituive::node::Node::range_labels(self, bool) -> intuituive::node::Node
+pub fn intuituive::node::Node::readout(self, impl core::ops::function::Fn() -> alloc::string::String + 'static) -> intuituive::node::Node
+pub fn intuituive::node::Node::sweep(self, f64) -> intuituive::node::Node
+pub fn intuituive::node::Node::unit(self, impl core::convert::Into<alloc::string::String>) -> intuituive::node::Node
+pub fn intuituive::node::Node::zones<'a>(self, impl core::iter::traits::collect::IntoIterator<Item = (f64, &'a str)>) -> intuituive::node::Node
+impl intuituive::node::Node
 pub fn intuituive::node::Node::auto_hide(self) -> intuituive::node::Node
 pub fn intuituive::node::Node::divider(self, &str) -> intuituive::node::Node
 pub fn intuituive::node::Node::fit(self) -> intuituive::node::Node
@@ -4537,6 +4561,10 @@ impl intuituive::node::Node
 pub fn intuituive::node::Node::item_disabled_when(self, impl core::ops::function::Fn(usize) -> bool + 'static) -> intuituive::node::Node
 pub fn intuituive::node::Node::on_highlight(self, impl core::ops::function::FnMut(usize, &mut intuituive::app::Ctx) + 'static) -> intuituive::node::Node
 pub fn intuituive::node::Node::separator_after(self, impl core::ops::function::Fn(usize) -> bool + 'static) -> intuituive::node::Node
+impl intuituive::node::Node
+pub fn intuituive::node::Node::item_width(self, u16) -> intuituive::node::Node
+pub fn intuituive::node::Node::on_page(self, impl core::ops::function::FnMut(usize) + 'static) -> intuituive::node::Node
+pub fn intuituive::node::Node::per_page(self, usize) -> intuituive::node::Node
 impl intuituive::node::Node
 pub fn intuituive::node::Node::key_style(self, &str) -> intuituive::node::Node
 pub fn intuituive::node::Node::value_style(self, &str) -> intuituive::node::Node
@@ -8846,6 +8874,15 @@ pub fn intuituive::node::Node::unless(self, impl core::ops::function::Fn() -> co
 pub fn intuituive::node::Node::unlisted(self) -> intuituive::node::Node
 pub fn intuituive::node::Node::when(self, impl core::ops::function::Fn() -> bool + 'static, impl core::ops::function::FnOnce(intuituive::node::Node) -> intuituive::node::Node) -> intuituive::node::Node
 impl intuituive::node::Node
+pub fn intuituive::node::Node::arc_mode(self, intuituive::pixels::PixelMode) -> intuituive::node::Node
+pub fn intuituive::node::Node::bands(self, f64, f64, f64) -> intuituive::node::Node
+pub fn intuituive::node::Node::caption(self, impl core::convert::Into<alloc::string::String>) -> intuituive::node::Node
+pub fn intuituive::node::Node::range_labels(self, bool) -> intuituive::node::Node
+pub fn intuituive::node::Node::readout(self, impl core::ops::function::Fn() -> alloc::string::String + 'static) -> intuituive::node::Node
+pub fn intuituive::node::Node::sweep(self, f64) -> intuituive::node::Node
+pub fn intuituive::node::Node::unit(self, impl core::convert::Into<alloc::string::String>) -> intuituive::node::Node
+pub fn intuituive::node::Node::zones<'a>(self, impl core::iter::traits::collect::IntoIterator<Item = (f64, &'a str)>) -> intuituive::node::Node
+impl intuituive::node::Node
 pub fn intuituive::node::Node::auto_hide(self) -> intuituive::node::Node
 pub fn intuituive::node::Node::divider(self, &str) -> intuituive::node::Node
 pub fn intuituive::node::Node::fit(self) -> intuituive::node::Node
@@ -8947,6 +8984,10 @@ impl intuituive::node::Node
 pub fn intuituive::node::Node::item_disabled_when(self, impl core::ops::function::Fn(usize) -> bool + 'static) -> intuituive::node::Node
 pub fn intuituive::node::Node::on_highlight(self, impl core::ops::function::FnMut(usize, &mut intuituive::app::Ctx) + 'static) -> intuituive::node::Node
 pub fn intuituive::node::Node::separator_after(self, impl core::ops::function::Fn(usize) -> bool + 'static) -> intuituive::node::Node
+impl intuituive::node::Node
+pub fn intuituive::node::Node::item_width(self, u16) -> intuituive::node::Node
+pub fn intuituive::node::Node::on_page(self, impl core::ops::function::FnMut(usize) + 'static) -> intuituive::node::Node
+pub fn intuituive::node::Node::per_page(self, usize) -> intuituive::node::Node
 impl intuituive::node::Node
 pub fn intuituive::node::Node::key_style(self, &str) -> intuituive::node::Node
 pub fn intuituive::node::Node::value_style(self, &str) -> intuituive::node::Node
@@ -9844,6 +9885,7 @@ pub fn intuituive::bar_spectrum_with(impl core::ops::function::Fn() -> alloc::ve
 pub fn intuituive::big_text(impl core::ops::function::Fn() -> alloc::string::String + 'static) -> intuituive::node::Node
 pub fn intuituive::button(impl core::convert::Into<alloc::string::String>, impl core::ops::function::FnMut(&mut intuituive::app::Ctx) + 'static) -> intuituive::node::Node
 pub fn intuituive::button_of(impl core::ops::function::Fn() -> alloc::string::String + 'static, impl core::ops::function::FnMut(&mut intuituive::app::Ctx) + 'static) -> intuituive::node::Node
+pub fn intuituive::carousel(impl core::ops::function::Fn() -> usize + 'static, intuituive::reactive::Signal<usize>, impl core::ops::function::Fn(usize) -> intuituive::node::Node + 'static) -> intuituive::node::Node
 pub fn intuituive::checkbox(impl core::convert::Into<alloc::string::String>, intuituive::reactive::Signal<bool>) -> intuituive::node::Node
 pub fn intuituive::checkbox_of(impl core::ops::function::Fn() -> alloc::string::String + 'static, intuituive::reactive::Signal<intuituive::CheckState>) -> intuituive::node::Node
 pub fn intuituive::checkbox_tri(impl core::convert::Into<alloc::string::String>, intuituive::reactive::Signal<intuituive::CheckState>) -> intuituive::node::Node
@@ -9855,6 +9897,7 @@ pub fn intuituive::command_line_with(intuituive::command_line::CommandLine, intu
 pub fn intuituive::complete_words<S: core::convert::Into<alloc::string::String>>(impl core::iter::traits::collect::IntoIterator<Item = S>) -> impl core::ops::function::Fn(&str, usize) -> alloc::vec::Vec<intuituive::complete::Completion> + 'static
 pub fn intuituive::component<C: rich_interact::component::Component + 'static>(C, impl core::ops::function::FnMut(<C as rich_interact::component::Component>::Output, &mut intuituive::app::Ctx) + 'static) -> intuituive::node::Node
 pub fn intuituive::described<R>(impl core::ops::function::Fn() -> R + 'static) -> intuituive::node::Node where R: rich::protocol::Renderable + rich_ext::a11y::semantic::AccessibleText + 'static
+pub fn intuituive::dial(impl core::ops::function::Fn() -> f64 + 'static, core::ops::range::RangeInclusive<f64>) -> intuituive::node::Node
 pub fn intuituive::digits(impl core::ops::function::Fn() -> alloc::string::String + 'static) -> intuituive::node::Node
 pub fn intuituive::drawn<R>(impl core::ops::function::Fn() -> R + 'static) -> intuituive::node::Node where R: rich::protocol::Renderable + rich_ext::surface::Draw + 'static
 pub fn intuituive::drawn_described<R>(impl core::ops::function::Fn() -> R + 'static) -> intuituive::node::Node where R: rich::protocol::Renderable + rich_ext::a11y::semantic::AccessibleText + rich_ext::surface::Draw + 'static
@@ -9929,6 +9972,8 @@ pub fn intuituive::progress_bar(intuituive::reactive::Signal<f64>, intuituive::r
 pub fn intuituive::radio(impl core::ops::function::Fn() -> alloc::vec::Vec<alloc::string::String> + 'static, intuituive::reactive::Signal<usize>) -> intuituive::node::Node
 pub fn intuituive::radio_keyed<K: core::clone::Clone + core::cmp::PartialEq + 'static>(impl core::ops::function::Fn() -> alloc::vec::Vec<intuituive::SelectOption<K>> + 'static, intuituive::reactive::Signal<core::option::Option<K>>) -> intuituive::node::Node
 pub fn intuituive::rate<T: 'static>(intuituive::reactive::Signal<T>) -> intuituive::reactive::Signal<u32>
+pub fn intuituive::rating(impl core::ops::function::Fn() -> f64 + 'static, u32) -> intuituive::node::Node
+pub fn intuituive::rating_input(intuituive::reactive::Signal<f64>, u32) -> intuituive::node::Node
 pub fn intuituive::read_state(&str, &str) -> std::io::error::Result<core::option::Option<alloc::vec::Vec<u8>>>
 pub fn intuituive::recent<T: core::clone::Clone + 'static>(intuituive::reactive::Signal<T>, impl intuituive::Count) -> intuituive::reactive::Memo<alloc::collections::vec_deque::VecDeque<T>>
 pub fn intuituive::recent_of<T: 'static, U: 'static>(intuituive::reactive::Signal<T>, impl intuituive::Count, impl core::ops::function::Fn(&T) -> U + 'static) -> intuituive::reactive::Memo<alloc::collections::vec_deque::VecDeque<U>>

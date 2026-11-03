@@ -424,3 +424,37 @@ fn a_carousel_follows_its_width_and_the_app_sets_its_page() {
     assert_eq!(rows(&driver)[4].trim(), "11–12 of 12");
     assert!(rows(&driver)[1].contains("item 12"));
 }
+
+// The example.
+
+#[path = "../examples/indicators.rs"]
+#[allow(dead_code)]
+mod indicators;
+
+#[test]
+fn the_indicators_example_shows_two_dials_a_rating_and_a_shelf() {
+    let mut driver = indicators::indicators_app(true).driver(72, 26);
+    driver.settle();
+    assert_screen!(driver, "indicators_example");
+    let said: Vec<String> = driver
+        .accessibility()
+        .iter()
+        .map(|n| n.describe())
+        .collect();
+    assert!(
+        said.contains(&"Download, meter: 287 Mbps".to_string()),
+        "{said:?}"
+    );
+    assert!(
+        said.contains(&"Upload, meter: 41.8 Mbps".to_string()),
+        "{said:?}"
+    );
+    assert!(
+        said.contains(&"Your rating, slider: 4 out of 5".to_string()),
+        "{said:?}"
+    );
+    // Tab to the shelf, and on a page.
+    driver.press("tab ]");
+    let shown = rows(&driver).join("\n");
+    assert!(shown.contains("Stove") || shown.contains("Rope"), "{shown}");
+}
