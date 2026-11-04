@@ -228,6 +228,12 @@ jobs:
   features:
     name: feature matrix
     runs-on: ubuntu-latest
+    # Without debug info, as the `check` job: rs-rich-intuituive's
+    # all-features test binaries filled the runner's disk ("No space left on
+    # device" mid-test).
+    env:
+      CARGO_PROFILE_DEV_DEBUG: "0"
+      CARGO_PROFILE_TEST_DEBUG: "0"
     strategy:
       fail-fast: false
       matrix:
