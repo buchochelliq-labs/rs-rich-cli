@@ -2,6 +2,7 @@
 
 import os
 import json
+import re
 from pathlib import Path
 import shutil
 import subprocess
@@ -71,6 +72,8 @@ def release_policy():
 
 # The one published actions/checkout major every workflow must use.
 CHECKOUT_MAJOR = "actions/checkout@v7"
+# ...or that major pinned to a commit, as release-kit's files and release.yml pin it.
+PINNED_CHECKOUT = re.compile(r"actions/checkout@[0-9a-f]{40} # v7(?:\.|$)")
 
 class ReadinessTests(unittest.TestCase):
     def test_release_tag_must_be_annotated_checked_out_and_on_main(self):
@@ -243,32 +246,28 @@ class ReadinessTests(unittest.TestCase):
             [
                 f"{path.relative_to(ROOT)}: {line.strip()}"
                 for path, line in checkout_refs
-                if CHECKOUT_MAJOR not in line
+                if CHECKOUT_MAJOR not in line and not PINNED_CHECKOUT.search(line)
             ],
         )
 
     def test_release_publishes_with_trusted_publishing_only(self):
         workflow = (ROOT / ".github/workflows/release.yml").read_text()
-        # The upload token comes from the OIDC exchange, which is requested
-        # only by the publish job. The one exception is a brand-new crate's
-        # first version: the environment's token reaches the upload step
-        # only when the preflight found a new crate.
+        # The upload tokens come from OIDC exchanges, requested only by the
+        # publish jobs (release-kit's publish-crates and publish-pypi). The one
+        # exception is a brand-new crate's first version: the environment's
+        # token reaches the kit's action only when the preflight found one.
         self.assertEqual(1, workflow.count("secrets.CARGO_REGISTRY_TOKEN"))
-        self.assertIn("RELEASE_NEW_CRATE_TOKEN: ${{ steps.preflight.outputs.new_crate == 'true' && "
+        self.assertIn("new-crate-token: ${{ steps.preflight.outputs.new_crate == 'true' && "
                       "secrets.CARGO_REGISTRY_TOKEN || '' }}", workflow)
-        exchange = workflow[workflow.index("Authenticate with crates.io Trusted Publishing"):]
-        self.assertIn("steps.preflight.outputs.existing_crate == 'true'", exchange.split("uses:")[0])
-        self.assertIn("uses: rust-lang/crates-io-auth-action@v1", workflow)
-        self.assertIn("RELEASE_TRUSTED_TOKEN: ${{ steps.crates-io-auth.outputs.token }}", workflow)
-        # No step hands Cargo a token directly: release.py picks one per run.
         self.assertNotIn("CARGO_REGISTRY_TOKEN: $", workflow)
-        self.assertEqual(1, workflow.count("id-token: write"))
-        publish = workflow[workflow.index("  publish:"):]
-        self.assertIn("id-token: write", publish)
-        # The exchange happens after the preflight and dry run, never before.
-        self.assertLess(publish.index("release.py preflight"), publish.index("crates-io-auth-action"))
-        self.assertLess(publish.index("publish --dry-run"), publish.index("crates-io-auth-action"))
-        self.assertLess(publish.index("crates-io-auth-action"), publish.index("run: python3 scripts/release.py publish\n"))
+        self.assertEqual(2, workflow.count("id-token: write"))
+        crates = workflow[workflow.index("\n  publish-crates:"):workflow.index("\n  publish-pypi:")]
+        self.assertIn("id-token: write", crates)
+        self.assertIn("token: ${{ steps.auth.outputs.token }}", crates)
+        # The exchange happens after the preflight, and only for an existing crate.
+        self.assertLess(crates.index("release.py preflight"), crates.index("crates-io-auth-action"))
+        self.assertIn("if: steps.preflight.outputs.existing_crate == 'true'",
+                      crates[crates.index("id: auth"):crates.index("crates-io-auth-action")])
 
     def test_release_handoff_gate_enforces_final_snapshot_fields(self):
         workflow = (ROOT / ".github/workflows/pr-hygiene.yml").read_text()

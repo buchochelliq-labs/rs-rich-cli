@@ -1,16 +1,20 @@
-# Publish the Python bindings (`rs-rich` on PyPI) from a `python-vX.Y.Z` tag.
-#
-# PyPI Trusted Publishing only: no token secret exists. PyPI's publisher for
-# `rs-rich` expects exactly this repository, this file name
-# (`pypi-release.yml`) and the `pypi` environment, so none of them may change.
-# Like crates.io, an upload is permanent: the gate re-checks the tag first.
-# `python-v…` never matches `release.yml`'s `release-*` tags, and vice versa;
-# `release_cohort.py tag` pushes both, each starting its own run.
+# The old PyPI path, kept as a manual fallback until release-kit has published
+# a release (docs/BRANCHING.md, "Which path is current"). Releases now publish
+# `rs-rich` to PyPI from release.yml's `publish-pypi` job, in the same run as
+# the crates; release-kit's `python-v…` record tags start nothing, so this
+# workflow no longer starts on a tag push. It runs only when dispatched by
+# hand with an existing `python-vX.Y.Z` tag, and it can upload only while
+# PyPI's trusted publishers for `rs-rich` still include this file
+# (`pypi-release.yml`, environment `pypi`). Retire it, and that publisher,
+# once release-kit has published a release.
 name: pypi-release
 
 on:
-  push:
-    tags: ["python-v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: An existing python-vX.Y.Z tag to publish (fallback only; release.yml publishes PyPI)
+        required: true
 
 permissions:
   contents: read
@@ -27,20 +31,27 @@ jobs:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
+          ref: refs/tags/${{ inputs.tag }}
       - name: The tag names the package's version, on main
         shell: bash
+        env:
+          TAG: ${{ inputs.tag }}
         run: |
           set -euo pipefail
-          tag="${GITHUB_REF_NAME}"
+          tag="${TAG}"
           version="$(python3 -c 'import tomllib; print(tomllib.load(open("crates/rich-py/pyproject.toml","rb"))["project"]["version"])')"
           test "${tag}" = "python-v${version}" || { echo "tag ${tag} does not match pyproject version ${version}"; exit 1; }
-          git merge-base --is-ancestor "${GITHUB_SHA}" origin/main || { echo "${tag} is not on main"; exit 1; }
+          git merge-base --is-ancestor HEAD origin/main || { echo "${tag} is not on main"; exit 1; }
       # A version on PyPI is permanent: refuse the tag before building wheels.
       - name: Refuse a version already on PyPI
-        run: python3 scripts/release_cohort.py unreleased "${GITHUB_REF_NAME}"
+        env:
+          TAG: ${{ inputs.tag }}
+        run: python3 scripts/release_cohort.py unreleased "$TAG"
       # One release, one commit: the same check as release.yml's.
       - name: Refuse a tag that splits its release across commits
-        run: python3 scripts/release_cohort.py same-commit "${GITHUB_REF_NAME}"
+        env:
+          TAG: ${{ inputs.tag }}
+        run: python3 scripts/release_cohort.py same-commit "$TAG"
 
   wheels:
     name: wheel (${{ matrix.name }})
@@ -56,6 +67,8 @@ jobs:
           - { name: windows-x86_64, os: windows-latest, target: x64 }
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: refs/tags/${{ inputs.tag }}
       - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
@@ -88,6 +101,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: refs/tags/${{ inputs.tag }}
       - uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
         with:
           command: sdist
@@ -107,6 +122,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: refs/tags/${{ inputs.tag }}
       - uses: actions/setup-python@v7
         with:
           python-version: "3.13"

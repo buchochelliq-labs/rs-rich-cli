@@ -56,6 +56,16 @@ jobs:
       - name: RELEASES.toml matches the manifests and the dependency order
         run: python3 scripts/release_cohort.py check
 
+      # release-kit (docs/BRANCHING.md): release-kit.yml matches the
+      # manifests (`check`), the installed copy is unmodified (`vendored`),
+      # every package plans its build jobs (`plan`), and `tag --dry-run`
+      # passes against origin's real tags, from a throwaway remote: nothing
+      # is pushed.
+      - name: Rehearse the release with release-kit (check, vendored, plan, tag --dry-run)
+        run: |
+          python3 -m pip install --quiet pyyaml
+          python3 scripts/release_rehearsal.py
+
       # The docs playground spike has a workspace and a lockfile of its own,
       # which no other job builds: a version bump that leaves it stale shows
       # here (0.0.23 plan, item 15).
