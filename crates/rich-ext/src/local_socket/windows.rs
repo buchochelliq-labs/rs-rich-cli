@@ -265,30 +265,41 @@ impl Security {
     #[allow(unsafe_code)] // the ACL's ACEs, read in place.
     fn admits_only_me(&self) -> io::Result<bool> {
         let me = me()?;
-        if self.dacl.is_null() {
+        // No DACL at all grants everyone everything.
+        let Some(dacl) = std::ptr::NonNull::new(self.dacl) else {
             return Ok(false);
-        }
-        // SAFETY: a valid ACL while `self` lives.
-        let count = unsafe { (*self.dacl).AceCount };
+        };
+        // SAFETY: a non-null ACL from GetSecurityInfo, valid while `self`
+        // lives (its descriptor is freed on drop).
+        let count = unsafe { dacl.as_ref() }.AceCount;
         for index in 0..u32::from(count) {
-            let mut ace = std::ptr::null_mut();
-            // SAFETY: an index below the ACE count; `ace` is writable.
-            if unsafe { GetAce(self.dacl, index, &mut ace) } == 0 {
+            let mut raw = std::ptr::null_mut();
+            // SAFETY: an index below the ACE count; `raw` is writable.
+            if unsafe { GetAce(dacl.as_ptr(), index, &mut raw) } == 0 {
                 return Err(io::Error::last_os_error());
             }
-            // SAFETY: every ACE starts with its header.
-            let kind = unsafe { (*(ace as *const ACE_HEADER)).AceType };
-            if !ALLOWED_ACES.contains(&kind) {
+            let Some(ace) = std::ptr::NonNull::new(raw.cast::<ACE_HEADER>()) else {
+                return Err(io::Error::other("GetAce gave no entry"));
+            };
+            // SAFETY: a non-null ACE inside the ACL: every ACE starts with
+            // its header.
+            let header = unsafe { ace.as_ref() };
+            if !ALLOWED_ACES.contains(&header.AceType) {
                 continue;
             }
             // A plain allow ACE: header, mask, then the SID. The others
             // (object, callback) are never in what this module makes.
-            if kind != 0 {
+            if header.AceType != 0 {
                 return Ok(false);
             }
-            // SAFETY: an ACCESS_ALLOWED_ACE: the SID follows the 4-byte
-            // header and the 4-byte mask.
-            let sid = unsafe { (ace as *mut u8).add(8) } as PSID;
+            // Header (4), mask (4) and at least a minimal SID (8): anything
+            // shorter is malformed, and admits no one we can vouch for.
+            if usize::from(header.AceSize) < 16 {
+                return Ok(false);
+            }
+            // SAFETY: an ACCESS_ALLOWED_ACE of at least 16 bytes: the SID
+            // follows the 4-byte header and the 4-byte mask, inside it.
+            let sid = unsafe { ace.as_ptr().cast::<u8>().add(8) } as PSID;
             // SAFETY: both SIDs are valid here.
             if unsafe { EqualSid(sid, me.psid()) } == 0 {
                 return Ok(false);
