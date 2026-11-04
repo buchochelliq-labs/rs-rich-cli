@@ -278,6 +278,11 @@ pub(crate) struct Table {
     /// [`marker`](TableOptions::marker)'s: [`Node::selection_markers`] and
     /// [`Node::marks_by`].
     pub(crate) marks: Option<crate::list::Marks>,
+    /// While the table sorts its own rows: the index among the rows given
+    /// of each row as shown, as the last sort left them.
+    sorted: RefCell<Option<Vec<usize>>>,
+    /// The cells the row labels took at the last draw.
+    labels: Cell<u16>,
 }
 
 /// Which way a table's column is sorted.
@@ -408,7 +413,19 @@ pub struct TableOptions {
     /// scroll: Textual's `fixed_rows` (a pinned row, totals at the top).
     /// The cursor still moves through them.
     pub freeze_rows: usize,
+    /// Each row's label, drawn in a column of its own at the left: see
+    /// [`row_labels`](Self::row_labels).
+    pub row_labels: Option<RowLabel>,
+    /// Cells drawn by a renderable in place of their markup: see
+    /// [`renderables`](Self::renderables).
+    pub renderables: Option<CellRenderable>,
 }
+
+/// A row's label, for the row at this index among the rows given.
+pub type RowLabel = Box<dyn Fn(usize) -> String>;
+/// The renderable for the cell at a row (among the rows given) and a
+/// column (among all the columns), if it has one.
+pub type CellRenderable = Box<dyn Fn(usize, usize) -> Option<Rc<dyn rich::Renderable>>>;
 
 /// A sorted column's title, from its title and the order.
 pub type SortIndicator = Box<dyn Fn(&str, Order) -> String>;
@@ -932,6 +949,69 @@ impl TableOptions {
         self
     }
 
+    /// A label for each row: markup, for the row at index `i` among the
+    /// rows given (it follows its row when the table sorts them). Labels
+    /// are drawn in a column of their own at the left, as wide as the
+    /// widest of the rows in view and the last row, in the theme's
+    /// `table.row_label` style (bold by default); the column has no title,
+    /// stays in place while the table scrolls across, and is not a column
+    /// the cell cursor visits. Textual's row labels.
+    ///
+    /// ```
+    /// use intuituive::prelude::*;
+    /// use intuituive::widgets::{table_with, Column, TableOptions};
+    ///
+    /// let app = App::new(|| {
+    ///     let columns = vec![Column::new("Name", Size::Auto)];
+    ///     let rows = || vec![vec!["a.txt".into()], vec!["b.txt".into()]];
+    ///     let options = TableOptions::default().row_labels(|i| format!("{}", i + 1));
+    ///     table_with(columns, rows, signal(0), options).on_key("q", |cx| cx.quit())
+    /// });
+    /// let screen = app.render_with(&["q"], 12, 3).unwrap();
+    /// assert_eq!(screen[0].trim_end(), "  Name");
+    /// assert_eq!(screen[2].trim_end(), "2 b.txt");
+    /// ```
+    pub fn row_labels(mut self, label: impl Fn(usize) -> String + 'static) -> TableOptions {
+        self.row_labels = Some(Box::new(label));
+        self
+    }
+
+    /// Cells drawn by a renderable (a `Table`, a `Syntax`, a `Pretty`, a
+    /// `Panel`): `cell(row, column)` gives one for the cell at `row` among
+    /// the rows given (it follows its row when the table sorts them) and
+    /// `column` among all the columns, or `None` to draw the cell's markup.
+    /// The markup still sorts the row and is what a screen reader reads. A
+    /// [`Size::Auto`] column is as wide as its renderables measure; with
+    /// [`multiline`](Self::multiline) a row is as tall as its tallest
+    /// renderable at its column's width, else a renderable shows its first
+    /// lines, as many as the row has.
+    ///
+    /// ```
+    /// use std::rc::Rc;
+    /// use intuituive::prelude::*;
+    /// use intuituive::rich::{Panel, Text};
+    /// use intuituive::widgets::{table_with, Column, TableOptions};
+    ///
+    /// let app = App::new(|| {
+    ///     let columns = vec![Column::new("Name", Size::Auto), Column::new("Box", Size::Auto)];
+    ///     let rows = || vec![vec!["a".into(), "ok".into()]];
+    ///     let options = TableOptions::default().multiline().renderables(|_, column| {
+    ///         (column == 1).then(|| Rc::new(Panel::new(Box::new(Text::new("ok")))) as Rc<dyn intuituive::rich::Renderable>)
+    ///     });
+    ///     table_with(columns, rows, signal(0), options).on_key("q", |cx| cx.quit())
+    /// });
+    /// let screen = app.render_with(&["q"], 12, 4).unwrap();
+    /// assert_eq!(screen[1].trim_end(), "a    ╭────╮");
+    /// assert_eq!(screen[2].trim_end(), "     │ ok │");
+    /// ```
+    pub fn renderables(
+        mut self,
+        cell: impl Fn(usize, usize) -> Option<Rc<dyn rich::Renderable>> + 'static,
+    ) -> TableOptions {
+        self.renderables = Some(Box::new(cell));
+        self
+    }
+
     /// Record where each draw puts the columns and rows in `layout`.
     pub fn layout(mut self, layout: &TableLayout) -> TableOptions {
         self.layout = Some(layout.clone());
@@ -1136,6 +1216,8 @@ pub fn virtual_list(
         seen_x: Cell::new(None),
         rects: None,
         marks: None,
+        sorted: RefCell::new(None),
+        labels: Cell::new(0),
     })
 }
 
@@ -1251,6 +1333,8 @@ fn table_options(
         seen_x: Cell::new(None),
         rects: None,
         marks: None,
+        sorted: RefCell::new(None),
+        labels: Cell::new(0),
     })
 }
 
@@ -1362,6 +1446,34 @@ fn cell_lines(
         .into_iter()
         .map(|line| aligned(line, width, align))
         .collect()
+}
+
+/// The most cells a renderable's natural width is measured at, in a table
+/// that scrolls across.
+const MAX_NATURAL: u16 = 1024;
+
+/// The cells `renderable` wants, at most `room`.
+fn renderable_width(console: &Console, renderable: &dyn rich::Renderable, room: u16) -> u16 {
+    let options = console.options().update_width(room.max(1) as usize);
+    let measured = rich::measure::Measurement::get(console, &options, renderable);
+    measured.maximum.min(room as usize) as u16
+}
+
+/// `renderable`'s lines `width` cells wide, each padded to it.
+fn renderable_lines(
+    console: &Console,
+    renderable: &dyn rich::Renderable,
+    width: u16,
+) -> Vec<Vec<Segment>> {
+    if width == 0 {
+        return vec![Vec::new()];
+    }
+    let options = console.options().update_width(width as usize);
+    let mut lines = console.render_lines(renderable, &options, true);
+    if lines.is_empty() {
+        lines.push(vec![Segment::new(" ".repeat(width as usize), None)]);
+    }
+    lines
 }
 
 /// The cells a cell of markup takes.
@@ -1498,6 +1610,40 @@ impl Table {
         self.order.iter().position(|&c| c == column)
     }
 
+    /// The index among the rows given of the row shown at `i`.
+    fn source(&self, i: usize) -> usize {
+        self.sorted
+            .borrow()
+            .as_ref()
+            .and_then(|by| by.get(i).copied())
+            .unwrap_or(i)
+    }
+
+    /// The renderable for the cell of the row shown at `i` in the column
+    /// shown at `at`, if [`TableOptions::renderables`] gives one.
+    fn renderable(&self, i: usize, at: usize) -> Option<Rc<dyn rich::Renderable>> {
+        let cell = self.options.renderables.as_ref()?;
+        cell(self.source(i), self.original(at))
+    }
+
+    /// The row labels' width for the rows `near` (shown indices), and the
+    /// last row, with the cell after them; 0 without labels.
+    fn label_width(&self, near: impl Iterator<Item = usize>, len: usize) -> u16 {
+        let Some(label) = &self.options.row_labels else {
+            return 0;
+        };
+        if len == 0 {
+            return 0;
+        }
+        let widest = near
+            .filter(|&i| i < len)
+            .chain([len - 1])
+            .map(|i| markup_width(&label(self.source(i))))
+            .max()
+            .unwrap_or(0);
+        if widest == 0 { 0 } else { widest + 1 }
+    }
+
     /// The index among all the columns of the column shown at `at`.
     fn original(&self, at: usize) -> usize {
         self.order.get(at).copied().unwrap_or(at)
@@ -1522,18 +1668,30 @@ impl Table {
         let order = self.options.sort.filter(|_| self.options.sort_rows);
         let rows = match (&self.rows, order.and_then(|sort| sort.get())) {
             (Rows::All(rows), Some((column, order))) => {
-                let mut all = rows();
-                all.sort_by(|a, b| {
-                    let (a, b) = (a.get(column), b.get(column));
+                let all = rows();
+                let mut by: Vec<usize> = (0..all.len()).collect();
+                by.sort_by(|&a, &b| {
+                    let (a, b) = (all[a].get(column), all[b].get(column));
                     let by = compare_cells(a.map_or("", |s| s), b.map_or("", |s| s));
                     match order {
                         Order::Ascending => by,
                         Order::Descending => by.reverse(),
                     }
                 });
-                all.into_iter().skip(from).take(count).collect()
+                let mut all: Vec<Option<Vec<String>>> = all.into_iter().map(Some).collect();
+                let rows = by
+                    .iter()
+                    .skip(from)
+                    .take(count)
+                    .map(|&i| all[i].take().unwrap_or_default())
+                    .collect();
+                *self.sorted.borrow_mut() = Some(by);
+                rows
             }
-            _ => self.rows.window(from, count),
+            _ => {
+                self.sorted.borrow_mut().take();
+                self.rows.window(from, count)
+            }
         };
         rows.into_iter()
             .map(|row| pick(&self.order, self.identity, row))
@@ -1641,7 +1799,14 @@ impl Table {
     /// Each column's track in a table `room` cells wide: its size (or the
     /// width it was set or dragged to), its least and most, and for
     /// [`Size::Auto`] the widest of its title and `rows`.
-    fn tracks(&self, rows: &[Vec<String>], titles: &[String], room: u16) -> Vec<Track> {
+    fn tracks(
+        &self,
+        console: &Console,
+        rows: &[Vec<String>],
+        indices: &[usize],
+        titles: &[String],
+        room: u16,
+    ) -> Vec<Track> {
         let set = self.options.widths.map(|widths| widths.get());
         let dragged = self.dragged.borrow();
         self.columns
@@ -1661,8 +1826,16 @@ impl Table {
                 if size == Size::Auto {
                     track.content = rows
                         .iter()
-                        .filter_map(|row| row.get(i))
-                        .map(|cell| markup_width(cell))
+                        .enumerate()
+                        .filter_map(|(n, row)| {
+                            let at = indices.get(n).and_then(|&r| self.renderable(r, i));
+                            match at {
+                                Some(renderable) => {
+                                    Some(renderable_width(console, &*renderable, room))
+                                }
+                                None => row.get(i).map(|cell| markup_width(cell)),
+                            }
+                        })
                         .chain([markup_width(&titles[i])])
                         .max()
                         .unwrap_or(0);
@@ -1742,10 +1915,13 @@ impl Table {
             (None, None) if options.wraps() => widths
                 .iter()
                 .enumerate()
-                .map(|(i, w)| {
-                    let markup = cells.get(i).map_or("", String::as_str);
-                    let (align, overflow) = self.cell_rules(i);
-                    cell_lines(console, markup, *w, align, overflow, true).len()
+                .map(|(at, w)| match self.renderable(i, at) {
+                    Some(renderable) => renderable_lines(console, &*renderable, *w).len(),
+                    None => {
+                        let markup = cells.get(at).map_or("", String::as_str);
+                        let (align, overflow) = self.cell_rules(at);
+                        cell_lines(console, markup, *w, align, overflow, true).len()
+                    }
                 })
                 .max()
                 .unwrap_or(1)
@@ -1761,6 +1937,7 @@ impl Table {
     fn row_lines(
         &self,
         console: &Console,
+        row: Option<usize>,
         cells: &[String],
         widths: &[u16],
         height: usize,
@@ -1771,6 +1948,9 @@ impl Table {
             .iter()
             .enumerate()
             .map(|(i, w)| {
+                if let Some(renderable) = row.and_then(|row| self.renderable(row, i)) {
+                    return renderable_lines(console, &*renderable, *w);
+                }
                 let markup = cells.get(i).map_or("", String::as_str);
                 let (align, overflow) = self.cell_rules(i);
                 cell_lines(console, markup, *w, align, overflow, wrap)
@@ -1844,6 +2024,7 @@ impl Widget for Table {
             Some((x, w)) => crate::screen::Rect::new(x, top, w, height),
             None => {
                 let (gutter, marker, symbol) = self.indents(true);
+                let gutter = gutter + self.labels.get();
                 let x = gutter + if symbol > 0 { marker + symbol } else { 0 };
                 crate::screen::Rect::new(x, top, u16::MAX, height)
             }
@@ -1889,9 +2070,11 @@ impl Widget for Table {
                     let titles = self.titles(None);
                     let (gutter, marker, symbol) =
                         self.indents(self.selection.get_untracked().is_some());
-                    let room = width.saturating_sub(gutter + marker + symbol);
+                    let labels = self.label_width(0..len, len);
+                    let room = width.saturating_sub(gutter + labels + marker + symbol);
                     let spacing = self.options.spacing();
-                    let tracks = self.tracks(&rows, &titles, room);
+                    let indices: Vec<usize> = (0..len).collect();
+                    let tracks = self.tracks(cx.console(), &rows, &indices, &titles, room);
                     let widths = solve(room, spacing, &tracks);
                     rows.iter()
                         .enumerate()
@@ -1937,6 +2120,16 @@ impl Widget for Table {
         let spacing = self.options.spacing();
         let (gutter, marker, symbol) = self.indents(selected.is_some());
         let indent = marker + symbol;
+        // Row labels keep a column after the marker's, as wide as the
+        // labels of the rows near the view and the last row.
+        let labels = {
+            let (pinned, near) = (self.options.freeze_rows, self.first.get());
+            let near = near.saturating_sub(full_body)..near + 2 * full_body.max(1);
+            self.label_width((0..pinned.min(len)).chain(near), len)
+        };
+        self.labels.set(labels);
+        let marker_cells = gutter;
+        let gutter = gutter + labels;
         let single = self.options.single_line();
         // The rows in hand: every row once (multi-line rows need their
         // heights), or the ones looked at.
@@ -1963,7 +2156,8 @@ impl Widget for Table {
             n => {
                 let near: Vec<Vec<String>> = (0..n).map(|i| fetch.row(i)).collect();
                 let room = width.saturating_sub(gutter + indent);
-                let tracks = self.tracks(&near, &titles, room);
+                let indices: Vec<usize> = (0..n).collect();
+                let tracks = self.tracks(console, &near, &indices, &titles, room);
                 let widths = solve(room, spacing, &tracks);
                 near.iter()
                     .enumerate()
@@ -1988,11 +2182,10 @@ impl Widget for Table {
         let padding = self.options.scroll_padding;
         let guess = self.first.get().max(frozen).min(len.saturating_sub(1));
         let widths_at = |fetch: &mut Fetch, room: u16| -> Vec<u16> {
-            let near: Vec<Vec<String>> = (guess..(guess + body.max(1)).min(len))
-                .map(|i| fetch.row(i))
-                .collect();
+            let indices: Vec<usize> = (guess..(guess + body.max(1)).min(len)).collect();
+            let near: Vec<Vec<String>> = indices.iter().map(|&i| fetch.row(i)).collect();
             let room = room.saturating_sub(indent);
-            let tracks = self.tracks(&near, &titles, room);
+            let tracks = self.tracks(console, &near, &indices, &titles, room);
             solve(room, spacing, &tracks)
         };
         // The first scrolled row, the frozen ones aside.
@@ -2123,7 +2316,8 @@ impl Widget for Table {
         // view; a column the user dragged keeps that width.
         let room = content_width.saturating_sub(indent);
         let mut titles = titles;
-        let mut tracks = self.tracks(&rows, &titles, room);
+        let indices: Vec<usize> = placed.iter().map(|&(i, _, _)| i).collect();
+        let mut tracks = self.tracks(console, &rows, &indices, &titles, room);
         // Columns with a priority that do not fit are dropped, whole.
         if !self.options.scroll_x {
             let gone = self.dropped(&tracks, &titles, room, spacing);
@@ -2149,7 +2343,7 @@ impl Widget for Table {
                     .map(|(_, c)| c)
                     .collect();
                 self.identity = false;
-                tracks = self.tracks(&rows, &titles, room);
+                tracks = self.tracks(console, &rows, &indices, &titles, room);
             }
         }
         let cell = self
@@ -2169,8 +2363,13 @@ impl Widget for Table {
                         Size::Fixed(width) => width,
                         _ => rows
                             .iter()
-                            .filter_map(|row| row.get(i))
-                            .map(|cell| markup_width(cell))
+                            .zip(&indices)
+                            .filter_map(|(row, &r)| match self.renderable(r, i) {
+                                Some(renderable) => {
+                                    Some(renderable_width(console, &*renderable, MAX_NATURAL))
+                                }
+                                None => row.get(i).map(|cell| markup_width(cell)),
+                            })
                             .chain([markup_width(&titles[i])])
                             .max()
                             .unwrap_or(0)
@@ -2237,7 +2436,7 @@ impl Widget for Table {
         let plain_line = |cells: &[String]| -> Vec<Segment> {
             let mut out: Vec<Segment> = blank_indent.iter().cloned().collect();
             let line = self
-                .row_lines(console, cells, &widths, 1, spacing)
+                .row_lines(console, None, cells, &widths, 1, spacing)
                 .remove(0);
             out.extend(line);
             match &window {
@@ -2258,7 +2457,7 @@ impl Widget for Table {
                 // The footer has no `‹` and `›`: those are the header's.
                 let mut full: Vec<Segment> = blank_indent.iter().cloned().collect();
                 full.extend(
-                    self.row_lines(console, &cells, &widths, 1, spacing)
+                    self.row_lines(console, None, &cells, &widths, 1, spacing)
                         .remove(0),
                 );
                 line = window.cut(&full);
@@ -2285,6 +2484,7 @@ impl Widget for Table {
             .map(|markup| symbol_markup(markup));
         let row_gap = self.options.row_gap as usize;
         let layer = self.options.highlight_layer;
+        let label_style = cx.style("table.row_label", "bold");
         for ((i, y, h), cells) in placed.iter().zip(&rows) {
             let is_selected = selected == Some(*i);
             let lines_tall = (*h as usize).saturating_sub(row_gap).max(1);
@@ -2302,7 +2502,7 @@ impl Widget for Table {
                 .filter(|_| symbol > 0)
                 .and_then(|(_, symbols)| symbols(*i, is_selected))
                 .map(|markup| symbol_markup(&markup));
-            let lines = self.row_lines(console, cells, &widths, lines_tall, spacing);
+            let lines = self.row_lines(console, Some(*i), cells, &widths, lines_tall, spacing);
             let mut out_lines = Vec::with_capacity(lines.len());
             for (n, line) in lines.into_iter().enumerate() {
                 let mut segments = Vec::new();
@@ -2349,11 +2549,18 @@ impl Widget for Table {
             let shown = (out_lines.len() as u16).min(room);
             canvas.lines_at(left, *y, content_width, shown, &out_lines);
             // The marker column, outside the row's style and highlight.
-            if gutter > 0 {
+            if marker_cells > 0 {
                 let mark = vec![Segment::new(" ", self.mark_of(console, *i))];
                 for line in 0..shown {
                     canvas.lines_at(gutter_x, *y + line, 1, 1, std::slice::from_ref(&mark));
                 }
+            }
+            // The row's label, on its first line.
+            if let (Some(label), true) = (&self.options.row_labels, labels > 0 && shown > 0) {
+                let markup = label(self.source(*i));
+                let line = cut_line(console, &markup, labels - 1, Overflow::Ellipsis);
+                let line = over(line, &label_style);
+                canvas.lines_at(gutter_x + marker_cells, *y, labels - 1, 1, &[line]);
             }
             // The cell cursor, over the selected row's cell.
             if let (true, Some(column)) = (is_selected, cell)

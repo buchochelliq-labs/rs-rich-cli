@@ -6688,10 +6688,12 @@ pub intuituive::widgets::TableOptions::multiline: bool
 pub intuituive::widgets::TableOptions::multiline_when: core::option::Option<alloc::boxed::Box<dyn core::ops::function::Fn() -> bool>>
 pub intuituive::widgets::TableOptions::offset: core::option::Option<intuituive::reactive::Signal<usize>>
 pub intuituive::widgets::TableOptions::offset_x: core::option::Option<intuituive::reactive::Signal<usize>>
+pub intuituive::widgets::TableOptions::renderables: core::option::Option<intuituive::widgets::CellRenderable>
 pub intuituive::widgets::TableOptions::resizable: bool
 pub intuituive::widgets::TableOptions::row_gap: u16
 pub intuituive::widgets::TableOptions::row_height: core::option::Option<u16>
 pub intuituive::widgets::TableOptions::row_height_for: core::option::Option<alloc::boxed::Box<dyn core::ops::function::Fn(usize) -> u16>>
+pub intuituive::widgets::TableOptions::row_labels: core::option::Option<intuituive::widgets::RowLabel>
 pub intuituive::widgets::TableOptions::row_style: core::option::Option<alloc::boxed::Box<dyn core::ops::function::Fn(usize) -> core::option::Option<alloc::string::String>>>
 pub intuituive::widgets::TableOptions::scroll_padding: usize
 pub intuituive::widgets::TableOptions::scroll_x: bool
@@ -6723,10 +6725,12 @@ pub fn intuituive::widgets::TableOptions::multiline(self) -> intuituive::widgets
 pub fn intuituive::widgets::TableOptions::multiline_when(self, impl core::ops::function::Fn() -> bool + 'static) -> intuituive::widgets::TableOptions
 pub fn intuituive::widgets::TableOptions::offset(self, intuituive::reactive::Signal<usize>) -> intuituive::widgets::TableOptions
 pub fn intuituive::widgets::TableOptions::offset_x(self, intuituive::reactive::Signal<usize>) -> intuituive::widgets::TableOptions
+pub fn intuituive::widgets::TableOptions::renderables(self, impl core::ops::function::Fn(usize, usize) -> core::option::Option<alloc::rc::Rc<dyn rich::protocol::Renderable>> + 'static) -> intuituive::widgets::TableOptions
 pub fn intuituive::widgets::TableOptions::resizable(self) -> intuituive::widgets::TableOptions
 pub fn intuituive::widgets::TableOptions::row_gap(self, u16) -> intuituive::widgets::TableOptions
 pub fn intuituive::widgets::TableOptions::row_height(self, u16) -> intuituive::widgets::TableOptions
 pub fn intuituive::widgets::TableOptions::row_height_for(self, impl core::ops::function::Fn(usize) -> u16 + 'static) -> intuituive::widgets::TableOptions
+pub fn intuituive::widgets::TableOptions::row_labels(self, impl core::ops::function::Fn(usize) -> alloc::string::String + 'static) -> intuituive::widgets::TableOptions
 pub fn intuituive::widgets::TableOptions::row_style(self, impl core::ops::function::Fn(usize) -> core::option::Option<alloc::string::String> + 'static) -> intuituive::widgets::TableOptions
 pub fn intuituive::widgets::TableOptions::scroll_padding(self, usize) -> intuituive::widgets::TableOptions
 pub fn intuituive::widgets::TableOptions::scroll_x(self) -> intuituive::widgets::TableOptions
@@ -7022,6 +7026,8 @@ pub fn intuituive::widgets::virtual_table_with(alloc::vec::Vec<intuituive::widge
 pub fn intuituive::widgets::vsplit(intuituive::node::Node, intuituive::node::Node, intuituive::reactive::Signal<f64>) -> intuituive::node::Node
 pub fn intuituive::widgets::year_view(impl core::ops::function::Fn() -> i32 + 'static, intuituive::widgets::YearOptions) -> intuituive::node::Node
 pub fn intuituive::widgets::year_view_with(impl core::ops::function::Fn() -> i32 + 'static, impl core::ops::function::Fn() -> intuituive::widgets::YearOptions + 'static) -> intuituive::node::Node
+pub type intuituive::widgets::CellRenderable = alloc::boxed::Box<dyn core::ops::function::Fn(usize, usize) -> core::option::Option<alloc::rc::Rc<dyn rich::protocol::Renderable>>>
+pub type intuituive::widgets::RowLabel = alloc::boxed::Box<dyn core::ops::function::Fn(usize) -> alloc::string::String>
 pub type intuituive::widgets::SortIndicator = alloc::boxed::Box<dyn core::ops::function::Fn(&str, intuituive::widgets::Order) -> alloc::string::String>
 pub type intuituive::widgets::Symbols = alloc::boxed::Box<dyn core::ops::function::Fn(usize, bool) -> core::option::Option<alloc::string::String>>
 pub macro intuituive::assert_screen!

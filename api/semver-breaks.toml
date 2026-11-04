@@ -49,3 +49,10 @@ version = "0.0.4"
 lint = "enum_variant_added"
 items = ["variant PageAction:ScrollBox", "variant Command:ScrollBox", "variant Rule:Shelves"]
 why = "sideways shelves (real sites, second pass, fix 11): a shelf is paged by scrolling its box sideways, and the shelves adaptation draws its strip (0.0.25 plan)"
+
+[[break]]
+crate = "rs-rich-intuituive"
+version = "0.0.10"
+lint = "constructible_struct_adds_field"
+items = ["field TableOptions.row_labels", "field TableOptions.renderables"]
+why = "Textual parity (0.0.25 plan, workstream 3): DataTable's row labels and cells holding renderables, as options of a table"

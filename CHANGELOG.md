@@ -185,6 +185,15 @@ Fixes 2, 4, 10, 12 and 14 of
   cells a node's bars take, `0` hiding one. These are layout, set by a
   node's kind, name and fixed classes. The parser's bounds are as before.
 - **`Scrollbar::size(cells)`**: a bar more than one cell across, or none.
+- **`DataTable` parity: row labels and renderable cells.**
+  `TableOptions::row_labels(|i| markup)` draws each row's label in a
+  column of its own at the left (the `table.row_label` theme style, bold
+  by default), outside the highlight and the scroll across.
+  `TableOptions::renderables(|row, column| ..)` draws a cell with any rich
+  renderable in place of its markup, which still sorts and is read aloud;
+  `Auto` columns measure it and multi-line rows take its height. Both are
+  keyed by a row's index among the rows given, so they follow it when the
+  table sorts its rows.
 
 ### intuiTUIve: the stylesheet fuzz timeout (rs-rich-intuituive)
 

@@ -50,7 +50,7 @@ Modules are under `crates/rich-intuituive/src/`.
 | `Checkbox` | `checkbox`, `checkbox_tri`, `checkbox_of` (`controls.rs`) | ✓ | Has a mixed state, which Textual's lacks |
 | `Collapsible` | `collapsible(title, open, child)` (`collapsible.rs`) | partial | The title is a fixed `String`. A tool-call card needs a title that follows state, plus a status slot (spinner, ✓/✗) and a summary line. Core. |
 | `ContentSwitcher` | `switch(key, build)`, `keyed`, `.keep_last(n)` (`builtin.rs`) | ✓ | |
-| `DataTable` | `table`, `table_with`, `virtual_table`, `TableOptions` (`widgets.rs`) | partial | Already has sorting, a row cursor, a cell cursor (`.cells`), column highlight, frozen columns and rows (`freeze_rows`, 0.0.24), zebra rows (`row_style`), resizable columns, rows from a closure (so cell updates are signal writes) and virtual rows. Missing: row labels, and cells holding renderables rather than markup. Core. |
+| `DataTable` | `table`, `table_with`, `virtual_table`, `TableOptions` (`widgets.rs`) | ✓ | Sorting, a row cursor, a cell cursor (`.cells`), column highlight, frozen columns and rows (`freeze_rows`, 0.0.24), zebra rows (`row_style`), resizable columns, rows from a closure (so cell updates are signal writes) and virtual rows; row labels (`row_labels`) and cells holding renderables (`renderables`), 0.0.25. |
 | `Digits` | `digits` (`digits.rs`) | ✓ | |
 | `DirectoryTree` | `files::miller`, `files::file_list`, `files::pick_file` (`files` feature); generic `tree_lazy` | partial | No tree view of a directory. Plugin: `files::dir_tree` on the core's `tree_lazy`. |
 | `Footer` | `key_hints`, `key_hints_with` (`bars.rs`) | ✓ | Built from described bindings, greyed when unavailable |
@@ -91,7 +91,7 @@ Modules are under `crates/rich-intuituive/src/`.
 | `Tree` | `tree`, `tree_keyed`, `tree_lazy`, `tree_reveal`, `tree_table` (`tree.rs`, `tree_table.rs`) | ✓ | Adds rows that nest inside a table |
 | `Welcome` | — | won't-do | A demo splash for Textual's own `textual` command, with no use in an app |
 
-**Counts:** 44 widgets. 28 ✓, 13 partial, 2 ✗, 1 won't-do.
+**Counts:** 44 widgets. 29 ✓, 12 partial, 2 ✗, 1 won't-do.
 
 ## Framework features
 
@@ -130,10 +130,10 @@ Modules are under `crates/rich-intuituive/src/`.
 | **Accessibility** | limited | roles, states, announcements, linear text mode, screen-reader guide (`a11y.rs`) | ✓ | More than Textual |
 | **Markdown streaming** | `Markdown.append`, `Markdown.get_stream` → `MarkdownStream.write` (batches fragments that arrive faster than they can be drawn) | — | ✗ | The top gap for Cornacai |
 | **TextArea** | tree-sitter highlighting, `TextAreaTheme`s, undo and redo, selection, soft wrap, read-only, line numbers, bracket matching, tab behaviour | all, bracket matching and editor themes included (0.0.24); highlighting through the console's highlighter (syntect, or tree-sitter through rs-rich-lumis); Vim mode | partial | Highlighting state from above the view |
-| **DataTable** | sorting, cell, row, column and no cursor, fixed rows and columns, zebra stripes, `update_cell`, virtual size | all but row labels and renderable cells (fixed rows: `freeze_rows`, 0.0.24) | partial | Row labels, renderable cells |
+| **DataTable** | sorting, cell, row, column and no cursor, fixed rows and columns, zebra stripes, `update_cell`, virtual size | all (fixed rows: `freeze_rows`, 0.0.24; row labels and renderable cells, 0.0.25) | ✓ | |
 | **Inline apps** | `run(inline=True)` | `App::inline(height)`, `print_above` | ✓ | |
 
-**Counts:** 35 areas. 16 ✓, 15 partial, 3 ✗, 1 won't-do.
+**Counts:** 35 areas. 17 ✓, 14 partial, 3 ✗, 1 won't-do.
 
 ## Prioritised gaps
 
