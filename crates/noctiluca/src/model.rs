@@ -191,6 +191,9 @@ pub struct Stack {
     /// badge on a thumbnail, art over a player): an index into
     /// [`Page::media`].
     pub over: Option<usize>,
+    /// The sideways-scrolling shelf it is in (its innermost): an index
+    /// into [`Page::shelves`]. Only that shelf's box clips it.
+    pub shelf: Option<usize>,
 }
 
 /// Where a fixed or sticky layer is drawn.
@@ -3339,10 +3342,25 @@ fn stack(dom: &Dom, page: &mut Page) {
             root[i].is_none().then(|| (m, media.rect, order(i)))
         })
         .collect();
+    // Each node's innermost shelf, from the shelves' own nodes.
+    let shelf_at: HashMap<usize, usize> = page
+        .shelves
+        .iter()
+        .enumerate()
+        .filter_map(|(k, s)| index.get(&s.node).map(|&i| (i, k)))
+        .collect();
+    let mut shelf_of: Vec<Option<usize>> = vec![None; n];
+    for i in 0..n {
+        shelf_of[i] = shelf_at
+            .get(&i)
+            .copied()
+            .or_else(|| parent(i).and_then(|p| shelf_of[p]));
+    }
     for block in &mut page.blocks {
         let Some(&i) = index.get(&block.node) else {
             continue;
         };
+        block.stack.shelf = shelf_of[i];
         if let Some(r) = root[i] {
             block.stack.layer = layer_of.get(&r).copied();
             continue;

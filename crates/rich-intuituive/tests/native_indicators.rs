@@ -458,3 +458,24 @@ fn the_indicators_example_shows_two_dials_a_rating_and_a_shelf() {
     let shown = rows(&driver).join("\n");
     assert!(shown.contains("Stove") || shown.contains("Rope"), "{shown}");
 }
+
+#[test]
+fn a_carousel_sized_to_its_content_measures_the_items_it_shows() {
+    // `.auto()` asks the carousel's height before it was ever laid out:
+    // it makes its first page's items to measure them, so a card taller
+    // than a row is shown whole.
+    let app = App::new(|| {
+        column([
+            carousel(|| 3, signal(0), |_| label("Visible card").panel(""))
+                .item_width(20)
+                .auto(),
+            label("below").auto(),
+        ])
+    });
+    let mut driver = app.driver(70, 12);
+    driver.settle();
+    let screen = rows(&driver).join("\n");
+    assert!(screen.contains("Visible card"), "{screen}");
+    assert!(screen.contains("1–3 of 3"), "{screen}");
+    assert!(screen.contains("below"), "{screen}");
+}

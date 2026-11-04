@@ -2136,6 +2136,7 @@ pub struct noctiluca::model::Stack
 pub noctiluca::model::Stack::covered: bool
 pub noctiluca::model::Stack::layer: core::option::Option<usize>
 pub noctiluca::model::Stack::over: core::option::Option<usize>
+pub noctiluca::model::Stack::shelf: core::option::Option<usize>
 impl core::clone::Clone for noctiluca::model::Stack
 pub fn noctiluca::model::Stack::clone(&self) -> noctiluca::model::Stack
 impl core::cmp::PartialEq for noctiluca::model::Stack

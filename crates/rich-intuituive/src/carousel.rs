@@ -143,6 +143,40 @@ impl Carousel {
     }
 
     /// Whether the strip draws its arrows: when it has room for them.
+    /// The page `inner` cells wide shows, and its items' nodes, kept in
+    /// order: an item still shown keeps its node, a new one is made, one
+    /// paged away is forgotten. Measuring and laying out both call it, so
+    /// a carousel sized to its content measures the items it shows.
+    fn sync(&mut self, inner: u16) {
+        let len = (self.len)();
+        let per = self.per_page(inner);
+        let first = self.first.get().min(len.saturating_sub(1));
+        let shown = len.saturating_sub(first).min(per);
+        self.page = Page {
+            first,
+            shown,
+            len,
+            per,
+        };
+        if self.keys.iter().copied().eq(first..first + shown) {
+            return;
+        }
+        let runtime = Runtime::current();
+        let mut old: Vec<(usize, Node)> =
+            self.keys.drain(..).zip(self.children.drain(..)).collect();
+        for index in first..first + shown {
+            let node = match old.iter().position(|(k, _)| *k == index) {
+                Some(at) => old.swap_remove(at).1,
+                None => runtime.untracked(|| (self.item)(index)),
+            };
+            self.keys.push(index);
+            self.children.push(node);
+        }
+        for (_, gone) in old {
+            gone.forget(&runtime);
+        }
+    }
+
     fn arrows(width: u16) -> bool {
         width >= 6
     }
@@ -205,6 +239,9 @@ impl Widget for Carousel {
                 } else {
                     width
                 };
+                // The page's items are made here too, so a carousel sized to
+                // its content measures the items it is about to show.
+                self.sync(inner);
                 let per = self.per_page(inner) as u16;
                 let slot = inner.saturating_sub(GAP * per.saturating_sub(1)) / per.max(1);
                 let tallest = self
@@ -220,7 +257,6 @@ impl Widget for Carousel {
 
     fn layout(&mut self, cx: &MeasureCx, rect: Rect) -> Vec<Rect> {
         let _ = cx;
-        let len = (self.len)();
         let (inner_x, inner_w) = if Self::arrows(rect.width) {
             (rect.x + 2, rect.width.saturating_sub(4))
         } else {
@@ -231,38 +267,18 @@ impl Widget for Carousel {
         } else {
             rect.height
         };
-        let per = self.per_page(inner_w);
-        let first = self.first.get().min(len.saturating_sub(1));
-        let shown = len.saturating_sub(first).min(per);
-        self.page = Page {
-            first,
-            shown,
-            len,
-            per,
-        };
-        let slots = per as u16;
+        self.sync(inner_w);
+        let slots = self.page.per as u16;
         let room = inner_w.saturating_sub(GAP * slots.saturating_sub(1));
         let (slot, spare) = (room / slots.max(1), room % slots.max(1));
-        let runtime = Runtime::current();
-        let mut old: Vec<(usize, Node)> =
-            self.keys.drain(..).zip(self.children.drain(..)).collect();
         self.areas.clear();
         let mut x = inner_x;
-        for (n, index) in (first..first + shown).enumerate() {
+        for n in 0..self.children.len() {
             // The first items take a cell more each, until the spare is
             // used.
             let width = slot + u16::from((n as u16) < spare);
-            let node = match old.iter().position(|(k, _)| *k == index) {
-                Some(at) => old.swap_remove(at).1,
-                None => runtime.untracked(|| (self.item)(index)),
-            };
-            self.keys.push(index);
-            self.children.push(node);
             self.areas.push(Rect::new(x, rect.y, width, items_h));
             x += width + GAP;
-        }
-        for (_, gone) in old {
-            gone.forget(&runtime);
         }
         self.areas.clone()
     }

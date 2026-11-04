@@ -1301,10 +1301,11 @@ fn project_part(
         }
         // Scrolled out of a shelf's box sideways: Chrome shows it only
         // once the shelf is paged to it.
-        if page
-            .shelves
-            .iter()
-            .any(|s| s.clipped(columns as f64 * cw).hides(&block.rect))
+        if block
+            .stack
+            .shelf
+            .and_then(|k| page.shelves.get(k))
+            .is_some_and(|s| s.clipped(columns as f64 * cw).hides(&block.rect))
         {
             continue;
         }

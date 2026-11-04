@@ -28,6 +28,9 @@ version = "0.0.4"
 lint = "enum_variant_added"
 items = ["variant BlockKind:Indicator", "variant Rule:ScreenReaderTwins", "variant Rule:Indicators"]
 why = "page semantics (0.0.25 plan, Noctiluca real sites fixes 3 and 7): an indicator block, and the screen-reader-twins and indicators adaptations"
+
+[[break]]
+crate = "noctiluca"
 version = "0.0.4"
 lint = "constructible_struct_adds_field"
 items = ["field Block.stack", "field Page.layers", "field Page.scroll_y", "field Page.view_height", "field Projection.overlays", "field Projection.pinned", "field Projection.docked"]

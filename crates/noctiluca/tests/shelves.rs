@@ -106,6 +106,62 @@ fn shelf_page(left: f64, overflow: &str) -> Page {
     build(&p.snapshot(), &mut Revisions::new())
 }
 
+/// Text beside a shelf is not the shelf's: a sidebar paragraph level with
+/// a shelf in the right column keeps its place, and so does a second
+/// shelf at the same height.
+#[test]
+fn a_shelf_clips_only_what_is_in_it() {
+    let mut p = PageBuilder::new("https://shop.example/", "Shop", 800.0, 600.0);
+    let body = p.body();
+    let side = p.element(
+        body,
+        "P",
+        &[],
+        &[],
+        Some(Rect::new(0.0, 100.0, 180.0, 60.0)),
+    );
+    p.text(side, "Sidebar note", Rect::new(0.0, 100.0, 100.0, 18.0));
+    let mut shelf = |p: &mut PageBuilder, x0: f64, name: &str| {
+        let row = p.element(
+            body,
+            "UL",
+            &[("aria-label", name)],
+            &[("display", "flex"), ("overflow-x", "auto")],
+            Some(Rect::new(x0, 100.0, 300.0, 60.0)),
+        );
+        p.scroll_box(row, 0.0, 6.0 * 120.0 - 12.0, 300.0);
+        for k in 0..6 {
+            let x = x0 + k as f64 * 120.0;
+            let card = p.element(
+                row,
+                "LI",
+                &[],
+                &[("display", "list-item")],
+                Some(Rect::new(x, 100.0, 108.0, 60.0)),
+            );
+            p.text(
+                card,
+                &format!("{name} {}", k + 1),
+                Rect::new(x, 100.0, 60.0, 18.0),
+            );
+        }
+    };
+    shelf(&mut p, 200.0, "Left");
+    shelf(&mut p, 500.0, "Right");
+    let page = build(&p.snapshot(), &mut Revisions::new());
+    assert_eq!(page.shelves.len(), 2, "{:#?}", page.shelves);
+    let text = lines(&page, 100, Adapt::default()).join("\n");
+    assert!(text.contains("Sidebar note"), "{text}");
+    assert!(
+        text.contains("Left 1") && text.contains("Right 1"),
+        "{text}"
+    );
+    assert!(
+        !text.contains("Left 4") && !text.contains("Right 4"),
+        "{text}"
+    );
+}
+
 #[test]
 fn a_shelf_paged_on_shows_its_later_items() {
     let page = shelf_page(3.0 * 172.0, "auto");
