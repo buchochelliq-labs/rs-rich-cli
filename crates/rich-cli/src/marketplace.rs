@@ -151,7 +151,7 @@ pub(crate) fn spec() -> rich_ext::cli_doc::CommandSpec {
                 .arg(
                     ArgSpec::option("kind")
                         .value_name("KIND")
-                        .help("Only this kind: crate, wasm-plugin, micro-pack or theme"),
+                        .help("Only this kind: crate, wasm-plugin, micro-pack, theme or agent"),
                 )
                 .arg(
                     ArgSpec::option("tier")
