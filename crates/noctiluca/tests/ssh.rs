@@ -133,21 +133,46 @@ fn fake_ssh_program(dev: u16) -> PathBuf {
     std::fs::create_dir_all(&dir).unwrap();
     let script = dir.join("ssh");
     let exe = std::env::current_exe().unwrap();
-    std::fs::write(
-        &script,
-        format!(
-            "#!/bin/sh\nNOCTILUCA_FAKE_SSH_ARGS=\"$*\" NOCTILUCA_FAKE_SSH_DEV={dev} \
-             exec '{}' --exact fake_ssh --nocapture --test-threads=1 >/dev/null\n",
-            exe.display()
-        ),
-    )
-    .unwrap();
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o700)).unwrap();
-    }
+    let body = format!(
+        "#!/bin/sh\nNOCTILUCA_FAKE_SSH_ARGS=\"$*\" NOCTILUCA_FAKE_SSH_DEV={dev} \
+         exec '{}' --exact fake_ssh --nocapture --test-threads=1 >/dev/null\n",
+        exe.display()
+    );
+    write_executable(&script, &body);
     script
+}
+
+/// Writes an executable script so that this process never holds it open
+/// for writing. Tests run side by side: a script written here with
+/// `fs::write` can still be open in a child another test is forking at
+/// that moment (until that child execs), and executing it then fails with
+/// ETXTBSY ("Text file busy"). A `sh` child writes it instead, from a pipe.
+#[cfg(unix)]
+fn write_executable(path: &std::path::Path, body: &str) {
+    use std::io::Write;
+    use std::process::{Command, Stdio};
+    let mut child = Command::new("sh")
+        .args(["-c", "cat > \"$1\" && chmod 700 \"$1\"", "sh"])
+        .arg(path)
+        .stdin(Stdio::piped())
+        .spawn()
+        .unwrap();
+    child
+        .stdin
+        .take()
+        .unwrap()
+        .write_all(body.as_bytes())
+        .unwrap();
+    assert!(
+        child.wait().unwrap().success(),
+        "could not write {}",
+        path.display()
+    );
+}
+
+#[cfg(not(unix))]
+fn write_executable(path: &std::path::Path, body: &str) {
+    std::fs::write(path, body).unwrap();
 }
 
 /// Through the SOCKS5 port: CONNECT to `host`:`port` by name, then a GET;
