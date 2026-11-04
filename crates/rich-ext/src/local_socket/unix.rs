@@ -140,6 +140,17 @@ pub(super) fn peer_uid(_stream: &UnixStream) -> io::Result<u32> {
     ))
 }
 
+/// Whether a peer of user `peer` may talk to user `me`: the same user;
+/// where the platform does not tell, the private directory is the guard.
+fn allowed(peer: io::Result<u32>, me: u32) -> io::Result<()> {
+    match peer {
+        Ok(uid) if uid == me => Ok(()),
+        Ok(uid) => Err(refused(format!("the peer is another user ({uid})"))),
+        Err(e) if e.kind() == io::ErrorKind::Unsupported => Ok(()),
+        Err(e) => Err(e),
+    }
+}
+
 #[derive(Debug)]
 pub(super) struct Listener(UnixListener);
 
@@ -177,12 +188,7 @@ impl Stream {
     }
 
     pub(super) fn peer_allowed(&self) -> io::Result<()> {
-        match peer_uid(&self.0) {
-            Ok(uid) if uid == current_uid() => Ok(()),
-            Ok(uid) => Err(refused(format!("the peer is another user ({uid})"))),
-            Err(e) if e.kind() == io::ErrorKind::Unsupported => Ok(()),
-            Err(e) => Err(e),
-        }
+        allowed(peer_uid(&self.0), current_uid())
     }
 
     pub(super) fn set_read_timeout(&self, timeout: Option<Duration>) -> io::Result<()> {
@@ -203,5 +209,20 @@ impl Stream {
 
     pub(super) fn as_unix(&self) -> &UnixStream {
         &self.0
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn another_users_peer_is_refused() {
+        assert!(allowed(Ok(1000), 1000).is_ok());
+        let other = allowed(Ok(1001), 1000).unwrap_err();
+        assert_eq!(other.kind(), io::ErrorKind::PermissionDenied);
+        let untold = io::Error::new(io::ErrorKind::Unsupported, "no");
+        assert!(allowed(Err(untold), 1000).is_ok());
+        assert!(allowed(Err(io::Error::other("broken")), 1000).is_err());
     }
 }

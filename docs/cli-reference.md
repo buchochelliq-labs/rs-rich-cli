@@ -2427,7 +2427,7 @@ rich console [--socket PATH] [--trace] [-v] [-x TARGET]...
 
 | Option | Description |
 | --- | --- |
-| `--socket <PATH>` | The Unix socket to listen on, in a directory only you can use (default console/console.sock in intuiTUIve's state directory) |
+| `--socket <PATH>` | The socket to listen on, in a directory only you can use (on Windows the file there names a named pipe; default console/console.sock in intuiTUIve's state directory) |
 | `--trace` | Show the app's inspector trace too: keys, focus, screens and signal writes. |
 | `-v`, `--verbose` | Show every event's fields on lines of their own. |
 | `-x`, `--exclude <TARGET>...` | Leave out events whose target starts with TARGET (repeatable) |

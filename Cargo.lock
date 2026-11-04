@@ -3320,7 +3320,6 @@ dependencies = [
  "cpal",
  "hound",
  "kasuari",
- "libc",
  "notify",
  "portable-pty",
  "ratatui",

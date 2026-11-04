@@ -48,7 +48,7 @@ rich-embed = { workspace = true, features = ["chrome"] }
 rich-intuituive = { workspace = true, features = ["art"] }
 # `--split DIR`: open Noctiluca in a split of the terminal (its `host`
 # client, #820), and the control socket agents drive it through (its
-# `control` piece, #816; Unix only for now).
+# `control` piece, #816: a Unix socket, a named pipe on Windows).
 rich-interact = { workspace = true, features = ["host", "control"] }
 # Pictures: decoding, animations, the byte budget and its step down;
 # video frames' pacing and the protocol each region steps down to.
