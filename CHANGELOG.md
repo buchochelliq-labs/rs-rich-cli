@@ -167,16 +167,33 @@ Fixes 2, 4, 10, 12 and 14 of
   `paint` (paint orders). New fixture `overlays.html`; Chrome's snapshots
   of `search-results.html` and `product-grid.html` read scrolled.
 
-## 0.0.24 cohort — to be published
+### intuiTUIve: the stylesheet fuzz timeout (rs-rich-intuituive)
 
-To be published from `main` by one `release.yml` run (tag
+- **Fixed: a stylesheet could take seconds and gigabytes to parse.** The
+  `stylesheet` fuzz target timed out (2026-11-03) on 921 bytes of nested
+  `&` and selector lists: each nested rule was read with each of its
+  parent's selectors and each `&` replaced by the parent's text, so the
+  selectors grew exponentially with nesting. `Stylesheet::parse` now takes
+  time linear in a stylesheet's length: rules nest at most 32 deep, and the
+  text nesting and variables expand it to (nested selectors read with their
+  parents', values with their variables put in) is at most four times its
+  length, or 64 KiB for a shorter one. Past either, it returns an error
+  (`rules nested more than 32 deep`, `nested selectors expand this
+  stylesheet past … bytes`, `variables expand …`). A rule's body is read
+  in one pass (a long body was scanned again for each declaration and
+  nested rule in it), and a variable is looked up by name, not through
+  every variable declared. Ordinary stylesheets parse as before.
+
+## 0.0.24 cohort — published 2026-11-03
+
+Published on 2026-11-03 from `c2d6588` by one `release.yml` run (tag
 `release-0.0.24`): core 0.0.14 / macros 0.0.8 / plugin API 0.0.8 /
 art 0.0.17 / diagram 0.0.7 / mermaid 0.0.10 / lumis 0.0.8 / ext 0.0.21 /
 micro 0.0.10 / record 0.0.12 / interact 0.0.12 / ratatui 0.0.9 /
 intuituive 0.0.9 / embed 0.0.7 / web 0.0.7 / data 0.0.8 /
 marketplace 0.0.3 / acp 0.0.1 (new) / noctiluca 0.0.3 / cornacai 0.0.1
 (new) / CLI 0.0.24, and `rs-rich` 0.0.12 on PyPI (`python-v0.0.12`, same
-commit). See [the release notes](docs/releases/0.0.24.md).
+commit, the same day). See [the release notes](docs/releases/0.0.24.md).
 
 ### Fixes from wave 2's review
 

@@ -1,8 +1,9 @@
 # Roadmap
 
 What each release delivered, and where this goes next: the
-[plan to 1.0.0](plans/1.0.0.md), after the 0.0.23 cohort (published
-2026-10-27) and with [0.0.24](plans/0.0.24.md) next.
+[plan to 1.0.0](plans/1.0.0.md), after the 0.0.24 cohort (published
+2026-11-03) and with [0.0.25](plans/0.0.25.md), the last release before
+0.1.0, next.
 Ordered by what unblocks people, not by what is most interesting to build.
 
 Two rules constrain everything here:
@@ -215,6 +216,18 @@ and #499). Delivered:
   and `capture` commands;
 - Atkinson dithering, OKLab distance, Sixel/GIF colour modes, alpha backgrounds
   (#498) and `--theme-file` (#499).
+
+## 0.0.24 — Cornacai, Textual parity, Noctiluca for scripts and agents (published 2026-11-03)
+
+The [0.0.24 plan](plans/0.0.24.md) opened the two tracks to 1.0.0 (the
+apps, and the stable set's groundwork) and took almost all of both: the
+new `cornacai` and `rs-rich-acp` crates, intuiTUIve caught up with
+Textual (the Markdown viewer, the diff view, Textual's themes, keymaps,
+modes, screenshots), Noctiluca's control socket for scripts and agents,
+edition 2024, a threat model and a security policy, and the docs on
+Zensical (see the [release notes](releases/0.0.24.md)). What is left of
+the tracks, lumis 0.17 and Memo's illustrations move to
+[0.0.25](plans/0.0.25.md).
 
 ## 0.0.23 — faster frames, Noctiluca's media, the marketplace live (published 2026-10-27)
 
