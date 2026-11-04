@@ -79,7 +79,7 @@ def signed_listing(root: Path, path: str, expected: str, history=committed_versi
 
 
 TIERS = {"official": "Official", "reviewed": "Approved", "community": "Community"}
-KINDS = {"crate": "Crate", "wasm-plugin": "WASM plugin", "micro-pack": "Micro pack", "theme": "Theme"}
+KINDS = {"crate": "Crate", "wasm-plugin": "WASM plugin", "micro-pack": "Micro pack", "theme": "Theme", "agent": "ACP agent"}
 
 
 def packages_page(listings: list[dict], csp: str) -> str:

@@ -42,5 +42,9 @@ rich-intuituive = { workspace = true, features = ["files"] }
 rich-ext.workspace = true
 # The shell pane: a persistent shell on a PTY (`LocalPty`).
 rich-embed.workspace = true
+# The agents recorded from the marketplace's `agent` listings
+# (`AgentList`, the `agents.json` that `rich plugin install` writes); no
+# HTTP: Cornacai never fetches the index itself.
+rich-marketplace.workspace = true
 serde_json.workspace = true
 toml = "1.1"

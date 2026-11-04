@@ -6,7 +6,9 @@ use std::path::PathBuf;
 use std::process::ExitCode;
 
 use cornacai::app::{Launch, Options, app};
-use cornacai::config::{Config, KNOWN_AGENTS, config_path, installed_agents, on_path};
+use cornacai::config::{
+    AgentChoice, Config, agent_choices, config_path, marketplace_agents, rich_plugin_dir,
+};
 use cornacai::store::{SessionStore, ago, now};
 
 const USAGE: &str = "\
@@ -116,22 +118,38 @@ fn main() -> ExitCode {
     ExitCode::SUCCESS
 }
 
+/// The agents to offer: built in, then those recorded from the
+/// marketplace.
+fn choices() -> Vec<AgentChoice> {
+    let listed = rich_plugin_dir()
+        .map(|dir| marketplace_agents(&dir))
+        .unwrap_or_default();
+    agent_choices(&listed)
+}
+
 fn agents() {
-    for agent in KNOWN_AGENTS {
-        let mark = if on_path(agent.command[0]) {
+    for agent in choices() {
+        let mark = if agent.installed() {
             "installed"
         } else {
             "not found"
         };
+        let from = match &agent.listing {
+            Some((id, tier)) => format!(" (marketplace: {id}, {tier})"),
+            None => String::new(),
+        };
         println!(
-            "{:<28} {:<28} {mark}\n{:<28} install: {}",
+            "{:<28} {:<28} {mark}{from}\n{:<28} install: {}",
             agent.name,
             agent.command.join(" "),
             "",
             agent.install
         );
     }
-    println!("\nMore agents are listed in the marketplace: rich plugin search --kind agent");
+    println!(
+        "\nMore agents are listed in the marketplace: rich plugin search --kind agent; \
+         `rich plugin install ID` records one here."
+    );
 }
 
 fn sessions() {
@@ -223,16 +241,19 @@ fn choose_agent(
     if let Some(agent) = &config.agent {
         return Ok(agent.clone());
     }
-    let found = installed_agents();
+    let all = choices();
+    let found: Vec<&AgentChoice> = all.iter().filter(|a| a.installed()).collect();
     let chosen = match found.len() {
         0 => {
             let mut message = String::from(
                 "no agent is configured and none of the known ones is installed. Install one, \
                  or give a command with --agent:\n",
             );
-            for agent in KNOWN_AGENTS {
+            for agent in &all {
                 message.push_str(&format!("  {:<28} {}\n", agent.name, agent.install));
             }
+            message
+                .push_str("More are listed in the marketplace: rich plugin search --kind agent\n");
             return Err(message);
         }
         1 => found[0],
@@ -252,7 +273,7 @@ fn choose_agent(
             *found.get(n.wrapping_sub(1)).ok_or("no agent chosen")?
         }
     };
-    let agent: Vec<String> = chosen.command.iter().map(|s| s.to_string()).collect();
+    let agent: Vec<String> = chosen.command.clone();
     if let Some(path) = path {
         let _ = Config::save_agent(path, &agent);
     }

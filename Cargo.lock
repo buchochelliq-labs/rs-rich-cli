@@ -695,6 +695,7 @@ dependencies = [
  "rs-rich-embed",
  "rs-rich-ext",
  "rs-rich-intuituive",
+ "rs-rich-marketplace",
  "serde_json",
  "toml",
 ]

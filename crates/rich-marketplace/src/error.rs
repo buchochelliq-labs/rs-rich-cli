@@ -265,6 +265,8 @@ pub enum Incompatibility {
     MicroSchema { required: u64, host: u64 },
     /// A theme of another theme format.
     ThemeFormat { required: u64, host: u64 },
+    /// An agent speaking another Agent Client Protocol version.
+    Acp { required: u64, host: u64 },
 }
 
 impl Incompatibility {
@@ -275,7 +277,8 @@ impl Incompatibility {
             Incompatibility::UnknownCapability { .. } => true,
             Incompatibility::PluginApi { required, host } => *required > u64::from(*host),
             Incompatibility::MicroSchema { required, host }
-            | Incompatibility::ThemeFormat { required, host } => required > host,
+            | Incompatibility::ThemeFormat { required, host }
+            | Incompatibility::Acp { required, host } => required > host,
         }
     }
 }
@@ -305,6 +308,12 @@ impl fmt::Display for Incompatibility {
             }
             Incompatibility::ThemeFormat { required, host } => {
                 write!(f, "needs theme format {required}, this host reads {host}")
+            }
+            Incompatibility::Acp { required, host } => {
+                write!(
+                    f,
+                    "speaks ACP version {required}, this client speaks {host}"
+                )
             }
         }
     }

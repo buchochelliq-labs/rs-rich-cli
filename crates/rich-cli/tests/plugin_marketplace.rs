@@ -170,6 +170,34 @@ fn listing(id: &str, kind: &str, tier: &str, repository: &str, versions: Vec<Val
     })
 }
 
+/// An ACP agent's listing: listed only, its launch command recorded.
+fn agent_listing() -> Value {
+    let mut value = listing(
+        "echo-agent",
+        "agent",
+        "community",
+        "https://github.com/example/echo-agent",
+        vec![json!({
+            "version": "1.4.0", "published": "2026-10-30",
+            "requires": {"acp": 1},
+            "artifact": {
+                "url": "https://registry.npmjs.org/@example/echo-agent/-/echo-agent-1.4.0.tgz",
+                "sha256": "9f2c1e0b6f6d7f0c5a4b3e2d1c0b9a8f7e6d5c4b3a29180716253443526170ab",
+                "size": 81920
+            },
+            "capabilities": [{"kind": "agent", "name": "echo-agent"}],
+            "permissions": ["native-code", "network", "process"],
+        })],
+    );
+    value["agent"] = json!({
+        "command": "echo-agent",
+        "args": ["--acp"],
+        "env": ["ECHO_AGENT_API_KEY"],
+        "install": "npm install -g @example/echo-agent",
+    });
+    value
+}
+
 /// An official crate's listing as the marketplace has it (its capabilities,
 /// permissions and features), at `version`.
 fn crate_listing(id: &str, name: &str, version: &str, features: &[&str]) -> Value {
@@ -432,6 +460,7 @@ impl Market {
             ),
         ];
         let mut listings = listings;
+        listings.push(("echo-agent".to_string(), agent_listing()));
         listings.extend(official_listings(dir));
         std::fs::create_dir_all(dir.join("keys")).unwrap();
         std::fs::write(dir.join("keys/keys-1.json"), keys_json()).unwrap();
@@ -615,6 +644,49 @@ fn a_crate_is_refused_with_its_cargo_add_line() {
         text(&out.stderr)
     );
     assert!(!w.plugins.join("marketplace.lock.json").exists());
+}
+
+#[test]
+fn an_agent_is_found_by_kind_and_recorded_never_installed() {
+    let w = world();
+    let out = w.plugin(&["search", "--kind", "agent"]);
+    assert_code(&out, 0);
+    let stdout = text(&out.stdout);
+    assert!(stdout.contains("echo-agent"), "{stdout}");
+    assert!(!stdout.contains("solarized"), "{stdout}");
+    // Recorded with no confirmation: nothing is downloaded or run.
+    let out = w.plugin(&["install", "echo-agent"]);
+    assert_code(&out, 0);
+    let stdout = text(&out.stdout);
+    assert!(
+        stdout.contains("Recorded agent echo-agent 1.4.0"),
+        "{stdout}"
+    );
+    assert!(stdout.contains("`echo-agent --acp`"), "{stdout}");
+    assert!(
+        stdout.contains("npm install -g @example/echo-agent"),
+        "{stdout}"
+    );
+    assert!(stdout.contains("ECHO_AGENT_API_KEY"), "{stdout}");
+    assert!(!w.plugins.join("marketplace.lock.json").exists());
+    let agents: Value =
+        serde_json::from_slice(&std::fs::read(w.plugins.join("agents.json")).unwrap()).unwrap();
+    assert_eq!(agents["agents"][0]["command"], "echo-agent");
+    assert_eq!(agents["agents"][0]["args"][0], "--acp");
+    let out = w.plugin(&["list"]);
+    assert_code(&out, 0);
+    assert!(
+        text(&out.stdout).contains("echo-agent --acp"),
+        "{}",
+        text(&out.stdout)
+    );
+    let out = w.plugin(&["remove", "echo-agent"]);
+    assert_code(&out, 0);
+    assert!(text(&out.stdout).contains("Forgot agent echo-agent"));
+    let agents: Value =
+        serde_json::from_slice(&std::fs::read(w.plugins.join("agents.json")).unwrap()).unwrap();
+    assert_eq!(agents["agents"], json!([]));
+    assert_code(&w.plugin(&["remove", "echo-agent"]), 2);
 }
 
 #[test]
