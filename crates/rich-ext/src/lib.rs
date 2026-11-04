@@ -101,6 +101,8 @@ pub mod hex;
 pub mod highlighter;
 // Directory entries, sorting, line-mode cells and a lazy tree walk.
 pub mod listing;
+#[cfg(all(feature = "local-socket", any(unix, windows)))]
+pub mod local_socket;
 pub mod markdown_export;
 // Which program opens a file: Yazi's opener rules.
 pub mod open;

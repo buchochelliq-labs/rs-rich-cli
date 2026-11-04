@@ -93,7 +93,7 @@ arrow = ["rich-data/arrow"]
 
 [dependencies]
 rich = { workspace = true, features = ["syntax", "markdown"] }
-rich-ext = { workspace = true, features = ["data", "yaml", "toml", "xml", "jsonpath", "serde", "testing"] }
+rich-ext = { workspace = true, features = ["data", "yaml", "toml", "xml", "jsonpath", "serde", "testing", "local-socket"] }
 terminal_size.workspace = true
 serde_json.workspace = true
 ureq = { workspace = true, optional = true }

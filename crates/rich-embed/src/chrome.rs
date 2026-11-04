@@ -133,6 +133,7 @@ enum Request {
 pub struct FrameMeta {
     /// The page's scroll position when the frame was painted.
     pub scroll_x: f64,
+    /// The page's vertical scroll position when the frame was painted.
     pub scroll_y: f64,
     /// The top of the frame's content in the device's pixels (a browser
     /// bar, none when headless).
@@ -141,6 +142,7 @@ pub struct FrameMeta {
     pub page_scale: f64,
     /// The device's size in CSS pixels.
     pub device_width: f64,
+    /// The device's height in CSS pixels.
     pub device_height: f64,
     /// When it was painted, in seconds since the epoch, if Chrome says.
     pub timestamp: Option<f64>,
@@ -167,6 +169,7 @@ impl FrameMeta {
 pub struct ScreencastFrame {
     /// The viewport's pixels.
     pub pixels: Pixels,
+    /// Where the frame was taken.
     pub meta: FrameMeta,
 }
 
@@ -257,7 +260,9 @@ pub enum Downloads {
 /// parameters, which are the page's and untrusted.
 #[derive(Clone, Debug, PartialEq)]
 pub struct DevToolsEvent {
+    /// The event's method, such as `Page.loadEventFired`.
     pub method: String,
+    /// The event's parameters, as the browser sent them.
     pub params: Value,
 }
 

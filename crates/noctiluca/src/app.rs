@@ -1321,7 +1321,6 @@ fn send_to_agent(b: Browser, index: usize, cx: &mut Ctx) {
 
 /// Answer the control socket: each request runs on the app's thread
 /// ([`crate::control::handle`]), and its connection waits for the answer.
-#[cfg(unix)]
 fn serve_control(b: Browser, server: rich_interact::control::ControlServer) {
     spawn_stream(move |stream| {
         let proxy = std::sync::Mutex::new(stream.proxy().clone());
@@ -2932,7 +2931,6 @@ pub fn app(engine: Box<dyn Engine>, options: Options) -> App {
                 b.send(Command::Pixels(on));
             },
         );
-        #[cfg(unix)]
         if let Some(server) = control.as_ref().and_then(|c| c.take()) {
             serve_control(b, server);
         }

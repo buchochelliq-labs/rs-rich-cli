@@ -13,7 +13,9 @@ pub type Rgb = (u8, u8, u8);
 /// The palette a recording is drawn in.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Theme {
+    /// The default background.
     pub background: Rgb,
+    /// The default foreground.
     pub foreground: Rgb,
     /// The 16 ANSI colours: 0–7, then their bright forms.
     pub ansi: [Rgb; 16],
@@ -79,12 +81,19 @@ impl Theme {
 /// with empty text and width 0.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Cell {
+    /// The cell's text: a character or a cluster, empty for a continuation.
     pub text: String,
+    /// Its width in columns: 1, 2, or 0 for a continuation.
     pub width: u8,
+    /// The foreground colour.
     pub fg: Rgb,
+    /// The background colour.
     pub bg: Rgb,
+    /// Bold.
     pub bold: bool,
+    /// Italic.
     pub italic: bool,
+    /// Underlined.
     pub underline: bool,
 }
 
@@ -101,6 +110,7 @@ impl Cell {
         }
     }
 
+    /// Whether this is the second cell of a wide character.
     pub fn is_continuation(&self) -> bool {
         self.width == 0
     }
@@ -123,7 +133,9 @@ impl Cell {
 /// drawn over the cells.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
 pub struct Snapshot {
+    /// The rows, top to bottom.
     pub rows: Vec<Vec<Cell>>,
+    /// The cursor (column, row) when it is shown.
     pub cursor: Option<(u16, u16)>,
     /// Images the program drew (Kitty, Sixel, iTerm2), in the order they
     /// are drawn: PNG, GIF, APNG and video frames show them; text grids
@@ -275,6 +287,7 @@ impl Snapshot {
         }
     }
 
+    /// The width in columns.
     pub fn columns(&self) -> usize {
         self.rows.first().map_or(0, Vec::len)
     }
@@ -488,18 +501,22 @@ impl Packed {
         &self.rows
     }
 
+    /// The width in columns.
     pub fn columns(&self) -> usize {
         self.rows.first().map_or(0, |row| row.cells.len())
     }
 
+    /// The height in rows.
     pub fn height(&self) -> usize {
         self.rows.len()
     }
 
+    /// The cursor (column, row) when it is shown.
     pub fn cursor(&self) -> Option<(u16, u16)> {
         self.cursor
     }
 
+    /// The images drawn over the cells.
     pub fn images(&self) -> &[Tile] {
         &self.images
     }

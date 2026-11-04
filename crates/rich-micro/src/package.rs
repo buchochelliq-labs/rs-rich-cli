@@ -101,8 +101,11 @@ impl Default for Limits {
 /// its reason. One bad package does not reject the pack.
 #[derive(Clone, Debug)]
 pub struct Pack {
+    /// The pack's name.
     pub name: String,
+    /// Its version, if it states one.
     pub version: Option<String>,
+    /// The assets that loaded.
     pub assets: Vec<MicroAsset>,
     /// `(package path within the pack, why it was rejected)`.
     pub rejected: Vec<(String, MicroError)>,
@@ -111,7 +114,9 @@ pub struct Pack {
 /// What a path held: one package or a pack.
 #[derive(Clone, Debug)]
 pub enum Loaded {
+    /// A single package's asset.
     Package(Box<MicroAsset>),
+    /// A pack of packages.
     Pack(Pack),
 }
 

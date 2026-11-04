@@ -1,0 +1,56 @@
+{
+  "schema_version": 1,
+  "id": "echo-agent",
+  "kind": "agent",
+  "name": "Echo Agent",
+  "description": "A coding agent that answers over the Agent Client Protocol.",
+  "tier": "community",
+  "license": "Apache-2.0",
+  "authors": [
+    "Example Author"
+  ],
+  "repository": "https://github.com/example/echo-agent",
+  "homepage": "https://example.com/echo-agent",
+  "keywords": [
+    "acp",
+    "agent"
+  ],
+  "agent": {
+    "command": "echo-agent",
+    "args": [
+      "--acp"
+    ],
+    "env": [
+      "ECHO_AGENT_API_KEY"
+    ],
+    "install": "npm install -g @example/echo-agent"
+  },
+  "versions": [
+    {
+      "version": "1.4.0",
+      "published": "2026-10-30",
+      "requires": {
+        "plugin_api": 1
+      },
+      "artifact": {
+        "url": "https://registry.npmjs.org/@example/echo-agent/-/echo-agent-1.4.0.tgz",
+        "sha256": "9f2c1e0b6f6d7f0c5a4b3e2d1c0b9a8f7e6d5c4b3a29180716253443526170ab",
+        "size": 81920
+      },
+      "capabilities": [
+        {
+          "kind": "agent",
+          "name": "echo-agent"
+        }
+      ],
+      "permissions": [
+        "native-code",
+        "filesystem-read",
+        "filesystem-write",
+        "network",
+        "process",
+        "environment"
+      ]
+    }
+  ]
+}

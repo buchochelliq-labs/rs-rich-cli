@@ -23,12 +23,15 @@ pub const MAX_ALT_CHARS: usize = 200;
 /// Whether an asset is a still image or moves.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
 pub enum AssetKind {
+    /// A still image.
     #[default]
     Static,
+    /// An animation.
     Animated,
 }
 
 impl AssetKind {
+    /// Its name in a manifest: `static` or `animated`.
     pub fn as_str(self) -> &'static str {
         match self {
             AssetKind::Static => "static",
@@ -86,10 +89,12 @@ impl CellSize {
         Ok(CellSize { cols, rows })
     }
 
+    /// The width in cells.
     pub fn cols(self) -> usize {
         self.cols as usize
     }
 
+    /// The height in rows.
     pub fn rows(self) -> usize {
         self.rows as usize
     }
@@ -131,14 +136,18 @@ impl FromStr for CellSize {
 /// An image file format a package may hold.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum ImageFormat {
+    /// PNG.
     Png,
     /// Animated PNG: a PNG with an `acTL` chunk.
     Apng,
+    /// GIF.
     Gif,
+    /// WebP.
     WebP,
 }
 
 impl ImageFormat {
+    /// Its name in a manifest: `png`, `apng`, `gif` or `webp`.
     pub fn as_str(self) -> &'static str {
         match self {
             ImageFormat::Png => "png",
@@ -152,8 +161,11 @@ impl ImageFormat {
 /// What an image's header says, read without decoding it.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct ImageInfo {
+    /// The file format.
     pub format: ImageFormat,
+    /// The width in pixels.
     pub width: u32,
+    /// The height in pixels.
     pub height: u32,
     /// 1 for a still image.
     pub frames: u32,
@@ -171,8 +183,11 @@ impl ImageInfo {
 /// ([`MicroAsset::read_variant`]), never kept.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct ImageRef {
+    /// Its path inside the package.
     pub path: String,
+    /// What its header says.
     pub info: ImageInfo,
+    /// Its size on disk, in bytes.
     pub bytes: u64,
 }
 
@@ -189,6 +204,7 @@ pub struct Variants {
 }
 
 impl Variants {
+    /// Whether there is no image at all.
     pub fn is_empty(&self) -> bool {
         self.static_image.is_none() && self.animation.is_none() && self.frames.is_empty()
     }
@@ -207,7 +223,9 @@ impl Variants {
 /// characters. With neither, the alt text is used, cut to fit.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
 pub struct Fallback {
+    /// An emoji to show instead.
     pub emoji: Option<String>,
+    /// A short text to show instead.
     pub text: Option<String>,
 }
 
@@ -225,8 +243,10 @@ pub enum Layer {
 }
 
 impl Layer {
+    /// Every layer, lowest precedence first.
     pub const ALL: [Layer; 4] = [Layer::BuiltIn, Layer::User, Layer::Project, Layer::Inline];
 
+    /// Its name: `built-in`, `user`, `project` or `inline`.
     pub fn as_str(self) -> &'static str {
         match self {
             Layer::BuiltIn => "built-in",
@@ -253,7 +273,12 @@ pub enum PackageLocation {
     /// A package directory.
     Directory(PathBuf),
     /// A zip archive, and the package's folder inside it (`""` at its root).
-    Archive { path: PathBuf, prefix: String },
+    Archive {
+        /// The archive's path.
+        path: PathBuf,
+        /// The package's folder inside it, `""` at its root.
+        prefix: String,
+    },
     /// The library's own built-in set, compiled in: the package's folder in
     /// it (`status/success`).
     BuiltIn(String),
@@ -262,6 +287,7 @@ pub enum PackageLocation {
 /// Where an asset came from.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Origin {
+    /// The layer it was loaded into.
     pub layer: Layer,
     /// The pack it was installed with, if any.
     pub pack: Option<String>,
@@ -373,12 +399,14 @@ impl MicroAsset {
         Ok(self)
     }
 
+    /// Set whether it is still or animated.
     #[must_use]
     pub fn with_kind(mut self, kind: AssetKind) -> Self {
         self.kind = kind;
         self
     }
 
+    /// Set the images it can be drawn from.
     #[must_use]
     pub fn with_variants(mut self, variants: Variants) -> Self {
         self.variants = variants;
@@ -394,24 +422,28 @@ impl MicroAsset {
         Ok(self)
     }
 
+    /// Set where it came from.
     #[must_use]
     pub fn with_origin(mut self, origin: Origin) -> Self {
         self.origin = origin;
         self
     }
 
+    /// Set its version.
     #[must_use]
     pub fn with_version(mut self, version: &str) -> Self {
         self.version = Some(version.to_string());
         self
     }
 
+    /// Set its licence.
     #[must_use]
     pub fn with_license(mut self, license: &str) -> Self {
         self.license = Some(license.to_string());
         self
     }
 
+    /// Set its author.
     #[must_use]
     pub fn with_author(mut self, author: &str) -> Self {
         self.author = Some(author.to_string());
@@ -433,14 +465,17 @@ impl MicroAsset {
         Ok(())
     }
 
+    /// Its name.
     pub fn name(&self) -> &str {
         &self.name
     }
 
+    /// Whether it is still or animated.
     pub fn kind(&self) -> AssetKind {
         self.kind
     }
 
+    /// Its size in cells.
     pub fn size(&self) -> CellSize {
         self.size
     }
@@ -456,34 +491,42 @@ impl MicroAsset {
         self.size.rows()
     }
 
+    /// The images it can be drawn from.
     pub fn variants(&self) -> &Variants {
         &self.variants
     }
 
+    /// Its alt text.
     pub fn alt(&self) -> &str {
         &self.alt
     }
 
+    /// What to show where no image can be drawn.
     pub fn fallback(&self) -> &Fallback {
         &self.fallback
     }
 
+    /// Its other names.
     pub fn aliases(&self) -> &[String] {
         &self.aliases
     }
 
+    /// Where it came from.
     pub fn origin(&self) -> &Origin {
         &self.origin
     }
 
+    /// Its version, if its package states one.
     pub fn version(&self) -> Option<&str> {
         self.version.as_deref()
     }
 
+    /// Its licence, if its package states one.
     pub fn license(&self) -> Option<&str> {
         self.license.as_deref()
     }
 
+    /// Its author, if its package states one.
     pub fn author(&self) -> Option<&str> {
         self.author.as_deref()
     }

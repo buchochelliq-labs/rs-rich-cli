@@ -1,0 +1,6 @@
+{"note": "Sign-in refused: the user closes the prompt; nothing is sent, and the session stays unopened."}
+{"client": {"id": 0, "method": "initialize"}}
+{"agent": {"jsonrpc": "2.0", "id": 0, "result": {"protocolVersion": 1, "authMethods": [{"id": "browser", "name": "Log in with the browser"}]}}}
+{"client": {"id": 1, "method": "session/new"}}
+{"agent": {"jsonrpc": "2.0", "id": 1, "error": {"code": -32000, "message": "Authentication required"}}}
+{"quiet": 300}

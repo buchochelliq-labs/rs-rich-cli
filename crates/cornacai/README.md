@@ -23,7 +23,14 @@ cornacai --agent "gemini --experimental-acp"
   with one button per option; every write reviewed as a diff, hunk by
   hunk; every command asked about. Reads and writes are kept inside the
   workspace.
+- **Sessions reopen** (Ctrl+O, `--resume ID`) with `session/load` when
+  the agent offers it, from a store of the sessions opened.
+- **Sign-in** with the agent's own methods when it asks, then the request
+  goes again.
 - **A shell pane** (Ctrl+T), your own: nothing in it reaches the agent.
+  With `--pty`, the agent's commands run on a terminal of their own too.
+- **Agents from the marketplace:** `rich plugin install` records an
+  `agent` listing's command, and Cornacai offers it.
 - **Agent text is untrusted:** control sequences are neutralised and
   hidden characters revealed.
 

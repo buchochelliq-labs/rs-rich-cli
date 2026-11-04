@@ -1,0 +1,197 @@
+# rab, the Release Asset Bundle (formerly release-kit;
+# https://github.com/buchochelliq-labs/release-asset-bundle): every package
+# this repository publishes, its version, and the order to publish in. The kit
+# is installed under .github/rab/ (v2.0.0; reinstall to update, never edit it)
+# and documented in docs/BRANCHING.md, the release skill and
+# https://buchochelliq-labs.github.io/release-asset-bundle/.
+#
+#   python3 .github/rab/scripts/release.py check      CI: this file matches every manifest
+#   python3 .github/rab/scripts/release.py sync       copy bumped versions in from the manifests
+#   python3 .github/rab/scripts/release.py status     what is published, tagged or due
+#   python3 .github/rab/scripts/release.py tag        tag the release on main and wait for its run
+#
+# Packages are listed in RELEASES.toml's order, each after every workspace
+# crate it depends on; RELEASES.toml stays beside this file, with the same
+# versions, until rab has published a release (CI checks both).
+#
+# `paths` is what each package ships, for the kit's split check (rule 4: one
+# version, one commit's files): a crate's `include` from its Cargo.toml, as
+# release_cohort.py read it, plus Cargo.lock for the three binaries, whose
+# packages carry it. The PyPI package builds from the workspace crates, so its
+# paths are theirs, its own directory and the workspace manifest.
+
+release:
+  # A release is named by rs-rich-cli's version; the last package listed is
+  # the PyPI rs-rich, the kit's default, so name it.
+  name_from: rs-rich-cli
+
+packages:
+  - name: rs-rich
+    registry: crates.io
+    manifest: crates/rich/Cargo.toml
+    version: "0.0.15"
+    paths: ["crates/rich/src/**", "crates/rich/README.md", "crates/rich/LICENSE", "crates/rich/Cargo.toml"]
+
+  - name: rs-rich-macros
+    registry: crates.io
+    manifest: crates/rich-macros/Cargo.toml
+    version: "0.0.9"
+    paths: ["crates/rich-macros/src/**", "crates/rich-macros/README.md", "crates/rich-macros/LICENSE", "crates/rich-macros/Cargo.toml"]
+
+  - name: rs-rich-plugin-api
+    registry: crates.io
+    manifest: crates/rich-plugin-api/Cargo.toml
+    version: "0.0.9"
+    paths: ["crates/rich-plugin-api/src/**", "crates/rich-plugin-api/README.md", "crates/rich-plugin-api/LICENSE", "crates/rich-plugin-api/Cargo.toml"]
+
+  - name: rs-rich-art
+    registry: crates.io
+    manifest: crates/rich-art/Cargo.toml
+    version: "0.0.18"
+    paths: ["crates/rich-art/src/**", "crates/rich-art/fonts/**", "crates/rich-art/examples/**", "crates/rich-art/tests/**", "crates/rich-art/README.md", "crates/rich-art/LICENSE", "crates/rich-art/Cargo.toml"]
+
+  - name: rs-rich-diagram
+    registry: crates.io
+    manifest: crates/rich-diagram/Cargo.toml
+    version: "0.0.8"
+    paths: ["crates/rich-diagram/src/**", "crates/rich-diagram/README.md", "crates/rich-diagram/LICENSE", "crates/rich-diagram/Cargo.toml"]
+
+  - name: rs-rich-mermaid
+    registry: crates.io
+    manifest: crates/rich-mermaid/Cargo.toml
+    version: "0.0.11"
+    paths: ["crates/rich-mermaid/src/**", "crates/rich-mermaid/README.md", "crates/rich-mermaid/LICENSE", "crates/rich-mermaid/Cargo.toml"]
+
+  - name: rs-rich-lumis
+    registry: crates.io
+    manifest: crates/rich-lumis/Cargo.toml
+    version: "0.0.9"
+    paths: ["crates/rich-lumis/src/**", "crates/rich-lumis/README.md", "crates/rich-lumis/LICENSE", "crates/rich-lumis/Cargo.toml"]
+
+  - name: rs-rich-ext
+    registry: crates.io
+    manifest: crates/rich-ext/Cargo.toml
+    version: "0.0.22"
+    paths: ["crates/rich-ext/src/**", "crates/rich-ext/examples/**", "crates/rich-ext/README.md", "crates/rich-ext/LICENSE", "crates/rich-ext/Cargo.toml"]
+
+  - name: rs-rich-micro
+    registry: crates.io
+    manifest: crates/rich-micro/Cargo.toml
+    version: "0.0.11"
+    paths: ["crates/rich-micro/src/**", "crates/rich-micro/builtin/**", "crates/rich-micro/README.md", "crates/rich-micro/LICENSE", "crates/rich-micro/Cargo.toml"]
+
+  - name: rs-rich-record
+    registry: crates.io
+    manifest: crates/rich-record/Cargo.toml
+    version: "0.0.13"
+    paths: ["crates/rich-record/src/**", "crates/rich-record/fonts/**", "crates/rich-record/README.md", "crates/rich-record/LICENSE", "crates/rich-record/Cargo.toml"]
+
+  - name: rs-rich-interact
+    registry: crates.io
+    manifest: crates/rich-interact/Cargo.toml
+    version: "0.0.13"
+    paths: ["crates/rich-interact/src/**", "crates/rich-interact/README.md", "crates/rich-interact/LICENSE", "crates/rich-interact/Cargo.toml"]
+
+  - name: rs-rich-ratatui
+    registry: crates.io
+    manifest: crates/rich-ratatui/Cargo.toml
+    version: "0.0.10"
+    paths: ["crates/rich-ratatui/src/**", "crates/rich-ratatui/examples/**", "crates/rich-ratatui/README.md", "crates/rich-ratatui/LICENSE", "crates/rich-ratatui/Cargo.toml"]
+
+  - name: rs-rich-intuituive
+    registry: crates.io
+    manifest: crates/rich-intuituive/Cargo.toml
+    version: "0.0.10"
+    paths: ["crates/rich-intuituive/src/**", "crates/rich-intuituive/README.md", "crates/rich-intuituive/LICENSE", "crates/rich-intuituive/THIRD_PARTY.md", "crates/rich-intuituive/Cargo.toml"]
+
+  - name: rs-rich-embed
+    registry: crates.io
+    manifest: crates/rich-embed/Cargo.toml
+    version: "0.0.8"
+    paths: ["crates/rich-embed/src/**", "crates/rich-embed/README.md", "crates/rich-embed/LICENSE", "crates/rich-embed/Cargo.toml"]
+
+  - name: rs-rich-web
+    registry: crates.io
+    manifest: crates/rich-web/Cargo.toml
+    version: "0.0.8"
+    paths: ["crates/rich-web/src/**", "crates/rich-web/assets/**", "crates/rich-web/examples/**", "crates/rich-web/build.rs", "crates/rich-web/README.md", "crates/rich-web/LICENSE", "crates/rich-web/Cargo.toml"]
+
+  - name: rs-rich-data
+    registry: crates.io
+    manifest: crates/rich-data/Cargo.toml
+    version: "0.0.9"
+    paths: ["crates/rich-data/src/**", "crates/rich-data/README.md", "crates/rich-data/LICENSE", "crates/rich-data/Cargo.toml"]
+
+  - name: rs-rich-marketplace
+    registry: crates.io
+    manifest: crates/rich-marketplace/Cargo.toml
+    version: "0.0.4"
+    paths: ["crates/rich-marketplace/src/**", "crates/rich-marketplace/keys/*.json", "crates/rich-marketplace/README.md", "crates/rich-marketplace/LICENSE", "crates/rich-marketplace/Cargo.toml"]
+
+  - name: rs-rich-acp
+    registry: crates.io
+    manifest: crates/rich-acp/Cargo.toml
+    version: "0.0.2"
+    paths: ["crates/rich-acp/src/**", "crates/rich-acp/README.md", "crates/rich-acp/LICENSE", "crates/rich-acp/Cargo.toml"]
+
+  - name: noctiluca
+    registry: crates.io
+    manifest: crates/noctiluca/Cargo.toml
+    version: "0.0.4"
+    paths: ["crates/noctiluca/src/**", "crates/noctiluca/README.md", "crates/noctiluca/LICENSE", "crates/noctiluca/config.sample.toml", "crates/noctiluca/Cargo.toml", "Cargo.lock"]
+
+  - name: cornacai
+    registry: crates.io
+    manifest: crates/cornacai/Cargo.toml
+    version: "0.0.2"
+    paths: ["crates/cornacai/src/**", "crates/cornacai/README.md", "crates/cornacai/LICENSE", "crates/cornacai/Cargo.toml", "Cargo.lock"]
+
+  - name: rs-rich-cli
+    registry: crates.io
+    manifest: crates/rich-cli/Cargo.toml
+    version: "0.0.25"
+    paths: ["crates/rich-cli/src/**", "crates/rich-cli/README.md", "crates/rich-cli/LICENSE", "crates/rich-cli/Cargo.toml", "Cargo.lock"]
+
+  # The Python bindings: PyPI `rs-rich`, outside the Cargo workspace. Its own
+  # tag format: the crate rs-rich is tagged `rs-rich-v…` (rs-rich-v0.0.12 is
+  # a crate's record), and `python-v…` is what release_cohort.py wrote.
+  - name: rs-rich
+    registry: pypi
+    manifest: crates/rich-py/pyproject.toml
+    version: "0.0.13"
+    tag: "python-v{version}"
+    paths:
+      - "crates/rich-py/**"
+      - "Cargo.toml"
+      - "crates/rich*/src/**"
+      - "crates/rich*/Cargo.toml"
+      - "crates/rich*/README.md"
+      - "crates/rich*/LICENSE"
+      - "crates/rich*/build.rs"
+      - "crates/rich*/examples/**"
+      - "crates/rich*/fonts/**"
+      - "crates/rich-art/tests/**"
+      - "crates/rich-intuituive/THIRD_PARTY.md"
+      - "crates/rich-marketplace/keys/*.json"
+      - "crates/rich-micro/builtin/**"
+      - "crates/rich-web/assets/**"
+    artifacts:
+      # pypi-release.yml's targets and runners. The wheels are abi3 (3.9+);
+      # each is installed and imported where its runner can run it, and the
+      # linux x86_64 one also runs the compatibility suite against rich 15.0.0
+      # and the stub check, as pypi-release.yml's `test` job did.
+      - kind: maturin
+        targets:
+          - x86_64-unknown-linux-gnu
+          - aarch64-unknown-linux-gnu
+          - aarch64-apple-darwin
+          - {target: x86_64-apple-darwin, runner: macos-15-intel}
+          - x86_64-pc-windows-msvc
+        test: |
+          set -euo pipefail
+          python crates/rich-py/tests/smoke.py "$DIST"
+          if [ "$TARGET" = x86_64-unknown-linux-gnu ]; then
+            python -m pip install "$DIST"/rs_rich-*.whl "rich==15.0.0" pytest pillow "mypy==2.4.0"
+            python -m pytest -q crates/rich-py/tests
+            python scripts/check_python_stubs.py
+          fi

@@ -45,6 +45,7 @@ pub struct BlockArt {
 }
 
 impl BlockArt {
+    /// Half-block art of `image`, at the width it is rendered to.
     pub fn new(image: DynamicImage) -> Self {
         Self::from_shared(std::sync::Arc::new(image))
     }
@@ -81,6 +82,7 @@ impl BlockArt {
         self
     }
 
+    /// Half-block art of the image at `path`, or the decoder's error.
     pub fn from_path(path: impl AsRef<std::path::Path>) -> Result<Self, image::ImageError> {
         Ok(Self::new(image::open(path)?))
     }

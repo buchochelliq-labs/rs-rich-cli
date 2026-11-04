@@ -2427,7 +2427,7 @@ rich console [--socket PATH] [--trace] [-v] [-x TARGET]...
 
 | Option | Description |
 | --- | --- |
-| `--socket <PATH>` | The Unix socket to listen on, in a directory only you can use (default console/console.sock in intuiTUIve's state directory) |
+| `--socket <PATH>` | The socket to listen on, in a directory only you can use (on Windows the file there names a named pipe; default console/console.sock in intuiTUIve's state directory) |
 | `--trace` | Show the app's inspector trace too: keys, focus, screens and signal writes. |
 | `-v`, `--verbose` | Show every event's fields on lines of their own. |
 | `-x`, `--exclude <TARGET>...` | Leave out events whose target starts with TARGET (repeatable) |
@@ -2560,7 +2560,7 @@ rich plugin search [QUERY] [--kind KIND] [--tier TIER] [--recommended] [--sort i
 
 | Option | Description |
 | --- | --- |
-| `--kind <KIND>` | Only this kind: crate, wasm-plugin, micro-pack or theme. |
+| `--kind <KIND>` | Only this kind: crate, wasm-plugin, micro-pack, theme or agent. |
 | `--tier <TIER>` | Only this tier: official (rs-rich's own), reviewed (shown as approved) or community. |
 | `--recommended` | Only the maintainers' picks, marked `★ recommended`. |
 | `--sort <ORDER>` | id (the default), or downloads: most downloaded first, from the marketplace's unsigned stats.json, with a Downloads column. |

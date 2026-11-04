@@ -94,9 +94,20 @@ rustix = { version = "1", default-features = false, features = ["std", "termios"
 libc = "0.2"
 
 # `trash::send` on Windows: the shell's Recycle Bin (`SHFileOperationW`).
-# Already in the tree through several crates.
+# Already in the tree through several crates. The `local-socket` feature's
+# named pipes, their security descriptors, and the random pipe names.
 [target.'cfg(windows)'.dependencies]
-windows-sys = { version = "0.61", features = ["Win32_UI_Shell"] }
+windows-sys = { version = "0.61", features = [
+    "Win32_UI_Shell",
+    "Win32_Foundation",
+    "Win32_Security",
+    "Win32_Security_Authorization",
+    "Win32_Security_Cryptography",
+    "Win32_Storage_FileSystem",
+    "Win32_System_IO",
+    "Win32_System_Pipes",
+    "Win32_System_Threading",
+] }
 
 [dev-dependencies]
 serde_json.workspace = true
@@ -148,6 +159,10 @@ clap = ["dep:clap"]
 dylib-plugins = ["dep:libloading"]
 # Load sandboxed WASM plugins: no imports, a fuel limit and a memory cap.
 wasm-plugins = ["dep:wasmi", "dep:wasmparser"]
+# `local_socket`: a local socket private to one user, a Unix domain socket
+# on Unix and a named pipe on Windows (the log console's and the control
+# socket's transport). No dependencies of its own.
+local-socket = []
 # `fs::local_time` and `fs::short_local_time`: times in the local time zone,
 # through chrono.
 local-time = ["dep:chrono"]

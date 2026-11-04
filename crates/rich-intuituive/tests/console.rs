@@ -1,30 +1,34 @@
 //! The log console (#815): an app's `tracing` events as JSON lines on a
-//! Unix socket, where `rich console` listens.
-#![cfg(all(feature = "tracing", unix))]
+//! local socket (a Unix socket, a named pipe on Windows), where `rich
+//! console` listens.
+#![cfg(all(feature = "tracing", any(unix, windows)))]
 
 use std::io::{BufRead, BufReader};
-use std::os::unix::net::UnixListener;
 use std::time::Duration;
 
 use intuituive::log::{console_layer, install_console};
 use intuituive::prelude::*;
+use rich_ext::local_socket::{LocalListener, private_dir};
 use tracing_subscriber::prelude::*;
 
+/// A socket's path in a private directory of its own.
 fn socket(name: &str) -> std::path::PathBuf {
-    let path = std::env::temp_dir().join(format!(
-        "intuituive-console-{}-{name}.sock",
-        std::process::id()
-    ));
-    let _ = std::fs::remove_file(&path);
-    path
+    let base =
+        std::env::temp_dir().join(format!("intuituive-console-{}-{name}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&base);
+    std::fs::create_dir_all(&base).unwrap();
+    let dir = base.join("private");
+    private_dir(&dir).unwrap();
+    dir.join("console.sock")
 }
 
 #[test]
 fn a_handlers_event_arrives_with_its_level_and_target() {
     let path = socket("events");
-    let listener = UnixListener::bind(&path).unwrap();
+    let listener = LocalListener::bind(&path).unwrap();
     let subscriber = tracing_subscriber::registry().with(console_layer(&path).unwrap());
-    let (stream, _) = listener.accept().unwrap();
+    let stream = listener.accept().unwrap();
+    stream.peer_allowed().unwrap();
     stream
         .set_read_timeout(Some(Duration::from_secs(5)))
         .unwrap();
@@ -60,7 +64,8 @@ fn a_handlers_event_arrives_with_its_level_and_target() {
     assert!(second.contains(r#""level":"debug""#), "{second}");
     assert!(second.contains(r#""target":"app""#), "{second}");
     assert!(second.contains("from cx.log"), "{second}");
-    let _ = std::fs::remove_file(&path);
+    drop(listener);
+    let _ = std::fs::remove_dir_all(path.parent().unwrap().parent().unwrap());
 }
 
 #[test]

@@ -195,10 +195,12 @@ impl Image {
         ))
     }
 
+    /// Its width in pixels.
     pub fn width(&self) -> u32 {
         self.width
     }
 
+    /// Its height in pixels.
     pub fn height(&self) -> u32 {
         self.height
     }
@@ -290,12 +292,15 @@ fn decode_gif(bytes: &[u8]) -> Option<Vec<u8>> {
 /// the image they show, stretched over them.
 #[derive(Clone, Debug)]
 pub struct Tile {
+    /// The image.
     pub image: Arc<Image>,
     /// The first cell it covers, from 0 at the top left.
     pub column: u16,
+    /// The first row it covers.
     pub row: u16,
     /// How many cells across and down it covers.
     pub columns: u16,
+    /// How many rows it covers.
     pub rows: u16,
     /// The part of the image shown: x, y, width and height, in the image's
     /// pixels. It may reach past the image's edges, which are transparent

@@ -24,6 +24,7 @@
     "wasm-plugin": "WASM plugin",
     "micro-pack": "Micro pack",
     theme: "Theme",
+    agent: "ACP agent",
   };
   // The listing format says `reviewed`; people see "Approved".
   const TIER_NAMES = { official: "Official", reviewed: "Approved", community: "Community" };
@@ -153,6 +154,7 @@
     if (r.plugin_api != null) return `plugin API ${r.plugin_api}`;
     if (r.micro_schema != null) return `micro pack schema ${r.micro_schema}`;
     if (r.theme_format != null) return `theme format ${r.theme_format}`;
+    if (r.acp != null) return `Agent Client Protocol ${r.acp}`;
     return "unknown";
   }
 
@@ -172,6 +174,7 @@
       case "action": return `Action ${name}`;
       case "component": return `Component ${name}`;
       case "asset": return `Micro asset ${name} (:micro:${name}:)`;
+      case "agent": return `Coding agent ${name}, for Cornacai and other ACP clients`;
       default: return `${c.kind} ${name}`;
     }
   }
@@ -196,7 +199,7 @@
       return ["None: data only"];
     }
     const out = list.map((p) => PERMISSIONS[p] || String(p));
-    if (kind === "crate") out.push("Declared, not enforced: native code runs with your rights");
+    if (kind === "crate" || kind === "agent") out.push("Declared, not enforced: native code runs with your rights");
     return out;
   }
 

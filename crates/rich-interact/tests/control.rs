@@ -1,14 +1,14 @@
 //! The control socket (#816): its private directory, its socket path,
 //! read-only sessions, unknown verbs, bounded requests, timeouts and
-//! session listing.
-#![cfg(unix)]
+//! session listing. On Unix and Windows (a named pipe there), but for
+//! the tests of file modes and symbolic links, which are Unix's.
+#![cfg(any(unix, windows))]
 
 use std::io::{Read, Write};
-use std::os::unix::fs::PermissionsExt;
-use std::os::unix::net::UnixStream;
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
 
+use rich_ext::local_socket::LocalStream;
 use rich_interact::control::{
     self, ControlServer, MAX_REQUEST, Request, Verb, check_private_dir, private_dir,
 };
@@ -57,14 +57,37 @@ fn call(path: &std::path::Path, verb: &str) -> Result<Value, String> {
 fn the_directory_is_made_private_before_anything_is_bound_in_it() {
     let dir = scratch("dir").join("sockets");
     private_dir(&dir).unwrap();
-    let mode = std::fs::metadata(&dir).unwrap().permissions().mode() & 0o777;
-    assert_eq!(mode, 0o700);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let mode = std::fs::metadata(&dir).unwrap().permissions().mode() & 0o777;
+        assert_eq!(mode, 0o700);
+    }
+    check_private_dir(&dir).unwrap();
     // Made again: checked, and still fine.
     private_dir(&dir).unwrap();
 }
 
 #[test]
+fn a_directory_open_to_others_is_refused() {
+    let base = scratch("shared");
+    // Made the ordinary way: open to others by its mode on Unix, by the
+    // grants it inherits on Windows.
+    let open = base.join("open");
+    std::fs::create_dir(&open).unwrap();
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(&open, std::fs::Permissions::from_mode(0o755)).unwrap();
+    }
+    assert!(check_private_dir(&open).is_err());
+    assert!(ControlServer::bind(open.join("app-1.sock"), VERBS).is_err());
+}
+
+#[cfg(unix)]
+#[test]
 fn a_directory_open_to_others_or_a_symbolic_link_is_refused() {
+    use std::os::unix::fs::PermissionsExt;
     let base = scratch("open");
     let open = base.join("open");
     std::fs::create_dir(&open).unwrap();
@@ -94,6 +117,7 @@ fn the_runtime_directory_falls_back_when_the_variable_is_unsafe() {
     assert!(control::runtime_dir_in("../up", None).is_err());
 }
 
+#[cfg(unix)]
 #[test]
 fn a_symbolic_link_at_the_socket_path_is_never_followed() {
     let dir = scratch("link").join("sockets");
@@ -125,7 +149,7 @@ fn a_file_that_is_not_a_left_over_socket_is_not_replaced() {
     assert_eq!(std::fs::read_to_string(&path).unwrap(), "keep me");
     // A socket no one answers is replaced.
     std::fs::remove_file(&path).unwrap();
-    drop(std::os::unix::net::UnixListener::bind(&path).unwrap());
+    drop(rich_ext::local_socket::LocalListener::bind(&path).unwrap());
     let server = ControlServer::bind(&path, VERBS).unwrap();
     drop(server);
     assert!(!path.exists(), "dropping the server removes its socket");
@@ -153,7 +177,7 @@ fn a_read_only_session_refuses_every_verb_that_mutates() {
 #[test]
 fn an_oversized_request_is_refused_unread() {
     let (path, closer) = serve("big", false, Duration::from_secs(5));
-    let mut stream = UnixStream::connect(&path).unwrap();
+    let mut stream = LocalStream::connect(&path).unwrap();
     let big = format!(
         "{{\"verb\":\"info\",\"args\":{{\"x\":\"{}\"}}}}\n",
         "y".repeat(MAX_REQUEST as usize)
@@ -165,7 +189,13 @@ fn an_oversized_request_is_refused_unread() {
     let mut reply = String::new();
     match stream.read_to_string(&mut reply) {
         Ok(_) => assert!(reply.contains("longer than"), "{reply}"),
-        Err(e) => assert_eq!(e.kind(), std::io::ErrorKind::ConnectionReset),
+        Err(e) => assert!(
+            matches!(
+                e.kind(),
+                std::io::ErrorKind::ConnectionReset | std::io::ErrorKind::BrokenPipe
+            ),
+            "{e:?}"
+        ),
     }
     assert!(!reply.contains("\"ok\":true"), "{reply}");
     assert!(call(&path, "info").is_ok());
@@ -184,7 +214,7 @@ fn an_oversized_request_is_refused_unread() {
 fn a_silent_client_times_out() {
     let (path, closer) = serve("slow", false, Duration::from_millis(200));
     let started = Instant::now();
-    let mut stream = UnixStream::connect(&path).unwrap();
+    let mut stream = LocalStream::connect(&path).unwrap();
     let mut reply = String::new();
     stream
         .set_read_timeout(Some(Duration::from_secs(5)))
@@ -205,8 +235,27 @@ fn sessions_lists_this_programs_sockets_only() {
     let b = ControlServer::bind(dir.join("app-2.sock"), VERBS).unwrap();
     let other = ControlServer::bind(dir.join("other-1.sock"), VERBS).unwrap();
     std::fs::write(dir.join("app-3.sock"), "").unwrap();
+    #[cfg(unix)]
     std::os::unix::fs::symlink(dir.join("app-1.sock"), dir.join("app-4.sock")).unwrap();
     let found = control::sessions(&dir, "app-").unwrap();
     assert_eq!(found, [dir.join("app-1.sock"), dir.join("app-2.sock")]);
     drop((a, b, other));
+}
+
+#[test]
+fn a_client_connects_to_a_server_of_its_own_user() {
+    let (path, closer) = serve("connect", false, Duration::from_secs(5));
+    control::check_socket(&path).unwrap();
+    let stream = LocalStream::connect(&path).unwrap();
+    // The client's end checks the server is this user; so does the server's.
+    stream.peer_allowed().unwrap();
+    drop(stream);
+    assert_eq!(call(&path, "info").unwrap()["verb"], "info");
+    let dir = path.parent().unwrap();
+    assert_eq!(
+        control::sessions(dir, "app-").unwrap(),
+        std::slice::from_ref(&path)
+    );
+    closer.close();
+    assert!(control::sessions(dir, "app-").unwrap().is_empty());
 }

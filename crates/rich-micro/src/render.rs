@@ -75,8 +75,11 @@ pub(crate) fn is_sentinel(c: char) -> bool {
 /// occurrence, and which of its rows these cells are.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct MicroMeta {
+    /// The asset's name.
     pub name: String,
+    /// Its width in cells.
     pub cols: usize,
+    /// Its height in rows.
     pub rows: usize,
     /// Unique per occurrence (per process).
     pub id: u64,
@@ -254,7 +257,9 @@ pub(crate) fn placeholder_with(
 /// ([`MicroMeta::row`]).
 #[derive(Clone, Debug)]
 pub struct Placement<'a> {
+    /// The asset placed.
     pub asset: &'a MicroAsset,
+    /// What the placeholder's metadata says.
     pub meta: MicroMeta,
     /// The style of the placeholder's first cell (colours around it, and the
     /// tag itself).
@@ -299,10 +304,12 @@ impl<T: MicroRenderer + ?Sized> MicroRenderer for Arc<T> {
 /// emits control sequences.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct FallbackRenderer {
+    /// Which fallback to draw.
     pub preference: FallbackPreference,
 }
 
 impl FallbackRenderer {
+    /// A renderer drawing the `preference` fallback.
     pub fn new(preference: FallbackPreference) -> Self {
         FallbackRenderer { preference }
     }
@@ -332,6 +339,7 @@ pub struct MicroView<R> {
 }
 
 impl<R: Renderable> MicroView<R> {
+    /// `inner`, with its micro assets drawn from `registry`.
     pub fn new(inner: R, registry: Arc<MicroRegistry>) -> Self {
         MicroView {
             inner,

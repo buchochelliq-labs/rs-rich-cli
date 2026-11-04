@@ -212,7 +212,7 @@ core mirror is untouched and a sync does not have to reconcile them.
 | `--gif` animation controls `--speed X`, `--fps N`, `--max-frames N` and `--max-duration SECS` (0.0.19 WS21, #708), next to `--loop` | `animation.rs` + `lib.rs` + `cli_spec.rs` | `--fps` is `AnimatedArt::max_fps` (the 30 fps cap that was hard-coded) and `--max-duration` is `Stage::until(Until::Elapsed)`; `--speed` and `--max-frames` drive the same `AnimatedArt::render_frame`/`frame_delay` frames through core's public `Live` with the CLI's own clock, since rs-rich-art has no speed or frame budget; redirected output is still the first frame; no core change |
 | `rich shell init bash\|zsh\|fish\|powershell`, `rich shell status` and `rich shell link` (0.0.19 WS21, #715): an init script with completions, OSC 133 prompt and command marks, OSC 7 and a status line after each command (`--no-completions`, `--no-marks`, `--no-status`, `--min-duration`); `status --exit CODE [--duration D] [--command TEXT] [--min-duration SECS] [--symbols unicode\|ascii\|words]`; `link [PATH[:LINE[:COL]]]... [--tilde] [--editor TEMPLATE] [--links auto\|always\|never] [--prompt bash\|zsh]` | `shell.rs` + `lib.rs` + `cli_spec.rs` | composes the public `rich_ext::cli_doc::generate`, `rich_ext::workflow::{CommandRecord, CommandView}` (with `AccessibilityPolicy::from_env`) and `rich_ext::hyperlink::Hyperlinker`; upstream rich-cli has no shell integration; the scripts are syntax-checked with `bash -n`, `zsh -n` and `fish --no-execute` in the tests; no core change |
 | `rich spin [--title TEXT] [--spinner NAME] [--show-output] [--show-error] -- COMMAND [ARG]...` (0.0.21 WS3, after `gum spin`): runs a command with a spinner and a title on stderr until it exits, and exits with its status (128 + the signal when one ended it, 127 when it cannot start); on a terminal the command's output is held back and printed after with `--show-output` (or only on a failure with `--show-error`); without one it just runs, its output going straight through | `spin.rs` + `lib.rs` + `cli_spec.rs` | composes core's public `Status` (its spinner's `render` at the elapsed time) and `spinner::spinner_frames` for the names and intervals, with `rich_ext::a11y::AccessibilityPolicy::from_env` for reduced motion; upstream rich-cli has no such command; no core change |
-| `rich console [--socket PATH] [--trace] [-v] [-x TARGET]...` (0.0.24, #815, after `textual console`): listens on a Unix domain socket, Unix only for now (default `console/console.sock` in intuiTUIve's state directory; the socket's directory must be the user's alone, made 0700 when missing, the socket created 0600, and only the user's own connections taken; never a TCP port) and prints the `tracing` events an intuiTUIve app sends with `intuituive::log::install_console()` and `INTUITUIVE_CONSOLE=1`; `--trace` shows the app's inspector trace (target `intuituive::trace`), `-x` leaves targets out, `-v` expands fields; elsewhere than Unix it says so | `console.rs` + `lib.rs` + `cli_spec.rs` | reads the JSON lines `rich log` reads through `structured_log::event` and rs-rich-ext's `StructuredEvent` presentation; the default path is intuiTUIve's, duplicated (the CLI does not depend on intuiTUIve) and kept equal by a test; upstream rich-cli has no such command; no core change |
+| `rich console [--socket PATH] [--trace] [-v] [-x TARGET]...` (0.0.24, #815, after `textual console`): listens on a local socket: a Unix domain socket, or on Windows (0.0.25) a named pipe through rs-rich-ext's `local_socket` (default `console/console.sock` in intuiTUIve's state directory; the socket's directory must be the user's alone, made 0700 when missing (on Windows with an access list granting the user alone), the socket created 0600 (on Windows the pipe's DACL grants the user alone), and only the user's own connections taken; never a TCP port) and prints the `tracing` events an intuiTUIve app sends with `intuituive::log::install_console()` and `INTUITUIVE_CONSOLE=1`; `--trace` shows the app's inspector trace (target `intuituive::trace`), `-x` leaves targets out, `-v` expands fields; elsewhere than Unix and Windows (WASI) it says so | `console.rs` + `lib.rs` + `cli_spec.rs` | reads the JSON lines `rich log` reads through `structured_log::event` and rs-rich-ext's `StructuredEvent` presentation; the default path is intuiTUIve's, duplicated (the CLI does not depend on intuiTUIve) and kept equal by a test; upstream rich-cli has no such command; no core change |
 | `rich record` HTML output, `--window-frame`, `--caption`, `--key-overlay`, and a tape's `Set WindowFrame`/`Caption`/`KeyOverlay` and `Output` (0.0.13, #600) | `record.rs` + `cli_spec.rs`; `rs-rich-record` | routes to the public `rich_record::record::Presentation`, `Formats` and `Recording::formats`; screenshots' SVG and the page's screens come from `rich_ext::frame::Frame::to_svg`/`to_html_with`; no core change |
 | `rich plugins list` / `rich plugins info NAME`, `--plugin PATH`, `--transform NAME` and the `plugins` key (0.0.13, #14, #232), which a working-directory `rich.toml` cannot set; runtime loading behind the `wasm-plugins` feature (on by default since 0.0.22) and the off-by-default `dylib-plugins` feature; a failed load exits 2 (3 when unreadable) naming the file | `plugins.rs` + `lib.rs` + `cli_spec.rs` + `config.rs` | composes the public `rich_ext::ExtensionRegistry` (`add_linked_plugins`, `add_plugin`) and `rich_ext::plugin_loading`; loaded plugins reach Markdown through `ExtensionRegistry::fences` and printed text through `install`, and `--transform` runs `ExtensionRegistry::transform` stages in the existing `--filter`/`--highlight` text pipeline; with no plugin given, output is unchanged; no core change |
 | `rich plugin search`/`info`/`install`/`update`/`remove`/`list`/`enable`/`disable`/`verify`/`browse`/`publish` (0.0.22, #232, #463): the plugin marketplace; an installed, enabled WASM plugin loads on every run without `--plugin`, after its file is checked against the lockfile (a changed file is skipped with a warning) | `marketplace.rs` + `marketplace_publish.rs` + `marketplace_browse.rs` + `plugins.rs` + `cli_spec.rs` | composes the public `rich_marketplace` API (`verify_index`, `KeySet::rotate`, `resolve`, `Installer` with an `ArtifactChecker` that runs `rich_ext::plugin_loading::load_wasm_bytes` and `compare_wasm_manifest`, `Lockfile`), and `rs-rich-interact`'s `Select` for `browse`; with nothing installed, a run does one missing-file check and its output is unchanged; no core change |
@@ -387,7 +387,9 @@ Python `rich` has no agents. It drives an agent through `rs-rich-acp`'s
 public `Connection` and `Client`, draws with `rs-rich-intuituive`'s stock
 nodes (`markdown`, `collapsible_with`, `follow_end`, the prompt editor,
 `files::path_completer`, `widgets::diff_view_with`) and runs its shell pane
-on `rs-rich-embed`'s `PtyHost`. It adds nothing to intuiTUIve core. Core is
+on `rs-rich-embed`'s `PtyHost`, as it does the agent's commands with the
+`pty` setting. It reads the agents `rich plugin install` records through
+`rs-rich-marketplace`'s `AgentList`. It adds nothing to intuiTUIve core. Core is
 unchanged and no golden fixture covers it. See
 [the design note](design/cornacai.md) and [the guide](guide/cornacai.md).
 
@@ -398,7 +400,8 @@ port nothing: Python `rich` has no counterpart, so there is no golden
 fixture and no row to mirror. These tables say what each one offers, how
 far it is, and what tests it. Status, here: 🟢 shipped and tested ·
 🟡 shipped, with the gaps named · ⬜ planned. The CLI's table is the
-`rich-cli` one above, with its conveniences. Checked on 2026-11-02.
+`rich-cli` one above, with its conveniences. Checked on 2026-11-02; the 🟡 rows again on 2026-11-04, against `main` at
+`3514d742`.
 
 ### rs-rich-plugin-api
 
@@ -437,6 +440,7 @@ Each area has its page in [the guide](guide/ext/index.md).
 | keys and the index | `KeySet` and its generations, `verify_index` (signature, serial, rollback, expiry) | 🟢 | `tests/marketplace.rs`, with test keys in `tests/fixtures/keys` |
 | listings and resolution | `read_listing`, the rules beyond the schema, `resolve` with the plugin API's own checks | 🟢 | `tests/marketplace.rs`; the CLI's `plugin_marketplace.rs` and CI's compatibility job |
 | installing and loading | `Installer` over HTTPS through a `Transport`, checks by kind, the lockfile | 🟢 | `tests/marketplace.rs`, `tests/https_trust.rs` (the system store first) |
+| agents | the `agent` kind (listed only: a launch command, the environment it reads, an install hint, `requires.acp`) and `AgentList`, the `agents.json` an install records it in | 🟢 | `listing.rs`'s and `agents.rs`'s unit tests, the schema's examples; the CLI's `plugin_marketplace.rs` |
 
 ### rs-rich-art
 
@@ -477,10 +481,10 @@ Each area has its page in [the guide](guide/ext/index.md).
 | area | what it offers | status | tests |
 |---|---|:---:|---|
 | the framework | signals, the retained tree, layout, focus, the cell screen and its paint strategies, screens and pop-ups, tasks | 🟢 | 131 test files under `tests/`, among them `app.rs`, `layout.rs`, `flex*.rs`, `driver.rs`; the `versus_ratatui` and `paint_bench` gates |
-| widgets | the [widget index](guide/intuituive/widget-index.md): lists, tables, trees, tabs, inputs, text editing, controls, charts, Markdown, logs, a diff view (#799) | 🟡 Textual parity's remaining gaps (#803, #805, #807 to #815) are 0.0.24's waves 2 and 3: [the audit](design/textual-parity.md#prioritised-gaps) | per widget, e.g. `components.rs`, `controls.rs`, `list_*.rs`, `table*.rs`, `markdown_stream.rs`, `log_view.rs` |
-| themes and keymaps | stylesheets, a semantic theme with Textual's palettes (#801), user keymaps (#806) | 🟡 stylesheet coverage (#812) is wave 3 | `colors.rs`, `bindings.rs`, `keys.rs` |
+| widgets | the [widget index](guide/intuituive/widget-index.md): lists, tables, trees, tabs, inputs, text editing, controls, charts, Markdown, logs, a diff view (#799) | 🟡 the audit's prioritised gaps all shipped in 0.0.24 (#797 to #815); what it still names: `DataTable` row labels and cells that hold renderables, separators in an option list, and highlighting state carried into a `TextArea`'s view from above it ([the audit](design/textual-parity.md)) | per widget, e.g. `components.rs`, `controls.rs`, `list_*.rs`, `table*.rs`, `markdown_stream.rs`, `log_view.rs` |
+| themes and keymaps | stylesheets, a semantic theme with Textual's palettes (#801), user keymaps (#806) | 🟡 #812's first three slices shipped in 0.0.24 (child combinators, `&` nesting, `$variables`; structural and theme pseudo-classes; `margin`, `visibility`, scrollbar colours); still missing: `offset`, `opacity` and `tint`, `outline`, `hatch`, `keyline`, the scrollbar's hover colour and size, `:inline` and `:first-of-type` ([the audit](design/textual-parity.md#framework-features)) | `colors.rs`, `bindings.rs`, `keys.rs`, `keymap.rs`, `stylesheet.rs`, `stylesheet_bounds.rs`, `theme_styles.rs` |
 | plugins | `art`, `pcm`/`audio`, `wav`, `watch`, `files`, `archive`, `viz`, `micro` | 🟢 | `files*.rs`, `audio_*.rs`, `charts*.rs`, `music.rs` |
-| testing and the inspector | a headless driver, snapshots, the inspector | 🟡 Pilot-style helpers (#810) and SVG snapshots (#809) are wave 2 | `inspector.rs`, `driver.rs` |
+| testing and the inspector | a headless driver, snapshots, the inspector; Pilot-style helpers by node name (`click_on`, `double_click_on`, `hover_on`, `scroll_on`, `wait_for_animations`, #810), screenshots and SVG snapshots (`Screen::to_svg`, `cx.screenshot`, `assert_screen_svg!`, #809) | 🟢 | `inspector.rs`, `driver.rs`, `pilot.rs`, `screenshots.rs` |
 
 ### rs-rich-embed
 
@@ -493,7 +497,7 @@ Each area has its page in [the guide](guide/ext/index.md).
 
 | area | what it offers | status | tests |
 |---|---|:---:|---|
-| reading pages | Chrome's layout drawn in cells, links, forms and controls, the mouse (#819) | 🟡 [known limits](guide/noctiluca/status.md#known-limits-in-0023): one tab, no fixed or sticky layer, inline SVG, canvas and frames as alt text | `app.rs`, `layout.rs`, `model.rs`, `mouse.rs`, `pixel_mouse.rs`, `settle.rs`, the snapshots |
+| reading pages | Chrome's layout drawn in cells, links, forms and controls, the mouse (#819) | 🟡 one tab, and a frame shows as its alt text ([what works](guide/noctiluca/status.md)); canvases and inline SVG are drawn and stay live, and fixed and sticky layers are pinned or docked, on `main` for 0.0.25 (`layout.rs`) | `app.rs`, `layout.rs`, `model.rs`, `mouse.rs`, `pixel_mouse.rs`, `settle.rs`, the snapshots |
 | pictures, video and sound | images and GIFs, video at up to 30 frames a second, audio | 🟢 | `pictures.rs`, `images.rs`, `video*.rs`, `audio.rs` |
 | live logs, SSH, split | live logs, `--ssh HOST` (#817), `--split` (#820) | 🟢 | `live*.rs`, `logs.rs`, `ssh.rs`, `split.rs` |
 | the start page | `about:noctiluca` and the animated banner | 🟢 | `start.rs`, `start_still.rs` |
@@ -502,7 +506,7 @@ Each area has its page in [the guide](guide/ext/index.md).
 
 | area | what it offers | status | tests |
 |---|---|:---:|---|
-| the protocol | ACP version 1 over JSON-RPC on an agent's standard streams: `Connection`, typed messages, the `Client` trait | 🟢 | `tests/replay.rs`, replaying `tests/fixtures/claude_agent.jsonl` (a real agent's turn, recorded on 2026-11-02) |
+| the protocol | ACP version 1 over JSON-RPC on an agent's standard streams: `Connection`, typed messages, the `Client` trait; `authenticate` and `session/load` (refused unsent for an agent without `loadSession`) | 🟢 | `tests/replay.rs`, replaying `tests/fixtures/claude_agent.jsonl` (a real agent's turn, recorded on 2026-11-02) and `load.jsonl` |
 | the client's answers | `Workspace`, `fs` and `Terminals`, inside the session's roots, offered only when asked | 🟢 | `tests/replay.rs` and the unit tests |
 | the fake agent | `replay`: a recorded transcript replayed as the agent over in-process pipes, for testing clients | 🟢 | `tests/replay.rs` (its own tests run on it), the module's doctest |
 
@@ -513,8 +517,8 @@ Each area has its page in [the guide](guide/ext/index.md).
 | the conversation | streamed Markdown answers that follow the end, thoughts and tool calls as folded cards with a live status, the plan, the agent's session title | 🟢 | `tests/app.rs` (on the driver, against rs-rich-acp's fake agent) |
 | the prompt | the prompt editor with history, `@` file mentions completed over the workspace and sent as `resource_link`s | 🟢 | `tests/app.rs`, `mention.rs`'s unit tests |
 | what the agent asks | permission prompts (one button per option), writes reviewed as a diff hunk by hunk, commands asked about and run on pipes, reads inside the workspace | 🟢 | `tests/app.rs` |
-| sessions and the shell | several sessions on one connection as tabs; a shell pane on a PTY, the user's own | 🟡 no resume (`session/load`) or session store yet; agent terminals on pipes, not a PTY | `tests/app.rs` (the shell over a `ReplayHost`) |
-| finding agents | the known agents on `PATH`, the choice saved in the config | 🟡 the marketplace's `agent` kind is not built yet | `config.rs`'s unit tests |
+| sessions and the shell | several sessions on one connection as tabs; a session store and resume with `session/load` (Ctrl+O, `--resume`); sign-in with `authenticate` when the agent asks; a shell pane on a PTY, the user's own; agent terminals on a PTY behind `--pty`, falling back to pipes | 🟢 | `tests/app.rs` (the shell over a `ReplayHost`; `resume.jsonl`, `reopen.jsonl`, `signin.jsonl`, `terminal_pty.jsonl`), `store.rs`'s and `terminals.rs`'s unit tests |
+| finding agents | the known agents on `PATH`, then the marketplace's `agent` listings recorded with `rich plugin install`; the choice saved in the config | 🟢 | `config.rs`'s unit tests; rs-rich-marketplace's `agents.rs` and `listing.rs` tests; rs-rich-cli's `tests/plugin_marketplace.rs` |
 
 ### `rs-rich` on PyPI (crates/rich-py)
 

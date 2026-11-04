@@ -32,6 +32,9 @@ cornacai                      # the configured agent, or one found on PATH
 cornacai --agent "gemini --experimental-acp"
 cornacai -- claude-code-acp   # the agent's command after --
 cornacai --agents             # the agents Cornacai knows, and which are installed
+cornacai --sessions           # the sessions kept to reopen
+cornacai --resume ID          # reopen one (session/load)
+cornacai --pty                # the agent's commands on a terminal
 ```
 
 The first time, with no agent configured, Cornacai looks on `PATH` for the
@@ -40,6 +43,23 @@ agents it knows, offers the ones it finds, and saves the choice in
 `~/.config`). An agent given with `--agent` is saved the same way when none
 is configured yet. Cornacai never installs an agent: `--agents` says what to
 install, and you do it.
+
+### Agents from the marketplace
+
+The [plugin marketplace](../marketplace.md) lists agents too, as the `agent`
+kind: each listing gives the agent's launch command, the environment
+variables it reads, and how to install its program.
+
+```sh
+rich plugin search --kind agent
+rich plugin install echo-agent    # records its command; installs nothing
+```
+
+Installing an agent listing downloads nothing and runs nothing: `rich`
+records the listing's verified command in `agents.json` in its plugin
+directory, and prints the install hint for you to follow. `cornacai
+--agents` and the first-run choice then offer it after the built-in ones,
+once its program is on `PATH`. `rich plugin remove ID` forgets it.
 
 The workspace is the current directory (or `--cwd DIR`): the sessions'
 working directory, and the root the agent's file reads and writes through
@@ -74,6 +94,7 @@ Cornacai are kept inside.
 | `@` | Complete a file or directory of the workspace |
 | Esc | Cancel the running turn |
 | Ctrl+N | A new session |
+| Ctrl+O | Reopen an earlier session of this agent in this workspace |
 | Alt+N, Alt+P, Alt+1 … Alt+9 | The next, the previous, or the numbered session |
 | Ctrl+T | Open or close the shell pane (and move into or out of it) |
 | F2 | The agent's log (what it wrote to its standard error) |
@@ -111,8 +132,14 @@ the rest.
   the write succeeded). Files that control what runs (`.git/`, editor and
   agent settings, MCP configuration) are flagged.
 - **Commands.** Every `terminal/create` asks first, with the command line
-  and its directory. An allowed command runs on pipes (not a terminal), in
-  the workspace, and its output, as the agent reads it, shows in its card.
+  and its directory. An allowed command runs in the workspace, on pipes by
+  default, and its output, as the agent reads it, shows in its card. With
+  `--pty` (or `pty = true` under `[terminal]` in the config) each command
+  runs on a terminal of its own (120 x 40), so programs that look for one
+  colour their output and draw their progress; what they write is read as
+  the terminal shows it, as plain text (colour and cursor movement dropped,
+  a progress bar at its last state). A command whose terminal cannot be
+  opened runs on pipes instead.
 - **Reads** inside the workspace are answered without asking. A path
   outside it is refused, whatever the agent says.
 
@@ -142,6 +169,34 @@ own conversation, plan, prompt and history, and its tab. A permission
 prompt or an edit from a session in the background still opens at once,
 naming its session.
 
+### Reopening a session
+
+Cornacai keeps the sessions it opens in `cornacai/sessions.jsonl` in your
+state directory (`$XDG_STATE_HOME`, else `~/.local/state`): each one's id,
+the agent's command, the workspace, its title (the agent's, else your
+first prompt) and when it was last used; the 200 most recent. The
+conversation itself is the agent's to keep.
+
+When the agent offers `session/load` (its `loadSession` capability),
+Ctrl+O lists the sessions of this agent in this workspace, newest first,
+and the one you pick opens in a tab of its own (or its tab, if it is open
+already): the agent replays the conversation into it, and you go on from
+there. `cornacai --resume ID` starts with one, and `cornacai --sessions`
+lists them all. An agent without `session/load` says so, and `--resume`
+opens a new session instead.
+
+## Signing in
+
+Some agents need you to sign in before they open a session or answer.
+When one answers "authentication required", Cornacai shows the sign-in
+methods the agent offered when it started, one button each; the one you
+pick is sent to the agent (`authenticate`), which does the signing in its
+own way (a browser page, an API key it reads), and what failed is sent
+again: the session opens, or your prompt goes through. Esc signs in with
+none. Methods that need the agent run in a terminal are not offered;
+sign in with the agent's own command for those, then start Cornacai
+again.
+
 ## Configuration
 
 ```toml
@@ -153,6 +208,9 @@ shell = ["bash", "-l"]
 read = true       # answer reads inside the workspace
 write = true      # review each write as a diff
 terminal = true   # ask about each command
+
+[terminal]
+pty = true        # the agent's commands on a terminal (default: pipes)
 ```
 
 ## As a library
@@ -178,12 +236,10 @@ wait_for(&mut driver, "Prompt", Duration::from_secs(10));
 
 ## What is not there yet
 
-- Resuming a session (`session/load`) and a session store.
-- The marketplace's `agent` listings (`rich plugin search --kind agent`).
-- Agent terminals on a PTY, shown live; today they run on pipes.
+- An agent terminal shown live as a terminal in its card: on a PTY its
+  output is read as plain text.
 - Sending a selection from the shell pane to the agent.
-- Authentication: an agent that needs you to sign in says so, and you sign
-  in with the agent's own command.
+- Sign-in methods that run the agent in a terminal.
 
 The design, its security model and its open questions are in
 [the design note](https://github.com/buchochelliq-labs/rs-rich-cli/blob/main/docs/design/cornacai.md).

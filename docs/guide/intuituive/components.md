@@ -177,10 +177,14 @@ The keys are a keymap of named actions: rebind them, take the Emacs or Vim
 preset, search with a find bar, wrap at words, and more, in
 [Editing text](text-editing.md).
 
-Only the lines in view are wrapped, highlighted and drawn, so a file of a
-hundred thousand lines pages as fast as a short one. Highlighting starts at
-the first line in view: a construct that opened above it (a long comment, a
-multi-line string) is not known to the lines it covers.
+Only the lines in view are wrapped and drawn, so a file of a hundred
+thousand lines pages as fast as a short one. Highlighting carries what the
+lines above the view leave: a construct that opened above it (a long
+comment, a multi-line string) is highlighted as such inside it. The lines
+from the top (or from 256 lines above the view, further down a file) are
+highlighted once and kept; an edit highlights again only from a little
+above the line it changed, once that is seen to leave the highlighter as
+before, and scrolling on highlights only the lines it brings in.
 
 For assistive technology it is a text box whose value is the caret's line,
 so linear mode reads the line the caret moves to.

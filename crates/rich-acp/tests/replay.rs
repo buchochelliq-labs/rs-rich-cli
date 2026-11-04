@@ -288,6 +288,69 @@ fn errors_from_the_agent() {
 }
 
 #[test]
+fn a_loaded_session_replays_its_history_before_the_answer() {
+    let recorder = Arc::new(Recorder::new(Answer::Choose("unused")));
+    let (agent, replay) = start(&fixture("load.jsonl"), None, Arc::clone(&recorder));
+    let init = init(&agent, ClientCapabilities::none());
+    assert!(init.agent_capabilities.load_session);
+    let loaded = agent
+        .load_session(LoadSessionRequest {
+            session_id: "sess_kept".into(),
+            cwd: "/w".into(),
+            mcp_servers: Vec::new(),
+        })
+        .unwrap();
+    assert_eq!(loaded.modes.unwrap().current_mode_id.as_str(), "ask");
+    // Every update of the history has been handed over by the time
+    // `load_session` returns.
+    let updates = recorder.updates();
+    assert_eq!(updates.len(), 2, "{updates:?}");
+    assert!(matches!(&updates[0], SessionUpdate::UserMessageChunk(c)
+        if c.content.as_text() == Some("Earlier question")));
+    assert_eq!(recorder.message_text(), "Earlier answer.");
+    let gone = agent
+        .load_session(LoadSessionRequest {
+            session_id: "sess_gone".into(),
+            cwd: "/w".into(),
+            mcp_servers: Vec::new(),
+        })
+        .unwrap_err();
+    assert!(
+        matches!(&gone, Error::Rpc(e) if e.code == RpcError::RESOURCE_NOT_FOUND),
+        "{gone}"
+    );
+    replay.finish();
+}
+
+#[test]
+fn a_session_is_not_loaded_from_an_agent_that_cannot() {
+    let recorder = Arc::new(Recorder::new(Answer::Choose("unused")));
+    // The transcript expects nothing after `initialize`: the call is
+    // refused before it is sent.
+    let transcript = r#"{"client": {"id": 0, "method": "initialize"}}
+{"agent": {"jsonrpc": "2.0", "id": 0, "result": {"protocolVersion": 1}}}
+{"quiet": 100}"#;
+    let (agent, replay) = start(transcript, None, Arc::clone(&recorder));
+    assert!(
+        !init(&agent, ClientCapabilities::none())
+            .agent_capabilities
+            .load_session
+    );
+    let refused = agent
+        .load_session(LoadSessionRequest {
+            session_id: "sess".into(),
+            cwd: "/w".into(),
+            mcp_servers: Vec::new(),
+        })
+        .unwrap_err();
+    assert!(
+        matches!(&refused, Error::Rpc(e) if e.code == RpcError::METHOD_NOT_FOUND),
+        "{refused}"
+    );
+    replay.finish();
+}
+
+#[test]
 fn an_unsupported_version_is_refused() {
     let recorder = Arc::new(Recorder::new(Answer::Choose("unused")));
     let (agent, replay) = start(&fixture("version.jsonl"), None, recorder);

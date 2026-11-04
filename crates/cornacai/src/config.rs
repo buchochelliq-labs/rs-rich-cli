@@ -1,6 +1,7 @@
 //! The configuration file, `cornacai/config.toml` in the user's config
 //! directory (`$XDG_CONFIG_HOME`, else `~/.config`), and the agents
-//! Cornacai knows how to start.
+//! Cornacai knows how to start: built in, and recorded from the
+//! marketplace's `agent` listings (`rich plugin install ID`).
 //!
 //! ```toml
 //! # The agent's launch command: the program and its arguments.
@@ -14,9 +15,16 @@
 //! read = true
 //! write = true
 //! terminal = true
+//!
+//! # The agent's commands on a PTY (colour, programs that want a
+//! # terminal) instead of pipes; pipes when a PTY cannot be opened.
+//! [terminal]
+//! pty = true
 //! ```
 
 use std::path::{Path, PathBuf};
+
+use rich_marketplace::{AgentList, ListedAgent};
 
 /// The settings the app runs with.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -31,6 +39,8 @@ pub struct Config {
     pub write: bool,
     /// Offer `terminal/*` (each command asked about).
     pub terminal: bool,
+    /// Run the agent's commands on a PTY.
+    pub pty: bool,
 }
 
 impl Default for Config {
@@ -43,6 +53,7 @@ impl Default for Config {
             read: true,
             write: true,
             terminal: true,
+            pty: false,
         }
     }
 }
@@ -86,6 +97,11 @@ impl Config {
                         .ok_or_else(|| format!("`capabilities.{key}`: true or false"))?;
                 }
             }
+        }
+        if let Some(terminal) = table.get("terminal").and_then(toml::Value::as_table)
+            && let Some(value) = terminal.get("pty")
+        {
+            config.pty = value.as_bool().ok_or("`terminal.pty`: true or false")?;
         }
         Ok(config)
     }
@@ -174,6 +190,86 @@ pub const KNOWN_AGENTS: &[KnownAgent] = &[
     },
 ];
 
+/// rs-rich-cli's plugin install directory, where `rich plugin install`
+/// records the marketplace's agents: `RICH_PLUGIN_DIR`, else
+/// `%LOCALAPPDATA%\\rich\\plugins` on Windows, else
+/// `$XDG_DATA_HOME/rich/plugins`, else `~/.local/share/rich/plugins`.
+pub fn rich_plugin_dir() -> Option<PathBuf> {
+    let env = |name: &str| std::env::var_os(name).filter(|v| !v.is_empty());
+    if let Some(dir) = env("RICH_PLUGIN_DIR") {
+        return Some(PathBuf::from(dir));
+    }
+    if cfg!(windows)
+        && let Some(local) = env("LOCALAPPDATA")
+    {
+        return Some(PathBuf::from(local).join("rich").join("plugins"));
+    }
+    if let Some(data) = env("XDG_DATA_HOME").map(PathBuf::from)
+        && data.is_absolute()
+    {
+        return Some(data.join("rich").join("plugins"));
+    }
+    env("HOME")
+        .or_else(|| env("USERPROFILE"))
+        .map(|home| PathBuf::from(home).join(".local/share/rich/plugins"))
+}
+
+/// The agents recorded from the marketplace in `dir`
+/// ([`rich_plugin_dir`]): none when there is no record or it does not
+/// read.
+pub fn marketplace_agents(dir: &Path) -> Vec<ListedAgent> {
+    AgentList::load(dir)
+        .map(|list| list.agents().to_vec())
+        .unwrap_or_default()
+}
+
+/// An agent to offer: built in, or recorded from the marketplace.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct AgentChoice {
+    /// Its name, for people.
+    pub name: String,
+    /// Its launch command.
+    pub command: Vec<String>,
+    /// How to install it.
+    pub install: String,
+    /// The marketplace listing it came from, if one did: its id and tier.
+    pub listing: Option<(String, String)>,
+}
+
+impl AgentChoice {
+    /// Whether its program is installed.
+    pub fn installed(&self) -> bool {
+        self.command.first().is_some_and(|program| on_path(program))
+    }
+}
+
+/// Every agent Cornacai can offer: [`KNOWN_AGENTS`], then the marketplace's
+/// `listed` agents whose command is not one of those.
+pub fn agent_choices(listed: &[ListedAgent]) -> Vec<AgentChoice> {
+    let mut choices: Vec<AgentChoice> = KNOWN_AGENTS
+        .iter()
+        .map(|agent| AgentChoice {
+            name: agent.name.to_string(),
+            command: agent.command.iter().map(|s| s.to_string()).collect(),
+            install: agent.install.to_string(),
+            listing: None,
+        })
+        .collect();
+    for agent in listed {
+        let command = agent.argv();
+        if choices.iter().any(|c| c.command == command) {
+            continue;
+        }
+        choices.push(AgentChoice {
+            name: crate::clean::clean(&agent.name),
+            command,
+            install: crate::clean::clean(&agent.install),
+            listing: Some((agent.id.clone(), agent.tier.as_str().to_string())),
+        });
+    }
+    choices
+}
+
 /// Whether `program` is an executable file on `PATH` (or a path to one).
 pub fn on_path(program: &str) -> bool {
     let runnable = |path: &Path| path.is_file();
@@ -214,7 +310,46 @@ mod tests {
         );
         assert_eq!(config.shell.unwrap(), ["bash", "-l"].map(String::from));
         assert!(config.read && config.write && !config.terminal);
+        assert!(!config.pty);
+        assert!(Config::parse("[terminal]\npty = true\n").unwrap().pty);
         assert!(Config::parse("[capabilities]\nread = 1\n").is_err());
+        assert!(Config::parse("[terminal]\npty = \"yes\"\n").is_err());
+    }
+
+    #[test]
+    fn the_marketplaces_agents_follow_the_built_in_ones() {
+        let dir = std::env::temp_dir().join(format!("cornacai-agents-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        assert!(marketplace_agents(&dir).is_empty());
+        std::fs::create_dir_all(&dir).unwrap();
+        // As `rich plugin install` writes it: one new agent, one that is
+        // a built-in one again (left out), and a broken entry (skipped).
+        std::fs::write(
+            dir.join("agents.json"),
+            r#"{"schema_version": 1, "agents": [
+                {"id": "echo-agent", "name": "Echo\u001b[2J Agent", "tier": "community",
+                 "version": "1.4.0", "command": "echo-agent", "args": ["--acp"],
+                 "install": "npm install -g @example/echo-agent"},
+                {"id": "claude", "name": "Claude again", "tier": "reviewed", "version": "1.0.0",
+                 "command": "claude-code-acp"},
+                {"id": "broken"}
+            ]}"#,
+        )
+        .unwrap();
+        let listed = marketplace_agents(&dir);
+        assert_eq!(listed.len(), 2);
+        let choices = agent_choices(&listed);
+        assert_eq!(choices.len(), KNOWN_AGENTS.len() + 1);
+        let echo = choices.last().unwrap();
+        assert_eq!(echo.command, ["echo-agent", "--acp"]);
+        assert_eq!(
+            echo.listing,
+            Some(("echo-agent".to_string(), "community".to_string()))
+        );
+        // The listing's text is shown, so it is cleaned.
+        assert!(!echo.name.contains('\u{1b}'), "{:?}", echo.name);
+        assert!(!echo.installed());
+        std::fs::remove_dir_all(&dir).ok();
     }
 
     #[test]

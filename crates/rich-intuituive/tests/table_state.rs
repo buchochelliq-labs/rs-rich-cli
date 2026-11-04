@@ -414,3 +414,88 @@ fn frozen_rows_in_virtual_and_multiline_tables() {
         "{shown:?}"
     );
 }
+
+/// Row labels (#814's DataTable parity): a column of their own at the
+/// left, as wide as the widest, following their rows through a sort.
+#[test]
+fn row_labels_have_a_column_and_follow_their_rows() {
+    let app = App::new(|| {
+        let sort = signal(None);
+        let columns = vec![Column::new("Name", Size::Auto)];
+        let rows = || {
+            ["b", "c", "a"]
+                .iter()
+                .map(|name| vec![name.to_string()])
+                .collect()
+        };
+        let labels = |i: usize| ["one", "two", "three"][i].to_string();
+        let options = TableOptions::default().sort_rows(sort).row_labels(labels);
+        table_with(columns, rows, signal(0), options)
+    });
+    let mut driver = app.driver(16, 4);
+    driver.settle();
+    let shown = plain(&driver);
+    assert_eq!(shown[0], "      Name");
+    assert_eq!(shown[1], "one   b");
+    assert_eq!(shown[3], "three a");
+    // The label is in the theme's `table.row_label` style (bold), and the
+    // selection's highlight stays off it.
+    let screen = driver.screen();
+    let label = screen
+        .style(screen.cell(0, 1).style)
+        .cloned()
+        .unwrap_or_default();
+    assert_eq!(label.bold(), Some(true));
+    let cell = screen
+        .style(screen.cell(0, 2).style)
+        .cloned()
+        .unwrap_or_default();
+    assert_ne!(cell.reverse(), Some(true));
+    // Sorted, each label goes with its row.
+    driver.press("s");
+    let shown = plain(&driver);
+    assert_eq!(shown[1], "three a", "{shown:?}");
+    assert_eq!(shown[2], "one   b", "{shown:?}");
+    assert_eq!(shown[3], "two   c", "{shown:?}");
+}
+
+/// Cells holding renderables: a panel in a multi-line table sizes its
+/// column and its row, and follows its row through a sort.
+#[test]
+fn cells_hold_renderables() {
+    use intuituive::rich::{Panel, Renderable, Text};
+    let app = App::new(|| {
+        let sort = signal(None);
+        let columns = vec![
+            Column::new("Name", Size::Auto),
+            Column::new("Status", Size::Auto),
+        ];
+        let rows = || {
+            vec![
+                vec!["b".into(), "two".into()],
+                vec!["a".into(), "one".into()],
+            ]
+        };
+        let options = TableOptions::default()
+            .sort_rows(sort)
+            .multiline()
+            .renderables(|row, column| {
+                (column == 1 && row == 0)
+                    .then(|| Rc::new(Panel::new(Box::new(Text::new("two")))) as Rc<dyn Renderable>)
+            });
+        table_with(columns, rows, signal(0), options)
+    });
+    let mut driver = app.driver(16, 6);
+    driver.settle();
+    let shown = plain(&driver);
+    assert_eq!(shown[0], "Name Status", "{shown:?}");
+    assert_eq!(shown[1], "b    ╭─────╮", "{shown:?}");
+    assert_eq!(shown[2], "     │ two │", "{shown:?}");
+    assert_eq!(shown[3], "     ╰─────╯", "{shown:?}");
+    assert_eq!(shown[4], "a    one", "{shown:?}");
+    // Sorted by name, the panel goes with its row.
+    driver.press("s");
+    let shown = plain(&driver);
+    assert_eq!(shown[1], "a      one", "{shown:?}");
+    assert_eq!(shown[2], "b      ╭─────╮", "{shown:?}");
+}

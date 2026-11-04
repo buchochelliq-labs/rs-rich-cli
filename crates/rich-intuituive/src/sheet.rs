@@ -22,8 +22,13 @@
 //! variable later values use (a `$name` not declared is a theme style).
 //!
 //! Besides colours, text styles and layout, a rule may set `margin` (room
-//! round the border), `visibility: hidden` (room kept, nothing drawn) and
-//! `scrollbar-color` and `scrollbar-background`.
+//! round the border), `visibility: hidden` (room kept, nothing drawn),
+//! `scrollbar-color`, `scrollbar-background`, `scrollbar-color-hover` and
+//! `scrollbar-size`, `offset` (drawn moved, its neighbours staying put),
+//! `opacity` and `tint` (its colours faded into the ground, or moved
+//! towards a colour), `outline` (a box over its edge, taking no room),
+//! `hatch` (its blank cells filled with a character) and `keyline` (lines
+//! round and between its children).
 //!
 //! Colours and text styles follow the states and
 //! [`class_when`](crate::Node::class_when); layout (sizes, padding, the
@@ -214,6 +219,19 @@ struct Decls {
     visible: Option<bool>,
     scrollbar_color: Option<Paint>,
     scrollbar_background: Option<Paint>,
+    scrollbar_color_hover: Option<Paint>,
+    /// `scrollbar-size-horizontal` and `scrollbar-size-vertical`.
+    scrollbar_across: Option<u16>,
+    scrollbar_down: Option<u16>,
+    offset_x: Option<i16>,
+    offset_y: Option<i16>,
+    /// From 0 (gone) to 1.
+    opacity: Option<f64>,
+    tint: Option<(Paint, f64)>,
+    /// `Some(None)`: `outline: none`.
+    outline: Option<Option<(Border, Option<Paint>)>>,
+    hatch: Option<Option<(char, Paint, f64)>>,
+    keyline: Option<Option<(Border, Option<Paint>)>>,
     gap: Option<u16>,
     grid_columns: Option<Vec<Size>>,
     grid_rows: Option<Vec<Size>>,
@@ -239,6 +257,23 @@ pub(crate) struct Layout {
     pub margin: [u16; 4],
     /// `visibility: hidden`: its room is kept, and nothing in it drawn.
     pub invisible: bool,
+    /// `offset`: where it draws, moved this far from where it is laid
+    /// out (across, down), its neighbours staying where they are.
+    pub offset: (i16, i16),
+    /// `opacity`, from 0 to 1: its colours this far from the ground
+    /// behind it to their own.
+    pub opacity: Option<f64>,
+    /// `tint`: its colours moved this far towards a colour.
+    pub tint: Option<(Color, f64)>,
+    /// `outline`: a line drawn over its edge, taking no room.
+    pub outline: Option<(Border, Style)>,
+    /// `hatch`: a character filling its blank cells, in a colour this far
+    /// from the ground.
+    pub hatch: Option<(char, Color, f64)>,
+    /// `keyline`: lines round and between its children.
+    pub keyline: Option<(Border, Style)>,
+    /// `scrollbar-size`: how many cells its bars across and down take.
+    pub scrollbar_size: (Option<u16>, Option<u16>),
     /// Theme styles the sheet gives the node, as
     /// [`theme_styles`](crate::Node::theme_styles) does (the scrollbar's).
     pub theme_styles: Vec<(String, String)>,
@@ -441,6 +476,11 @@ impl Stylesheet {
         let mut out = Layout::default();
         let mut border: Option<Option<(Border, Option<Paint>)>> = None;
         let (mut scrollbar_color, mut scrollbar_background) = (None, None);
+        let mut scrollbar_hover = None;
+        let mut outline: Option<Option<(Border, Option<Paint>)>> = None;
+        let mut keyline: Option<Option<(Border, Option<Paint>)>> = None;
+        let mut hatch: Option<Option<(char, Paint, f64)>> = None;
+        let mut tint: Option<(Paint, f64)> = None;
         for rule in self.rules.iter().filter(|rule| rule.applies(viewport)) {
             if !rule.selector.matches(chain, Mode::Fixed) {
                 continue;
@@ -457,6 +497,26 @@ impl Stylesheet {
             }
             if let Some(paint) = &d.scrollbar_background {
                 scrollbar_background = Some(paint.clone());
+            }
+            if let Some(paint) = &d.scrollbar_color_hover {
+                scrollbar_hover = Some(paint.clone());
+            }
+            out.scrollbar_size.0 = d.scrollbar_across.or(out.scrollbar_size.0);
+            out.scrollbar_size.1 = d.scrollbar_down.or(out.scrollbar_size.1);
+            out.offset.0 = d.offset_x.unwrap_or(out.offset.0);
+            out.offset.1 = d.offset_y.unwrap_or(out.offset.1);
+            out.opacity = d.opacity.or(out.opacity);
+            if d.tint.is_some() {
+                tint = d.tint.clone();
+            }
+            if d.outline.is_some() {
+                outline = d.outline.clone();
+            }
+            if d.keyline.is_some() {
+                keyline = d.keyline.clone();
+            }
+            if d.hatch.is_some() {
+                hatch = d.hatch.clone();
             }
             if d.border.is_some() {
                 border = d.border.clone();
@@ -502,6 +562,10 @@ impl Stylesheet {
             out.theme_styles
                 .push(("scrollbar.thumb".to_string(), color));
         }
+        if let Some(color) = named(scrollbar_hover) {
+            out.theme_styles
+                .push(("scrollbar.thumb.hover".to_string(), color));
+        }
         if let Some(ground) = named(scrollbar_background) {
             out.theme_styles
                 .push(("scrollbar".to_string(), format!("bright_black on {ground}")));
@@ -511,13 +575,24 @@ impl Stylesheet {
             ));
         }
         out.no_border = matches!(border, Some(None));
-        out.border = border.flatten().map(|(kind, paint)| {
-            let style = paint
-                .and_then(|paint| paint_style(&paint, vars))
-                .map(|(color, style)| style.unwrap_or_else(|| Style::from_color(Some(color), None)))
-                .unwrap_or_default();
-            (kind, style)
-        });
+        let line = |line: Option<Option<(Border, Option<Paint>)>>| {
+            line.flatten().map(|(kind, paint)| {
+                let style = paint
+                    .and_then(|paint| paint_style(&paint, vars))
+                    .map(|(color, style)| {
+                        style.unwrap_or_else(|| Style::from_color(Some(color), None))
+                    })
+                    .unwrap_or_default();
+                (kind, style)
+            })
+        };
+        out.border = line(border);
+        out.outline = line(outline);
+        out.keyline = line(keyline);
+        out.hatch = hatch
+            .flatten()
+            .and_then(|(c, paint, alpha)| Some((c, paint_style(&paint, vars)?.0, alpha)));
+        out.tint = tint.and_then(|(paint, alpha)| Some((paint_style(&paint, vars)?.0, alpha)));
         out
     }
 
@@ -1323,29 +1398,26 @@ fn declare(decls: &mut Decls, property: &str, value: &str) -> Result<(), String>
                 Style::parse(&words.join(" ")).map_err(|e| e.to_string())?
             });
         }
-        "border" => {
+        "border" => decls.border = Some(line(value, "a border")?),
+        "outline" => decls.outline = Some(line(value, "an outline")?),
+        "keyline" => {
             let mut words = value.split_whitespace();
             let kind = match words.next() {
-                Some("none") => {
-                    decls.border = Some(None);
-                    return Ok(());
-                }
-                Some(word) if Border::parse(word).is_some() => {
-                    Border::parse(word).expect("checked")
-                }
+                Some("none") => None,
+                Some("thin") => Some(Border::Plain),
+                Some("heavy") => Some(Border::Thick),
+                Some("double") => Some(Border::Double),
                 _ => {
                     return Err(format!(
-                        "`{value}`: a border is none, round, square, heavy, double, ascii, a dashed \
-                         kind (dashed, light-triple-dashed, ...) or quadrant-inside or \
-                         quadrant-outside, then a colour"
+                        "`{value}`: a keyline is none, thin, heavy or double, then a colour"
                     ));
                 }
             };
             let color = words.next().map(paint).transpose()?;
             if let Some(extra) = words.next() {
-                return Err(format!("`{extra}`: a border takes a box and one colour"));
+                return Err(format!("`{extra}`: a keyline takes a kind and one colour"));
             }
-            decls.border = Some(Some((kind, color)));
+            decls.keyline = Some(kind.map(|kind| (kind, color)));
         }
         "border-title" | "border-subtitle" => {
             let title = value.trim_matches(|c| c == '"' || c == '\'').to_string();
@@ -1468,6 +1540,80 @@ fn declare(decls: &mut Decls, property: &str, value: &str) -> Result<(), String>
         }
         "scrollbar-color" => decls.scrollbar_color = Some(paint(value)?),
         "scrollbar-background" => decls.scrollbar_background = Some(paint(value)?),
+        "scrollbar-color-hover" => decls.scrollbar_color_hover = Some(paint(value)?),
+        "scrollbar-size" => {
+            let n = value
+                .split_whitespace()
+                .map(cells)
+                .collect::<Result<Vec<_>, _>>()?;
+            let [across, down] = n[..] else {
+                return Err(format!(
+                    "`{value}`: scrollbar-size takes two numbers, across then down"
+                ));
+            };
+            decls.scrollbar_across = Some(across);
+            decls.scrollbar_down = Some(down);
+        }
+        "scrollbar-size-horizontal" => decls.scrollbar_across = Some(cells(value)?),
+        "scrollbar-size-vertical" => decls.scrollbar_down = Some(cells(value)?),
+        "offset" => {
+            let n = value
+                .split_whitespace()
+                .map(offset)
+                .collect::<Result<Vec<_>, _>>()?;
+            let [x, y] = n[..] else {
+                return Err(format!(
+                    "`{value}`: offset takes two numbers, across then down"
+                ));
+            };
+            decls.offset_x = Some(x);
+            decls.offset_y = Some(y);
+        }
+        "offset-x" => decls.offset_x = Some(offset(value)?),
+        "offset-y" => decls.offset_y = Some(offset(value)?),
+        "opacity" => decls.opacity = Some(fraction(value)?),
+        "tint" => {
+            let (color, alpha) = color_and_alpha(value, "a tint")?;
+            decls.tint = Some((color, alpha));
+        }
+        "hatch" => {
+            if value == "none" {
+                decls.hatch = Some(None);
+                return Ok(());
+            }
+            let (pattern, rest) = match value.chars().next() {
+                Some(q @ ('"' | '\'')) => {
+                    let inner = &value[1..];
+                    let end = inner
+                        .find(q)
+                        .ok_or_else(|| format!("`{value}`: a quoted hatch never ends"))?;
+                    let mut chars = inner[..end].chars();
+                    let (Some(c), None) = (chars.next(), chars.next()) else {
+                        return Err(format!("`{value}`: a quoted hatch is one character"));
+                    };
+                    (c, &inner[end + 1..])
+                }
+                _ => {
+                    let (word, rest) = value.split_once(char::is_whitespace).unwrap_or((value, ""));
+                    let c = match word {
+                        "left" => '╲',
+                        "right" => '╱',
+                        "cross" => '╳',
+                        "horizontal" => '─',
+                        "vertical" => '│',
+                        _ => {
+                            return Err(format!(
+                                "`{value}`: a hatch is none, left, right, cross, horizontal, \
+                                 vertical or a quoted character, then a colour"
+                            ));
+                        }
+                    };
+                    (c, rest)
+                }
+            };
+            let (color, alpha) = color_and_alpha(rest.trim(), "a hatch")?;
+            decls.hatch = Some(Some((pattern, color, alpha)));
+        }
         "gap" => decls.gap = Some(cells(value)?),
         "grid-columns" | "grid-rows" => {
             let sizes = value
@@ -1544,6 +1690,62 @@ fn declare(decls: &mut Decls, property: &str, value: &str) -> Result<(), String>
         _ => return Err(format!("unknown property `{property}`")),
     }
     Ok(())
+}
+
+/// A `border` or `outline` value: `none`, or a kind and a colour.
+fn line(value: &str, what: &str) -> Result<Option<(Border, Option<Paint>)>, String> {
+    let mut words = value.split_whitespace();
+    let kind = match words.next() {
+        Some("none") => return Ok(None),
+        Some(word) if Border::parse(word).is_some() => Border::parse(word).expect("checked"),
+        _ => {
+            return Err(format!(
+                "`{value}`: {what} is none, round, square, heavy, double, ascii, a dashed \
+                 kind (dashed, light-triple-dashed, ...) or quadrant-inside or \
+                 quadrant-outside, then a colour"
+            ));
+        }
+    };
+    let color = words.next().map(paint).transpose()?;
+    if let Some(extra) = words.next() {
+        return Err(format!("`{extra}`: {what} takes a box and one colour"));
+    }
+    Ok(Some((kind, color)))
+}
+
+/// A number of cells, which may be less than 0.
+fn offset(value: &str) -> Result<i16, String> {
+    value
+        .parse()
+        .map_err(|_| format!("`{value}` is not a number of cells"))
+}
+
+/// `50%` or `0.5`: from 0 to 1.
+fn fraction(value: &str) -> Result<f64, String> {
+    let bad = || format!("`{value}` is not a percentage (50%) or a number from 0 to 1");
+    let n: f64 = match value.strip_suffix('%') {
+        Some(n) => n.trim().parse::<f64>().map_err(|_| bad())? / 100.0,
+        None => value.parse().map_err(|_| bad())?,
+    };
+    if n.is_finite() && (0.0..=1.0).contains(&n) {
+        Ok(n)
+    } else {
+        Err(bad())
+    }
+}
+
+/// A colour and how much of it (`red 20%`), all of it when that is not
+/// said.
+fn color_and_alpha(value: &str, what: &str) -> Result<(Paint, f64), String> {
+    let mut words = value.split_whitespace();
+    let Some(color) = words.next() else {
+        return Err(format!("{what} takes a colour"));
+    };
+    let alpha = words.next().map(fraction).transpose()?.unwrap_or(1.0);
+    if let Some(extra) = words.next() {
+        return Err(format!("`{extra}`: {what} takes a colour and a percentage"));
+    }
+    Ok((paint(color)?, alpha))
 }
 
 /// An `align-items` or `align-self` value; `auto` (`align-self` only) is
@@ -2078,6 +2280,81 @@ mod tests {
                 "margin takes one to four numbers",
             ),
             ("a { scrollbar-color: nope; }", "`nope` is not a colour"),
+        ] {
+            let error = Stylesheet::parse(css).unwrap_err().to_string();
+            assert!(error.contains(message), "{css}: {error}");
+        }
+    }
+
+    #[test]
+    fn offset_opacity_tint_outline_hatch_keyline_and_scrollbar_size() {
+        let sheet = Stylesheet::parse(
+            "#a { offset: 2 -1; opacity: 50%; tint: $accent 20%; outline: heavy red; \
+             hatch: cross $accent 40%; keyline: double $accent; scrollbar-size: 2 3; \
+             scrollbar-color-hover: $accent; } \
+             #a.moved { offset-x: -3; scrollbar-size-vertical: 0; opacity: 0.25; } \
+             #b { hatch: \"x\" red; keyline: thin; outline: round; } \
+             #b.off { hatch: none; keyline: none; outline: none; }",
+        )
+        .unwrap();
+        let accent = |name: &str| (name == "accent").then(|| Style::parse("magenta").unwrap());
+        let magenta = Color::parse("magenta").unwrap();
+        let a = sheet.layout(&[element("label", Some("a"), &[])], &accent, WIDE);
+        assert_eq!(a.offset, (2, -1));
+        assert_eq!(a.opacity, Some(0.5));
+        assert_eq!(a.tint, Some((magenta.clone(), 0.2)));
+        assert_eq!(
+            a.outline,
+            Some((Border::Thick, Style::parse("red").unwrap()))
+        );
+        assert_eq!(a.hatch, Some(('╳', magenta.clone(), 0.4)));
+        assert_eq!(
+            a.keyline,
+            Some((Border::Double, Style::parse("magenta").unwrap()))
+        );
+        assert_eq!(a.scrollbar_size, (Some(2), Some(3)));
+        assert!(
+            a.theme_styles
+                .contains(&("scrollbar.thumb.hover".to_string(), "magenta".to_string()))
+        );
+        let moved = sheet.layout(&[element("label", Some("a"), &["moved"])], &accent, WIDE);
+        assert_eq!(moved.offset, (-3, -1));
+        assert_eq!(moved.scrollbar_size, (Some(2), Some(0)));
+        assert_eq!(moved.opacity, Some(0.25));
+        let b = sheet.layout(&[element("label", Some("b"), &[])], &accent, WIDE);
+        assert_eq!(b.hatch, Some(('x', Color::parse("red").unwrap(), 1.0)));
+        assert_eq!(b.keyline, Some((Border::Plain, Style::default())));
+        assert_eq!(b.outline, Some((Border::Rounded, Style::default())));
+        let off = sheet.layout(&[element("label", Some("b"), &["off"])], &accent, WIDE);
+        assert_eq!((off.hatch, off.keyline, off.outline), (None, None, None));
+        for (css, message) in [
+            ("a { offset: 1; }", "offset takes two numbers"),
+            ("a { offset-y: down; }", "`down` is not a number of cells"),
+            ("a { opacity: 150%; }", "is not a percentage"),
+            ("a { opacity: half; }", "is not a percentage"),
+            (
+                "a { tint: red 20% 3; }",
+                "a tint takes a colour and a percentage",
+            ),
+            ("a { tint: nope; }", "`nope` is not a colour"),
+            ("a { outline: wavy; }", "an outline is none, round"),
+            ("a { hatch: zigzag red; }", "a hatch is none, left, right"),
+            (
+                "a { hatch: \"ab\" red; }",
+                "a quoted hatch is one character",
+            ),
+            (
+                "a { keyline: round; }",
+                "a keyline is none, thin, heavy or double",
+            ),
+            (
+                "a { scrollbar-size: 1; }",
+                "scrollbar-size takes two numbers",
+            ),
+            (
+                "a { scrollbar-color-hover: nope; }",
+                "`nope` is not a colour",
+            ),
         ] {
             let error = Stylesheet::parse(css).unwrap_err().to_string();
             assert!(error.contains(message), "{css}: {error}");

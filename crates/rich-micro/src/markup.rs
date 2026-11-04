@@ -47,9 +47,11 @@ pub struct Diagnostic {
     pub offset: usize,
     /// The token as written.
     pub token: String,
+    /// What was wrong with it.
     pub kind: DiagnosticKind,
 }
 
+/// Why a token was left as written.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum DiagnosticKind {
     /// A well-formed name no layer has.
@@ -282,6 +284,8 @@ pub struct PreparedMarkup {
 }
 
 impl PreparedMarkup {
+    /// `markup` with its `:micro:name:` tokens resolved in `registry` and
+    /// replaced by stand-ins, ready to parse.
     pub fn new(markup: &str, registry: &MicroRegistry, preference: FallbackPreference) -> Self {
         let mut prepared = PreparedMarkup {
             markup: String::with_capacity(markup.len()),
@@ -496,6 +500,8 @@ pub struct PreparedMarkdown {
 }
 
 impl PreparedMarkdown {
+    /// `source` with its `:micro:name:` tokens resolved in `registry` and
+    /// replaced by stand-ins, ready to parse as Markdown.
     pub fn new(source: &str, registry: &MicroRegistry, preference: FallbackPreference) -> Self {
         let mut prepared = PreparedMarkdown {
             source: String::with_capacity(source.len()),
@@ -669,6 +675,7 @@ pub struct MicroTransform {
 }
 
 impl MicroTransform {
+    /// The transform, substituting the assets of `registry`.
     pub fn new(registry: Arc<MicroRegistry>) -> Self {
         MicroTransform {
             registry,
@@ -676,6 +683,7 @@ impl MicroTransform {
         }
     }
 
+    /// Which fallback to show where no image can be drawn.
     #[must_use]
     pub fn preference(mut self, preference: FallbackPreference) -> Self {
         self.preference = preference;

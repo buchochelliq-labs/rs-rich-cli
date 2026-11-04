@@ -50,8 +50,11 @@ pub struct Prepared {
     /// The first 64 bits of the SHA-256 of the source bytes, the size in
     /// cells and the cell size: an id for the image within a session.
     pub key: u64,
+    /// The width in cells.
     pub cols: usize,
+    /// The height in cells.
     pub rows: usize,
+    /// The cell size in pixels it was fitted for.
     pub cell: CellPixels,
     /// Fitted to exactly `cols × rows` cells; one frame for a still image.
     pub frames: Vec<AnimationFrame>,
@@ -144,6 +147,8 @@ impl ImageCache {
     /// Default bound on the decoded frames kept in memory: 32 MiB.
     pub const DEFAULT_BUDGET: usize = 32 << 20;
 
+    /// A cache holding at most `budget` bytes of decoded frames in memory,
+    /// and, with `disk`, prepared images on disk there too.
     pub fn new(budget: usize, disk: Option<PathBuf>) -> ImageCache {
         ImageCache {
             entries: HashMap::new(),
@@ -165,6 +170,7 @@ impl ImageCache {
         self.entries.len()
     }
 
+    /// Whether it holds nothing.
     pub fn is_empty(&self) -> bool {
         self.entries.is_empty()
     }

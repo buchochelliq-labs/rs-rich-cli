@@ -3014,11 +3014,14 @@ impl Node {
         });
         // A container that collapses its children's borders takes a
         // stylesheet's border as its lines', rather than a box round it.
+        // A `keyline` is such lines, round and between the children.
         let collapse = |collapse: &mut crate::builtin::Collapse| {
             if !collapse.code {
-                collapse.on = layout.collapse.unwrap_or(false);
+                collapse.on = layout.keyline.is_some() || layout.collapse.unwrap_or(false);
             }
-            collapse.sheet = layout.border.clone().filter(|_| collapse.on);
+            collapse.sheet = (layout.keyline.clone())
+                .or_else(|| layout.border.clone())
+                .filter(|_| collapse.on);
             collapse.on
         };
         let collapsed = self
@@ -3032,6 +3035,8 @@ impl Node {
         } else {
             (layout.border.clone(), layout.insets())
         };
+        let (across, down) = layout.scrollbar_size;
+        self.sheet_bar_sizes(across, down);
         let mut sheet = self.sheet.borrow_mut();
         if sheet.layout.theme_styles != layout.theme_styles {
             // Its scope is made again with the sheet's theme styles.
@@ -3058,6 +3063,125 @@ impl Node {
             self.disabled_when.as_ref().is_some_and(|c| c()),
             self.invalid(),
         )
+    }
+
+    /// A stylesheet's `hatch`, `outline`, `tint` and `opacity`, over what
+    /// was drawn inside the node this frame (since `mark`; all of it when
+    /// `repaint`), once its children have drawn.
+    #[allow(clippy::too_many_arguments)]
+    fn sheet_effects(
+        &self,
+        frame: &mut FrameState,
+        screen: &mut Screen,
+        console: &Console,
+        theme: &Theme,
+        rect: Rect,
+        mark: usize,
+        repaint: bool,
+    ) {
+        let (outline, hatch, tint, opacity, boxed) = {
+            let sheet = self.sheet.borrow();
+            let layout = &sheet.layout;
+            (
+                layout.outline.clone(),
+                layout.hatch.clone(),
+                layout.tint.clone(),
+                layout.opacity,
+                layout.boxed(rect),
+            )
+        };
+        if outline.is_none() && hatch.is_none() && tint.is_none() && opacity.is_none() {
+            return;
+        }
+        let area = boxed.intersection(screen.area());
+        let mut parts: Vec<Rect> = if repaint {
+            vec![area]
+        } else {
+            frame.damage[mark..]
+                .iter()
+                .map(|part| part.intersection(area))
+                .filter(|part| !part.is_empty())
+                .collect()
+        };
+        if parts.is_empty() {
+            return;
+        }
+        let ground = Ground::of(console, theme);
+        if let Some((symbol, color, alpha)) = hatch {
+            for part in &parts {
+                for y in part.y..part.bottom() {
+                    for x in part.x..part.right() {
+                        let cell = screen.cell(x, y);
+                        if cell.is_continuation() || cell.text() != " " {
+                            continue;
+                        }
+                        let own = screen.style(cell.style).cloned().unwrap_or_default();
+                        let bg = rgb(own.bgcolor()).unwrap_or(ground.bg);
+                        let color = match rgb(Some(&color)) {
+                            Some(c) if alpha < 1.0 => from_rgb(crate::fx::mix(bg, c, alpha)),
+                            _ => color.clone(),
+                        };
+                        let style = own.combine(&Style::from_color(Some(color), None));
+                        let id = screen.intern(Some(&style));
+                        screen.put(x, y, symbol, id);
+                    }
+                }
+            }
+        }
+        if let Some((kind, style)) = outline {
+            let look = crate::border::Frame {
+                border: kind,
+                sides: Sides::ALL,
+                style: &style,
+                title_style: &style,
+                titles: &[],
+                flush: false,
+            };
+            let edges = crate::border::draw_frame(screen, console, &look, area);
+            parts.extend(edges.iter().copied());
+            frame.damage.extend(edges);
+        }
+        if tint.is_none() && opacity.is_none() {
+            return;
+        }
+        // Each cell once, however many parts hold it.
+        let mut seen = vec![false; usize::from(area.width) * usize::from(area.height)];
+        for part in &parts {
+            let part = part.intersection(area);
+            for y in part.y..part.bottom() {
+                for x in part.x..part.right() {
+                    let at =
+                        usize::from(y - area.y) * usize::from(area.width) + usize::from(x - area.x);
+                    if std::mem::replace(&mut seen[at], true) {
+                        continue;
+                    }
+                    let cell = screen.cell(x, y);
+                    if cell.is_continuation() {
+                        continue;
+                    }
+                    let own = screen.style(cell.style).cloned().unwrap_or_default();
+                    let mut bg = rgb(own.bgcolor());
+                    if bg.is_none() && cell.text().trim().is_empty() {
+                        // Nothing shows there to fade or tint.
+                        continue;
+                    }
+                    let mut fg = rgb(own.color()).unwrap_or(ground.fg);
+                    if let Some((color, alpha)) = &tint
+                        && let Some(to) = rgb(Some(color))
+                    {
+                        fg = crate::fx::mix(fg, to, *alpha);
+                        bg = bg.map(|bg| crate::fx::mix(bg, to, *alpha));
+                    }
+                    if let Some(alpha) = opacity {
+                        let under = bg.unwrap_or(ground.bg);
+                        fg = crate::fx::mix(under, fg, alpha);
+                        bg = bg.map(|bg| crate::fx::mix(ground.bg, bg, alpha));
+                    }
+                    let over = Style::from_color(Some(from_rgb(fg)), bg.map(from_rgb));
+                    screen.restyle(x, y, &over);
+                }
+            }
+        }
     }
 
     /// Visit this node and every node inside it that is shown, depth first.
@@ -3219,6 +3343,16 @@ impl Node {
             self.hide();
             return;
         }
+        // `offset`: drawn moved from where it was laid out. Past the right
+        // or bottom edge it is clipped; the screen has no cells left of or
+        // above its corner, so moved past those edges it stops there, drawn
+        // whole, rather than clipped.
+        let rect = match self.sheet.borrow().layout.offset {
+            (0, 0) => rect,
+            (dx, dy) => rect
+                .offset(i32::from(dx), i32::from(dy))
+                .intersection(screen.area()),
+        };
         // While the inspector is open: how long this node takes, less what
         // its children take.
         let clock = frame.timings.is_some().then(|| {
@@ -3655,6 +3789,7 @@ impl Node {
                 frame.damage.push(area);
             }
         }
+        self.sheet_effects(frame, screen, console, theme, rect, mark, repaint);
         // The theme's error look goes under what the stylesheet left, the
         // same way (a panel shows it on its border instead).
         if invalid && self.what != "panel" {
@@ -4866,6 +5001,36 @@ pub(crate) fn with_node(root: &Node, id: NodeId, f: &mut dyn FnMut(&Node)) {
             done = true;
         }
     });
+}
+
+/// The colours behind everything: the theme's `screen` style's, else
+/// the usual dark or light terminal's.
+struct Ground {
+    fg: rich::ColorTriplet,
+    bg: rich::ColorTriplet,
+}
+
+impl Ground {
+    fn of(console: &Console, theme: &Theme) -> Ground {
+        let screen = crate::widget::named_style(console, "screen").unwrap_or_default();
+        let (fg, bg) = match theme.is_dark() {
+            true => ((192, 192, 192), (0, 0, 0)),
+            false => ((0, 0, 0), (255, 255, 255)),
+        };
+        let triplet = |(r, g, b)| rich::ColorTriplet::new(r, g, b);
+        Ground {
+            fg: rgb(screen.color()).unwrap_or(triplet(fg)),
+            bg: rgb(screen.bgcolor()).unwrap_or(triplet(bg)),
+        }
+    }
+}
+
+fn rgb(color: Option<&rich::Color>) -> Option<rich::ColorTriplet> {
+    color.and_then(rich::Color::get_truecolor)
+}
+
+fn from_rgb(c: rich::ColorTriplet) -> rich::Color {
+    rich::Color::from_rgb(c.red, c.green, c.blue)
 }
 
 #[cfg(test)]

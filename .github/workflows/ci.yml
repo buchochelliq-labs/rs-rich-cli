@@ -38,6 +38,9 @@ jobs:
       - uses: actions/checkout@v7
         with:
           ref: ${{ inputs.checkout_ref || github.ref }}
+          # The rehearsal pushes every tag to a throwaway remote, which
+          # needs their whole history.
+          fetch-depth: 0
 
       - uses: actions/setup-python@v7
         with:
@@ -55,6 +58,16 @@ jobs:
 
       - name: RELEASES.toml matches the manifests and the dependency order
         run: python3 scripts/release_cohort.py check
+
+      # rab (docs/BRANCHING.md): rab.yml matches the
+      # manifests (`check`), the installed copy is unmodified (`vendored`),
+      # every package plans its build jobs (`plan`), and `tag --dry-run`
+      # passes against origin's real tags, from a throwaway remote: nothing
+      # is pushed.
+      - name: Rehearse the release with rab (check, vendored, plan, tag --dry-run)
+        run: |
+          python3 -m pip install --quiet pyyaml
+          python3 scripts/release_rehearsal.py
 
       # The docs playground spike has a workspace and a lockfile of its own,
       # which no other job builds: a version bump that leaves it stale shows
@@ -215,6 +228,12 @@ jobs:
   features:
     name: feature matrix
     runs-on: ubuntu-latest
+    # Without debug info, as the `check` job: rs-rich-intuituive's
+    # all-features test binaries filled the runner's disk ("No space left on
+    # device" mid-test).
+    env:
+      CARGO_PROFILE_DEV_DEBUG: "0"
+      CARGO_PROFILE_TEST_DEBUG: "0"
     strategy:
       fail-fast: false
       matrix:
@@ -482,11 +501,14 @@ jobs:
   # a job object, which ends it and what it started when the session ends or
   # the server dies. Only these tests; the rest of the crate's run on Linux
   # and macOS. It also lints, on Windows, the core, intuiTUIve and the CLI's
-  # tests, whose code differs off Unix and off Linux.
+  # tests, whose code differs off Unix and off Linux; and runs the local
+  # socket's tests on its named pipes (rs-rich-ext's `local_socket`, the
+  # control socket, intuiTUIve's log console, `rich console` and
+  # Noctiluca's agent control), including another user's access refused.
   windows-web:
     name: Windows web sessions
     runs-on: windows-latest
-    timeout-minutes: 30
+    timeout-minutes: 50
     steps:
       - uses: actions/checkout@v7
         with:
@@ -513,6 +535,8 @@ jobs:
           cargo clippy -p rs-rich --all-targets --locked -- -D warnings
           cargo clippy -p rs-rich-intuituive --all-features --all-targets --locked -- -D warnings
           cargo clippy -p rs-rich-cli --no-default-features --all-targets --locked -- -D warnings
+          cargo clippy -p rs-rich-ext --features local-socket --all-targets --locked -- -D warnings
+          cargo clippy -p rs-rich-interact --features control --all-targets --locked -- -D warnings
 
       # One command a step: in a pwsh step of several, only the last one's
       # exit code would fail it.
@@ -521,6 +545,20 @@ jobs:
 
       - name: Test session job objects
         run: cargo test -p rs-rich-web --locked --test isolation_windows
+
+      # The named pipes behind the control socket and the log console: the
+      # same tests as on Unix where they apply, and the pipe's own (its
+      # DACL, the anonymous logon refused, a name taken first).
+      - name: Test the local sockets (named pipes)
+        shell: bash
+        run: |
+          cargo test -p rs-rich-ext --locked --features local-socket --lib local_socket
+          cargo test -p rs-rich-interact --locked --features control --lib control::
+          cargo test -p rs-rich-interact --locked --features control --test control
+          cargo test -p rs-rich-intuituive --locked --features tracing --lib log::console
+          cargo test -p rs-rich-intuituive --locked --features tracing --test console
+          cargo test -p rs-rich-cli --locked --no-default-features --lib console::tests
+          cargo test -p noctiluca --locked --test control
 
   # The whole workspace's tests on macOS: PTYs, terminal modes, signals and
   # paths differ enough from Linux to break on their own.

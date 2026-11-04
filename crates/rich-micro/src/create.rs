@@ -36,17 +36,26 @@ use crate::pipeline::Processed;
 /// What a package says about its asset, besides its images.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct PackageSpec {
+    /// The asset's name.
     pub name: String,
+    /// Its alt text.
     pub alt: String,
+    /// Its emoji fallback, if any.
     pub emoji: Option<String>,
+    /// Its text fallback, if any.
     pub text: Option<String>,
+    /// Other names for it.
     pub aliases: Vec<String>,
+    /// The package's version, if it states one.
     pub version: Option<String>,
+    /// Its licence, if it states one.
     pub license: Option<String>,
+    /// Its author, if it states one.
     pub author: Option<String>,
 }
 
 impl PackageSpec {
+    /// A spec for the asset `name`, described by `alt`.
     pub fn new(name: impl Into<String>, alt: impl Into<String>) -> PackageSpec {
         PackageSpec {
             name: name.into(),
@@ -55,36 +64,42 @@ impl PackageSpec {
         }
     }
 
+    /// Set the emoji fallback.
     #[must_use]
     pub fn emoji(mut self, emoji: impl Into<String>) -> Self {
         self.emoji = Some(emoji.into());
         self
     }
 
+    /// Set the text fallback.
     #[must_use]
     pub fn text(mut self, text: impl Into<String>) -> Self {
         self.text = Some(text.into());
         self
     }
 
+    /// Add another name for the asset.
     #[must_use]
     pub fn alias(mut self, alias: impl Into<String>) -> Self {
         self.aliases.push(alias.into());
         self
     }
 
+    /// Set the package's version.
     #[must_use]
     pub fn version(mut self, version: impl Into<String>) -> Self {
         self.version = Some(version.into());
         self
     }
 
+    /// Set the licence.
     #[must_use]
     pub fn license(mut self, license: impl Into<String>) -> Self {
         self.license = Some(license.into());
         self
     }
 
+    /// Set the author.
     #[must_use]
     pub fn author(mut self, author: impl Into<String>) -> Self {
         self.author = Some(author.into());

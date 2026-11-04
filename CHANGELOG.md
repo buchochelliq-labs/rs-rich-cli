@@ -9,6 +9,142 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Cornacai, phase 4: resume, sign-in, PTY terminals, agents from the marketplace (0.0.25)
+
+- **Sessions reopen.** Cornacai keeps the sessions it opens in
+  `cornacai/sessions.jsonl` in the state directory (`$XDG_STATE_HOME`,
+  else `~/.local/state`): id, agent, workspace, title, last used; the 200
+  most recent. With an agent that offers `loadSession`, Ctrl+O lists this
+  agent's sessions in this workspace and reopens one in a tab with
+  `session/load`, the replayed history filling it; `--resume ID` starts
+  with one, `--sessions` lists them. An agent without it says so.
+- **Sign-in.** When `session/new`, `session/load` or a prompt fails with
+  "authentication required", Cornacai offers the agent's advertised
+  methods, calls `authenticate` with the one picked and sends the request
+  again. Terminal sign-in methods are not offered.
+- **Agent terminals on a PTY,** behind `--pty` or `[terminal] pty = true`:
+  each command on a terminal of its own (rs-rich-embed's `LocalPty`), its
+  output read as the terminal shows it, as plain text; pipes when a PTY
+  cannot be opened. Pipes stay the default.
+- **Agents from the marketplace.** `--agents` and the first-run choice
+  offer the agents `rich plugin install` recorded, after the built-in ones.
+- **rs-rich-acp:** `Connection::load_session` is refused unsent, with
+  "method not found", once `initialize` said the agent does not offer
+  `loadSession`.
+- **rs-rich-marketplace: the `agent` kind.** `Kind::Agent`, listed only,
+  with `Listing::agent` (`AgentInfo`: a bare program name, its arguments,
+  the environment variables it reads by name, an install hint) and
+  `requires.acp` (`Requires::Acp`, `ACP_VERSION`, `Incompatibility::Acp`),
+  checked as the schema states; `AgentList`, the `agents.json` an install
+  records the verified command in. The listing schema, examples and the
+  marketplace site know the kind.
+- **rs-rich-cli:** `rich plugin install` of an agent records it, downloads
+  nothing and runs nothing, and prints its install hint; `list` shows it
+  and `remove` forgets it; `search --kind agent` finds them. A search now
+  leaves out, with a warning, a listing of a kind or format this release
+  does not know, rather than failing on it.
+- **Breaking (cornacai):** `Options` gains `pty`, `store` and `resume`, and
+  `Config` gains `pty`.
+
+### Named pipes on Windows: the control socket and `rich console` (0.0.25)
+
+- **rs-rich-ext: `local_socket`**, behind a new `local-socket` feature: a
+  local socket private to one user, a Unix domain socket on Unix and a
+  named pipe on Windows behind one API (`LocalListener`, `LocalStream`,
+  `private_dir`, `check_private_dir`, `check_endpoint`, `is_endpoint`,
+  `remove_endpoint`, `current_user`, `is_own_dir`; `current_uid` and
+  `peer_uid` on Unix). On Windows the socket's path is an address file
+  naming `\\.\pipe\rich-local-` and 128 bits from `BCryptGenRandom`;
+  the directory is made with a protected DACL granting the user's SID
+  alone and refused when it grants anyone else; the pipe's security
+  descriptor is `O:<sid>D:P(A;;GA;;;<sid>)`, made with
+  `FILE_FLAG_FIRST_PIPE_INSTANCE` and `PIPE_REJECT_REMOTE_CLIENTS`; a
+  client follows only an address file of the user's naming a pipe of that
+  form (never a UNC path), checks the pipe's owner and connects at
+  `SECURITY_IDENTIFICATION`; reads and writes are overlapped, with the
+  timeouts a Unix socket has.
+- **rs-rich-interact: the `control` socket runs on Windows.** Its
+  transport is rs-rich-ext's local socket; its API is unchanged.
+  `sessions` lists the pipes' address files as it lists sockets, so a
+  program's running instances are found the same way.
+  `ControlServer::bind` over a file that is not a socket of the user's now
+  fails with `PermissionDenied` (it was `AddrInUse`); the file is still
+  left alone.
+- **Noctiluca: `--control`, `noctiluca ls` and `noctiluca action` on
+  Windows**, the same commands and output. `control::unix_only` is gone
+  (a break, in `api/semver-breaks.toml`).
+- **intuiTUIve's log console and `rich console` on Windows.**
+  `install_console` connects and `rich console` listens there, through the
+  same local socket; the `tracing` feature no longer pulls in `libc`.
+- **Tests on Windows:** the local socket's, the control socket's, the log
+  console's, `rich console`'s and Noctiluca's control tests run on the
+  "Windows web sessions" CI job, with the pipe's own: its DACL and owner,
+  the anonymous logon's token refused by the pipe and the directory (CI
+  has no second account; this stands in for another user), and a pipe
+  name taken first refused. The threat model's rows for both sockets say
+  how.
+
+### Releases run on rab, the Release Asset Bundle (formerly release-kit) (0.0.25)
+
+- **`rab.yml` and the kit, rab v2.0.0.** Every package of `RELEASES.toml`,
+  in its order, is declared for
+  [rab](https://github.com/buchochelliq-labs/release-asset-bundle)
+  ([docs](https://buchochelliq-labs.github.io/release-asset-bundle/)),
+  release-kit renamed with its 2.0.0, installed under `.github/rab/`
+  (`release.py vendored` keeps it unedited); its `install` moved the
+  release-kit 1.7.0 layout (`release-kit.yml`, `.github/release-kit/`,
+  `release-kit-build.yml`) to `rab.yml`, `.github/rab/` and
+  `rab-build.yml`. The
+  PyPI `rs-rich` keeps its `python-v…` tags and builds as a maturin wheel per
+  target, pypi-release.yml's five, each installed and imported; the linux
+  x86_64 one runs the compatibility suite and the stub check too.
+- **One run publishes crates.io and PyPI.** `release.yml` is the kit's: its
+  gate, CI on the tagged commit (`checkout_ref`), the wheels' build, then
+  `publish-crates` and `publish-pypi`, which verify each version and use it
+  as a stranger would. This repository's `semver` job
+  (`scripts/release.py plan --semver-checks`) and `publish-playground` stay.
+  A release is tagged with `python3 .github/rab/scripts/release.py tag`; a
+  failed one is resumed the same way.
+- **A release record from every run.** The template's `record` job comes
+  last, runs whatever happened before it, checks the release tag still
+  names the commit the gate checked, and uploads the `release-record`
+  artifact: each job's result and each package's outcome, registry URL and
+  built files' SHA-256. It needs every job that gates or publishes (`gate`,
+  `ci`, `build`, `semver`, `publish-crates`, `publish-pypi`,
+  `publish-playground`) and writes nowhere else.
+- **No cache from a release run.** The `semver` job checks out
+  `refs/tags/release-X.Y.Z`, not the bare commit, and stops if the tag no
+  longer names the gated commit (CodeQL's cache-poisoning pattern, as rab
+  2.0.0's build workflow does); the playground's `setup-node` sets
+  `package-manager-cache: false`.
+- **`pypi-release.yml` starts on no tag**, so the kit's `python-v…` records
+  cannot publish twice; it is a manual fallback until the kit has published
+  a release, and `RELEASES.toml` and `release_cohort.py check` stay in step
+  until then.
+- **Rehearsed in CI:** `scripts/release_rehearsal.py` runs the kit's
+  `check`, `vendored`, `plan` and `tag --dry-run` against a throwaway remote
+  holding `HEAD` and origin's tags. It works from a shallow clone (it
+  deepens it before fetching the tags), and CI's job checks out full
+  history. Every tag from before the kit names a
+  published version, so the kit never selects or moves one
+  ([Branching and releases](docs/BRANCHING.md#tags-from-before-release-kit)).
+
+### Documentation and the API review's groundwork (0.0.25)
+
+- **Every public item documented in ten stable crates**, with
+  `#![warn(missing_docs)]` on: rs-rich-plugin-api, rs-rich-macros,
+  rs-rich-cli, rs-rich-marketplace, rs-rich-art, rs-rich-micro,
+  rs-rich-record, rs-rich-embed, rs-rich-acp and cornacai (about 510 doc
+  comments added; a few one-line struct variants now take a line a field).
+  The other five's counts are in
+  [the API review's groundwork](docs/design/api-review.md), with every
+  foreign type in the stable set's public APIs, the list 0.1.0's review
+  of public dependencies works through. No API change.
+- **PORTING's partial rows checked against the code:** intuiTUIve's testing
+  helpers (#809, #810) are 🟢; its widgets and stylesheets rows name what
+  is still missing after 0.0.24 rather than its waves; Noctiluca's and
+  Cornacai's say what `main` has for 0.0.25.
+
 ### Noctiluca: live regions (0.0.25)
 
 - **Canvases are drawn, and stay live.** A `<canvas>` gets a picture from
@@ -166,6 +302,47 @@ Fixes 2, 4, 10, 12 and 14 of
 - `testing::PageBuilder` gains `view` (scroll offset and viewport) and
   `paint` (paint orders). New fixture `overlays.html`; Chrome's snapshots
   of `search-results.html` and `product-grid.html` read scrolled.
+
+### intuiTUIve: the rest of Textual parity (0.0.25, #812)
+
+- **Stylesheets cover #812's last properties.** `offset` (and `offset-x`,
+  `offset-y`) draws a node moved from where it is laid out, its
+  neighbours staying put (moved past the screen's left or top edge, it
+  stops there). `opacity` (`50%` or `0.5`) fades a node's
+  colours, its children's with them, into the ground behind it (the
+  theme's `screen` style); `tint: $accent 20%` moves them towards a
+  colour. `outline` is a `border` drawn over the node's edge, taking no
+  room. `hatch` (`left`, `right`, `cross`, `horizontal`, `vertical` or a
+  quoted character, then a colour and a percentage) fills its blank
+  cells. `keyline: thin red` draws lines round and between a container's
+  children, as `border-collapse: collapse` does. `scrollbar-color-hover`
+  colours a thumb while the pointer is over its bar (the
+  `scrollbar.thumb.hover` theme style), and `scrollbar-size` (or
+  `scrollbar-size-horizontal`, `scrollbar-size-vertical`) sets how many
+  cells a node's bars take, `0` hiding one. These are layout, set by a
+  node's kind, name and fixed classes. The parser's bounds are as before.
+- **`Scrollbar::size(cells)`**: a bar more than one cell across, or none.
+- **`DataTable` parity: row labels and renderable cells.**
+  `TableOptions::row_labels(|i| markup)` draws each row's label in a
+  column of its own at the left (the `table.row_label` theme style, bold
+  by default), outside the highlight and the scroll across.
+  `TableOptions::renderables(|row, column| ..)` draws a cell with any rich
+  renderable in place of its markup, which still sorts and is read aloud;
+  `Auto` columns measure it and multi-line rows take its height. Both are
+  keyed by a row's index among the rows given, so they follow it when the
+  table sorts its rows.
+- **Separators in an option list.** `Node::separator_after(|i| ..)`, a
+  `list_of`'s, now works on a markup `list` too: a rule under item `i` in
+  the theme's border style, which the cursor and clicks pass over and the
+  list scrolls by.
+- **A `text_area` highlights what starts above its view.** Highlighting
+  carries the state the lines above leave, so a block comment or a
+  multi-line string that opens above the view is highlighted as such
+  inside it. The lines from the top (or from 256 lines above the view)
+  are highlighted once and kept; an edit highlights again only from a
+  little above the line it changed, once that start gives the lines it
+  covers their old spans, and scrolling on highlights only what it brings
+  in.
 
 ### intuiTUIve: the stylesheet fuzz timeout (rs-rich-intuituive)
 

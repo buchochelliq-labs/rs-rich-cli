@@ -147,6 +147,7 @@ impl fmt::Display for MicroMode {
 /// What [`select`] chose, and why.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Selection {
+    /// The mode chosen.
     pub mode: MicroMode,
     /// Why this mode, for `rich doctor`.
     pub reason: String,

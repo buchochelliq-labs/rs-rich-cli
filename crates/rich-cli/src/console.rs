@@ -1,5 +1,6 @@
 //! `rich console [--socket PATH] [--trace] [-v] [-x TARGET]...` (0.0.24,
-//! after `textual console`): listen on a Unix domain socket and print the
+//! after `textual console`): listen on a local socket (rs-rich-ext's
+//! `local_socket`: a Unix domain socket, a named pipe on Windows) and print the
 //! `tracing` events an intuiTUIve app sends there (the app calls
 //! `intuituive::log::install_console()` and runs with
 //! `INTUITUIVE_CONSOLE=1`), so a full-screen app is debugged from a second
@@ -8,22 +9,24 @@
 //! them with rs-rich-ext's event presentation.
 //!
 //! - The socket is only ever the user's: its directory must be the user's
-//!   alone (made 0700 when it is missing, refused otherwise), the socket is
-//!   created 0600, a symbolic link or anything but a stale socket at the
-//!   path is refused, and a connection from another user is dropped
-//!   (checked by the peer's credentials where the platform has them). It
-//!   is never a TCP port.
+//!   alone (made 0700 when it is missing, refused otherwise; on Windows
+//!   made with a DACL granting the user's SID alone), the socket is
+//!   created 0600 (on Windows the pipe's DACL grants the user alone, and
+//!   the file at the path that names the pipe is the user's alone), a
+//!   symbolic link or anything but a stale socket at the path is refused,
+//!   and a connection from another user is dropped (checked by the peer's
+//!   credentials where the platform has them). It is never a TCP port.
 //! - The default socket is intuiTUIve's: `console/console.sock` in its
 //!   state directory, duplicated here (the CLI does not depend on
 //!   intuiTUIve) and kept the same by a test.
-//! - Unix only for now: elsewhere it says so and exits with a usage error
-//!   (a Windows named pipe is a follow-up).
+//! - On Unix and Windows; elsewhere (WASI) it says so and exits with a
+//!   usage error.
 use super::*;
 
 use rich_ext::cli_doc::{ArgSpec, CommandSpec};
 
 /// The target the app's inspector trace comes with.
-#[cfg_attr(not(unix), allow(dead_code))]
+#[cfg_attr(not(any(unix, windows)), allow(dead_code))]
 const TRACE_TARGET: &str = "intuituive::trace";
 
 /// Whether the command line is `rich console …`.
@@ -40,8 +43,9 @@ pub(super) fn command() -> CommandSpec {
         )
         .usage("console [--socket PATH] [--trace] [-v] [-x TARGET]...")
         .arg(ArgSpec::option("socket").value_name("PATH").help(
-            "The Unix socket to listen on, in a directory only you can use (default \
-             console/console.sock in intuiTUIve's state directory)",
+            "The socket to listen on, in a directory only you can use (on Windows the file \
+             there names a named pipe; default console/console.sock in intuiTUIve's state \
+             directory)",
         ))
         .arg(
             ArgSpec::flag("trace")
@@ -186,7 +190,7 @@ pub(super) fn dispatch(args: &[String]) -> ExitCode {
 }
 
 /// Whether to show an event read from the socket.
-#[cfg_attr(not(unix), allow(dead_code))]
+#[cfg_attr(not(any(unix, windows)), allow(dead_code))]
 fn shown(event: &serde_json::Value, args: &ConsoleArgs) -> bool {
     let target = event
         .get("target")
@@ -199,75 +203,6 @@ fn shown(event: &serde_json::Value, args: &ConsoleArgs) -> bool {
         .exclude
         .iter()
         .any(|excluded| target.starts_with(excluded.as_str()))
-}
-
-/// This process's effective user.
-#[cfg(unix)]
-#[allow(unsafe_code)] // geteuid has no preconditions and cannot fail.
-fn current_uid() -> u32 {
-    // SAFETY: as above.
-    unsafe { libc::geteuid() }
-}
-
-/// The user at the other end of `stream`, where the platform says:
-/// `SO_PEERCRED` on Linux and Android, `getpeereid` on the BSDs and macOS;
-/// `None` elsewhere (the directory's mode is then what keeps others out).
-#[cfg(any(target_os = "linux", target_os = "android"))]
-#[allow(unsafe_code)] // getsockopt into a ucred of the size it is told.
-fn peer_uid(stream: &std::os::unix::net::UnixStream) -> Option<u32> {
-    use std::os::fd::AsRawFd;
-    let mut cred = libc::ucred {
-        pid: 0,
-        uid: u32::MAX,
-        gid: u32::MAX,
-    };
-    let mut len = std::mem::size_of::<libc::ucred>() as libc::socklen_t;
-    // SAFETY: the fd is open for the call; cred and len point to writable
-    // memory of the size len says.
-    let done = unsafe {
-        libc::getsockopt(
-            stream.as_raw_fd(),
-            libc::SOL_SOCKET,
-            libc::SO_PEERCRED,
-            (&mut cred as *mut libc::ucred).cast(),
-            &mut len,
-        )
-    };
-    (done == 0 && len as usize == std::mem::size_of::<libc::ucred>()).then_some(cred.uid)
-}
-
-#[cfg(any(
-    target_os = "macos",
-    target_os = "ios",
-    target_os = "freebsd",
-    target_os = "openbsd",
-    target_os = "netbsd",
-    target_os = "dragonfly"
-))]
-#[allow(unsafe_code)] // getpeereid into two writable ids.
-fn peer_uid(stream: &std::os::unix::net::UnixStream) -> Option<u32> {
-    use std::os::fd::AsRawFd;
-    let (mut uid, mut gid) = (libc::uid_t::MAX, libc::gid_t::MAX);
-    // SAFETY: the fd is open for the call; both pointers are writable.
-    let done = unsafe { libc::getpeereid(stream.as_raw_fd(), &mut uid, &mut gid) };
-    (done == 0).then_some(uid)
-}
-
-#[cfg(all(
-    unix,
-    not(any(
-        target_os = "linux",
-        target_os = "android",
-        target_os = "macos",
-        target_os = "ios",
-        target_os = "freebsd",
-        target_os = "openbsd",
-        target_os = "netbsd",
-        target_os = "dragonfly"
-    ))
-))]
-fn peer_uid(_stream: &std::os::unix::net::UnixStream) -> Option<u32> {
-    None
 }
 
 /// The socket's directory: made (with any missing parents) 0700 when it is
@@ -293,7 +228,7 @@ fn private_dir(dir: &std::path::Path) -> Result<(), String> {
              directory only you can use"
         ));
     }
-    if meta.uid() != current_uid() || meta.mode() & 0o077 != 0 {
+    if meta.uid() != rich_ext::local_socket::current_uid() || meta.mode() & 0o077 != 0 {
         return Err(format!(
             "{shown} must be a directory only you can use (yours, mode 700): run `chmod 700 \
              {shown}`, or give --socket a path in such a directory"
@@ -302,16 +237,35 @@ fn private_dir(dir: &std::path::Path) -> Result<(), String> {
     Ok(())
 }
 
+/// The socket's directory on Windows: its parents made when missing, then
+/// the directory itself made with a DACL granting the user alone; an
+/// existing one must be the user's with no grant to anyone else. Nothing
+/// is loosened or tightened: a directory that fails is refused.
+#[cfg(windows)]
+fn private_dir(dir: &std::path::Path) -> Result<(), String> {
+    let shown = dir.display();
+    if std::fs::symlink_metadata(dir).is_err()
+        && let Some(parent) = dir.parent().filter(|p| !p.as_os_str().is_empty())
+    {
+        std::fs::create_dir_all(parent)
+            .map_err(|e| format!("cannot create {}: {e}", parent.display()))?;
+    }
+    rich_ext::local_socket::private_dir(dir).map_err(|e| {
+        format!(
+            "{e}: {shown} must be a directory only you can use (yours, granting no one else \
+             access): give --socket a path in such a directory"
+        )
+    })
+}
+
 /// Bind the socket in a [private directory](private_dir): a symbolic link
 /// at the path is refused, and so is anything but a stale socket of the
-/// user's (which is replaced); the socket is made 0600 and checked. The
-/// directory is checked to be the user's alone first, so no one else can
-/// reach the socket before its mode is set. (The umask is not changed: it
-/// is the whole process's, and other threads create files meanwhile.)
-#[cfg(unix)]
-fn bind(path: &std::path::Path) -> Result<std::os::unix::net::UnixListener, String> {
-    use std::os::unix::fs::{FileTypeExt, MetadataExt, PermissionsExt};
-    use std::os::unix::net::{UnixListener, UnixStream};
+/// user's (which is replaced); on Unix the socket is made 0600 and
+/// checked, on Windows the pipe's DACL grants the user alone
+/// (rs-rich-ext's `LocalListener::bind`).
+#[cfg(any(unix, windows))]
+fn bind(path: &std::path::Path) -> Result<rich_ext::local_socket::LocalListener, String> {
+    use rich_ext::local_socket::{LocalListener, is_endpoint};
     let dir = path
         .parent()
         .filter(|dir| !dir.as_os_str().is_empty())
@@ -322,53 +276,21 @@ fn bind(path: &std::path::Path) -> Result<std::os::unix::net::UnixListener, Stri
         if meta.file_type().is_symlink() {
             return Err(format!("{shown} is a symbolic link: refused"));
         }
-        if !meta.file_type().is_socket() || meta.uid() != current_uid() {
+        if !is_endpoint(path) {
             return Err(format!(
                 "{shown} is not a socket of yours: refused (remove it, or give another --socket)"
             ));
         }
-        if UnixStream::connect(path).is_ok() {
-            return Err(format!("a console is listening on {shown} already"));
-        }
-        std::fs::remove_file(path).map_err(|e| format!("cannot replace {shown}: {e}"))?;
     }
-    let listener =
-        UnixListener::bind(path).map_err(|e| format!("cannot listen on {shown}: {e}"))?;
-    std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o600))
-        .map_err(|e| format!("cannot make {shown} private: {e}"))?;
-    let mode = std::fs::symlink_metadata(path)
-        .map(|meta| meta.permissions().mode() & 0o777)
-        .map_err(|e| format!("cannot read {shown}: {e}"))?;
-    if mode != 0o600 {
-        drop(listener);
-        let _ = std::fs::remove_file(path);
-        return Err(format!(
-            "{shown} was created with mode {mode:o}, not 600: refused"
-        ));
-    }
-    Ok(listener)
-}
-
-/// Whether a connection is the user's own: its peer's user, where the
-/// platform says, is this process's.
-#[cfg(unix)]
-fn accepted(stream: &std::os::unix::net::UnixStream) -> Result<(), u32> {
-    peer_allowed(peer_uid(stream), current_uid())
-}
-
-/// A peer of user `peer` (`None`: the platform cannot say) is let in by a
-/// console of user `me` when they are the same.
-#[cfg(unix)]
-fn peer_allowed(peer: Option<u32>, me: u32) -> Result<(), u32> {
-    match peer {
-        Some(uid) if uid != me => Err(uid),
-        _ => Ok(()),
-    }
+    LocalListener::bind(path).map_err(|e| match e.kind() {
+        std::io::ErrorKind::AddrInUse => format!("a console is listening on {shown} already"),
+        _ => format!("cannot listen on {shown}: {e}"),
+    })
 }
 
 /// Listen until interrupted, printing each connection's events as they
 /// come, one connection a thread; another user's connection is dropped.
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 fn listen(path: &std::path::Path, args: &ConsoleArgs, no_color: bool) -> Result<(), String> {
     use std::io::{BufRead, BufReader, Write};
     use std::sync::{Arc, Mutex};
@@ -388,7 +310,7 @@ fn listen(path: &std::path::Path, args: &ConsoleArgs, no_color: bool) -> Result<
     });
     for stream in listener.incoming() {
         let Ok(stream) = stream else { continue };
-        if accepted(&stream).is_err() {
+        if stream.peer_allowed().is_err() {
             eprintln!("rich console: refused a connection from another user");
             continue;
         }
@@ -416,13 +338,9 @@ fn listen(path: &std::path::Path, args: &ConsoleArgs, no_color: bool) -> Result<
     Ok(())
 }
 
-#[cfg(not(unix))]
+#[cfg(not(any(unix, windows)))]
 fn listen(_path: &std::path::Path, _args: &ConsoleArgs, _no_color: bool) -> Result<(), String> {
-    Err(
-        "rich console is Unix only for now: it listens on a Unix domain socket (a Windows \
-         named pipe is planned)"
-            .into(),
-    )
+    Err("rich console needs a local socket: a Unix domain socket or a Windows named pipe".into())
 }
 
 #[cfg(test)]
@@ -492,38 +410,66 @@ mod tests {
         );
     }
 
-    #[cfg(unix)]
+    #[cfg(any(unix, windows))]
     #[test]
     fn the_socket_is_the_users_alone() {
-        use std::os::unix::fs::PermissionsExt;
+        use rich_ext::local_socket::{LocalStream, check_private_dir};
         let dir = std::env::temp_dir().join(format!("rich-console-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         let path = dir.join("state/console.sock");
         let listener = bind(&path).unwrap();
-        let mode = |p: &std::path::Path| std::fs::metadata(p).unwrap().permissions().mode() & 0o777;
-        assert_eq!(mode(&path), 0o600);
-        assert_eq!(mode(&dir.join("state")), 0o700);
+        check_private_dir(&dir.join("state")).unwrap();
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let mode =
+                |p: &std::path::Path| std::fs::metadata(p).unwrap().permissions().mode() & 0o777;
+            assert_eq!(mode(&path), 0o600);
+            assert_eq!(mode(&dir.join("state")), 0o700);
+        }
         // The user's own connection is let in, by its credentials.
-        let client = std::os::unix::net::UnixStream::connect(&path).unwrap();
-        let (server, _) = listener.accept().unwrap();
-        assert_eq!(peer_uid(&server).unwrap_or(current_uid()), current_uid());
-        assert!(accepted(&server).is_ok());
+        let client = LocalStream::connect(&path).unwrap();
+        let server = listener.accept().unwrap();
+        assert!(server.peer_allowed().is_ok());
         drop((client, server));
         // A second console finds the first listening.
         assert!(bind(&path).unwrap_err().contains("already"));
         drop(listener);
         // A stale socket is replaced.
         assert!(bind(&path).is_ok());
+        // A file that is not a socket is never removed.
+        let notes = dir.join("state/notes.sock");
+        std::fs::write(&notes, "notes").unwrap();
+        assert!(bind(&notes).unwrap_err().contains("not a socket"));
+        assert_eq!(std::fs::read_to_string(&notes).unwrap(), "notes");
         let _ = std::fs::remove_dir_all(&dir);
     }
 
-    #[cfg(unix)]
+    /// An event sent on the socket is read back as a JSON line, from
+    /// another thread as an app would send it.
+    #[cfg(any(unix, windows))]
     #[test]
-    fn another_users_connection_is_refused() {
-        assert_eq!(peer_allowed(Some(1000), 1000), Ok(()));
-        assert_eq!(peer_allowed(Some(1001), 1000), Err(1001));
-        // Where the platform cannot say, the directory keeps others out.
-        assert_eq!(peer_allowed(None, 1000), Ok(()));
+    fn a_line_sent_arrives() {
+        use std::io::{BufRead, BufReader, Write};
+        let dir = std::env::temp_dir().join(format!("rich-console-line-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let path = dir.join("state/console.sock");
+        let listener = bind(&path).unwrap();
+        let sender = {
+            let path = path.clone();
+            std::thread::spawn(move || {
+                let mut client = rich_ext::local_socket::LocalStream::connect(&path).unwrap();
+                client
+                    .write_all(b"{\"level\":\"info\",\"target\":\"app\"}\n")
+                    .unwrap();
+            })
+        };
+        let server = listener.accept().unwrap();
+        let line = BufReader::new(&server).lines().next().unwrap().unwrap();
+        let event: serde_json::Value = serde_json::from_str(&line).unwrap();
+        assert!(shown(&event, &ConsoleArgs::default()));
+        sender.join().unwrap();
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[cfg(unix)]

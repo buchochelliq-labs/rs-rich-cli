@@ -31,4 +31,4 @@ Plan
 ╭─ the agent is working (Esc cancels) · mode ask ────────────────────────────────────────────────────────────╮
 │Ask the agent…  @ names a file                                                                              │
 ╰────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
-Enter send · Alt+Enter line · @ file · Esc cancel · Ctrl+N new · Alt+N/P switch · Ctrl+T shell · F2 log ·
+Enter send · Alt+Enter line · Esc cancel · Ctrl+N new · Ctrl+O reopen · Alt+N/P tab · Ctrl+T shell · F2 log ·

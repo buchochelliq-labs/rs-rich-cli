@@ -98,8 +98,10 @@ archive = ["files", "rich-ext/archive"]
 # `log::tracing_layer`, `log::install_tracing` and `log::TracingFeed`: a
 # `tracing_subscriber` layer feeding a `Log`, so an app shows its own
 # `tracing` events, through rs-rich-ext's `EventLayer` and `ChannelSink`.
-# A plugin. Off by default.
-tracing = ["rich-ext/tracing", "dep:tracing", "dep:tracing-subscriber", "dep:libc"]
+# A plugin. Off by default. Its log console (`log::install_console`) sends
+# them to `rich console` over rs-rich-ext's local socket: a Unix socket, or
+# a named pipe on Windows.
+tracing = ["rich-ext/tracing", "rich-ext/local-socket", "dep:tracing", "dep:tracing-subscriber"]
 
 # ratatui-textarea's examples as one gallery; its Vim tab needs `vim`.
 [[example]]
@@ -131,11 +133,6 @@ tracing-subscriber = { version = "0.3", default-features = false, features = ["r
 
 # The `audio` feature's ALSA error handler (`snd_lib_error_set_local`);
 # cpal links the same library already.
-# The `tracing` plugin's log console: the socket's owner and the peer's
-# credentials (`geteuid`, `SO_PEERCRED`, `getpeereid`).
-[target.'cfg(unix)'.dependencies]
-libc = { version = "0.2", optional = true }
-
 [target.'cfg(target_os = "linux")'.dependencies]
 alsa-sys = { version = "0.4", optional = true }
 

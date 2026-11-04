@@ -632,3 +632,107 @@ fn scrollbar_colours_come_from_the_sheet() {
         style("on grey15").bgcolor()
     );
 }
+
+/// The colour of `color` as red, green and blue.
+fn rgb(color: Option<&intuituive::rich::Color>) -> Option<(u8, u8, u8)> {
+    color
+        .and_then(intuituive::rich::Color::get_truecolor)
+        .map(|c| (c.red, c.green, c.blue))
+}
+
+#[test]
+fn offset_moves_where_a_node_draws_but_not_its_neighbours() {
+    let app = App::new(|| row([label("ab").name("x").fixed(2), label("cd")]))
+        .stylesheet("#x { offset: 0 1; }");
+    let mut driver = app.driver(10, 3);
+    let rows = frame(&mut driver, None);
+    assert_eq!(rows[0].trim_end(), "  cd");
+    assert_eq!(rows[1].trim_end(), "ab");
+}
+
+/// The screen has no cells left of or above its corner: a node moved
+/// past those edges stops there, drawn whole (the guide says so).
+#[test]
+fn offset_past_the_left_edge_stops_at_it() {
+    let app = App::new(|| row([label("abcd").name("x").fixed(4), label("ef")]))
+        .stylesheet("#x { offset: -1 0; }");
+    let mut driver = app.driver(10, 1);
+    let rows = frame(&mut driver, None);
+    assert_eq!(rows[0].trim_end(), "abcdef");
+}
+
+#[test]
+fn opacity_fades_colours_into_the_ground_and_tint_moves_them_to_a_colour() {
+    let app = App::new(|| column([label("hi").name("faded"), label("hi").name("tinted")]))
+        .stylesheet(
+            "#faded { color: #ffffff; background: #000000; opacity: 50%; } \
+             #tinted { color: #000000; background: #000000; tint: #ff0000 50%; }",
+        );
+    let mut driver = app.driver(4, 2);
+    frame(&mut driver, None);
+    let faded = style_at(&driver, 0, 0);
+    assert_eq!(rgb(faded.color()), Some((128, 128, 128)));
+    assert_eq!(rgb(faded.bgcolor()), Some((0, 0, 0)));
+    let tinted = style_at(&driver, 0, 1);
+    assert_eq!(rgb(tinted.color()), Some((128, 0, 0)));
+    assert_eq!(rgb(tinted.bgcolor()), Some((128, 0, 0)));
+    // Drawn again, a cell is not faded twice.
+    driver.resize(5, 2);
+    frame(&mut driver, None);
+    assert_eq!(rgb(style_at(&driver, 0, 0).color()), Some((128, 128, 128)));
+}
+
+#[test]
+fn an_outline_draws_over_the_edge_and_takes_no_room() {
+    let app = App::new(|| column([label("hi").name("x").fixed(3), label("next")]))
+        .stylesheet("#x { outline: round red; }");
+    let mut driver = app.driver(6, 4);
+    let rows = frame(&mut driver, None);
+    assert_eq!(rows[0], "╭────╮");
+    assert_eq!(rows[1], "│    │");
+    assert_eq!(rows[2], "╰────╯");
+    assert_eq!(rows[3].trim_end(), "next");
+    assert_eq!(style_at(&driver, 0, 0).color(), style("red").color());
+}
+
+#[test]
+fn a_hatch_fills_the_blank_cells() {
+    let app = App::new(|| column([label("hi").name("x").fixed(2)]))
+        .stylesheet("#x { hatch: cross red; background: blue; }");
+    let mut driver = app.driver(5, 3);
+    let rows = frame(&mut driver, None);
+    assert_eq!(rows[0], "hi╳╳╳");
+    assert_eq!(rows[1], "╳╳╳╳╳");
+    assert_eq!(rows[2].trim_end(), "");
+    let cell = style_at(&driver, 3, 1);
+    assert_eq!(cell.color(), style("red").color());
+    assert_eq!(cell.bgcolor(), style("on blue").bgcolor());
+}
+
+#[test]
+fn a_keyline_draws_lines_round_and_between_the_children() {
+    let app = App::new(|| row([label("a"), label("b")]).name("g"))
+        .stylesheet("#g { keyline: thin red; }");
+    let mut driver = app.driver(5, 3);
+    let rows = frame(&mut driver, None);
+    assert_eq!(rows, ["┌─┬─┐", "│a│b│", "└─┴─┘"]);
+    assert_eq!(style_at(&driver, 2, 0).color(), style("red").color());
+}
+
+#[test]
+fn scrollbar_size_and_hover_colour_come_from_the_sheet() {
+    let app = App::new(|| scroll(column((0..20).map(|n| label(format!("line {n}"))))).name("view"))
+        .stylesheet(
+            "#view { scrollbar-size: 1 2; scrollbar-color: red; scrollbar-color-hover: green; }",
+        );
+    let mut driver = app.driver(10, 4);
+    let rows = frame(&mut driver, None);
+    // Two columns of bar, the content two short of the width.
+    assert_eq!(rows[0], "line 0  ┃┃");
+    assert_eq!(style_at(&driver, 8, 0).color(), style("red").color());
+    let moved = |x, y| Some(Event::Mouse(Mouse::new(MouseKind::Moved, x, y)));
+    frame(&mut driver, moved(9, 2));
+    assert_eq!(style_at(&driver, 8, 0).color(), style("green").color());
+    frame(&mut driver, moved(2, 2));
+    assert_eq!(style_at(&driver, 8, 0).color(), style("red").color());
+}

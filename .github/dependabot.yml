@@ -29,6 +29,11 @@ updates:
 
   - package-ecosystem: "github-actions"
     directory: "/"
+    # rab's installed build workflow changes only by installing a newer kit
+    # (`release.py vendored` fails CI on an edit); its pins move with rab's
+    # own Dependabot.
+    exclude-paths:
+      - ".github/workflows/rab-build.yml"
     schedule:
       interval: "weekly"
       day: "monday"

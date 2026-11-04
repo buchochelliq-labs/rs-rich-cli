@@ -147,7 +147,7 @@ The full graph is in
   `mermaid`, `art`, `interact`, `micro`, `plugins`) and the `rich` command
   line: the compiled module converts arguments and writes output, and the
   Rust crates render. Outside the Cargo workspace (it needs a Python interpreter to
-  build), with its own CI (`python.yml`) and release (`pypi-release.yml`).
+  build), with its own CI (`python.yml`); it is released with the crates (`rab.yml`, `release.yml`).
   Never published to crates.io; see [Python bindings](https://buchochelliq-labs.github.io/rs-rich-cli/python/).
 - **`crates/rich-macros`** — procedural macros (`richf!`, `style!`,
   `theme_key!`, `markup!`, `#[derive(Rich)]`) that check markup and styles at

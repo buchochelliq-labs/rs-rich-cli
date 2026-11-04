@@ -30,9 +30,11 @@ pub const ALL_AS_ESCAPES: u8 = 8;
 /// What happens to a key.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Event {
+    /// The key goes down.
     Press,
     /// An autorepeat while it is held.
     Repeat,
+    /// The key comes up.
     Release,
 }
 
@@ -40,7 +42,9 @@ pub enum Event {
 /// modifiers, or a character (`KeyDown w`, `Hold W 1s` with Shift).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Press {
+    /// A named key.
     Key(Key),
+    /// A character.
     Char(char),
 }
 

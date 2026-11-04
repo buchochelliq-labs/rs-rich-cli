@@ -35,7 +35,10 @@ rs-rich. [The tiers](design/marketplace.md#tiers) say more.
 **Kinds.** A *WASM plugin* runs in a sandbox with no files, network, clock
 or processes. A *micro pack* and a *theme* are data. A *crate* is native
 code: it is never installed by `rich`, so its command is the `cargo add`
-line for your own program.
+line for your own program. An *ACP agent* is a coding agent's program,
+never installed by `rich` either: `rich plugin install` records its launch
+command for [Cornacai](guide/cornacai.md#agents-from-the-marketplace) and
+prints how to install the program.
 
 ## Trust { #mkt-trust }
 
@@ -60,6 +63,7 @@ rich plugin search                          # every package: kind, tier, version
 rich plugin search rot13                    # every word must match: id, name, description,
                                             # keywords, authors or capabilities
 rich plugin search --kind theme --tier official
+rich plugin search --kind agent             # coding agents for Cornacai
 rich plugin info textcase                   # who publishes it, every version, permissions
 rich plugin install textcase                # shows what it is and asks first
 rich plugin browse                          # all of it in a selector

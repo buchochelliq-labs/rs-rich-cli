@@ -2,8 +2,9 @@
 //! control socket while intuiTUIve's driver runs it, as a script or an
 //! agent would drive a running Noctiluca. Open, snapshot, click by id,
 //! type into a form and submit, back, find; a read-only session; the
-//! status bar; and Ctrl+G's "send to agent".
-#![cfg(unix)]
+//! status bar; and Ctrl+G's "send to agent". On Unix and Windows (a
+//! named pipe there).
+#![cfg(any(unix, windows))]
 
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
@@ -33,11 +34,11 @@ fn engine() -> FakeEngine {
     engine
 }
 
-/// A private directory for one test's socket. It sits under `/tmp`, not
-/// `TMPDIR`: macOS's `TMPDIR` is long enough that the socket's path
-/// would pass the 104 bytes a Unix socket's address holds.
+/// A private directory for one test's socket. On Unix it sits under
+/// `/tmp`, not `TMPDIR`: macOS's `TMPDIR` is long enough that the
+/// socket's path would pass the 104 bytes a Unix socket's address holds.
 fn socket(name: &str) -> PathBuf {
-    let tmp = if std::path::Path::new("/tmp").is_dir() {
+    let tmp = if cfg!(unix) && std::path::Path::new("/tmp").is_dir() {
         PathBuf::from("/tmp")
     } else {
         std::env::temp_dir()

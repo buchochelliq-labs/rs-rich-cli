@@ -24,9 +24,11 @@ use crate::wake::{Fed, connect};
 /// Input for the page, in the page's own cells.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum WebInput {
+    /// A key, for the page's focused element.
     Key(Key),
     /// The mouse, at a cell of the page (the address bar is not counted).
     Mouse(Mouse),
+    /// Text pasted into the page.
     Paste(String),
 }
 
@@ -35,7 +37,9 @@ pub enum WebInput {
 pub enum WebFrame {
     /// Text: one line of rich segments per row, and the text cursor.
     Cells {
+        /// The rows, top to bottom.
         lines: Vec<Vec<Segment>>,
+        /// Where the text cursor is (column, row), if the page shows one.
         cursor: Option<(u16, u16)>,
     },
     /// An image of the page, scaled into the pane.
@@ -45,10 +49,15 @@ pub enum WebFrame {
 /// Where the page is and what it is doing.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct PageState {
+    /// The page's address.
     pub url: String,
+    /// The page's title.
     pub title: String,
+    /// Whether the page is still loading.
     pub loading: bool,
+    /// Whether there is a page to go back to.
     pub can_go_back: bool,
+    /// Whether there is a page to go forward to.
     pub can_go_forward: bool,
     /// Why the page could not be shown, if it could not.
     pub error: Option<String>,
@@ -66,9 +75,13 @@ pub trait WebEngine {
     fn open(&mut self, url: &str) -> io::Result<()>;
     /// The page's area is now `columns` x `rows` cells.
     fn resize(&mut self, columns: u16, rows: u16) -> io::Result<()>;
+    /// A key, a mouse event or a paste, for the page.
     fn input(&mut self, input: WebInput) -> io::Result<()>;
+    /// Go back a page in the history.
     fn back(&mut self) -> io::Result<()>;
+    /// Go forward a page in the history.
     fn forward(&mut self) -> io::Result<()>;
+    /// Load the page again.
     fn reload(&mut self) -> io::Result<()>;
     /// The newest frame since the last call, if there is one.
     fn poll(&mut self) -> Option<WebFrame>;
@@ -104,18 +117,22 @@ impl WebHandle {
         self.address
     }
 
+    /// The page's title.
     pub fn title(&self) -> Signal<String> {
         self.title
     }
 
+    /// Whether the page is still loading.
     pub fn loading(&self) -> Signal<bool> {
         self.loading
     }
 
+    /// Whether there is a page to go back to.
     pub fn can_go_back(&self) -> Signal<bool> {
         self.can_go_back
     }
 
+    /// Whether there is a page to go forward to.
     pub fn can_go_forward(&self) -> Signal<bool> {
         self.can_go_forward
     }
@@ -138,14 +155,17 @@ impl WebHandle {
         self.address.set(url.into());
     }
 
+    /// Go back a page in the history.
     pub fn back(&self) {
         self.with_view(|view| view.act(|engine| engine.back()));
     }
 
+    /// Go forward a page in the history.
     pub fn forward(&self) {
         self.with_view(|view| view.act(|engine| engine.forward()));
     }
 
+    /// Load the page again.
     pub fn reload(&self) {
         self.with_view(|view| view.act(|engine| engine.reload()));
     }

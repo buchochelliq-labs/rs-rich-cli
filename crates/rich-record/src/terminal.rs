@@ -160,6 +160,7 @@ fn panic_message(payload: &(dyn std::any::Any + Send)) -> String {
 }
 
 impl Terminal {
+    /// A terminal of `rows` x `columns` cells, with no scrollback.
     pub fn new(rows: u16, columns: u16) -> Terminal {
         Terminal::with_scrollback(rows, columns, 0)
     }
@@ -645,6 +646,7 @@ impl Terminal {
         })
     }
 
+    /// The emulator's screen.
     pub fn screen(&self) -> &vt100::Screen {
         self.parser.screen()
     }
@@ -695,6 +697,7 @@ impl Terminal {
         out
     }
 
+    /// The screen as a [`Snapshot`], drawn in `theme`.
     pub fn snapshot(&self, theme: &Theme) -> Snapshot {
         let mut snapshot = Snapshot::read(self.parser.screen(), theme, Cow::Borrowed);
         for row in &mut snapshot.rows {

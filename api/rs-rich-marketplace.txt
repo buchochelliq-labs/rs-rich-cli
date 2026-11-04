@@ -135,6 +135,9 @@ impl core::panic::unwind_safe::UnwindSafe for rich_marketplace::FetchError
 pub rich_marketplace::Incompatibility::Abi
 pub rich_marketplace::Incompatibility::Abi::host: (u32, u32)
 pub rich_marketplace::Incompatibility::Abi::required: (u32, u32)
+pub rich_marketplace::Incompatibility::Acp
+pub rich_marketplace::Incompatibility::Acp::host: u64
+pub rich_marketplace::Incompatibility::Acp::required: u64
 pub rich_marketplace::Incompatibility::MicroSchema
 pub rich_marketplace::Incompatibility::MicroSchema::host: u64
 pub rich_marketplace::Incompatibility::MicroSchema::required: u64
@@ -280,6 +283,7 @@ impl core::marker::UnsafeUnpin for rich_marketplace::KeyChainError
 impl core::panic::unwind_safe::RefUnwindSafe for rich_marketplace::KeyChainError
 impl core::panic::unwind_safe::UnwindSafe for rich_marketplace::KeyChainError
 #[non_exhaustive] pub enum rich_marketplace::Kind
+pub rich_marketplace::Kind::Agent
 pub rich_marketplace::Kind::Crate
 pub rich_marketplace::Kind::MicroPack
 pub rich_marketplace::Kind::Theme
@@ -401,6 +405,7 @@ impl core::panic::unwind_safe::UnwindSafe for rich_marketplace::Request
 pub rich_marketplace::Requires::Abi
 pub rich_marketplace::Requires::Abi::major: u32
 pub rich_marketplace::Requires::Abi::minor: u32
+pub rich_marketplace::Requires::Acp(u64)
 pub rich_marketplace::Requires::MicroSchema(u64)
 pub rich_marketplace::Requires::PluginApi(u64)
 pub rich_marketplace::Requires::ThemeFormat(u64)
@@ -551,6 +556,55 @@ impl core::marker::Unpin for rich_marketplace::AcceptedIndex
 impl core::marker::UnsafeUnpin for rich_marketplace::AcceptedIndex
 impl core::panic::unwind_safe::RefUnwindSafe for rich_marketplace::AcceptedIndex
 impl core::panic::unwind_safe::UnwindSafe for rich_marketplace::AcceptedIndex
+#[non_exhaustive] pub struct rich_marketplace::AgentInfo
+pub rich_marketplace::AgentInfo::args: alloc::vec::Vec<alloc::string::String>
+pub rich_marketplace::AgentInfo::command: alloc::string::String
+pub rich_marketplace::AgentInfo::env: alloc::vec::Vec<alloc::string::String>
+pub rich_marketplace::AgentInfo::install: alloc::string::String
+impl rich_marketplace::AgentInfo
+pub fn rich_marketplace::AgentInfo::argv(&self) -> alloc::vec::Vec<alloc::string::String>
+impl core::clone::Clone for rich_marketplace::AgentInfo
+pub fn rich_marketplace::AgentInfo::clone(&self) -> rich_marketplace::AgentInfo
+impl core::cmp::Eq for rich_marketplace::AgentInfo
+impl core::cmp::PartialEq for rich_marketplace::AgentInfo
+pub fn rich_marketplace::AgentInfo::eq(&self, &rich_marketplace::AgentInfo) -> bool
+impl core::fmt::Debug for rich_marketplace::AgentInfo
+pub fn rich_marketplace::AgentInfo::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for rich_marketplace::AgentInfo
+impl core::marker::Freeze for rich_marketplace::AgentInfo
+impl core::marker::Send for rich_marketplace::AgentInfo
+impl core::marker::Sync for rich_marketplace::AgentInfo
+impl core::marker::Unpin for rich_marketplace::AgentInfo
+impl core::marker::UnsafeUnpin for rich_marketplace::AgentInfo
+impl core::panic::unwind_safe::RefUnwindSafe for rich_marketplace::AgentInfo
+impl core::panic::unwind_safe::UnwindSafe for rich_marketplace::AgentInfo
+pub struct rich_marketplace::AgentList
+impl rich_marketplace::AgentList
+pub fn rich_marketplace::AgentList::add(&mut self, &rich_marketplace::Listing, &rich_marketplace::ListedVersion) -> core::option::Option<&rich_marketplace::ListedAgent>
+pub fn rich_marketplace::AgentList::agents(&self) -> &[rich_marketplace::ListedAgent]
+pub fn rich_marketplace::AgentList::get(&self, &str) -> core::option::Option<&rich_marketplace::ListedAgent>
+pub fn rich_marketplace::AgentList::load(&std::path::Path) -> std::io::error::Result<rich_marketplace::AgentList>
+pub fn rich_marketplace::AgentList::new() -> rich_marketplace::AgentList
+pub fn rich_marketplace::AgentList::path(&std::path::Path) -> std::path::PathBuf
+pub fn rich_marketplace::AgentList::remove(&mut self, &str) -> bool
+pub fn rich_marketplace::AgentList::save(&self, &std::path::Path) -> std::io::error::Result<()>
+impl core::clone::Clone for rich_marketplace::AgentList
+pub fn rich_marketplace::AgentList::clone(&self) -> rich_marketplace::AgentList
+impl core::cmp::Eq for rich_marketplace::AgentList
+impl core::cmp::PartialEq for rich_marketplace::AgentList
+pub fn rich_marketplace::AgentList::eq(&self, &rich_marketplace::AgentList) -> bool
+impl core::default::Default for rich_marketplace::AgentList
+pub fn rich_marketplace::AgentList::default() -> rich_marketplace::AgentList
+impl core::fmt::Debug for rich_marketplace::AgentList
+pub fn rich_marketplace::AgentList::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for rich_marketplace::AgentList
+impl core::marker::Freeze for rich_marketplace::AgentList
+impl core::marker::Send for rich_marketplace::AgentList
+impl core::marker::Sync for rich_marketplace::AgentList
+impl core::marker::Unpin for rich_marketplace::AgentList
+impl core::marker::UnsafeUnpin for rich_marketplace::AgentList
+impl core::panic::unwind_safe::RefUnwindSafe for rich_marketplace::AgentList
+impl core::panic::unwind_safe::UnwindSafe for rich_marketplace::AgentList
 #[non_exhaustive] pub struct rich_marketplace::Artifact
 pub rich_marketplace::Artifact::sha256: alloc::string::String
 pub rich_marketplace::Artifact::size: u64
@@ -630,6 +684,7 @@ impl core::panic::unwind_safe::UnwindSafe for rich_marketplace::CrateInfo
 #[non_exhaustive] pub struct rich_marketplace::Host
 pub rich_marketplace::Host::abi_major: u32
 pub rich_marketplace::Host::abi_minor: u32
+pub rich_marketplace::Host::acp: u64
 pub rich_marketplace::Host::micro_schema: u64
 pub rich_marketplace::Host::plugin_api: u32
 pub rich_marketplace::Host::theme_format: u64
@@ -766,6 +821,34 @@ impl core::marker::Unpin for rich_marketplace::KeySet
 impl core::marker::UnsafeUnpin for rich_marketplace::KeySet
 impl core::panic::unwind_safe::RefUnwindSafe for rich_marketplace::KeySet
 impl core::panic::unwind_safe::UnwindSafe for rich_marketplace::KeySet
+#[non_exhaustive] pub struct rich_marketplace::ListedAgent
+pub rich_marketplace::ListedAgent::args: alloc::vec::Vec<alloc::string::String>
+pub rich_marketplace::ListedAgent::command: alloc::string::String
+pub rich_marketplace::ListedAgent::description: alloc::string::String
+pub rich_marketplace::ListedAgent::env: alloc::vec::Vec<alloc::string::String>
+pub rich_marketplace::ListedAgent::homepage: alloc::string::String
+pub rich_marketplace::ListedAgent::id: alloc::string::String
+pub rich_marketplace::ListedAgent::install: alloc::string::String
+pub rich_marketplace::ListedAgent::name: alloc::string::String
+pub rich_marketplace::ListedAgent::tier: rich_marketplace::Tier
+pub rich_marketplace::ListedAgent::version: alloc::string::String
+impl rich_marketplace::ListedAgent
+pub fn rich_marketplace::ListedAgent::argv(&self) -> alloc::vec::Vec<alloc::string::String>
+impl core::clone::Clone for rich_marketplace::ListedAgent
+pub fn rich_marketplace::ListedAgent::clone(&self) -> rich_marketplace::ListedAgent
+impl core::cmp::Eq for rich_marketplace::ListedAgent
+impl core::cmp::PartialEq for rich_marketplace::ListedAgent
+pub fn rich_marketplace::ListedAgent::eq(&self, &rich_marketplace::ListedAgent) -> bool
+impl core::fmt::Debug for rich_marketplace::ListedAgent
+pub fn rich_marketplace::ListedAgent::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for rich_marketplace::ListedAgent
+impl core::marker::Freeze for rich_marketplace::ListedAgent
+impl core::marker::Send for rich_marketplace::ListedAgent
+impl core::marker::Sync for rich_marketplace::ListedAgent
+impl core::marker::Unpin for rich_marketplace::ListedAgent
+impl core::marker::UnsafeUnpin for rich_marketplace::ListedAgent
+impl core::panic::unwind_safe::RefUnwindSafe for rich_marketplace::ListedAgent
+impl core::panic::unwind_safe::UnwindSafe for rich_marketplace::ListedAgent
 #[non_exhaustive] pub struct rich_marketplace::ListedVersion
 pub rich_marketplace::ListedVersion::artifact: rich_marketplace::Artifact
 pub rich_marketplace::ListedVersion::capabilities: alloc::vec::Vec<rich_marketplace::Capability>
@@ -793,6 +876,7 @@ impl core::marker::UnsafeUnpin for rich_marketplace::ListedVersion
 impl core::panic::unwind_safe::RefUnwindSafe for rich_marketplace::ListedVersion
 impl core::panic::unwind_safe::UnwindSafe for rich_marketplace::ListedVersion
 #[non_exhaustive] pub struct rich_marketplace::Listing
+pub rich_marketplace::Listing::agent: core::option::Option<rich_marketplace::AgentInfo>
 pub rich_marketplace::Listing::authors: alloc::vec::Vec<alloc::string::String>
 pub rich_marketplace::Listing::crate_info: core::option::Option<rich_marketplace::CrateInfo>
 pub rich_marketplace::Listing::description: alloc::string::String
@@ -997,6 +1081,9 @@ impl<'a> core::marker::Unpin for rich_marketplace::WasmExpectation<'a>
 impl<'a> core::marker::UnsafeUnpin for rich_marketplace::WasmExpectation<'a>
 impl<'a> core::panic::unwind_safe::RefUnwindSafe for rich_marketplace::WasmExpectation<'a>
 impl<'a> core::panic::unwind_safe::UnwindSafe for rich_marketplace::WasmExpectation<'a>
+pub const rich_marketplace::ACP_VERSION: u64
+pub const rich_marketplace::AGENTS_FILE_NAME: &str
+pub const rich_marketplace::AGENTS_SCHEMA_VERSION: u64
 pub const rich_marketplace::INDEX_COMMENT_PREFIX: &str
 pub const rich_marketplace::INDEX_SCHEMA_VERSION: u64
 pub const rich_marketplace::KEYS_COMMENT_PREFIX: &str

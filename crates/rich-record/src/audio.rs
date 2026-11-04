@@ -152,8 +152,11 @@ pub fn read_dir(dir: &Path) -> Vec<Stream> {
 /// it lasts on the recording's timeline, in seconds.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Span {
+    /// What the wall clock said when it started.
     pub wall: SystemTime,
+    /// Where it starts on the timeline, in seconds.
     pub at: f64,
+    /// How long it lasts, in seconds.
     pub length: f64,
 }
 

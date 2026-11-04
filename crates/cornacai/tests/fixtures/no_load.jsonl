@@ -1,0 +1,5 @@
+{"note": "Asked to resume, but the agent does not offer loadSession: a new session opens instead, and the user is told."}
+{"client": {"id": 0, "method": "initialize"}}
+{"agent": {"jsonrpc": "2.0", "id": 0, "result": {"protocolVersion": 1}}}
+{"client": {"id": 1, "method": "session/new"}}
+{"agent": {"jsonrpc": "2.0", "id": 1, "result": {"sessionId": "sess_fresh"}}}

@@ -197,10 +197,18 @@ impl Connection {
         self.request("session/new", &request)?.wait()
     }
 
-    /// `session/load` (only when the agent advertised `loadSession`): the
-    /// history arrives as `session/update` notifications before this
-    /// returns.
+    /// `session/load`: the history arrives as `session/update`
+    /// notifications before this returns. Only for an agent that
+    /// advertised `loadSession`: once `initialize` has said it did not, the
+    /// call is refused here with "method not found", unsent, as the
+    /// protocol forbids sending it.
     pub fn load_session(&self, request: LoadSessionRequest) -> Result<LoadSessionResponse, Error> {
+        if lock(&self.shared.agent)
+            .as_ref()
+            .is_some_and(|agent| !agent.load_session)
+        {
+            return Err(Error::Rpc(RpcError::method_not_found("session/load")));
+        }
         self.request("session/load", &request)?.wait()
     }
 
