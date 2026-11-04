@@ -1299,7 +1299,7 @@ impl Widget for TextArea {
                 canvas.lines_at(origin, 0, width, height, &lines);
                 let (top, _) = self.top.get();
                 let (count, view) = (self.buffer.line_count(), height as usize);
-                look.paint(cx.console(), canvas, at, top, count, view);
+                look.paint(cx, canvas, at, top, count, view);
                 self.bar_at.set(Some((at, count, view)));
             }
             _ => {

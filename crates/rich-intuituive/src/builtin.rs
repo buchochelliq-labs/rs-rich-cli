@@ -1989,8 +1989,8 @@ pub(crate) struct ScrollView {
     /// The focused node inside when it was last scrolled into view.
     focus: Option<NodeId>,
     /// The bar down and the bar across, and where each was last drawn.
-    down: crate::scrollbar::Bar,
-    across_bar: crate::scrollbar::Bar,
+    pub(crate) down: crate::scrollbar::Bar,
+    pub(crate) across_bar: crate::scrollbar::Bar,
     bars: (Option<Rect>, Option<Rect>),
     /// Its own size, as last laid out.
     size: (u16, u16),
@@ -2079,11 +2079,14 @@ impl ScrollView {
     /// Where the window starts: after a bar on the left or the top.
     fn window_origin(&self, width: u16, height: u16) -> (u16, u16) {
         use crate::scrollbar::Side;
-        let x =
-            u16::from(self.vertical && self.view.0 < width && self.down_look().side == Side::Left);
-        let y = u16::from(
-            self.horizontal && self.view.1 < height && self.across_look().side == Side::Top,
-        );
+        let x = match self.vertical && self.down_look().side == Side::Left {
+            true => width.saturating_sub(self.view.0),
+            false => 0,
+        };
+        let y = match self.horizontal && self.across_look().side == Side::Top {
+            true => height.saturating_sub(self.view.1),
+            false => 0,
+        };
         (x, y)
     }
 
@@ -2170,11 +2173,15 @@ impl Widget for ScrollView {
         // passes.
         let (down, across) = (self.down_look().clone(), self.across_look().clone());
         for _ in 0..2 {
-            if self.vertical && down.wanted(h as usize, view_h as usize) && rect.width > 1 {
-                view_w = rect.width - 1;
+            let (across_t, down_t) = (across.thickness(), down.thickness());
+            if self.vertical && down.wanted(h as usize, view_h as usize) && rect.width > down_t {
+                view_w = rect.width - down_t;
             }
-            if self.horizontal && across.wanted(w as usize, view_w as usize) && rect.height > 1 {
-                view_h = rect.height - 1;
+            if self.horizontal
+                && across.wanted(w as usize, view_w as usize)
+                && rect.height > across_t
+            {
+                view_h = rect.height - across_t;
             }
             w = wide(view_w);
             h = tall(w);
@@ -2233,26 +2240,20 @@ impl Widget for ScrollView {
         self.bars = (None, None);
         if self.vertical && view_w < width {
             let look = self.down_look().clone();
-            let column = if look.side == Side::Left {
-                0
-            } else {
-                width - 1
-            };
-            let rect = Rect::new(column, y, 1, view_h);
+            let t = width - view_w;
+            let column = if look.side == Side::Left { 0 } else { view_w };
+            let rect = Rect::new(column, y, t, view_h);
             let (top, content) = (self.top() as usize, content_h as usize);
-            look.paint(cx.console(), canvas, rect, top, content, view_h as usize);
+            look.paint(cx, canvas, rect, top, content, view_h as usize);
             self.bars.0 = Some(rect);
         }
         if self.horizontal && view_h < height {
             let look = self.across_look().clone();
-            let line = if look.side == Side::Top {
-                0
-            } else {
-                height - 1
-            };
-            let rect = Rect::new(x, line, view_w, 1);
+            let t = height - view_h;
+            let line = if look.side == Side::Top { 0 } else { view_h };
+            let rect = Rect::new(x, line, view_w, t);
             let (left, content) = (self.left() as usize, content_w as usize);
-            look.paint(cx.console(), canvas, rect, left, content, view_w as usize);
+            look.paint(cx, canvas, rect, left, content, view_w as usize);
             self.bars.1 = Some(rect);
         }
     }

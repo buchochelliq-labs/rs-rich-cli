@@ -1410,7 +1410,7 @@ impl Widget for List {
                 let look = bar.as_ref().expect("a bar was laid out");
                 let view = (laid.items.len() - laid.frozen).max(1);
                 let (first, len) = (laid.first - laid.frozen, len - laid.frozen);
-                look.paint(console, canvas, at, first, len, view);
+                look.paint(cx, canvas, at, first, len, view);
                 self.bar_at.set(Some((at, first, len, view)));
             }
         }

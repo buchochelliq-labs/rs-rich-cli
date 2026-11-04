@@ -6532,6 +6532,7 @@ pub fn intuituive::widgets::Scrollbar::is_vertical(&self) -> bool
 pub fn intuituive::widgets::Scrollbar::new() -> intuituive::widgets::Scrollbar
 pub fn intuituive::widgets::Scrollbar::show(self, intuituive::widgets::Show) -> intuituive::widgets::Scrollbar
 pub fn intuituive::widgets::Scrollbar::side(self, intuituive::widgets::Side) -> intuituive::widgets::Scrollbar
+pub fn intuituive::widgets::Scrollbar::size(self, u16) -> intuituive::widgets::Scrollbar
 pub fn intuituive::widgets::Scrollbar::symbols(self, intuituive::widgets::ScrollbarSymbols) -> intuituive::widgets::Scrollbar
 pub fn intuituive::widgets::Scrollbar::thumb(self, &str) -> intuituive::widgets::Scrollbar
 pub fn intuituive::widgets::Scrollbar::track(self, core::option::Option<&str>) -> intuituive::widgets::Scrollbar

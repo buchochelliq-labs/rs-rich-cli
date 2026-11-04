@@ -100,7 +100,7 @@ Modules are under `crates/rich-intuituive/src/`.
 | **TCSS selectors** | type, `#id`, `.class`, descendant, child `>`, `*`, `&` nesting | `Stylesheet` (`sheet.rs`): kind, `#name`, `.class`, `*`, descendant, child `>`, nesting with `&` (read as the flattened rule) | ✓ | Sibling combinators (`+`, `~`), which Textual lacks too (#812) |
 | **Pseudo-classes** | `:focus`, `:focus-within`, `:hover`, `:disabled`, `:blur`, `:can-focus`, `:dark`, `:light`, `:first-child`, `:last-child`, `:odd`, `:even`, `:empty`, `:inline`, … | `:focus`, `:focus-within`, `:hover`, `:selected`, `:disabled`, `:error`, `:blur`, `:enabled`, `:can-focus`, `:first-child`, `:last-child`, `:odd`, `:even`, `:empty`, `:dark`, `:light` | partial | `:inline`, `:first-of-type` and the like; states change colours and text styles, not layout (#812) |
 | **Variables** | `$name: value;` declared in CSS; theme variables | `$name: value;` declared at the top level (values may use earlier ones); a `$name` not declared names a theme style | ✓ | (#812) |
-| **Properties** | about 90 (width, height, margin, offset, opacity, tint, visibility, outline, scrollbar colours, hatch, keyline, layer, …) | about 35: colours, text style, border (titles, sides, collapse), text align, wrap and overflow, size and its limits, padding, margin, visibility, scrollbar colours, gap, grid tracks, display, dock, flex alignment | partial | Offset, opacity and tint, outline, hatch, keyline, `scrollbar-color-hover` and the scrollbar's size (#812's later slices) |
+| **Properties** | about 90 (width, height, margin, offset, opacity, tint, visibility, outline, scrollbar colours, hatch, keyline, layer, …) | about 45: colours, text style, border (titles, sides, collapse), text align, wrap and overflow, size and its limits, padding, margin, visibility, scrollbar colours (hover too) and size, gap, grid tracks, display, dock, flex alignment; offset, opacity, tint, outline, hatch and keyline (0.0.25) | ✓ | Textual's `layer`s and the rest of its long tail; `opacity`, `tint`, `outline` and `hatch` are set by kind, name and fixed classes, not states (#812) |
 | **@media / responsive** | horizontal and vertical breakpoints that set classes (`-narrow`); no `@media` | `@media (min-width: N) and …`, `.hide_below`, `viewport()` | ✓ | More than Textual |
 | **Live CSS reload** | `textual run --dev` | `App::stylesheet_file`, `App::theme_file` are read again when the file changes | ✓ | |
 | **Layout: grid, dock, layers, align, fr** | all | `grid` (tracks, spans), `dock`, `layers`, `Align` and `Justify`, `Size::Flex`/`3fr`, `place` (`Origin`, `Offset`), the `Solver`, `treemap`, draggable `split` | ✓ | |
@@ -133,7 +133,7 @@ Modules are under `crates/rich-intuituive/src/`.
 | **DataTable** | sorting, cell, row, column and no cursor, fixed rows and columns, zebra stripes, `update_cell`, virtual size | all but row labels and renderable cells (fixed rows: `freeze_rows`, 0.0.24) | partial | Row labels, renderable cells |
 | **Inline apps** | `run(inline=True)` | `App::inline(height)`, `print_above` | ✓ | |
 
-**Counts:** 35 areas. 15 ✓, 16 partial, 3 ✗, 1 won't-do.
+**Counts:** 35 areas. 16 ✓, 15 partial, 3 ✗, 1 won't-do.
 
 ## Prioritised gaps
 

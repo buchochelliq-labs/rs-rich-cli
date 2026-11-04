@@ -724,7 +724,7 @@ impl Widget for Tree {
         }
         match (look, bar) {
             (Some(look), Some(at)) => {
-                look.paint(console, canvas, at, first, rows.len(), height);
+                look.paint(cx, canvas, at, first, rows.len(), height);
                 self.bar_at.set(Some((at, rows.len())));
             }
             _ => self.bar_at.set(None),

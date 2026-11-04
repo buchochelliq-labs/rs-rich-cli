@@ -140,6 +140,10 @@ pub struct Scrollbar {
     thumb: Option<String>,
     track: Option<Option<String>>,
     ends: Option<(Option<String>, Option<String>)>,
+    /// How many cells across it is: code's, then a stylesheet's
+    /// `scrollbar-size`.
+    size: Option<u16>,
+    pub(crate) sheet_size: Option<u16>,
 }
 
 impl Scrollbar {
@@ -186,14 +190,43 @@ impl Scrollbar {
         self
     }
 
+    /// How many cells across it is: 1 by default, and 0 hides it. A
+    /// stylesheet's `scrollbar-size` sets it where code does not.
+    ///
+    /// ```
+    /// use intuituive::prelude::*;
+    /// use intuituive::widgets::{Scrollbar, Show};
+    ///
+    /// let app = App::new(|| {
+    ///     let items = || (1..=20).map(|n| format!("item {n}")).collect();
+    ///     list(items, signal(0))
+    ///         .scrollbar(Scrollbar::new().size(2).show(Show::Always))
+    ///         .on_key("q", |cx| cx.quit())
+    /// });
+    /// let screen = app.render_with(&["q"], 10, 4).unwrap();
+    /// assert!(screen[0].ends_with("┃┃"), "{screen:?}");
+    /// ```
+    pub fn size(mut self, cells: u16) -> Scrollbar {
+        self.size = Some(cells);
+        self
+    }
+
     /// Whether it runs down, scrolling rows.
     pub fn is_vertical(&self) -> bool {
         self.side.is_vertical()
     }
 
+    /// The cells across it takes.
+    pub(crate) fn thickness(&self) -> u16 {
+        self.size.or(self.sheet_size).unwrap_or(1)
+    }
+
     /// Whether it keeps its line for content `content` long with `view`
     /// of it in view.
     pub(crate) fn wanted(&self, content: usize, view: usize) -> bool {
+        if self.thickness() == 0 {
+            return false;
+        }
         match self.show {
             Show::Never => false,
             Show::Always => true,
@@ -252,6 +285,7 @@ impl Scrollbar {
     pub(crate) fn segments(
         &self,
         console: &Console,
+        hover: bool,
         length: u16,
         position: usize,
         content: usize,
@@ -264,7 +298,12 @@ impl Scrollbar {
                 .or_else(|| Style::parse(fallback).ok())
         };
         let track_style = style("scrollbar", "bright_black");
-        let thumb_style = style("scrollbar.thumb", "white");
+        let thumb_style = match hover {
+            true => {
+                style("scrollbar.thumb.hover", "").or_else(|| style("scrollbar.thumb", "white"))
+            }
+            false => style("scrollbar.thumb", "white"),
+        };
         let arrow_style = style("scrollbar.arrow", "bright_black");
         // In text mode the bar is no text for a screen reader to read: its
         // line is kept, blank.
@@ -293,11 +332,12 @@ impl Scrollbar {
         out
     }
 
-    /// Draw the bar on `canvas` in `rect` (a column for a bar down, a row
-    /// across).
+    /// Draw the bar on `canvas` in `rect` (columns for a bar down, rows
+    /// across), its thumb in `scrollbar.thumb.hover` while the pointer is
+    /// over it, when the theme has that style.
     pub(crate) fn paint(
         &self,
-        console: &Console,
+        cx: &DrawCx,
         canvas: &mut Canvas,
         rect: Rect,
         position: usize,
@@ -307,16 +347,22 @@ impl Scrollbar {
         if rect.is_empty() {
             return;
         }
+        let console = cx.console();
+        // Asking where the pointer is draws the bar again as it comes and
+        // goes: only when there is a hover style to show.
+        let hover = crate::widget::named_style(console, "scrollbar.thumb.hover").is_some()
+            && cx.pointer().is_some_and(|(x, y)| rect.contains(x, y));
         if self.is_vertical() {
             let lines: Vec<Vec<Segment>> = self
-                .segments(console, rect.height, position, content, view)
+                .segments(console, hover, rect.height, position, content, view)
                 .into_iter()
-                .map(|segment| vec![segment])
+                .map(|segment| vec![segment; rect.width as usize])
                 .collect();
             canvas.lines_at(rect.x, rect.y, rect.width, rect.height, &lines);
         } else {
-            let line = self.segments(console, rect.width, position, content, view);
-            canvas.lines_at(rect.x, rect.y, rect.width, rect.height, &[line]);
+            let line = self.segments(console, hover, rect.width, position, content, view);
+            let lines = vec![line; rect.height as usize];
+            canvas.lines_at(rect.x, rect.y, rect.width, rect.height, &lines);
         }
     }
 
@@ -342,25 +388,17 @@ impl Scrollbar {
     /// The rectangle a bar on this side takes of a widget `width` x
     /// `height`, and what it leaves for the content.
     pub(crate) fn split(&self, width: u16, height: u16) -> (Rect, Rect) {
-        let rest = |w: u16, h: u16| (w.saturating_sub(1), h.saturating_sub(1));
-        let (w, h) = rest(width, height);
+        let t = self.thickness();
+        let (across, down) = (t.min(width), t.min(height));
+        let (w, h) = (width - across, height - down);
         match self.side {
-            Side::Right => (
-                Rect::new(0, 0, w, height),
-                Rect::new(w, 0, 1.min(width), height),
-            ),
+            Side::Right => (Rect::new(0, 0, w, height), Rect::new(w, 0, across, height)),
             Side::Left => (
-                Rect::new(1.min(width), 0, w, height),
-                Rect::new(0, 0, 1.min(width), height),
+                Rect::new(across, 0, w, height),
+                Rect::new(0, 0, across, height),
             ),
-            Side::Bottom => (
-                Rect::new(0, 0, width, h),
-                Rect::new(0, h, width, 1.min(height)),
-            ),
-            Side::Top => (
-                Rect::new(0, 1.min(height), width, h),
-                Rect::new(0, 0, width, 1.min(height)),
-            ),
+            Side::Bottom => (Rect::new(0, 0, width, h), Rect::new(0, h, width, down)),
+            Side::Top => (Rect::new(0, down, width, h), Rect::new(0, 0, width, down)),
         }
     }
 }
@@ -571,7 +609,7 @@ impl Widget for Standalone {
 
     fn measure(&mut self, _cx: &MeasureCx, axis: Axis, width: u16, height: u16) -> u16 {
         match (axis, self.look().is_vertical()) {
-            (Axis::Horizontal, true) | (Axis::Vertical, false) => 1,
+            (Axis::Horizontal, true) | (Axis::Vertical, false) => self.look().thickness(),
             (Axis::Horizontal, false) => width,
             (Axis::Vertical, true) => height.max(1),
         }
@@ -587,12 +625,13 @@ impl Widget for Standalone {
         if !look.wanted(content, view) {
             return;
         }
+        let t = look.thickness();
         let rect = if look.is_vertical() {
-            Rect::new(0, 0, 1.min(width), height)
+            Rect::new(0, 0, t.min(width), height)
         } else {
-            Rect::new(0, 0, width, 1.min(height))
+            Rect::new(0, 0, width, t.min(height))
         };
-        look.paint(cx.console(), canvas, rect, position, content, view);
+        look.paint(cx, canvas, rect, position, content, view);
     }
 
     fn event(&mut self, cx: &mut EventCx, event: &WidgetEvent) -> Used {
@@ -670,6 +709,41 @@ impl Node {
             self.widget_mut(|log: &mut crate::log::LogView| set(&mut log.bar));
         }
         self
+    }
+
+    /// Give each scrollbar its widget has (a scroll's two) a stylesheet's
+    /// `scrollbar-size`: `across` for a bar across, `down` for one down.
+    pub(crate) fn sheet_bar_sizes(&self, across: Option<u16>, down: Option<u16>) {
+        let set = |bar: &mut Bar| {
+            if let Some(look) = &mut bar.look {
+                look.sheet_size = if look.is_vertical() { down } else { across };
+            }
+        };
+        let done = self
+            .widget_mut(|view: &mut crate::builtin::ScrollView| {
+                set(&mut view.down);
+                set(&mut view.across_bar);
+            })
+            .is_some()
+            || crate::list::with_list(self, |list| set(&mut list.bar)).is_some()
+            || self
+                .widget_mut(|table: &mut crate::widgets::Table| set(&mut table.bar))
+                .is_some()
+            || self
+                .widget_mut(|tree: &mut crate::tree::Tree| set(&mut tree.bar))
+                .is_some()
+            || self
+                .widget_mut(|area: &mut crate::text_area::TextArea| set(&mut area.bar))
+                .is_some()
+            || self
+                .widget_mut(|view: &mut crate::scroll_virtual::VirtualScroll| set(&mut view.bar))
+                .is_some()
+            || self
+                .widget_mut(|bar: &mut Standalone| set(&mut bar.bar))
+                .is_some();
+        if !done {
+            self.widget_mut(|log: &mut crate::log::LogView| set(&mut log.bar));
+        }
     }
 }
 

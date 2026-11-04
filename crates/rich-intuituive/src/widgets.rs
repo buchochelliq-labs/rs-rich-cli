@@ -2400,7 +2400,7 @@ impl Widget for Table {
                 let look = self.bar.look.clone().expect("a bar was laid out");
                 let view = scrolled_count.max(1);
                 let (first, len) = (first - frozen, len - frozen);
-                look.paint(console, canvas, at, first, len, view);
+                look.paint(cx, canvas, at, first, len, view);
                 self.bar_at.set(Some((at, first, len, view)));
             }
             None => self.bar_at.set(None),
