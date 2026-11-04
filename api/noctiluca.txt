@@ -69,6 +69,7 @@ pub noctiluca::adapt::Rule::InlinePictures
 pub noctiluca::adapt::Rule::LiveTail
 pub noctiluca::adapt::Rule::PageColors
 pub noctiluca::adapt::Rule::ScreenReaderTwins
+pub noctiluca::adapt::Rule::Shelves
 pub noctiluca::adapt::Rule::SnapGrids
 pub noctiluca::adapt::Rule::TextOverPictures
 impl noctiluca::adapt::Rule
@@ -289,6 +290,7 @@ pub fn noctiluca::app::availability(noctiluca::app::Browser, &str) -> core::resu
 pub fn noctiluca::app::byte_budget(noctiluca::app::Browser) -> rich_art::picture::ByteBudget
 pub fn noctiluca::app::current_log(noctiluca::app::Browser) -> core::option::Option<(noctiluca::engine::NodeId, usize)>
 pub fn noctiluca::app::current_media(noctiluca::app::Browser) -> core::option::Option<(noctiluca::engine::NodeId, noctiluca::engine::Playback)>
+pub fn noctiluca::app::current_shelf(noctiluca::app::Browser, &noctiluca::model::Page) -> core::option::Option<&noctiluca::model::Shelf>
 pub fn noctiluca::app::measured_budget(u64, u64, bool) -> u64
 pub fn noctiluca::app::overlay_actions(noctiluca::app::Browser) -> alloc::vec::Vec<intuituive::actions::Action>
 pub fn noctiluca::app::run(noctiluca::app::Browser, &str, &mut intuituive::app::Ctx)
@@ -1013,6 +1015,9 @@ pub noctiluca::engine::PageAction::Key(rich_interact::event::Key)
 pub noctiluca::engine::PageAction::Media
 pub noctiluca::engine::PageAction::Media::node: noctiluca::engine::NodeId
 pub noctiluca::engine::PageAction::Media::op: noctiluca::engine::MediaOp
+pub noctiluca::engine::PageAction::ScrollBox
+pub noctiluca::engine::PageAction::ScrollBox::by: f64
+pub noctiluca::engine::PageAction::ScrollBox::node: noctiluca::engine::NodeId
 pub noctiluca::engine::PageAction::ScrollTo(f64)
 pub noctiluca::engine::PageAction::SelectOption
 pub noctiluca::engine::PageAction::SelectOption::option: noctiluca::engine::NodeId
@@ -1388,10 +1393,13 @@ impl core::marker::UnsafeUnpin for noctiluca::layout::Marks
 impl core::panic::unwind_safe::RefUnwindSafe for noctiluca::layout::Marks
 impl core::panic::unwind_safe::UnwindSafe for noctiluca::layout::Marks
 pub struct noctiluca::layout::Projection
+pub noctiluca::layout::Projection::docked: core::option::Option<alloc::boxed::Box<noctiluca::layout::Projection>>
 pub noctiluca::layout::Projection::inline: alloc::vec::Vec<(noctiluca::layout::Region, alloc::string::String)>
 pub noctiluca::layout::Projection::keys: alloc::vec::Vec<u64>
 pub noctiluca::layout::Projection::lines: alloc::vec::Vec<noctiluca::layout::Line>
 pub noctiluca::layout::Projection::logs: alloc::vec::Vec<(noctiluca::engine::NodeId, usize, usize)>
+pub noctiluca::layout::Projection::overlays: alloc::vec::Vec<(usize, usize, noctiluca::layout::Line)>
+pub noctiluca::layout::Projection::pinned: core::option::Option<alloc::boxed::Box<noctiluca::layout::Projection>>
 pub noctiluca::layout::Projection::regions: alloc::vec::Vec<noctiluca::layout::Region>
 pub noctiluca::layout::Projection::rows: std::collections::hash::map::HashMap<u64, usize>
 pub noctiluca::layout::Projection::y: alloc::vec::Vec<f64>
@@ -1598,6 +1606,27 @@ impl core::marker::Unpin for noctiluca::model::MediaKind
 impl core::marker::UnsafeUnpin for noctiluca::model::MediaKind
 impl core::panic::unwind_safe::RefUnwindSafe for noctiluca::model::MediaKind
 impl core::panic::unwind_safe::UnwindSafe for noctiluca::model::MediaKind
+pub enum noctiluca::model::Place
+pub noctiluca::model::Place::Docked
+pub noctiluca::model::Place::Flow
+pub noctiluca::model::Place::Off
+pub noctiluca::model::Place::Pinned
+impl core::clone::Clone for noctiluca::model::Place
+pub fn noctiluca::model::Place::clone(&self) -> noctiluca::model::Place
+impl core::cmp::Eq for noctiluca::model::Place
+impl core::cmp::PartialEq for noctiluca::model::Place
+pub fn noctiluca::model::Place::eq(&self, &noctiluca::model::Place) -> bool
+impl core::fmt::Debug for noctiluca::model::Place
+pub fn noctiluca::model::Place::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Copy for noctiluca::model::Place
+impl core::marker::StructuralPartialEq for noctiluca::model::Place
+impl core::marker::Freeze for noctiluca::model::Place
+impl core::marker::Send for noctiluca::model::Place
+impl core::marker::Sync for noctiluca::model::Place
+impl core::marker::Unpin for noctiluca::model::Place
+impl core::marker::UnsafeUnpin for noctiluca::model::Place
+impl core::panic::unwind_safe::RefUnwindSafe for noctiluca::model::Place
+impl core::panic::unwind_safe::UnwindSafe for noctiluca::model::Place
 pub enum noctiluca::model::RegionKind
 pub noctiluca::model::RegionKind::Complementary
 pub noctiluca::model::RegionKind::Navigation
@@ -1704,6 +1733,7 @@ pub noctiluca::model::Block::quote: u8
 pub noctiluca::model::Block::rect: noctiluca::engine::Rect
 pub noctiluca::model::Block::region: core::option::Option<usize>
 pub noctiluca::model::Block::runs: alloc::vec::Vec<noctiluca::model::Run>
+pub noctiluca::model::Block::stack: noctiluca::model::Stack
 impl noctiluca::model::Block
 pub fn noctiluca::model::Block::text(&self) -> alloc::string::String
 impl core::clone::Clone for noctiluca::model::Block
@@ -1872,6 +1902,27 @@ impl core::marker::Unpin for noctiluca::model::Indicator
 impl core::marker::UnsafeUnpin for noctiluca::model::Indicator
 impl core::panic::unwind_safe::RefUnwindSafe for noctiluca::model::Indicator
 impl core::panic::unwind_safe::UnwindSafe for noctiluca::model::Indicator
+pub struct noctiluca::model::Layer
+pub noctiluca::model::Layer::fixed: bool
+pub noctiluca::model::Layer::node: noctiluca::engine::NodeId
+pub noctiluca::model::Layer::place: noctiluca::model::Place
+pub noctiluca::model::Layer::rect: noctiluca::engine::Rect
+pub noctiluca::model::Layer::top: f64
+impl core::clone::Clone for noctiluca::model::Layer
+pub fn noctiluca::model::Layer::clone(&self) -> noctiluca::model::Layer
+impl core::cmp::PartialEq for noctiluca::model::Layer
+pub fn noctiluca::model::Layer::eq(&self, &noctiluca::model::Layer) -> bool
+impl core::fmt::Debug for noctiluca::model::Layer
+pub fn noctiluca::model::Layer::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Copy for noctiluca::model::Layer
+impl core::marker::StructuralPartialEq for noctiluca::model::Layer
+impl core::marker::Freeze for noctiluca::model::Layer
+impl core::marker::Send for noctiluca::model::Layer
+impl core::marker::Sync for noctiluca::model::Layer
+impl core::marker::Unpin for noctiluca::model::Layer
+impl core::marker::UnsafeUnpin for noctiluca::model::Layer
+impl core::panic::unwind_safe::RefUnwindSafe for noctiluca::model::Layer
+impl core::panic::unwind_safe::UnwindSafe for noctiluca::model::Layer
 pub struct noctiluca::model::Log
 pub noctiluca::model::Log::entries: alloc::vec::Vec<noctiluca::model::Entry>
 pub noctiluca::model::Log::first_shown: core::option::Option<u64>
@@ -1936,12 +1987,16 @@ pub noctiluca::model::Page::has_ax: bool
 pub noctiluca::model::Page::height: f64
 pub noctiluca::model::Page::indicators: alloc::vec::Vec<noctiluca::model::Indicator>
 pub noctiluca::model::Page::inline_pictures: std::collections::hash::map::HashMap<alloc::string::String, rich_art::picture::Picture>
+pub noctiluca::model::Page::layers: alloc::vec::Vec<noctiluca::model::Layer>
 pub noctiluca::model::Page::logs: alloc::vec::Vec<noctiluca::model::Log>
 pub noctiluca::model::Page::media: alloc::vec::Vec<noctiluca::model::Media>
 pub noctiluca::model::Page::regions: alloc::vec::Vec<noctiluca::model::Region>
+pub noctiluca::model::Page::scroll_y: f64
+pub noctiluca::model::Page::shelves: alloc::vec::Vec<noctiluca::model::Shelf>
 pub noctiluca::model::Page::title: alloc::string::String
 pub noctiluca::model::Page::truncated: bool
 pub noctiluca::model::Page::url: alloc::string::String
+pub noctiluca::model::Page::view_height: f64
 pub noctiluca::model::Page::width: f64
 impl noctiluca::model::Page
 pub fn noctiluca::model::Page::check(&self, &noctiluca::model::Binding) -> core::result::Result<&noctiluca::model::Control, alloc::string::String>
@@ -2049,6 +2104,55 @@ impl core::marker::Unpin for noctiluca::model::Run
 impl core::marker::UnsafeUnpin for noctiluca::model::Run
 impl core::panic::unwind_safe::RefUnwindSafe for noctiluca::model::Run
 impl core::panic::unwind_safe::UnwindSafe for noctiluca::model::Run
+pub struct noctiluca::model::Shelf
+pub noctiluca::model::Shelf::client_width: f64
+pub noctiluca::model::Shelf::items: alloc::vec::Vec<noctiluca::engine::Rect>
+pub noctiluca::model::Shelf::label: alloc::string::String
+pub noctiluca::model::Shelf::node: noctiluca::engine::NodeId
+pub noctiluca::model::Shelf::rect: noctiluca::engine::Rect
+pub noctiluca::model::Shelf::scroll_left: f64
+pub noctiluca::model::Shelf::scroll_width: f64
+impl noctiluca::model::Shelf
+pub fn noctiluca::model::Shelf::can_page(&self) -> (bool, bool)
+pub fn noctiluca::model::Shelf::clipped(&self, f64) -> noctiluca::model::Shelf
+pub fn noctiluca::model::Shelf::hides(&self, &noctiluca::engine::Rect) -> bool
+pub fn noctiluca::model::Shelf::shown(&self) -> (usize, usize)
+pub fn noctiluca::model::Shelf::shows(&self, usize) -> bool
+impl core::clone::Clone for noctiluca::model::Shelf
+pub fn noctiluca::model::Shelf::clone(&self) -> noctiluca::model::Shelf
+impl core::cmp::PartialEq for noctiluca::model::Shelf
+pub fn noctiluca::model::Shelf::eq(&self, &noctiluca::model::Shelf) -> bool
+impl core::fmt::Debug for noctiluca::model::Shelf
+pub fn noctiluca::model::Shelf::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for noctiluca::model::Shelf
+impl core::marker::Freeze for noctiluca::model::Shelf
+impl core::marker::Send for noctiluca::model::Shelf
+impl core::marker::Sync for noctiluca::model::Shelf
+impl core::marker::Unpin for noctiluca::model::Shelf
+impl core::marker::UnsafeUnpin for noctiluca::model::Shelf
+impl core::panic::unwind_safe::RefUnwindSafe for noctiluca::model::Shelf
+impl core::panic::unwind_safe::UnwindSafe for noctiluca::model::Shelf
+pub struct noctiluca::model::Stack
+pub noctiluca::model::Stack::covered: bool
+pub noctiluca::model::Stack::layer: core::option::Option<usize>
+pub noctiluca::model::Stack::over: core::option::Option<usize>
+impl core::clone::Clone for noctiluca::model::Stack
+pub fn noctiluca::model::Stack::clone(&self) -> noctiluca::model::Stack
+impl core::cmp::PartialEq for noctiluca::model::Stack
+pub fn noctiluca::model::Stack::eq(&self, &noctiluca::model::Stack) -> bool
+impl core::default::Default for noctiluca::model::Stack
+pub fn noctiluca::model::Stack::default() -> noctiluca::model::Stack
+impl core::fmt::Debug for noctiluca::model::Stack
+pub fn noctiluca::model::Stack::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Copy for noctiluca::model::Stack
+impl core::marker::StructuralPartialEq for noctiluca::model::Stack
+impl core::marker::Freeze for noctiluca::model::Stack
+impl core::marker::Send for noctiluca::model::Stack
+impl core::marker::Sync for noctiluca::model::Stack
+impl core::marker::Unpin for noctiluca::model::Stack
+impl core::marker::UnsafeUnpin for noctiluca::model::Stack
+impl core::panic::unwind_safe::RefUnwindSafe for noctiluca::model::Stack
+impl core::panic::unwind_safe::UnwindSafe for noctiluca::model::Stack
 pub struct noctiluca::model::Table
 pub noctiluca::model::Table::caption: alloc::string::String
 pub noctiluca::model::Table::rows: alloc::vec::Vec<alloc::vec::Vec<noctiluca::model::Cell>>
@@ -2175,6 +2279,9 @@ pub fn noctiluca::pixel_view::point(f32, f32) -> (f64, f64)
 pub fn noctiluca::pixel_view::rgba(&rich_embed::chrome::ScreencastFrame) -> core::option::Option<image::images::buffer::RgbaImage>
 pub fn noctiluca::pixel_view::state() -> alloc::rc::Rc<core::cell::RefCell<noctiluca::pixel_view::Screen>>
 pub fn noctiluca::pixel_view::view(noctiluca::app::Browser) -> intuituive::node::Node
+pub mod noctiluca::shelf
+pub fn noctiluca::shelf::page_by(&noctiluca::model::Shelf, bool) -> f64
+pub fn noctiluca::shelf::strip(&noctiluca::model::Shelf, usize) -> noctiluca::layout::Line
 pub mod noctiluca::ssh
 pub enum noctiluca::ssh::TunnelState
 pub noctiluca::ssh::TunnelState::Connecting
@@ -2343,6 +2450,10 @@ pub noctiluca::tab::Command::Regions::on_screen: alloc::vec::Vec<noctiluca::engi
 pub noctiluca::tab::Command::Regions::scale: f64
 pub noctiluca::tab::Command::Resize(u16, u16)
 pub noctiluca::tab::Command::Scroll(f64)
+pub noctiluca::tab::Command::ScrollBox
+pub noctiluca::tab::Command::ScrollBox::by: f64
+pub noctiluca::tab::Command::ScrollBox::document: u64
+pub noctiluca::tab::Command::ScrollBox::node: noctiluca::engine::NodeId
 pub noctiluca::tab::Command::Type(alloc::string::String)
 pub noctiluca::tab::Command::Wheel(f64)
 impl core::clone::Clone for noctiluca::tab::Command
@@ -2541,9 +2652,12 @@ pub fn noctiluca::testing::PageBuilder::body(&self) -> usize
 pub fn noctiluca::testing::PageBuilder::element(&mut self, usize, &str, &[(&str, &str)], &[(&str, &str)], core::option::Option<noctiluca::engine::Rect>) -> usize
 pub fn noctiluca::testing::PageBuilder::image(&mut self, usize, &str, &str, noctiluca::engine::Rect) -> usize
 pub fn noctiluca::testing::PageBuilder::new(&str, &str, f64, f64) -> noctiluca::testing::PageBuilder
+pub fn noctiluca::testing::PageBuilder::paint(&mut self, usize, i64)
+pub fn noctiluca::testing::PageBuilder::scroll_box(&mut self, usize, f64, f64, f64)
 pub fn noctiluca::testing::PageBuilder::set_style(&mut self, usize, &str, &str)
 pub fn noctiluca::testing::PageBuilder::snapshot(&self) -> noctiluca::engine::PageSnapshot
 pub fn noctiluca::testing::PageBuilder::text(&mut self, usize, &str, noctiluca::engine::Rect) -> usize
+pub fn noctiluca::testing::PageBuilder::view(&mut self, f64, f64)
 impl core::marker::Freeze for noctiluca::testing::PageBuilder
 impl core::marker::Send for noctiluca::testing::PageBuilder
 impl core::marker::Sync for noctiluca::testing::PageBuilder
