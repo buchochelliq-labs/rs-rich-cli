@@ -405,7 +405,9 @@ mod tests {
         assert!(shown.iter().any(|row| row.contains("250.0 Mbps")));
         assert!(shown[11].contains("Upload"), "{shown:#?}");
         assert!(
-            shown.iter().any(|row| row.contains('0') && row.contains("500")),
+            shown
+                .iter()
+                .any(|row| row.contains('0') && row.contains("500")),
             "the range's ends: {shown:#?}"
         );
         // Half filled: the arc's two colours, the fill bold in the

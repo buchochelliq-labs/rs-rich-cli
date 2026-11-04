@@ -181,7 +181,11 @@ fn a_canvas_gauge_with_a_meter_role_is_drawn_as_intuituives_dial() {
                 .iter()
                 .any(|i| i.label == "Upload" && i.value.is_some_and(|v| v > 95.0))
     });
-    let upload = page.indicators.iter().find(|i| i.label == "Upload").unwrap();
+    let upload = page
+        .indicators
+        .iter()
+        .find(|i| i.label == "Upload")
+        .unwrap();
     assert!(upload.media.is_some(), "the canvas is the meter");
     let lines: Vec<String> = noctiluca::layout::project(
         &page,
@@ -198,9 +202,6 @@ fn a_canvas_gauge_with_a_meter_role_is_drawn_as_intuituives_dial() {
         lines.iter().any(|l| l.chars().any(braille)),
         "the dial's arc: {lines:#?}"
     );
-    assert!(
-        lines.iter().any(|l| l.contains("95.8 Mbps")),
-        "{lines:#?}"
-    );
+    assert!(lines.iter().any(|l| l.contains("95.8 Mbps")), "{lines:#?}");
     assert!(lines.iter().any(|l| l.contains("500")), "the range's end");
 }
