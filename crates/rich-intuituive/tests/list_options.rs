@@ -321,3 +321,42 @@ fn a_lists_frozen_items_stay_at_the_top() {
     assert_eq!(shown[0], "line 0");
     assert!(shown.contains(&"line 5000".to_string()), "{shown:?}");
 }
+
+/// Separators between options (OptionList's): a rule after an item, which
+/// is no item: the keys pass over it, a click on it selects nothing, and
+/// the list scrolls by the lines it takes.
+#[test]
+fn separators_sit_between_items_and_are_none() {
+    let app = App::new(|| {
+        let selected = signal(0usize);
+        column([
+            list(fruit, selected)
+                .separator_after(|i| i == 0 || i == 2)
+                .fixed(4),
+            text!("at {selected}").fixed(1),
+        ])
+    });
+    let mut driver = app.driver(8, 5);
+    driver.settle();
+    assert_eq!(
+        rows(&driver),
+        ["apple", "────────", "banana", "cherry", "at 0"]
+    );
+    // A click on the rule selects nothing.
+    driver.event(Event::Mouse(Mouse::new(
+        MouseKind::Down(Button::Left),
+        2,
+        1,
+    )));
+    driver.settle();
+    assert_eq!(rows(&driver)[4], "at 0");
+    // ↓ goes from apple to banana, over the rule.
+    driver.press("down");
+    assert_eq!(rows(&driver)[4], "at 1");
+    // Down to damson: the view scrolls by the lines the rules take.
+    driver.press("down down");
+    let screen = rows(&driver);
+    assert_eq!(screen[4], "at 3");
+    assert_eq!(screen[3], "damson", "{screen:?}");
+    assert_eq!(screen[2], "────────", "{screen:?}");
+}

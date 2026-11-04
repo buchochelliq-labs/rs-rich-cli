@@ -50,7 +50,7 @@ Modules are under `crates/rich-intuituive/src/`.
 | `Checkbox` | `checkbox`, `checkbox_tri`, `checkbox_of` (`controls.rs`) | ✓ | Has a mixed state, which Textual's lacks |
 | `Collapsible` | `collapsible(title, open, child)` (`collapsible.rs`) | partial | The title is a fixed `String`. A tool-call card needs a title that follows state, plus a status slot (spinner, ✓/✗) and a summary line. Core. |
 | `ContentSwitcher` | `switch(key, build)`, `keyed`, `.keep_last(n)` (`builtin.rs`) | ✓ | |
-| `DataTable` | `table`, `table_with`, `virtual_table`, `TableOptions` (`widgets.rs`) | partial | Already has sorting, a row cursor, a cell cursor (`.cells`), column highlight, frozen columns and rows (`freeze_rows`, 0.0.24), zebra rows (`row_style`), resizable columns, rows from a closure (so cell updates are signal writes) and virtual rows. Missing: row labels, and cells holding renderables rather than markup. Core. |
+| `DataTable` | `table`, `table_with`, `virtual_table`, `TableOptions` (`widgets.rs`) | ✓ | Sorting, a row cursor, a cell cursor (`.cells`), column highlight, frozen columns and rows (`freeze_rows`, 0.0.24), zebra rows (`row_style`), resizable columns, rows from a closure (so cell updates are signal writes) and virtual rows; row labels (`row_labels`) and cells holding renderables (`renderables`), 0.0.25. |
 | `Digits` | `digits` (`digits.rs`) | ✓ | |
 | `DirectoryTree` | `files::miller`, `files::file_list`, `files::pick_file` (`files` feature); generic `tree_lazy` | partial | No tree view of a directory. Plugin: `files::dir_tree` on the core's `tree_lazy`. |
 | `Footer` | `key_hints`, `key_hints_with` (`bars.rs`) | ✓ | Built from described bindings, greyed when unavailable |
@@ -67,7 +67,7 @@ Modules are under `crates/rich-intuituive/src/`.
 | `Markdown` | `renderable(Markdown::new(..))`, rs-rich's port (`crates/rich/src/markdown.rs`) | partial | Static only. The whole document is parsed and drawn again on each change. Links cannot be clicked or focused, code blocks are not retained nodes, and nothing streams: Textual has `Markdown.append` and `MarkdownStream`. Core. **Cornacai's first need.** |
 | `MarkdownViewer` | `markdown_viewer(load)`, `MarkdownViewer` (`go`, `back`, `forward`, `toc`, `on_link`), `files::markdown_loader(root)` (`markdown_viewer.rs`) | ✓ | The loader is the app's (the `files` plugin reads files). Anchors are GitHub's slugs of the ATX and setext headings (#805) |
 | `MaskedInput` | — | ✗ | `.mask(char)` is a password mask, not a template such as `9999-99-99` or `>AAA`. Core. |
-| `OptionList` | `list`, `.multiline()`, `list_search`, `.row_style` | ✓ | Missing separators between options. Small, tracked with `ListView`. |
+| `OptionList` | `list`, `.multiline()`, `list_search`, `.row_style`, `.separator_after` | ✓ | Separators between options (`separator_after`, on `list` since 0.0.25, as on `list_of`) |
 | `Placeholder` | `fx::placeholder` | partial | `fx::placeholder` is a loading skeleton. Textual's is for laying out a prototype: each one labelled with its id, in cycling colours. Core, small. |
 | `Pretty` | `renderable(Pretty::new(&value))` or `Pretty::from_value` (rs-rich's port) | ✓ | Rust has no reflection, so it pretty-prints `Debug` or a `PrettyValue` |
 | `ProgressBar` | `renderable(rich::ProgressBar)`, `seg_gauge`, `jobs_panel` | partial | No progress node that shows a bar, a percentage and an ETA, with an indeterminate pulse. Core, small. |
@@ -91,7 +91,7 @@ Modules are under `crates/rich-intuituive/src/`.
 | `Tree` | `tree`, `tree_keyed`, `tree_lazy`, `tree_reveal`, `tree_table` (`tree.rs`, `tree_table.rs`) | ✓ | Adds rows that nest inside a table |
 | `Welcome` | — | won't-do | A demo splash for Textual's own `textual` command, with no use in an app |
 
-**Counts:** 44 widgets. 28 ✓, 13 partial, 2 ✗, 1 won't-do.
+**Counts:** 44 widgets. 29 ✓, 12 partial, 2 ✗, 1 won't-do.
 
 ## Framework features
 
@@ -100,7 +100,7 @@ Modules are under `crates/rich-intuituive/src/`.
 | **TCSS selectors** | type, `#id`, `.class`, descendant, child `>`, `*`, `&` nesting | `Stylesheet` (`sheet.rs`): kind, `#name`, `.class`, `*`, descendant, child `>`, nesting with `&` (read as the flattened rule) | ✓ | Sibling combinators (`+`, `~`), which Textual lacks too (#812) |
 | **Pseudo-classes** | `:focus`, `:focus-within`, `:hover`, `:disabled`, `:blur`, `:can-focus`, `:dark`, `:light`, `:first-child`, `:last-child`, `:odd`, `:even`, `:empty`, `:inline`, … | `:focus`, `:focus-within`, `:hover`, `:selected`, `:disabled`, `:error`, `:blur`, `:enabled`, `:can-focus`, `:first-child`, `:last-child`, `:odd`, `:even`, `:empty`, `:dark`, `:light` | partial | `:inline`, `:first-of-type` and the like; states change colours and text styles, not layout (#812) |
 | **Variables** | `$name: value;` declared in CSS; theme variables | `$name: value;` declared at the top level (values may use earlier ones); a `$name` not declared names a theme style | ✓ | (#812) |
-| **Properties** | about 90 (width, height, margin, offset, opacity, tint, visibility, outline, scrollbar colours, hatch, keyline, layer, …) | about 35: colours, text style, border (titles, sides, collapse), text align, wrap and overflow, size and its limits, padding, margin, visibility, scrollbar colours, gap, grid tracks, display, dock, flex alignment | partial | Offset, opacity and tint, outline, hatch, keyline, `scrollbar-color-hover` and the scrollbar's size (#812's later slices) |
+| **Properties** | about 90 (width, height, margin, offset, opacity, tint, visibility, outline, scrollbar colours, hatch, keyline, layer, …) | about 45: colours, text style, border (titles, sides, collapse), text align, wrap and overflow, size and its limits, padding, margin, visibility, scrollbar colours (hover too) and size, gap, grid tracks, display, dock, flex alignment; offset, opacity, tint, outline, hatch and keyline (0.0.25) | ✓ | Textual's `layer`s and the rest of its long tail; `opacity`, `tint`, `outline` and `hatch` are set by kind, name and fixed classes, not states (#812) |
 | **@media / responsive** | horizontal and vertical breakpoints that set classes (`-narrow`); no `@media` | `@media (min-width: N) and …`, `.hide_below`, `viewport()` | ✓ | More than Textual |
 | **Live CSS reload** | `textual run --dev` | `App::stylesheet_file`, `App::theme_file` are read again when the file changes | ✓ | |
 | **Layout: grid, dock, layers, align, fr** | all | `grid` (tracks, spans), `dock`, `layers`, `Align` and `Justify`, `Size::Flex`/`3fr`, `place` (`Origin`, `Offset`), the `Solver`, `treemap`, draggable `split` | ✓ | |
@@ -129,11 +129,11 @@ Modules are under `crates/rich-intuituive/src/`.
 | **Web** | `textual serve`, textual-web | `rich serve` / rs-rich-web: xterm.js or a DOM renderer with ARIA, a session per tab | ✓ | |
 | **Accessibility** | limited | roles, states, announcements, linear text mode, screen-reader guide (`a11y.rs`) | ✓ | More than Textual |
 | **Markdown streaming** | `Markdown.append`, `Markdown.get_stream` → `MarkdownStream.write` (batches fragments that arrive faster than they can be drawn) | — | ✗ | The top gap for Cornacai |
-| **TextArea** | tree-sitter highlighting, `TextAreaTheme`s, undo and redo, selection, soft wrap, read-only, line numbers, bracket matching, tab behaviour | all, bracket matching and editor themes included (0.0.24); highlighting through the console's highlighter (syntect, or tree-sitter through rs-rich-lumis); Vim mode | partial | Highlighting state from above the view |
-| **DataTable** | sorting, cell, row, column and no cursor, fixed rows and columns, zebra stripes, `update_cell`, virtual size | all but row labels and renderable cells (fixed rows: `freeze_rows`, 0.0.24) | partial | Row labels, renderable cells |
+| **TextArea** | tree-sitter highlighting, `TextAreaTheme`s, undo and redo, selection, soft wrap, read-only, line numbers, bracket matching, tab behaviour | all, bracket matching and editor themes included (0.0.24); highlighting through the console's highlighter (syntect, or tree-sitter through rs-rich-lumis), with the state from above the view carried into it (0.0.25); Vim mode | ✓ | |
+| **DataTable** | sorting, cell, row, column and no cursor, fixed rows and columns, zebra stripes, `update_cell`, virtual size | all (fixed rows: `freeze_rows`, 0.0.24; row labels and renderable cells, 0.0.25) | ✓ | |
 | **Inline apps** | `run(inline=True)` | `App::inline(height)`, `print_above` | ✓ | |
 
-**Counts:** 35 areas. 15 ✓, 16 partial, 3 ✗, 1 won't-do.
+**Counts:** 35 areas. 18 ✓, 13 partial, 3 ✗, 1 won't-do.
 
 ## Prioritised gaps
 

@@ -498,13 +498,37 @@ impl Node {
         self
     }
 
-    /// On a [`list_of`]: draw a rule under item `i` while `after(i)` holds
-    /// (OptionList's `None` between options). The cursor never stops on it.
+    /// On a [`list_of`] or a [`list`](crate::list): draw a rule under
+    /// item `i` while `after(i)` holds (OptionList's `None` between
+    /// options), across the list in the theme's border style. It is no
+    /// item: the cursor never stops on it, clicks pass over it, and the
+    /// indices stay the items'.
+    ///
+    /// ```
+    /// use intuituive::prelude::*;
+    ///
+    /// let app = App::new(|| {
+    ///     let items = || vec!["Open".to_string(), "Save".into(), "Quit".into()];
+    ///     list(items, signal(0)).separator_after(|i| i == 1).on_key("q", |cx| cx.quit())
+    /// });
+    /// let screen = app.render_with(&["down", "down", "q"], 6, 4).unwrap();
+    /// assert_eq!(screen, ["Open  ", "Save  ", "──────", "Quit  "]);
+    /// ```
     pub fn separator_after(self, after: impl Fn(usize) -> bool + 'static) -> Node {
-        self.widget_mut(|list: &mut NodeList| {
-            *list.shared.separator.borrow_mut() = Some(Box::new(after));
-        });
-        self
+        let after: Rc<dyn Fn(usize) -> bool> = Rc::new(after);
+        let shared = after.clone();
+        let of_nodes = self
+            .widget_mut(|list: &mut NodeList| {
+                *list.shared.separator.borrow_mut() = Some(Box::new(move |i| shared(i)));
+            })
+            .is_some();
+        if of_nodes {
+            return self;
+        }
+        self.list_options("separator_after", move |options| {
+            let after = after.clone();
+            options.separators = Some(Box::new(move |i| after(i)));
+        })
     }
 
     /// On a [`list_of`]: item `i` is disabled while `disabled(i)` holds:

@@ -7,10 +7,12 @@
 //! highlighter, with line numbers, wrapped or scrolled sideways, and with
 //! the mouse.
 //!
-//! Only the lines in view are wrapped, highlighted and drawn, so a file of a
-//! hundred thousand lines scrolls as fast as a short one. Highlighting
-//! starts at the first line in view, so a construct that began above it (a
-//! long comment, a multi-line string) is not known to the lines it covers.
+//! Only the lines in view are wrapped and drawn, so a file of a hundred
+//! thousand lines scrolls as fast as a short one. Highlighting carries
+//! what the lines above the view leave (a long comment, a multi-line
+//! string that began above it): the lines from the top, or from
+//! 256 lines above the view, are highlighted once and kept,
+//! and an edit highlights again from a little above the line it changed.
 
 use std::cell::{Cell, RefCell};
 use std::ops::Range;
@@ -138,10 +140,37 @@ struct Looks {
     matches: Vec<(Pos, Pos)>,
 }
 
+/// The highlighted lines: highlighted in one pass from `base` (the top,
+/// unless the view is further down than [`MAX_CONTEXT`] lines), so a
+/// construct that starts above the view (a block comment, a string over
+/// several lines) is highlighted as such inside it.
 struct Highlight {
-    key: (usize, usize, u64),
+    /// The language and theme it was highlighted in.
+    look: (String, String),
+    revision: u64,
+    base: usize,
+    /// Lines `base..`'s spans, and a hash of each line's text: an edit
+    /// leaves the lines before the first it changed as they were.
     lines: Vec<Spans>,
+    hashes: Vec<u64>,
     default: Style,
+}
+
+/// The most lines above the view highlighted with it, for the state they
+/// leave: a construct that starts further up is not seen.
+const MAX_CONTEXT: usize = 256;
+
+/// How far above the first line an edit changed highlighting starts
+/// again, tried in turn: a start is taken once it gives the lines between
+/// it and that line the spans they had, so it left the highlighter in the
+/// same state. Failing both, from the top.
+const RESTARTS: [usize; 2] = [16, 256];
+
+fn hash_line(line: &str) -> u64 {
+    use std::hash::{Hash, Hasher};
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    line.hash(&mut hasher);
+    hasher.finish()
 }
 
 pub(crate) struct TextArea {
@@ -409,20 +438,13 @@ impl TextArea {
         rows
     }
 
-    /// Each line of `lines` highlighted: byte ranges and their styles, and
-    /// the style for what no range covers. `None` without a language.
-    fn highlighted(&self, console: &Console, lines: Range<usize>) -> Option<()> {
+    /// The lines `view` highlighted, with what the lines above them leave
+    /// (see [`Highlight`]): byte ranges and their styles, and the style for
+    /// what no range covers. `None` without a language. What an edit left
+    /// alone, and the lines already highlighted when the view scrolls, are
+    /// not highlighted again.
+    fn highlighted(&self, console: &Console, view: Range<usize>) -> Option<()> {
         let language = self.options.language.as_deref()?;
-        let key = (lines.start, lines.end, self.buffer.revision());
-        if self
-            .highlight
-            .borrow()
-            .as_ref()
-            .is_some_and(|h| h.key == key)
-        {
-            return Some(());
-        }
-        let code = self.buffer.lines()[lines.clone()].join("\n");
         let (engine, theme) = match console.code_highlighting() {
             Some(chosen) => (chosen.highlighter.clone(), chosen.theme.clone()),
             #[cfg(feature = "syntax")]
@@ -432,11 +454,43 @@ impl TextArea {
             None => return None,
         };
         let theme = theme.unwrap_or_else(|| engine.default_theme().to_string());
-        let out = engine.highlight(&code, Some(language), &theme).ok()?;
-        *self.highlight.borrow_mut() = Some(Highlight {
-            key,
-            lines: out
-                .lines
+        let look = (language.to_string(), theme.clone());
+        let lines = self.buffer.lines();
+        let revision = self.buffer.revision();
+        let end = view.end.min(lines.len());
+        let floor = view.start.saturating_sub(MAX_CONTEXT);
+        let mut cache = self.highlight.borrow_mut();
+        // What still holds of the last highlighting: the lines before the
+        // first one an edit changed.
+        if let Some(h) = cache.as_mut() {
+            if h.look != look || h.base > view.start {
+                *cache = None;
+            } else if h.revision != revision {
+                let kept = h
+                    .hashes
+                    .iter()
+                    .zip(lines.get(h.base..).unwrap_or_default())
+                    .take_while(|(hash, line)| **hash == hash_line(line))
+                    .count();
+                h.lines.truncate(kept);
+                h.hashes.truncate(kept);
+                h.revision = revision;
+            }
+        }
+        if let Some(h) = cache.as_ref()
+            && h.base + h.lines.len() >= end
+        {
+            return Some(());
+        }
+        // More is needed: on from what holds, when it reaches near the
+        // view, else afresh. A little past the view, for scrolling on.
+        let target = (end + view.len().max(1)).min(lines.len());
+        let highlight = |from: usize| -> Option<rich::HighlightedCode> {
+            let code = lines[from..target].join("\n");
+            engine.highlight(&code, Some(language), &theme).ok()
+        };
+        let spans_of = |out: rich::HighlightedCode| -> Vec<Spans> {
+            out.lines
                 .into_iter()
                 .map(|line| {
                     line.spans
@@ -444,9 +498,48 @@ impl TextArea {
                         .map(|span| (span.range, span.style))
                         .collect()
                 })
-                .collect(),
-            default: out.default_style,
+                .collect()
+        };
+        let resumed = cache.as_mut().and_then(|h| {
+            let upto = h.base + h.lines.len();
+            if upto <= h.base || upto < floor {
+                return None;
+            }
+            let starts = RESTARTS
+                .iter()
+                .map(|back| upto.saturating_sub(*back).max(h.base))
+                .chain([h.base]);
+            for from in starts {
+                let mut fresh = spans_of(highlight(from)?);
+                fresh.resize(target - from, Vec::new());
+                // The lines both have must agree, or the state differs.
+                let agree = from == h.base || fresh[..upto - from] == h.lines[from - h.base..];
+                if agree {
+                    h.lines.extend(fresh.drain(upto - from..));
+                    h.hashes
+                        .extend(lines[upto..target].iter().map(|line| hash_line(line)));
+                    return Some(());
+                }
+            }
+            None
         });
+        if resumed.is_none() {
+            let out = highlight(floor)?;
+            let default = out.default_style.clone();
+            let mut spans = spans_of(out);
+            spans.resize(target - floor, Vec::new());
+            *cache = Some(Highlight {
+                look,
+                revision,
+                base: floor,
+                lines: spans,
+                hashes: lines[floor..target]
+                    .iter()
+                    .map(|line| hash_line(line))
+                    .collect(),
+                default,
+            });
+        }
         Some(())
     }
 
@@ -466,20 +559,14 @@ impl TextArea {
     /// The segments of `row`, from cell `left` (unwrapped), at most `width`
     /// cells: its text in the highlighter's styles, tabs as spaces, the
     /// selection reversed.
-    fn row_segments(
-        &self,
-        row: Row,
-        first_line: usize,
-        left: usize,
-        width: usize,
-        looks: &Looks,
-    ) -> Vec<Segment> {
+    fn row_segments(&self, row: Row, left: usize, width: usize, looks: &Looks) -> Vec<Segment> {
         let selection = &looks.selection;
         let line = self.buffer.line(row.line);
         let highlight = self.highlight.borrow();
-        let spans: Option<(&Spans, &Style)> = highlight
-            .as_ref()
-            .and_then(|h| Some((h.lines.get(row.line - first_line)?, &h.default)));
+        let spans: Option<(&Spans, &Style)> = highlight.as_ref().and_then(|h| {
+            let at = row.line.checked_sub(h.base)?;
+            Some((h.lines.get(at)?, &h.default))
+        });
         let selected = self.buffer.selection().and_then(|(start, end)| {
             (start.line <= row.line && row.line <= end.line).then(|| {
                 let from = if start.line == row.line { start.at } else { 0 };
@@ -1181,7 +1268,6 @@ impl Widget for TextArea {
         {
             *self.highlight.borrow_mut() = None;
         }
-        let first_line = rows.first().map_or(0, |row| row.line);
         let gutter = self.gutter();
         let text_width = width.saturating_sub(gutter) as usize;
         let left = if self.options.soft_wrap {
@@ -1244,7 +1330,7 @@ impl Widget for TextArea {
                     line.push(Segment::new(placeholder.clone(), Some(hint.clone())));
                 }
             } else {
-                let segments = self.row_segments(*row, first_line, left, text_width, &looks);
+                let segments = self.row_segments(*row, left, text_width, &looks);
                 match &base {
                     Some(base) => line.extend(segments.into_iter().map(|mut segment| {
                         segment.style = Some(match &segment.style {
@@ -1299,7 +1385,7 @@ impl Widget for TextArea {
                 canvas.lines_at(origin, 0, width, height, &lines);
                 let (top, _) = self.top.get();
                 let (count, view) = (self.buffer.line_count(), height as usize);
-                look.paint(cx.console(), canvas, at, top, count, view);
+                look.paint(cx, canvas, at, top, count, view);
                 self.bar_at.set(Some((at, count, view)));
             }
             _ => {

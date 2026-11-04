@@ -247,6 +247,46 @@ Fixes 2, 4, 10, 12 and 14 of
   `paint` (paint orders). New fixture `overlays.html`; Chrome's snapshots
   of `search-results.html` and `product-grid.html` read scrolled.
 
+### intuiTUIve: the rest of Textual parity (0.0.25, #812)
+
+- **Stylesheets cover #812's last properties.** `offset` (and `offset-x`,
+  `offset-y`) draws a node moved from where it is laid out, its
+  neighbours staying put. `opacity` (`50%` or `0.5`) fades a node's
+  colours, its children's with them, into the ground behind it (the
+  theme's `screen` style); `tint: $accent 20%` moves them towards a
+  colour. `outline` is a `border` drawn over the node's edge, taking no
+  room. `hatch` (`left`, `right`, `cross`, `horizontal`, `vertical` or a
+  quoted character, then a colour and a percentage) fills its blank
+  cells. `keyline: thin red` draws lines round and between a container's
+  children, as `border-collapse: collapse` does. `scrollbar-color-hover`
+  colours a thumb while the pointer is over its bar (the
+  `scrollbar.thumb.hover` theme style), and `scrollbar-size` (or
+  `scrollbar-size-horizontal`, `scrollbar-size-vertical`) sets how many
+  cells a node's bars take, `0` hiding one. These are layout, set by a
+  node's kind, name and fixed classes. The parser's bounds are as before.
+- **`Scrollbar::size(cells)`**: a bar more than one cell across, or none.
+- **`DataTable` parity: row labels and renderable cells.**
+  `TableOptions::row_labels(|i| markup)` draws each row's label in a
+  column of its own at the left (the `table.row_label` theme style, bold
+  by default), outside the highlight and the scroll across.
+  `TableOptions::renderables(|row, column| ..)` draws a cell with any rich
+  renderable in place of its markup, which still sorts and is read aloud;
+  `Auto` columns measure it and multi-line rows take its height. Both are
+  keyed by a row's index among the rows given, so they follow it when the
+  table sorts its rows.
+- **Separators in an option list.** `Node::separator_after(|i| ..)`, a
+  `list_of`'s, now works on a markup `list` too: a rule under item `i` in
+  the theme's border style, which the cursor and clicks pass over and the
+  list scrolls by.
+- **A `text_area` highlights what starts above its view.** Highlighting
+  carries the state the lines above leave, so a block comment or a
+  multi-line string that opens above the view is highlighted as such
+  inside it. The lines from the top (or from 256 lines above the view)
+  are highlighted once and kept; an edit highlights again only from a
+  little above the line it changed, once that start gives the lines it
+  covers their old spans, and scrolling on highlights only what it brings
+  in.
+
 ### intuiTUIve: the stylesheet fuzz timeout (rs-rich-intuituive)
 
 - **Fixed: a stylesheet could take seconds and gigabytes to parse.** The

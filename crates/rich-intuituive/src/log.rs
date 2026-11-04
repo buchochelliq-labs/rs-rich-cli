@@ -998,7 +998,7 @@ impl Widget for LogView {
         // The bar, where the lines in view are among those that pass.
         self.bar_at = None;
         if let (Some(look), Some(at)) = (look, bar) {
-            look.paint(console, canvas, at, first, passing, height);
+            look.paint(cx, canvas, at, first, passing, height);
             self.bar_at = Some((at, first, passing));
         }
         self.fast = fast;

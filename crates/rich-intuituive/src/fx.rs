@@ -761,7 +761,7 @@ fn colour(c: ColorTriplet) -> Color {
 }
 
 /// `t` (0 to 1) of the way from `a` to `b`.
-fn mix(a: ColorTriplet, b: ColorTriplet, t: f64) -> ColorTriplet {
+pub(crate) fn mix(a: ColorTriplet, b: ColorTriplet, t: f64) -> ColorTriplet {
     let t = t.clamp(0.0, 1.0);
     let m = |p: u8, q: u8| (f64::from(p) + (f64::from(q) - f64::from(p)) * t).round() as u8;
     ColorTriplet::new(m(a.red, b.red), m(a.green, b.green), m(a.blue, b.blue))

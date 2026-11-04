@@ -249,6 +249,9 @@ pub(crate) struct ListOptions {
     range: Option<Signal<Option<usize>>>,
     /// The leading items that stay in view ([`Node::freeze_rows`]).
     frozen: usize,
+    /// Whether a line separates item `i` from the next
+    /// ([`Node::separator_after`]).
+    pub(crate) separators: Option<Box<dyn Fn(usize) -> bool>>,
 }
 
 /// Where a list's items come from: every item from one closure, or a count
@@ -964,13 +967,24 @@ impl List {
     ) -> Vec<Vec<Segment>> {
         let options = self.options.borrow();
         let trailing = options.trailing.as_ref().map(|trailing| trailing(i));
-        row_lines(
+        let mut lines = row_lines(
             console,
             &items.get(i),
             trailing.as_deref(),
             width,
             options.multiline,
-        )
+        );
+        // A separator after it is a line of its own, drawn as one.
+        if self.separated(i) {
+            lines.push(Vec::new());
+        }
+        lines
+    }
+
+    /// Whether a separator follows item `i`.
+    fn separated(&self, i: usize) -> bool {
+        let options = self.options.borrow();
+        options.separators.as_ref().is_some_and(|after| after(i))
     }
 
     /// Lay the list out `width` x `height`: its items' lines, rendered
@@ -1015,7 +1029,7 @@ impl List {
                 if multiline {
                     lines(i + frozen).len()
                 } else {
-                    1
+                    1 + usize::from(self.separated(i + frozen))
                 }
             };
             frozen
@@ -1032,7 +1046,9 @@ impl List {
         let mut used = 0usize;
         for i in (first..len).take_while(|_| view > 0) {
             let item = lines(i);
-            if used > 0 && used + item.len() > view {
+            // An item fits without the separator after it.
+            let own = item.len() - usize::from(self.separated(i));
+            if used > 0 && used + own > view {
                 break;
             }
             used += item.len();
@@ -1055,7 +1071,7 @@ impl List {
                 .map(|i| self.lines_of(console, items, i, width).len())
                 .sum()
         } else {
-            items.len()
+            items.len() + (0..items.len()).filter(|&i| self.separated(i)).count()
         }
     }
 
@@ -1226,6 +1242,7 @@ impl Widget for List {
         let carrying = self.carried.get().is_some_and(|carried| carried.get());
         let marked = crate::a11y::text_mode();
         let highlight = cx.style("selected", "reverse");
+        let separator_style = cx.theme().border(false);
         // A range from its anchor to the cursor, the cursor's own row
         // aside.
         let range = options
@@ -1289,7 +1306,23 @@ impl Widget for List {
                     Segment::new(" ", style)
                 });
             let top = rows.len();
+            let separated = options.separators.as_ref().is_some_and(|after| after(i));
+            let own = lines.len() - usize::from(separated);
             for (n, line) in lines.iter().enumerate() {
+                if n == own {
+                    // The separator: a rule across in the theme's border
+                    // style, as a `list_of`'s, no item's: the cursor and
+                    // clicks pass over it (blank for a screen reader).
+                    let rule = if marked { " " } else { "─" };
+                    rows.push((
+                        None,
+                        vec![Segment::new(
+                            rule.repeat(area.width as usize),
+                            Some(separator_style.clone()),
+                        )],
+                    ));
+                    continue;
+                }
                 let mut out = Vec::new();
                 if carrying && is_selected {
                     out.push(Segment::new("↕ ", None));
@@ -1333,7 +1366,7 @@ impl Widget for List {
                 rows.push((Some(i), out));
             }
             if is_selected {
-                cursor = Some((top, lines.len()));
+                cursor = Some((top, own));
             }
         }
         // Bottom to top: the first item at the bottom, each item's own
@@ -1410,7 +1443,7 @@ impl Widget for List {
                 let look = bar.as_ref().expect("a bar was laid out");
                 let view = (laid.items.len() - laid.frozen).max(1);
                 let (first, len) = (laid.first - laid.frozen, len - laid.frozen);
-                look.paint(console, canvas, at, first, len, view);
+                look.paint(cx, canvas, at, first, len, view);
                 self.bar_at.set(Some((at, first, len, view)));
             }
         }

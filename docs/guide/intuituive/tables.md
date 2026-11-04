@@ -209,6 +209,20 @@ table_with(
   read, or set to scroll, as a list's does.
 - **`Column::overflow(Overflow::Crop)`** cuts the column's cells at its
   edge, as ratatui's table does, rather than with `…`.
+- **`.row_labels(|i| markup)`** gives each row a label (Textual's row
+  labels), in a column of its own at the left in the theme's
+  `table.row_label` style (bold by default). It has no title, stays put
+  when the table scrolls across, is outside the selection's highlight,
+  and follows its row when the table sorts: `i` is the row's index among
+  the rows given.
+- **`.renderables(|row, column| Some(renderable))`** draws a cell with a
+  rich renderable (a `Panel`, a `Syntax`, a `Pretty`, another `Table`) in
+  place of its markup. `row` is the row's index among the rows given, so
+  the renderable follows its row through a sort, and `column` its index
+  among all the columns; `None` draws the markup, which still sorts the
+  row and is what a screen reader reads. An `Auto` column is as wide as
+  its renderables measure; with `.multiline()` a row is as tall as its
+  tallest renderable, else a renderable shows its first lines.
 - **`table_optional(columns, rows, selected, options)`** takes a
   `Signal<Option<usize>>`: `None` selects nothing and shows no highlight,
   and ↓ selects the first row.
@@ -403,8 +417,12 @@ row([my_view, scrollbar(top, move || lines.get().len(), || 0, Scrollbar::new())]
   `DOUBLE_VERTICAL`, `HORIZONTAL` or `DOUBLE_HORIZONTAL` (ratatui's).
   **`.thumb(..)`**, **`.track(..)`** (`None` for a blank track) and
   **`.ends(begin, end)`** change single symbols.
+- **`.size(cells)`** makes it more than one cell across, or (0) hides
+  it; a stylesheet's `scrollbar-size` does the same where code does not.
 - The theme's `scrollbar`, `scrollbar.thumb` and `scrollbar.arrow` styles
-  draw it.
+  draw it, and `scrollbar.thumb.hover`, when the theme has it (a
+  stylesheet's `scrollbar-color-hover`), the thumb while the pointer is
+  over the bar.
 - With the mouse, a press on the track pages, a press on an arrow steps,
   and dragging the thumb scrolls. On a list, a table or a tree the
   selection comes along into the view.

@@ -339,8 +339,9 @@ impl Widget for VirtualScroll {
                 .is_some_and(|look| look.wanted(total as usize, view_h as usize))
         };
         let wanted = overflows(self.chunks.iter().sum());
-        let width = if wanted && rect.width > 1 {
-            rect.width - 1
+        let thickness = self.bar.look.as_ref().map_or(1, |look| look.thickness());
+        let width = if wanted && rect.width > thickness {
+            rect.width - thickness
         } else {
             rect.width
         };
@@ -509,9 +510,10 @@ impl Widget for VirtualScroll {
         if view_w < canvas.width()
             && let Some(look) = &self.bar.look
         {
-            let rect = Rect::new(canvas.width() - 1, 0, 1, view_h);
+            let t = canvas.width() - view_w;
+            let rect = Rect::new(view_w, 0, t, view_h);
             look.paint(
-                cx.console(),
+                cx,
                 canvas,
                 rect,
                 self.top as usize,
