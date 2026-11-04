@@ -1,14 +1,19 @@
-# Publish a release: release-kit's workflow (https://github.com/buchochelliq-labs/release-kit,
-# v1.7.0, installed under .github/release-kit/), with this repository's own
-# jobs. It started from the kit's template; it is this repository's file.
+# Publish a release: the workflow of rab, the Release Asset Bundle (formerly
+# release-kit; https://github.com/buchochelliq-labs/release-asset-bundle,
+# v2.0.0, installed under .github/rab/, docs at
+# https://buchochelliq-labs.github.io/release-asset-bundle/), with this
+# repository's own jobs. It started from the kit's template; it is this
+# repository's file.
 #
-# `python3 .github/release-kit/scripts/release.py tag`, on main after the
+# `python3 .github/rab/scripts/release.py tag`, on main after the
 # release pull request merges, pushes one annotated record tag per package of
-# release-kit.yml (they start nothing) and then `release-X.Y.Z`, which starts
+# rab.yml (they start nothing) and then `release-X.Y.Z`, which starts
 # this run: the gate checks the tag once, CI runs once on the tagged commit,
 # the wheels are built and tested, and every package not yet on crates.io or
-# PyPI is published, then waited for and used as a stranger would. A run that
-# fails is fixed and resumed with `release.py tag` again (docs/BRANCHING.md).
+# PyPI is published, then waited for and used as a stranger would. The last
+# job, `record`, uploads the run's release record (the `release-record`
+# artifact) whatever happened before it. A run that fails is fixed and
+# resumed with `release.py tag` again (docs/BRANCHING.md).
 #
 # Publishing is permanent, so only the publish jobs write, and only from the
 # `crates-io` and `pypi` environments, whose trusted publishers name this
@@ -59,7 +64,7 @@ jobs:
           ref: refs/tags/${{ inputs.tag || github.ref_name }}
           persist-credentials: false
       - id: gate
-        uses: ./.github/release-kit/gate
+        uses: ./.github/rab/gate
         with:
           tag: ${{ inputs.tag || github.ref_name }}
           verify-only: ${{ inputs.verify_only == true }}
@@ -74,7 +79,7 @@ jobs:
     with:
       checkout_ref: ${{ needs.gate.outputs.sha }}
 
-  # The wheels release-kit.yml declares (a maturin artifact per target, each
+  # The wheels rab.yml declares (a maturin artifact per target, each
   # installed and imported, the linux x86_64 one also tested against rich
   # 15.0.0), from the tagged commit. Skipped in a verify-only run.
   build:
@@ -83,12 +88,12 @@ jobs:
     permissions:
       contents: read
       actions: read   # a ci-artifact reads this repository's CI artifacts
-    uses: ./.github/workflows/release-kit-build.yml
+    uses: ./.github/workflows/rab-build.yml
     with:
       sha: ${{ needs.gate.outputs.sha }}
       selection: ${{ needs.gate.outputs.selection }}
 
-  # This repository's own check, which release-kit does not carry: each
+  # This repository's own check, which rab does not carry: each
   # selected crate's version bump must fit its change by Cargo's rules,
   # against its last release on crates.io (cargo-semver-checks, pinned in
   # api/tools.toml, as CI's `api` job runs it), and the selected manifests and
@@ -145,7 +150,7 @@ jobs:
           VERSION: ${{ steps.tools.outputs.cargo_semver_checks }}
         run: cargo install --locked cargo-semver-checks --version "$VERSION"
       # The gate's selection, crates only, as scripts/release.py reads it:
-      # {crate: version}, in release-kit.yml's order.
+      # {crate: version}, in rab.yml's order.
       - name: Selected manifests, internal requirements and version bumps agree
         env:
           SELECTION: ${{ needs.gate.outputs.selection }}
@@ -192,11 +197,11 @@ jobs:
         if: needs.gate.outputs.verify-only != 'true'
         env:
           SELECTION: ${{ needs.gate.outputs.selection }}
-        run: python3 .github/release-kit/scripts/release.py preflight --registry crates.io --selection "$SELECTION"
+        run: python3 .github/rab/scripts/release.py preflight --registry crates.io --selection "$SELECTION"
       - id: auth
         if: steps.preflight.outputs.existing_crate == 'true'
         uses: rust-lang/crates-io-auth-action@3268eb413133e2960fa4ae0e963ca76380c54cd9 # v1.0.6
-      - uses: ./.github/release-kit/publish-crates
+      - uses: ./.github/rab/publish-crates
         with:
           selection: ${{ needs.gate.outputs.selection }}
           new-crates: ${{ steps.preflight.outputs.new_crates || '[]' }}
@@ -233,7 +238,7 @@ jobs:
         with:
           pattern: release--*
           path: dist
-      - uses: ./.github/release-kit/publish-pypi
+      - uses: ./.github/rab/publish-pypi
         with:
           selection: ${{ needs.gate.outputs.selection }}
           verify-only: ${{ needs.gate.outputs.verify-only }}
@@ -309,3 +314,61 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: gh workflow run docs.yml --repo "$GITHUB_REPOSITORY" --ref main
+
+  # The run's release record (rab's `record` job,
+  # https://buchochelliq-labs.github.io/release-asset-bundle/release-record/):
+  # the release, its commit, each job's result and every package's outcome,
+  # uploaded as the `release-record` artifact even when publishing failed.
+  # Its `needs` lists every job of this file that gates or publishes; it
+  # refuses a selected package whose publish job it does not need. It writes
+  # nothing anywhere else and needs no permission beyond `contents: read`.
+  record:
+    needs: [gate, ci, build, semver, publish-crates, publish-pypi, publish-playground]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: refs/tags/${{ inputs.tag || github.ref_name }}
+          persist-credentials: false
+      # As in the build workflow and the semver job: the release tag must
+      # still name the commit the gate checked before anything from the
+      # checkout runs. (When the gate failed there is no such commit; the
+      # record then says so.)
+      - name: Check the tag still names the gated commit
+        shell: bash
+        env:
+          TAG: ${{ inputs.tag || github.ref_name }}
+          SHA: ${{ needs.gate.outputs.sha }}
+        run: |
+          at=$(git rev-parse HEAD)
+          if [ -n "$SHA" ] && [ "$at" != "$SHA" ]; then
+            echo "::error::$TAG is at $at, not $SHA, the commit the gate checked; no record is written"
+            exit 1
+          fi
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.12"
+      - run: python3 -m pip install --quiet pyyaml
+      # The files each package was built into, for their SHA-256.
+      - if: needs.build.result != 'skipped'
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: release--*
+          path: dist
+      - env:
+          # Reads this repository's GitHub releases (contents: read).
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.tag || github.ref_name }}
+          SHA: ${{ needs.gate.outputs.sha }}
+          SELECTION: ${{ needs.gate.outputs.selection }}
+          VERIFY_ONLY: ${{ needs.gate.outputs.verify-only }}
+          NEEDS: ${{ toJSON(needs) }}
+        run: >-
+          python3 .github/rab/scripts/release.py record --tag "$TAG" --sha "$SHA"
+          --selection "$SELECTION" --verify-only "$VERIFY_ONLY" --needs "$NEEDS" --out release-record.json
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: release-record
+          path: release-record.json
+          if-no-files-found: error

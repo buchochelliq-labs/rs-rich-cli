@@ -21,8 +21,8 @@ rules are in [the demo gaps](intuituive-demo-gaps.md).
   release-0.0.24's commit (`c2d65880`); `docs/marketplace-repo/` mirrors
   it.
 - **0.0.25 is planned** ([the plan](../plans/0.0.25.md)): the last release
-  before 0.1.0, released with release-kit v1.2.0. Wave 1 is its
-  workstreams 1 to 5.
+  before 0.1.0, released with rab (formerly release-kit) v2.0.0. Wave 1
+  is its workstreams 1 to 5.
 - **Wave 1, WS2 (Cornacai phase 4) is done** on `025-cornacai` (backup
   `claude/next-priority-items-3c5p8e-wip-cornacai4`): resume and the
   session store, sign-in, PTY agent terminals, the marketplace's `agent`

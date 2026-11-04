@@ -114,8 +114,8 @@ checkers see the signatures documented here.
   and Mermaid's own CLI. The `python` workflow builds each wheel on every change to core or
   the bindings, then installs it and renders with it on Python 3.9 and 3.13.
 - **Releases.** The package is part of each release of the repository
-  (release-kit, from 0.0.25 on): when its version is not yet on PyPI, the
-  release run builds the wheels and the sdist, installs and imports every
+  (rab, formerly release-kit, from 0.0.25 on): when its version is not yet
+  on PyPI, the release run builds the wheels and the sdist, installs and imports every
   wheel its runner can run, runs the whole test suite (compatibility with
   Rich 15.0.0 included) against the Linux x86-64 wheel, and only then
   publishes them with PyPI Trusted Publishing from the `pypi` environment,

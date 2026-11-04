@@ -11,9 +11,10 @@ does not authorize creating tags or uploading packages.
 
 ## 0. Select the packages
 
-Releases run on release-kit (v1.7.0, installed under `.github/release-kit/`;
-`docs/BRANCHING.md`, "Which path is current"). Every crate owns its
-independent SemVer. A release is every package of `release-kit.yml` (the
+Releases run on rab, the Release Asset Bundle (formerly release-kit; v2.0.0,
+installed under `.github/rab/`; `docs/BRANCHING.md`, "Which path is current";
+docs at https://buchochelliq-labs.github.io/release-asset-bundle/). Every crate owns its
+independent SemVer. A release is every package of `rab.yml` (the
 crates, then the PyPI `rs-rich`) on one commit of `main`, named by
 `rs-rich-cli`'s version; one `release.yml` run publishes all of it that is
 not yet on its registry:
@@ -24,13 +25,13 @@ not yet on its registry:
 | `<crate>-vX.Y.Z` | A record of that crate in its release (starts nothing) |
 | `python-vX.Y.Z` | A record of the PyPI `rs-rich` in its release (starts nothing) |
 
-`release-kit.yml` holds the publication order (each crate after the workspace
-crates it depends on; `python3 .github/release-kit/scripts/release.py check` enforces it), and the release run uploads in
+`rab.yml` holds the publication order (each crate after the workspace
+crates it depends on; `python3 .github/rab/scripts/release.py check` enforces it), and the release run uploads in
 that order. New crates may be in the same release as existing ones: their
 first versions upload with the environment's token. Versions accept
 prereleases such as `-rc.1`. Manual workflow dispatch takes an existing
 release tag, never a branch name. `RELEASES.toml` stays in step with
-`release-kit.yml` until the kit has published a release (CI checks both).
+`rab.yml` until the kit has published a release (CI checks both).
 
 Choose versions from the non-empty `Unreleased` changelog. Cargo's `^0.0.2`
 means `>=0.0.2,<0.0.3`: an internal dependency bump requires updating dependent
@@ -80,13 +81,13 @@ ambient color suppression invalidates tests that assert ANSI output.
 
 Update each selected manifest version, every affected internal requirement in
 the root `Cargo.toml`, and `Cargo.lock`. Do not invent a workspace package version.
-Re-run `cargo check --workspace --locked`, then `python3 .github/release-kit/scripts/release.py sync` and
-`python3 scripts/release_cohort.py sync` so `release-kit.yml` and
+Re-run `cargo check --workspace --locked`, then `python3 .github/rab/scripts/release.py sync` and
+`python3 scripts/release_cohort.py sync` so `rab.yml` and
 `RELEASES.toml` carry the new versions (each `check` fails CI until it does).
 Audit the intended release locally:
 
 ```bash
-python3 .github/release-kit/scripts/release.py status                                   # what is published, tagged, due
+python3 .github/rab/scripts/release.py status            # what is published, tagged, due
 python3 scripts/release_rehearsal.py                     # check, vendored, plan, tag --dry-run
 python3 scripts/release.py plan release-0.0.25 --semver-checks   # as release.yml's semver job runs it
 ```
@@ -154,7 +155,7 @@ policy in `.github/release-readiness.json`; CI requires these field labels:
 `Selected publish tag`, `Publish target:`,
 `Validation summary:`, `Unresolved review threads:`, and
 `Remaining visible blocker:`. Spell out the release tag, e.g.
-`release-0.0.25`, and the packages it will publish (`python3 .github/release-kit/scripts/release.py tag
+`release-0.0.25`, and the packages it will publish (`python3 .github/rab/scripts/release.py tag
 --dry-run` on `main`, or the rehearsal before the merge).
 
 The same policy file owns the handoff triggers and
@@ -184,8 +185,8 @@ After the release PR merges, check out `main` at the exact intended commit
 `origin/main` as last fetched. Only with authorization to publish:
 
 ```bash
-python3 .github/release-kit/scripts/release.py tag --dry-run   # skip, keep, tag, move or wait, per package
-python3 .github/release-kit/scripts/release.py tag             # tag, push, wait for the run (up to three hours)
+python3 .github/rab/scripts/release.py tag --dry-run   # skip, keep, tag, move or wait, per package
+python3 .github/rab/scripts/release.py tag             # tag, push, wait for the run (up to three hours)
 ```
 
 It never tags a version already on its registry. It writes an annotated
@@ -194,7 +195,7 @@ release's `Release:` and `Commit:` lines), pushes them in one atomic push, then
 pushes `release-<name>` on its own (GitHub starts no workflow for a push of
 more than three tags), and waits until the run has succeeded and every package
 is on its registry. It refuses a package tag on the remote that is not that
-package's record, a `release-kit.yml` that fails `check`, and a split release
+package's record, a `rab.yml` that fails `check`, and a split release
 (a package's `paths` changed under a version tagged on another commit). Tags
 from before the kit (up to the 0.0.24 cohort) all name published versions,
 so the kit never selects or moves them (`docs/BRANCHING.md`, "Tags from
@@ -227,11 +228,14 @@ wheels and the sdist. Each then runs `verify` (every version served) and
 `consume` (an exact-version `cargo install --locked` of each binary, a fresh
 consumer crate for each library, `pip install` in a new virtualenv); do not
 substitute a floating `cargo install` or `cargo add`. `publish-playground`
-attaches the docs playground's module to the GitHub release afterwards.
+attaches the docs playground's module to the GitHub release afterwards. The
+last job, `record`, runs whatever happened before it and uploads the run's
+release record (`gh run download <run> -n release-record`: each job's result
+and each package's outcome); check its `result` is `complete`.
 
 If the run fails: re-run, don't repair. Fix the cause (merged to `main` and
 pulled when nothing was published; outside the tagged commit when something
-was), then `python3 .github/release-kit/scripts/release.py tag --dry-run` and `tag` again. A run that published nothing
+was), then `python3 .github/rab/scripts/release.py tag --dry-run` and `tag` again. A run that published nothing
 has its tags moved to the fix; one that published some keeps its commit, and
 the new run publishes only what is still due. Never move or delete tags by
 hand, and never "Re-run jobs" on a publish job. A fix to `release.yml` itself

@@ -29,11 +29,11 @@ updates:
 
   - package-ecosystem: "github-actions"
     directory: "/"
-    # release-kit's installed build workflow changes only by installing a
-    # newer kit (`release.py vendored` fails CI on an edit); its pins move
-    # with release-kit's own Dependabot.
+    # rab's installed build workflow changes only by installing a newer kit
+    # (`release.py vendored` fails CI on an edit); its pins move with rab's
+    # own Dependabot.
     exclude-paths:
-      - ".github/workflows/release-kit-build.yml"
+      - ".github/workflows/rab-build.yml"
     schedule:
       interval: "weekly"
       day: "monday"

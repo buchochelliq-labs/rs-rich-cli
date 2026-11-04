@@ -72,7 +72,7 @@ def release_policy():
 
 # The one published actions/checkout major every workflow must use.
 CHECKOUT_MAJOR = "actions/checkout@v7"
-# ...or that major pinned to a commit, as release-kit's files and release.yml pin it.
+# ...or that major pinned to a commit, as rab's files and release.yml pin it.
 PINNED_CHECKOUT = re.compile(r"actions/checkout@[0-9a-f]{40} # v7(?:\.|$)")
 
 class ReadinessTests(unittest.TestCase):
@@ -253,7 +253,7 @@ class ReadinessTests(unittest.TestCase):
     def test_release_publishes_with_trusted_publishing_only(self):
         workflow = (ROOT / ".github/workflows/release.yml").read_text()
         # The upload tokens come from OIDC exchanges, requested only by the
-        # publish jobs (release-kit's publish-crates and publish-pypi). The one
+        # publish jobs (rab's publish-crates and publish-pypi). The one
         # exception is a brand-new crate's first version: the environment's
         # token reaches the kit's action only when the preflight found one.
         self.assertEqual(1, workflow.count("secrets.CARGO_REGISTRY_TOKEN"))

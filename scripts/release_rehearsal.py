@@ -1,14 +1,14 @@
-"""Rehearse a release with the installed release-kit, changing nothing.
+"""Rehearse a release with the installed rab (formerly release-kit), changing nothing.
 
     python3 scripts/release_rehearsal.py [--no-fetch]
 
 Runs, from the committed HEAD, what a release would run before anything is
 pushed for real:
 
-1. `release.py check` (release-kit.yml matches every manifest) and
-   `release.py vendored` (the installed copy under .github/release-kit/ is
+1. `release.py check` (rab.yml matches every manifest) and
+   `release.py vendored` (the installed copy under .github/rab/ is
    unmodified);
-2. `release.py plan` over every package of release-kit.yml, as if all were
+2. `release.py plan` over every package of rab.yml, as if all were
    due: the build jobs a release run would start;
 3. `release.py tag --dry-run` against a throwaway remote that holds HEAD as
    its default branch and every tag of `origin`, so the kit's tag checks
@@ -30,13 +30,13 @@ import sys
 import tempfile
 
 ROOT = Path(__file__).resolve().parent.parent
-KIT = ROOT / ".github/release-kit/scripts/release.py"
+KIT = ROOT / ".github/rab/scripts/release.py"
 
 
 def kit_module():
     """The installed kit's release.py, under a name that does not shadow
     scripts/release.py."""
-    spec = importlib.util.spec_from_file_location("release_kit", KIT)
+    spec = importlib.util.spec_from_file_location("rab_release", KIT)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
@@ -44,7 +44,7 @@ def kit_module():
 
 def full_selection(kit, read):
     """The gate's selection (`gate`'s `selection` output) if every package of
-    release-kit.yml were due."""
+    rab.yml were due."""
     release = kit.load(read)
     return json.dumps([{"name": p.name, "registry": p.registry, "version": p.version,
                         "manifest": p.manifest, "tag": p.tag, "slug": p.slug} for p in release.packages])
@@ -57,7 +57,7 @@ def git(*args, cwd=ROOT, capture=True):
 
 def run_kit(*args, cwd=ROOT):
     print(f"$ release.py {' '.join(args)}", flush=True)
-    subprocess.run([sys.executable, str(cwd / ".github/release-kit/scripts/release.py"), *args],
+    subprocess.run([sys.executable, str(cwd / KIT.relative_to(ROOT)), *args],
                    cwd=cwd, check=True)
 
 
@@ -94,8 +94,8 @@ def main(argv=None):
     parser.add_argument("--no-fetch", action="store_true", help="use the local tags; do not fetch origin's")
     args = parser.parse_args(argv)
     os.chdir(ROOT)
-    if git("status", "--porcelain", "--untracked-files=no", "--", "release-kit.yml", ".github/release-kit"):
-        print("note: release-kit.yml or the kit has uncommitted changes; `plan` and `tag` rehearse HEAD",
+    if git("status", "--porcelain", "--untracked-files=no", "--", "rab.yml", ".github/rab"):
+        print("note: rab.yml or the kit has uncommitted changes; `plan` and `tag` rehearse HEAD",
               file=sys.stderr)
     head = git("rev-parse", "HEAD")
     run_kit("check")
@@ -109,7 +109,7 @@ def main(argv=None):
                        env={**os.environ, "GITHUB_OUTPUT": str(output)})
         jobs = output.read_text(encoding="utf-8")
     if "count=0" in jobs.splitlines():
-        sys.exit("release-kit.yml plans no build job: the PyPI package's wheels are missing")
+        sys.exit("rab.yml plans no build job: the PyPI package's wheels are missing")
     if not args.no_fetch:
         fetch_tags()
     tag_dry_run(head)

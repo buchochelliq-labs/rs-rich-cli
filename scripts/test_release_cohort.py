@@ -166,7 +166,7 @@ class Unreleased(unittest.TestCase):
             cohort.unreleased(self.cli().tag, self.packages, lambda package: 503)
 
     def test_the_pypi_fallback_runs_the_guard_before_anything_else(self):
-        # release.yml is release-kit's now (test_release_kit.py); the old PyPI
+        # release.yml is rab's now (test_release_kit.py); the old PyPI
         # workflow stays as a manual fallback until the kit has published.
         pypi = (ROOT / ".github/workflows/pypi-release.yml").read_text()
         self.assertLess(pypi.index("release_cohort.py unreleased"), pypi.index("  wheels:"))
@@ -250,8 +250,8 @@ class ReleaseTags(unittest.TestCase):
 
 
 class PypiFallback(unittest.TestCase):
-    """pypi-release.yml, the old PyPI path, kept until release-kit has
-    published a release: release-kit's record tags (python-v...) must not
+    """pypi-release.yml, the old PyPI path, kept until rab (formerly
+    release-kit) has published a release: rab's record tags (python-v...) must not
     start it, or one release would upload twice."""
 
     text = (ROOT / ".github/workflows/pypi-release.yml").read_text()

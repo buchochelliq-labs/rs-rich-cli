@@ -1,12 +1,12 @@
-# The old PyPI path, kept as a manual fallback until release-kit has published
+# The old PyPI path, kept as a manual fallback until rab has published
 # a release (docs/BRANCHING.md, "Which path is current"). Releases now publish
 # `rs-rich` to PyPI from release.yml's `publish-pypi` job, in the same run as
-# the crates; release-kit's `python-v…` record tags start nothing, so this
+# the crates; rab's `python-v…` record tags start nothing, so this
 # workflow no longer starts on a tag push. It runs only when dispatched by
 # hand with an existing `python-vX.Y.Z` tag, and it can upload only while
 # PyPI's trusted publishers for `rs-rich` still include this file
 # (`pypi-release.yml`, environment `pypi`). Retire it, and that publisher,
-# once release-kit has published a release.
+# once rab (formerly release-kit) has published a release.
 name: pypi-release
 
 on:

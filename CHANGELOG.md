@@ -84,12 +84,17 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   name taken first refused. The threat model's rows for both sockets say
   how.
 
-### Releases run on release-kit (0.0.25)
+### Releases run on rab, the Release Asset Bundle (formerly release-kit) (0.0.25)
 
-- **`release-kit.yml` and the kit, v1.7.0.** Every package of
-  `RELEASES.toml`, in its order, is declared for
-  [release-kit](https://github.com/buchochelliq-labs/release-kit), installed
-  under `.github/release-kit/` (`release.py vendored` keeps it unedited). The
+- **`rab.yml` and the kit, rab v2.0.0.** Every package of `RELEASES.toml`,
+  in its order, is declared for
+  [rab](https://github.com/buchochelliq-labs/release-asset-bundle)
+  ([docs](https://buchochelliq-labs.github.io/release-asset-bundle/)),
+  release-kit renamed with its 2.0.0, installed under `.github/rab/`
+  (`release.py vendored` keeps it unedited); its `install` moved the
+  release-kit 1.7.0 layout (`release-kit.yml`, `.github/release-kit/`,
+  `release-kit-build.yml`) to `rab.yml`, `.github/rab/` and
+  `rab-build.yml`. The
   PyPI `rs-rich` keeps its `python-v…` tags and builds as a maturin wheel per
   target, pypi-release.yml's five, each installed and imported; the linux
   x86_64 one runs the compatibility suite and the stub check too.
@@ -98,15 +103,29 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   `publish-crates` and `publish-pypi`, which verify each version and use it
   as a stranger would. This repository's `semver` job
   (`scripts/release.py plan --semver-checks`) and `publish-playground` stay.
-  A release is tagged with `python3 .github/release-kit/scripts/release.py
-  tag`; a failed one is resumed the same way.
+  A release is tagged with `python3 .github/rab/scripts/release.py tag`; a
+  failed one is resumed the same way.
+- **A release record from every run.** The template's `record` job comes
+  last, runs whatever happened before it, checks the release tag still
+  names the commit the gate checked, and uploads the `release-record`
+  artifact: each job's result and each package's outcome, registry URL and
+  built files' SHA-256. It needs every job that gates or publishes (`gate`,
+  `ci`, `build`, `semver`, `publish-crates`, `publish-pypi`,
+  `publish-playground`) and writes nowhere else.
+- **No cache from a release run.** The `semver` job checks out
+  `refs/tags/release-X.Y.Z`, not the bare commit, and stops if the tag no
+  longer names the gated commit (CodeQL's cache-poisoning pattern, as rab
+  2.0.0's build workflow does); the playground's `setup-node` sets
+  `package-manager-cache: false`.
 - **`pypi-release.yml` starts on no tag**, so the kit's `python-v…` records
   cannot publish twice; it is a manual fallback until the kit has published
   a release, and `RELEASES.toml` and `release_cohort.py check` stay in step
   until then.
 - **Rehearsed in CI:** `scripts/release_rehearsal.py` runs the kit's
   `check`, `vendored`, `plan` and `tag --dry-run` against a throwaway remote
-  holding `HEAD` and origin's tags. Every tag from before the kit names a
+  holding `HEAD` and origin's tags. It works from a shallow clone (it
+  deepens it before fetching the tags), and CI's job checks out full
+  history. Every tag from before the kit names a
   published version, so the kit never selects or moves one
   ([Branching and releases](docs/BRANCHING.md#tags-from-before-release-kit)).
 

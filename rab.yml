@@ -1,16 +1,18 @@
-# release-kit (https://github.com/buchochelliq-labs/release-kit): every package
+# rab, the Release Asset Bundle (formerly release-kit;
+# https://github.com/buchochelliq-labs/release-asset-bundle): every package
 # this repository publishes, its version, and the order to publish in. The kit
-# is installed under .github/release-kit/ (v1.7.0; reinstall to update, never
-# edit it) and documented in docs/BRANCHING.md and the release skill.
+# is installed under .github/rab/ (v2.0.0; reinstall to update, never edit it)
+# and documented in docs/BRANCHING.md, the release skill and
+# https://buchochelliq-labs.github.io/release-asset-bundle/.
 #
-#   python3 .github/release-kit/scripts/release.py check      CI: this file matches every manifest
-#   python3 .github/release-kit/scripts/release.py sync       copy bumped versions in from the manifests
-#   python3 .github/release-kit/scripts/release.py status     what is published, tagged or due
-#   python3 .github/release-kit/scripts/release.py tag        tag the release on main and wait for its run
+#   python3 .github/rab/scripts/release.py check      CI: this file matches every manifest
+#   python3 .github/rab/scripts/release.py sync       copy bumped versions in from the manifests
+#   python3 .github/rab/scripts/release.py status     what is published, tagged or due
+#   python3 .github/rab/scripts/release.py tag        tag the release on main and wait for its run
 #
 # Packages are listed in RELEASES.toml's order, each after every workspace
 # crate it depends on; RELEASES.toml stays beside this file, with the same
-# versions, until release-kit has published a release (CI checks both).
+# versions, until rab has published a release (CI checks both).
 #
 # `paths` is what each package ships, for the kit's split check (rule 4: one
 # version, one commit's files): a crate's `include` from its Cargo.toml, as

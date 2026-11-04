@@ -1,5 +1,5 @@
-"""Tests for the release on release-kit: release-kit.yml, release.yml and the
-rehearsal script. No registry access or publishing credentials needed."""
+"""Tests for the release on rab (formerly release-kit): rab.yml, release.yml
+and the rehearsal script. No registry access or publishing credentials needed."""
 
 from pathlib import Path
 import contextlib
@@ -31,7 +31,7 @@ def job_names():
 
 
 class Config(unittest.TestCase):
-    """release-kit.yml against RELEASES.toml, which it replaces."""
+    """rab.yml against RELEASES.toml, which it replaces."""
 
     def test_the_kit_finds_no_problem(self):
         self.assertEqual(KIT.check(KIT.files_on_disk(ROOT)), [])
@@ -113,9 +113,9 @@ class Workflow(unittest.TestCase):
         self.assertIn("      checkout_ref:", ci[:ci.index("\njobs:")])
 
     def test_the_gate_and_the_build_are_the_kits(self):
-        self.assertIn("uses: ./.github/release-kit/gate", job("gate"))
+        self.assertIn("uses: ./.github/rab/gate", job("gate"))
         self.assertIn("fetch-depth: 0", job("gate"))
-        self.assertIn("uses: ./.github/workflows/release-kit-build.yml", job("build"))
+        self.assertIn("uses: ./.github/workflows/rab-build.yml", job("build"))
 
     def test_only_jobs_that_upload_are_named_publish(self):
         # The kit reads a started `publish…` job as a possible upload and then
@@ -125,7 +125,7 @@ class Workflow(unittest.TestCase):
                          ["publish-crates", "publish-pypi", "publish-playground"])
         for name in names:
             text = job(name)
-            uploads = any(word in text for word in ("release-kit/publish-", "gh release upload", "id-token: write"))
+            uploads = any(word in text for word in ("rab/publish-", "gh release upload", "id-token: write"))
             self.assertEqual(uploads, name.startswith("publish"), name)
         self.assertIn("name: publish-playground", job("publish-playground"))
 
@@ -136,6 +136,20 @@ class Workflow(unittest.TestCase):
         self.assertIn("needs.semver.result == 'success'", job("publish-crates"))
         self.assertIn("needs: [gate, publish-crates]", job("publish-playground"))
         self.assertIn("needs.publish-crates.result == 'success'", job("publish-playground"))
+
+    def test_the_record_job_comes_last_and_needs_every_gating_and_publishing_job(self):
+        # rab's `record` refuses a selected package whose publish job it does
+        # not need; it runs whatever happened before it.
+        names = job_names()
+        self.assertEqual(names[-1], "record")
+        record = job("record")
+        self.assertIn(f"needs: [{', '.join(names[:-1])}]", record)
+        self.assertIn("if: always()", record)
+        self.assertIn("ref: refs/tags/${{ inputs.tag || github.ref_name }}", record)
+        check = record.index("Check the tag still names the gated commit")
+        self.assertLess(check, record.index("release.py record"))
+        self.assertIn("name: release-record", record)
+        self.assertNotIn("permissions:", record)
 
     def test_the_semver_job_checks_the_selected_crates(self):
         semver = job("semver")

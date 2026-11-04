@@ -137,7 +137,7 @@ There are two separate decisions here:
    contents; it is never copied from either Python upstream. A change in one
    crate does not, by policy alone, require an unrelated crate's version to
    change.
-2. **One release, one run.** A release is every package of `release-kit.yml`
+2. **One release, one run.** A release is every package of `rab.yml`
    on one commit of `main`, named by `rs-rich-cli`'s version. Its release
    tag, `release-X.Y.Z`, starts one `release.yml` run that checks it once,
    runs CI once and publishes **every package of it not yet on its registry**,
@@ -146,12 +146,13 @@ There are two separate decisions here:
    versions, are already published, and are neither published nor verified
    again.
 
-Releases run on [release-kit](https://github.com/buchochelliq-labs/release-kit)
-v1.7.0, the organisation's release standard, generalised from this
-repository's own scripts: its rules are the ones below (a published version is
-permanent; releases come from `main`; tags are records; a release is one
-commit; re-run, don't repair; least privilege). Its documentation is at
-<https://buchochelliq-labs.github.io/release-kit/>.
+Releases run on [rab, the Release Asset Bundle](https://github.com/buchochelliq-labs/release-asset-bundle)
+v2.0.0 (formerly release-kit, renamed with 2.0.0), the organisation's release
+standard, generalised from this repository's own scripts: its rules are the
+ones below (a published version is permanent; releases come from `main`; tags
+are records; a release is one commit; re-run, don't repair; least privilege).
+Its documentation is at
+<https://buchochelliq-labs.github.io/release-asset-bundle/>.
 
 | Tag | What it does |
 |---|---|
@@ -314,9 +315,9 @@ tag checks every crate of the release's `RELEASES.toml` (the run checks the
 unpublished ones); a crate tag checks that crate. Its Python release checks are listed
 explicitly (`test_release.py` and `test_release_readiness.py`) instead of through
 a glob, so adding another release test module requires updating the wrapper on
-purpose. Then rehearse the release with release-kit:
+purpose. Then rehearse the release with rab:
 `python3 scripts/release_rehearsal.py` (see
-[Release numbers and tagging](#release-numbers-and-tagging-release-kityml)).
+[Release numbers and tagging](#release-numbers-and-tagging-rabyml)).
 
 For ad-hoc parallel validation, isolate jobs with separate `CARGO_TARGET_DIR`
 values:
@@ -332,7 +333,7 @@ is a specific reason to do otherwise.
 
 ### Publish order
 
-`publish-crates` publishes the crates of the selection, in `release-kit.yml`
+`publish-crates` publishes the crates of the selection, in `rab.yml`
 order, with the kit's `release.py publish-crates`. It re-checks each selected
 crate/version against crates.io (`preflight`: a hit aborts), runs one `cargo
 publish --dry-run --locked -p a -p b …` for all of them (Cargo 1.90 and later
@@ -351,21 +352,21 @@ test, or whose crates fail the SemVer check, publishes nothing anywhere.
 
 ### Which path is current
 
-**release-kit is the release path, from 0.0.25 on:** `release-kit.yml`, the
-kit installed under `.github/release-kit/`, and `release.yml` on the kit.
-Until release-kit has published its first release, the old path's pieces stay
+**rab (formerly release-kit) is the release path, from 0.0.25 on:**
+`rab.yml`, the kit installed under `.github/rab/`, and `release.yml` on the
+kit. Until rab has published its first release, the old path's pieces stay
 beside it, and retire together once it has:
 
 | Old piece | Now |
 |---|---|
-| `RELEASES.toml`, `scripts/release_cohort.py check`/`sync` | kept in step with `release-kit.yml` (CI checks both; `scripts/build_versioned_docs.py` still reads `RELEASES.toml`). Bump the manifests, then run both `sync`s |
-| `release_cohort.py tag`/`status` | **not used**: `.github/release-kit/scripts/release.py tag`/`status` |
+| `RELEASES.toml`, `scripts/release_cohort.py check`/`sync` | kept in step with `rab.yml` (CI checks both; `scripts/build_versioned_docs.py` still reads `RELEASES.toml`). Bump the manifests, then run both `sync`s |
+| `release_cohort.py tag`/`status` | **not used**: `.github/rab/scripts/release.py tag`/`status` |
 | `pypi-release.yml` | no longer starts on `python-v…` tags; a manual fallback (`gh workflow run pypi-release.yml -f tag=python-vX.Y.Z`) that can upload only while PyPI still trusts it |
 | `scripts/release.py` | `plan --semver-checks` runs in `release.yml`'s `semver` job; its `preflight`, `publish` and `verify` are the kit's now |
 
-### Release numbers and tagging (`release-kit.yml`)
+### Release numbers and tagging (`rab.yml`)
 
-`release-kit.yml` lists every package this repository publishes (every crate,
+`rab.yml` lists every package this repository publishes (every crate,
 then the PyPI `rs-rich`), its manifest, its version and its place in the
 publication order: each after the workspace crates it depends on. A release is
 named by `rs-rich-cli`'s version (`release: name_from: rs-rich-cli`), and its
@@ -381,12 +382,12 @@ its runner can run it, and the linux x86_64 one also runs the compatibility
 suite against rich 15.0.0 and the stub check.
 
 Every command is the installed kit's script,
-`python3 .github/release-kit/scripts/release.py <command>` (Python 3.11+,
+`python3 .github/rab/scripts/release.py <command>` (Python 3.11+,
 PyYAML, git; `tag` also uses the GitHub CLI):
 
 | Command | What it does |
 |---|---|
-| `check` | `release-kit.yml` matches every manifest (versions, names, tag formats, order, artifacts). CI runs it |
+| `check` | `rab.yml` matches every manifest (versions, names, tag formats, order, artifacts). CI runs it |
 | `vendored` | the installed copy is unmodified (it changes only by installing a newer kit). CI runs it |
 | `sync` | after a version bump, rewrites the versions from the manifests |
 | `status` | each package: its record tag, where it is, and `published` or `due` |
@@ -401,11 +402,15 @@ it in `release-tests`. While a release is tagged and not yet finished, its
 `tag --dry-run` fails on any later commit that changes a package of it (a
 split release): finish the release first.
 
-To install a newer kit: check out its tag in a release-kit clone, run its
+To install a newer kit: check out its tag in a clone of
+<https://github.com/buchochelliq-labs/release-asset-bundle>, run its
 `scripts/release.py install` from this repository's root, review the diff
-(it rewrites `.github/release-kit/` and `.github/workflows/release-kit-build.yml`
-and leaves `release.yml` alone), compare `release.yml` with the kit's
-`templates/release.yml`, and open a pull request.
+(it rewrites `.github/rab/` and `.github/workflows/rab-build.yml` and leaves
+`release.yml` alone), compare `release.yml` with the kit's
+`templates/release.yml`, and open a pull request. rab 2.0.0's install moved
+this repository from release-kit 1.7.0's names (`release-kit.yml`,
+`.github/release-kit/`, `release-kit-build.yml`); the `record` job came from
+its template by hand.
 
 #### Tags from before release-kit
 
@@ -413,15 +418,16 @@ Every tag before release 0.0.25 predates the kit: `v0.0.1` to `v0.0.4`, every
 `<crate>-v…` and `python-v…` tag up to the 0.0.24 cohort's, and `release-0.0.20`
 to `release-0.0.24`, written by `scripts/release_cohort.py` and the scripts
 before it. Their messages start `<name> <version>`, not the kit's
-`<name> <version> (<registry>)`, and their commits have no `release-kit.yml`.
+`<name> <version> (<registry>)`, and their commits have neither `rab.yml`
+nor release-kit's `release-kit.yml`.
 The kit needs no option for them. It checks a tag's ownership only for a
 package's *current* version, and only while that version is unpublished; on
 2026-11-04 every one of the 200 old tags named a version already on its
 registry (all annotated), so the kit never selects, moves or resumes them,
 and `tag --dry-run` against the real tags passes. A release tagged with
-`release_cohort.py tag` would not be resumed by the kit (its commit has no
-`release-kit.yml`): finish such a release with the old scripts, or bump the
-packages still due.
+`release_cohort.py tag` would not be resumed by the kit (its commit has
+neither `rab.yml` nor `release-kit.yml`): finish such a release with the old
+scripts, or bump the packages still due.
 
 #### How to release
 
@@ -432,9 +438,9 @@ authorization to publish, and once someone has walked Noctiluca's
 a forum) and put what they saw in the release notes:
 
 ```bash
-python3 .github/release-kit/scripts/release.py status
-python3 .github/release-kit/scripts/release.py tag --dry-run   # what is tagged, kept, skipped, moved
-python3 .github/release-kit/scripts/release.py tag             # tag, push, and wait for the run
+python3 .github/rab/scripts/release.py status
+python3 .github/rab/scripts/release.py tag --dry-run   # what is tagged, kept, skipped, moved
+python3 .github/rab/scripts/release.py tag             # tag, push, and wait for the run
 ```
 
 `tag`:
@@ -444,7 +450,7 @@ python3 .github/release-kit/scripts/release.py tag             # tag, push, and 
    `--release`, the last commit on `main` naming it; else `HEAD`. The commit
    must be on `origin/main` as last fetched.
 2. **Refuses** a package tag on the remote that is not that package's record,
-   a `release-kit.yml` that fails `check` at that commit, and a split release:
+   a `rab.yml` that fails `check` at that commit, and a split release:
    a commit that changes the `paths` of a package tagged under the same
    version on another commit.
 3. **Tags every package not yet published** with an annotated record tag
@@ -460,12 +466,12 @@ python3 .github/release-kit/scripts/release.py tag             # tag, push, and 
 The release run (`release.yml`), from the release tag:
 
 1. **`gate`** (the kit's): the tag is annotated, records its release and
-   commit, and is that commit's release tag; `release-kit.yml` there passes
+   commit, and is that commit's release tag; `rab.yml` there passes
    `check`; the commit is on `main`; no unpublished package's tag belongs to
    something else; the release is not split; the **selection** is every
    package not yet published, each with its record tag on the commit.
 2. **`ci`:** `ci.yml` on the gated commit (`checkout_ref`).
-3. **`build`** (the kit's `release-kit-build.yml`): the wheels and the sdist,
+3. **`build`** (the kit's `rab-build.yml`): the wheels and the sdist,
    each tested as above. **`semver`** (this repository's): every selected
    manifest and internal requirement agrees, and each crate's version bump is
    at least as big as its change by Cargo's rules (`scripts/release.py plan
@@ -478,6 +484,13 @@ The release run (`release.yml`), from the release tag:
 5. **`publish-playground`**, after the crates are up: the docs playground's
    module, attached to the GitHub release `release-X.Y.Z`. It cannot fail the
    run.
+6. **`record`** (the kit's), whatever happened before it: once the release
+   tag is checked to still name the gated commit, it uploads the run's
+   [release record](https://buchochelliq-labs.github.io/release-asset-bundle/release-record/)
+   as the `release-record` artifact (each job's result, and each package's
+   outcome, registry URL and built files' SHA-256). It needs every job above,
+   publishes nothing and needs no write permission
+   (`gh run download <run> -n release-record` reads it).
 
 Only jobs named `publish…` upload, and every job that uploads is named so:
 `tag` reads a run in which such a job started as one that may have published,
@@ -512,7 +525,7 @@ and never use GitHub's "Re-run jobs" on a publish job.
   still checks out and publishes the tag's commit. `tag` does not see a
   dispatched run on `main`: watch it with `gh run watch`.
 
-The kit's [recovery guide](https://buchochelliq-labs.github.io/release-kit/recovery/)
+The kit's [recovery guide](https://buchochelliq-labs.github.io/release-asset-bundle/recovery/)
 has the details and the refusals that need a decision.
 
 Publishing one crate by hand, by dispatching its record tag, is gone with the
@@ -548,7 +561,7 @@ Release 0.0.19 was cut (2fc9772) before release tags: that commit's
 `release.yml` does not start on `release-*`. It was finished one tag at a
 time with the scripts of `main` before one-run releases (`git worktree add
 ../release-old 5989aac`, then that tree's `scripts/release_cohort.py tag`).
-The first one-run release was 0.0.20; the first on release-kit is 0.0.25.
+The first one-run release was 0.0.20; the first on rab (formerly release-kit) is 0.0.25.
 
 ### Registry authentication (Trusted Publishing)
 
@@ -608,7 +621,7 @@ workflow publishes.
 ### Python package (PyPI)
 
 The Python bindings (`crates/rich-py`, `rs-rich` on PyPI, `import rs_rich`)
-are a package of the release like the crates: `release-kit.yml` lists them
+are a package of the release like the crates: `rab.yml` lists them
 last, with their own SemVer, independent of the crates, and the release run
 builds, tests and publishes them when their version is not yet on PyPI. Their
 record tag is `python-vX.Y.Z`; it starts nothing.
@@ -656,8 +669,8 @@ Documented discipline decays; these are the mechanisms.
 | A required check that can never report | one aggregate `ci-ok` context, not per-matrix-job names | prevents |
 | Merging a branch cut from a stale `main` | `strict: true` on required checks | prevents |
 | A PR that says nothing useful | `pr body` CI check against the template | prevents |
-| Publishing content that isn't on `main` | tags only ever go on `main`; release-kit's gate refuses a tag whose commit is not on it | prevents |
-| An edited copy of release-kit | `release.py vendored` in CI's `release-tests` | detects, in the PR |
+| Publishing content that isn't on `main` | tags only ever go on `main`; rab's gate refuses a tag whose commit is not on it | prevents |
+| An edited copy of rab | `release.py vendored` in CI's `release-tests` | detects, in the PR |
 | An API change nobody reviewed | `api/<crate>.txt` snapshots, diffed by CI's `public API and SemVer` job | detects, in the PR |
 | A version bump smaller than the change | `cargo-semver-checks` in `release.py plan --semver-checks` (`release.yml`'s `semver` job); for 0.0.x, every break listed in `api/semver-breaks.toml` (CI) | prevents |
 | "Is it actually merged?" | `git merge-base --is-ancestor "$(gh pr view N --json mergeCommit -q .mergeCommit.oid)" origin/main` | detects |
