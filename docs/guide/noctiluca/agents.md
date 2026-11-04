@@ -6,8 +6,8 @@ building. The agent reads the page as the projection's text, which costs
 far fewer tokens than a screenshot and works over plain SSH, and acts on
 it through the same guarded actions a person uses.
 
-Unix only for now (Linux, macOS and the BSDs): on Windows the commands say
-so.
+On Linux, macOS, the BSDs and (since 0.0.25) Windows, where the socket is
+a named pipe; the commands and their output are the same.
 
 ## Turning it on
 
@@ -26,8 +26,10 @@ control = true
 ```
 
 Each session then listens on a socket of its own,
-`$XDG_RUNTIME_DIR/noctiluca/noctiluca-PID.sock`, and every action a script
-takes shows in the status bar as it happens (`agent: click The "Send"
+`$XDG_RUNTIME_DIR/noctiluca/noctiluca-PID.sock` (on Windows
+`%TEMP%\noctiluca-SID\noctiluca-PID.sock`, a file naming the session's
+named pipe), and every action a script takes shows in the status bar as it
+happens (`agent: click The "Send"
 button`).
 
 ## `noctiluca ls`
@@ -129,6 +131,14 @@ and a toast says why.
   On Linux, macOS and the BSDs each connection's user is checked too, and
   `noctiluca action` checks that the session is yours. There is no network
   listener.
+- **On Windows** the session listens on a named pipe whose security
+  descriptor admits only your account (you own it; its access list grants
+  you alone, with nothing inherited), that takes no connection from
+  another machine, and whose name holds 128 random bits. The name is in the
+  file at the socket's path, in a directory whose access list grants you
+  alone. `noctiluca action` follows only such a file of yours naming such
+  a pipe, and checks the pipe is yours before it sends anything; the
+  session checks the caller's account where Windows lets it.
 - **Paths are not followed.** A symbolic link where the socket or its
   directory should be is refused, by the session and by the commands.
 - **`--read-only` is the session's rule.** The session refuses every verb

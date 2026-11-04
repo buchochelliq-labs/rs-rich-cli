@@ -9,6 +9,44 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Named pipes on Windows: the control socket and `rich console` (0.0.25)
+
+- **rs-rich-ext: `local_socket`**, behind a new `local-socket` feature: a
+  local socket private to one user, a Unix domain socket on Unix and a
+  named pipe on Windows behind one API (`LocalListener`, `LocalStream`,
+  `private_dir`, `check_private_dir`, `check_endpoint`, `is_endpoint`,
+  `remove_endpoint`, `current_user`, `is_own_dir`; `current_uid` and
+  `peer_uid` on Unix). On Windows the socket's path is an address file
+  naming `\\.\pipe\rich-local-` and 128 bits from `BCryptGenRandom`;
+  the directory is made with a protected DACL granting the user's SID
+  alone and refused when it grants anyone else; the pipe's security
+  descriptor is `O:<sid>D:P(A;;GA;;;<sid>)`, made with
+  `FILE_FLAG_FIRST_PIPE_INSTANCE` and `PIPE_REJECT_REMOTE_CLIENTS`; a
+  client follows only an address file of the user's naming a pipe of that
+  form (never a UNC path), checks the pipe's owner and connects at
+  `SECURITY_IDENTIFICATION`; reads and writes are overlapped, with the
+  timeouts a Unix socket has.
+- **rs-rich-interact: the `control` socket runs on Windows.** Its
+  transport is rs-rich-ext's local socket; its API is unchanged.
+  `sessions` lists the pipes' address files as it lists sockets, so a
+  program's running instances are found the same way.
+  `ControlServer::bind` over a file that is not a socket of the user's now
+  fails with `PermissionDenied` (it was `AddrInUse`); the file is still
+  left alone.
+- **Noctiluca: `--control`, `noctiluca ls` and `noctiluca action` on
+  Windows**, the same commands and output. `control::unix_only` is gone
+  (a break, in `api/semver-breaks.toml`).
+- **intuiTUIve's log console and `rich console` on Windows.**
+  `install_console` connects and `rich console` listens there, through the
+  same local socket; the `tracing` feature no longer pulls in `libc`.
+- **Tests on Windows:** the local socket's, the control socket's, the log
+  console's, `rich console`'s and Noctiluca's control tests run on the
+  "Windows web sessions" CI job, with the pipe's own: its DACL and owner,
+  the anonymous logon's token refused by the pipe and the directory (CI
+  has no second account; this stands in for another user), and a pipe
+  name taken first refused. The threat model's rows for both sockets say
+  how.
+
 ### Noctiluca: live regions (0.0.25)
 
 - **Canvases are drawn, and stay live.** A `<canvas>` gets a picture from

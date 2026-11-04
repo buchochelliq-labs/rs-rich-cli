@@ -145,9 +145,6 @@ change it for you: remove it, or fix its owner and mode, and run again.
 `[agent] read_only = true`): it answers `info`, `snapshot` and `find`
 only.
 
-**The control commands say "Unix only for now".** On Windows there is no
-control socket yet.
-
 **"The pixel view needs Kitty graphics".** It draws through Kitty's
 protocol only. In kitty, WezTerm or Ghostty, name it if it was not
 detected: `--images kitty --pixels`.

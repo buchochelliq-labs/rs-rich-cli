@@ -76,7 +76,7 @@ noctiluca action [--session PID] [--json] [--no-wait] VERB [ARGS…]
 | `--ssh [USER@]HOST` | Run Chrome here, but make every request through HOST over an SSH tunnel: its `localhost` is `localhost`. See [Over SSH](ssh.md) |
 | `--ssh-arg ARG` | One more word for that ssh, repeatable: `--ssh-arg=-p --ssh-arg=2222` |
 | `--split DIR` | Open in a new pane beside this one (`right`, `left`, `up`, `down`) and return: `noctiluca --split right http://localhost:3000` beside a coding agent. Works in tmux, WezTerm, kitty (with `allow_remote_control`), zellij (right and down) and terminals with terminal-browser's socket. See [the terminal host](../interact/index.md#the-terminal-host-splits-panes-and-focus) |
-| `--control` | Listen for `noctiluca action`: a socket of your own user, no network listener (Unix only for now). See [Scripts and coding agents](agents.md) |
+| `--control` | Listen for `noctiluca action`: a socket of your own user (a named pipe on Windows), no network listener. See [Scripts and coding agents](agents.md) |
 | `--read-only` | Listen, but refuse every action that changes anything: scripts may only read |
 | `--dump HOW` | Print the page's model and exit: `text`, `ax` (its controls) or `json` (all of it). Needs a page |
 | `--no-js` | Turn the page's script off |

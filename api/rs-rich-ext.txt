@@ -10693,6 +10693,70 @@ impl core::marker::Unpin for rich_ext::live::RegionId
 impl core::marker::UnsafeUnpin for rich_ext::live::RegionId
 impl core::panic::unwind_safe::RefUnwindSafe for rich_ext::live::RegionId
 impl core::panic::unwind_safe::UnwindSafe for rich_ext::live::RegionId
+pub mod rich_ext::local_socket
+pub struct rich_ext::local_socket::Incoming<'a>
+impl core::iter::traits::iterator::Iterator for rich_ext::local_socket::Incoming<'_>
+pub type rich_ext::local_socket::Incoming<'_>::Item = core::result::Result<rich_ext::local_socket::LocalStream, std::io::error::Error>
+pub fn rich_ext::local_socket::Incoming<'_>::next(&mut self) -> core::option::Option<std::io::error::Result<rich_ext::local_socket::LocalStream>>
+impl<'a> core::fmt::Debug for rich_ext::local_socket::Incoming<'a>
+pub fn rich_ext::local_socket::Incoming<'a>::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl<'a> core::marker::Freeze for rich_ext::local_socket::Incoming<'a>
+impl<'a> core::marker::Send for rich_ext::local_socket::Incoming<'a>
+impl<'a> core::marker::Sync for rich_ext::local_socket::Incoming<'a>
+impl<'a> core::marker::Unpin for rich_ext::local_socket::Incoming<'a>
+impl<'a> core::marker::UnsafeUnpin for rich_ext::local_socket::Incoming<'a>
+impl<'a> core::panic::unwind_safe::RefUnwindSafe for rich_ext::local_socket::Incoming<'a>
+impl<'a> core::panic::unwind_safe::UnwindSafe for rich_ext::local_socket::Incoming<'a>
+pub struct rich_ext::local_socket::LocalListener
+impl rich_ext::local_socket::LocalListener
+pub fn rich_ext::local_socket::LocalListener::accept(&self) -> std::io::error::Result<rich_ext::local_socket::LocalStream>
+pub fn rich_ext::local_socket::LocalListener::bind(impl core::convert::AsRef<std::path::Path>) -> std::io::error::Result<rich_ext::local_socket::LocalListener>
+pub fn rich_ext::local_socket::LocalListener::incoming(&self) -> rich_ext::local_socket::Incoming<'_>
+pub fn rich_ext::local_socket::LocalListener::path(&self) -> &std::path::Path
+impl core::fmt::Debug for rich_ext::local_socket::LocalListener
+pub fn rich_ext::local_socket::LocalListener::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Freeze for rich_ext::local_socket::LocalListener
+impl core::marker::Send for rich_ext::local_socket::LocalListener
+impl core::marker::Sync for rich_ext::local_socket::LocalListener
+impl core::marker::Unpin for rich_ext::local_socket::LocalListener
+impl core::marker::UnsafeUnpin for rich_ext::local_socket::LocalListener
+impl core::panic::unwind_safe::RefUnwindSafe for rich_ext::local_socket::LocalListener
+impl core::panic::unwind_safe::UnwindSafe for rich_ext::local_socket::LocalListener
+pub struct rich_ext::local_socket::LocalStream(_)
+impl rich_ext::local_socket::LocalStream
+pub fn rich_ext::local_socket::LocalStream::as_unix(&self) -> &std::os::unix::net::stream::UnixStream
+pub fn rich_ext::local_socket::LocalStream::connect(impl core::convert::AsRef<std::path::Path>) -> std::io::error::Result<rich_ext::local_socket::LocalStream>
+pub fn rich_ext::local_socket::LocalStream::peer_allowed(&self) -> std::io::error::Result<()>
+pub fn rich_ext::local_socket::LocalStream::set_read_timeout(&self, core::option::Option<core::time::Duration>) -> std::io::error::Result<()>
+pub fn rich_ext::local_socket::LocalStream::set_write_timeout(&self, core::option::Option<core::time::Duration>) -> std::io::error::Result<()>
+impl core::fmt::Debug for rich_ext::local_socket::LocalStream
+pub fn rich_ext::local_socket::LocalStream::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl std::io::Read for &rich_ext::local_socket::LocalStream
+pub fn &rich_ext::local_socket::LocalStream::read(&mut self, &mut [u8]) -> std::io::error::Result<usize>
+impl std::io::Read for rich_ext::local_socket::LocalStream
+pub fn rich_ext::local_socket::LocalStream::read(&mut self, &mut [u8]) -> std::io::error::Result<usize>
+impl std::io::Write for &rich_ext::local_socket::LocalStream
+pub fn &rich_ext::local_socket::LocalStream::flush(&mut self) -> std::io::error::Result<()>
+pub fn &rich_ext::local_socket::LocalStream::write(&mut self, &[u8]) -> std::io::error::Result<usize>
+impl std::io::Write for rich_ext::local_socket::LocalStream
+pub fn rich_ext::local_socket::LocalStream::flush(&mut self) -> std::io::error::Result<()>
+pub fn rich_ext::local_socket::LocalStream::write(&mut self, &[u8]) -> std::io::error::Result<usize>
+impl core::marker::Freeze for rich_ext::local_socket::LocalStream
+impl core::marker::Send for rich_ext::local_socket::LocalStream
+impl core::marker::Sync for rich_ext::local_socket::LocalStream
+impl core::marker::Unpin for rich_ext::local_socket::LocalStream
+impl core::marker::UnsafeUnpin for rich_ext::local_socket::LocalStream
+impl core::panic::unwind_safe::RefUnwindSafe for rich_ext::local_socket::LocalStream
+impl core::panic::unwind_safe::UnwindSafe for rich_ext::local_socket::LocalStream
+pub fn rich_ext::local_socket::check_endpoint(&std::path::Path) -> std::io::error::Result<()>
+pub fn rich_ext::local_socket::check_private_dir(&std::path::Path) -> std::io::error::Result<()>
+pub fn rich_ext::local_socket::current_uid() -> u32
+pub fn rich_ext::local_socket::current_user() -> alloc::string::String
+pub fn rich_ext::local_socket::is_endpoint(&std::path::Path) -> bool
+pub fn rich_ext::local_socket::is_own_dir(&std::path::Path) -> bool
+pub fn rich_ext::local_socket::peer_uid(&std::os::unix::net::stream::UnixStream) -> std::io::error::Result<u32>
+pub fn rich_ext::local_socket::private_dir(&std::path::Path) -> std::io::error::Result<()>
+pub fn rich_ext::local_socket::remove_endpoint(&std::path::Path)
 pub mod rich_ext::log_handler
 pub enum rich_ext::log_handler::SpanView
 pub rich_ext::log_handler::SpanView::Hidden

@@ -381,11 +381,12 @@ the pixel view.
 | I | Requests leave this machine directly despite `--ssh` (DNS, WebRTC, QUIC, loopback) | Chrome's resolver maps every name to "not found" but the proxy's own address, so names go to the far side (SOCKS5 remote DNS); `<-loopback>` sends loopback through the proxy; WebRTC only over the proxy (`disable_non_proxied_udp`); QUIC off (`chrome_switches`) | verified (switches), unverified (Chrome's behaviour: the live test needs Chrome) |
 | T | ssh's messages corrupt the screen, or carry escapes | ssh's standard error is read on a thread, kept (eight lines) and cleaned (`clean`) before the status bar shows one; prompts go to `/dev/tty` before the browser takes the screen; a reconnect never prompts (`BatchMode=yes`) | verified |
 | D | A killed Noctiluca leaves the tunnel running | The tunnel is a child, killed when the `Tunnel` drops; on Linux `PR_SET_PDEATHSIG` stops it if Noctiluca dies | verified (drop), documented (death signal) |
-| S, E | Another local user drives the browser through the control socket | Off unless asked (`--control`, `--read-only`, `[agent] control`); the socket's directory is the user's own, mode 700, made with that mode before the bind, and an existing one that is another user's, open to others or a link is refused; each peer's user is checked where the platform tells (`SO_PEERCRED`, `getpeereid`), and the client checks the server's (`rich_interact::control`: `private_dir`, `peer_allowed`) | verified (tests: the mode, an open or linked directory refused, the peer check) |
-| T | A symbolic link redirects the socket to another file | The socket path and its directory are read without following links; a link is refused by the server and the client, and a file that is not a left-over socket of the user's is never replaced | verified (tests) |
+| S, E | Another local user drives the browser through the control socket | Off unless asked (`--control`, `--read-only`, `[agent] control`); the socket's directory is the user's own, mode 700, made with that mode before the bind, and an existing one that is another user's, open to others or a link is refused; each peer's user is checked where the platform tells (`SO_PEERCRED`, `getpeereid`), and the client checks the server's (`rich_interact::control`: `private_dir`, `peer_allowed`). On Windows (0.0.25) the transport is rs-rich-ext's `local_socket`: a named pipe whose security descriptor is `O:<sid>D:P(A;;GA;;;<sid>)` (the user owns it; a protected DACL grants the user's SID alone, nothing inherited, not Administrators or SYSTEM), made with `FILE_FLAG_FIRST_PIPE_INSTANCE` and `PIPE_REJECT_REMOTE_CLIENTS`; its name (`\\.\pipe\rich-local-` and 128 bits from `BCryptGenRandom`) is in an address file at the socket's path, in a directory made with a DACL granting the user alone (`D:P(A;OICI;FA;;;<sid>)`) and refused when it grants anyone else; the client checks the pipe's owner is the user before it writes, and connects at `SECURITY_IDENTIFICATION`; the server checks the client process's user where Windows lets it read the token | verified (tests: the mode, an open or linked directory refused, the peer check; on Windows the pipe's and the address file's owner and DACL, the anonymous logon refused by the pipe and the directory, a name taken first refused) |
+| T | A symbolic link redirects the socket to another file | The socket path and its directory are read without following links (on Windows any reparse point is refused, opened with `FILE_FLAG_OPEN_REPARSE_POINT`); a link is refused by the server and the client, and a file that is not a left-over socket of the user's is never replaced | verified (tests; Windows links unverified: making one needs a privilege CI's tests do not take) |
+| S, I | A planted address file (Windows) sends the client to another pipe, or to another machine (which would receive the user's credentials) | The client reads only an address file of the user's, at most 256 bytes, whose second line is `\\.\pipe\rich-local-` and 32 lowercase hex digits: never a UNC path or another program's pipe; then the pipe's owner must be the user | verified (tests: a remote name and other forms refused) |
 | E | A read-only session changes the page | The server refuses every verb marked as changing anything before the handler runs; unknown verbs are refused too | verified (tests: every changing verb refused, the page untouched) |
 | D | A client holds the socket or floods it | Requests of at most 64 kB, replies of at most 16 MB, 5-second read and write timeouts, at most 8 connections answered at once | verified (tests: an oversized request, a silent client) |
-| I | The control socket is reachable from the network | A Unix socket only; nothing listens on a port | verified (by construction) |
+| I | The control socket is reachable from the network | A Unix socket, or a local named pipe with `PIPE_REJECT_REMOTE_CLIENTS`; nothing listens on a port | verified (by construction) |
 | T | The pixel view's frames carry escapes to the terminal | The page's pixels are only pixels: Noctiluca encodes them itself into Kitty's protocol (`rich_art::tiles`, `Picture`); nothing the page says reaches those escapes | documented |
 
 **Gaps:**
@@ -401,8 +402,11 @@ the pixel view.
   quarantine's location, its permissions and the move. **planned**.
 - **The agent-control CLI (#816):** in, with the rows above. What is
   left:
-  - **Windows** has no control socket yet (a named pipe with an ACL for
-    the user): the commands say "Unix only for now". **gap** (low).
+  - **Windows:** the named pipe (0.0.25) is in, with the rows above.
+    Another *real* user's refusal is shown in CI by the anonymous logon's
+    token, not a second account (a hosted runner cannot log on as one
+    without a password store); the decision is the same DACL check.
+    **verified** (anonymous logon), unverified (a second account).
   - **Page text reaches the agent.** A snapshot is the page's own text,
     cleaned of control characters but not of meaning, so a page can write
     instructions aimed at an agent. The agent must treat it as data. With
@@ -604,8 +608,9 @@ in the CLI, and intuiTUIve's
 [`log/console.rs`](https://github.com/buchochelliq-labs/rs-rich-cli/blob/main/crates/rich-intuituive/src/log/console.rs)
 (the `tracing` plugin, 0.0.24, #815). An app run with `INTUITUIVE_CONSOLE`
 sends its `tracing` events, and the inspector's trace (keys, focus,
-signal writes), as JSON lines to a Unix domain socket where `rich console`
-listens. Unix only for now.
+signal writes), as JSON lines to a local socket where `rich console`
+listens: a Unix domain socket, or on Windows (0.0.25) a named pipe, both
+through rs-rich-ext's `local_socket`.
 
 **Assets:** what the app logs (which may hold the user's data, and the keys
 typed while the trace is on); the user's terminal, where the console
@@ -619,20 +624,18 @@ socket's path (`--socket`, `INTUITUIVE_CONSOLE`).
 
 | | Threat | Mitigation | State |
 |---|---|---|---|
-| I, T | Another local user connects to the console, or the app connects to another user's console | The socket's directory must be the user's alone (made 0700 when missing; one others can enter or write is refused, never changed); the socket is made 0600 and checked right after the bind, inside that directory, so no one else can reach it before (the process-wide umask is left alone); the console drops a connection whose peer is another user, and the app refuses a path that is not a socket of its own user or a listener of another user (`SO_PEERCRED` on Linux and Android, `getpeereid` on macOS and the BSDs; the directory's mode elsewhere). Never a TCP port | verified (Linux tests: modes, refusals, the user's own peer) |
+| I, T | Another local user connects to the console, or the app connects to another user's console | The socket's directory must be the user's alone (made 0700 when missing; one others can enter or write is refused, never changed); the socket is made 0600 and checked right after the bind, inside that directory, so no one else can reach it before (the process-wide umask is left alone); the console drops a connection whose peer is another user, and the app refuses a path that is not a socket of its own user or a listener of another user (`SO_PEERCRED` on Linux and Android, `getpeereid` on macOS and the BSDs; the directory's mode elsewhere). On Windows the same rules through a named pipe: the directory made with a DACL granting the user's SID alone, the pipe's DACL granting the user alone (`O:<sid>D:P(A;;GA;;;<sid>)`), `PIPE_REJECT_REMOTE_CLIENTS`, `FILE_FLAG_FIRST_PIPE_INSTANCE`, an unguessable name in an address file only the user can read, and the app checking the pipe's owner (see the control socket's rows in [Noctiluca](#4-noctiluca-and-chrome)). Never a TCP port | verified (Linux tests: modes, refusals, the user's own peer; Windows tests: the DACLs and owners, the anonymous logon refused) |
 | T | A path planted at the socket's place: a symbolic link, or a file the console would delete | A symbolic link at the path, or as the directory, is refused, by both sides; anything at the path but a stale socket of the user's is refused and left alone | verified |
 | T | Event text drives the terminal | The console prints events through rs-rich-ext's structured event presentation, as `rich log` does | documented |
 | D | A slow console stalls the app | Events go through a bounded queue on a thread of their own; a full queue drops them | documented |
 
 **Gaps:**
 
-- **Windows:** no named pipe yet; `rich console` refuses to run and
-  `install_console` does nothing there. A pipe needs an ACL for the user
-  alone, `PIPE_REJECT_REMOTE_CLIENTS`, and a check of the server's owner
-  from the client. **planned**.
 - **Another user's peer** is refused by code that tests cannot reach
-  without a second account; the decision itself is unit-tested. **verified
-  (logic)**, unverified (a live second user).
+  without a second account; the decision itself is unit-tested. On
+  Windows the anonymous logon's token stands in for another user: the
+  pipe's DACL and the directory's refuse it. **verified (logic; Windows:
+  anonymous logon)**, unverified (a live second user).
 
 ## The review checklist
 
@@ -765,9 +768,13 @@ says, not in a public issue.
 - [x] The peer's user checked on both sides where the platform says
       (`SO_PEERCRED`, `getpeereid`); a symbolic link or a file at the path
       refused and left alone (0.0.24).
-- [ ] A live test with a second user account, on Linux and macOS.
-- [ ] The Windows named pipe: its ACL, remote clients refused, the
-      server's owner checked by the app, once it is built.
+- [ ] A live test with a second user account, on Linux, macOS and
+      Windows.
+- [x] The Windows named pipe: its DACL (the user alone, protected, the
+      user the owner), remote clients refused, a name taken first
+      refused, the server's owner checked by the client, the anonymous
+      logon refused (0.0.25, rs-rich-ext's `local_socket`, tests on the
+      Windows CI job).
 
 ### Across surfaces
 

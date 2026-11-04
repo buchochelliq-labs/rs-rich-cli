@@ -129,7 +129,7 @@ sends. See [Scripts and coding agents](agents.md).
 
 | Key | Type | Default | Meaning |
 |---|---|---|---|
-| `control` | boolean | `false` | Listen on the control socket, as `--control` does (Unix only for now) |
+| `control` | boolean | `false` | Listen on the control socket, as `--control` does (a named pipe on Windows) |
 | `read_only` | boolean | `false` | When listening, refuse every action that changes anything, as `--read-only` does |
 | `send` | `"clipboard"`, `"pane"` or `"pane:ID"` | `"clipboard"` | Where `Ctrl+G` sends the element you pick: the clipboard, the pane beside this one, or a pane by its id, through the terminal's API |
 
