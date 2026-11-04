@@ -1175,6 +1175,8 @@ fn project_part(
     let mut freed: Vec<(f64, f64, usize, usize)> = Vec::new();
     // Controls: one row each, cut rather than wrapped.
     let mut one_row: Vec<usize> = Vec::new();
+    // The one-row indicators among them (a bar, steps, stars).
+    let mut indicator_items: Vec<usize> = Vec::new();
     for (r, region) in page.regions.iter().enumerate() {
         if !collapsed[r] {
             continue;
@@ -1362,6 +1364,7 @@ fn project_part(
                 let mut lines = crate::indicator::lines(indicator, i1 - i0, rows, (cw, ch));
                 if lines.len() == 1 {
                     one_row.push(items.len());
+                    indicator_items.push(items.len());
                     let mut item = text_item(
                         indicator.node,
                         indicator.rect,
@@ -1739,6 +1742,39 @@ fn project_part(
         .collect();
     for b in touching {
         items[b].x0 += 1;
+    }
+    // A one-row indicator drawn wider than its box (a rating's stars and
+    // number in a box Chrome sized for its picture) moves what follows it
+    // on its row right, a cell past its end, so the two do not run
+    // together ("4.512,408") or cut it ("4…"); in a grid's cell too.
+    for &n in &indicator_items {
+        let (top, bottom, x0) = (items[n].top, items[n].bottom, items[n].x0);
+        let end = x0 + need_of(&items[n]);
+        if end > columns {
+            continue;
+        }
+        for m in 0..items.len() {
+            let item = &items[m];
+            if m == n
+                || item.wrap.is_none()
+                || item.x0 <= x0
+                || item.x0 > end
+                || item.bottom - item.top > 1.5 * ch
+                || item.top >= bottom - 0.5
+                || top >= item.bottom - 0.5
+            {
+                continue;
+            }
+            let shift = end + 1 - item.x0;
+            let item = &mut items[m];
+            if item.x1 + shift <= columns {
+                item.x0 += shift;
+                item.x1 += shift;
+            } else {
+                item.x0 = (end + 1).min(item.x1.saturating_sub(1));
+            }
+        }
+        items[n].x1 = items[n].x1.max(end);
     }
     // Terminal glyphs are not Chrome's: a box whose text needs more cells
     // than it has grows to the right, into cells no box beside it (on the

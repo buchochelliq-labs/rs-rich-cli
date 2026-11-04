@@ -518,3 +518,18 @@ fn a_lazy_thumbnail_gets_a_placeholder_with_its_title() {
         "{shown}"
     );
 }
+
+#[test]
+fn a_ratings_number_and_the_count_after_it_keep_apart() {
+    // The stars and number are wider than the box Chrome sized for the
+    // stars' picture: what follows moves right, in a grid's cell too.
+    let shown = lines(&page("product-grid"), 100, Adapt::default());
+    let line = line_with(&shown, "★★★★½ 4.5");
+    assert!(line.contains("★★★★½ 4.5 12,408"), "{shown:#?}");
+    assert!(line_with(&shown, "★★★★☆ 4.1").contains("4.1 3,117"));
+    let shown = lines(&page("meters"), 100, Adapt::default());
+    assert!(
+        line_with(&shown, "Rating").contains("★★★★½ 4.5 (1,204)"),
+        "{shown:#?}"
+    );
+}
