@@ -50,9 +50,11 @@ the release counts are used for.
   [`buchochelliq-labs/rs-rich-marketplace`](https://github.com/buchochelliq-labs/rs-rich-marketplace),
   validated against
   [`listing.schema.json`](https://github.com/buchochelliq-labs/rs-rich-cli/blob/main/schemas/marketplace/listing.schema.json).
-- **Four kinds:** `crate`, `wasm-plugin`, `micro-pack` and `theme`. Only a
-  WASM plugin and the two asset packs (micro packs and themes) install from
-  the marketplace. A crate is listed, never installed.
+- **Five kinds:** `crate`, `wasm-plugin`, `micro-pack`, `theme` and
+  `agent`. Only a WASM plugin and the two asset packs (micro packs and
+  themes) install from the marketplace. A crate and an agent are listed,
+  never installed: an agent's verified launch command is recorded for
+  Cornacai ([Agents](#agents)).
 - **Every version** names its artifact's URL, SHA-256 and size, what it
   needs from the host (`requires`), its capabilities and its permissions,
   and whether it is yanked and why.
@@ -94,7 +96,7 @@ marked optional:
 |---|---|---|
 | `schema_version` | integer | `1` for this format. A client refuses a version it does not know. |
 | `id` | string | Unique across every kind. The plugin name rule: lowercase letters, digits, `-`, `_` and `.`, starting with a letter or digit, at most 64 bytes (`rich_plugin_api::is_valid_name`). A micro pack's id is also a micro name segment (no `.`). |
-| `kind` | string | `crate`, `wasm-plugin`, `micro-pack` or `theme`. |
+| `kind` | string | `crate`, `wasm-plugin`, `micro-pack`, `theme` or `agent`. |
 | `name` | string | A human-readable name. |
 | `description` | string | One line on what it adds. |
 | `tier` | string | `official`, `reviewed` or `community` (see [Tiers](#tiers)). |
@@ -105,6 +107,7 @@ marked optional:
 | `keywords` | strings | Optional, at most 8, for search. |
 | `recommended` | object | Optional, set by a maintainer: `since` (`YYYY-MM-DD`) and `note` (at most 140 characters). See [Recommended](#recommended). |
 | `crate` | object | For a `crate` only, and required there: `name` (the crate on crates.io) and optional `features` (the Cargo features that enable the plugin). |
+| `agent` | object | For an `agent` only, and required there: `command` (a bare program name looked for on `PATH`: no path, no spaces), optional `args` (at most 32), optional `env` (the environment variables it reads, by name only, `A-Z0-9_`, at most 32) and `install` (one line: how to install the program). |
 | `versions` | array | Every version ever listed, **newest first** by SemVer precedence. |
 
 Each version:
@@ -132,6 +135,7 @@ printed in a terminal as it is. Unknown keys are refused by the schema.
 | `crate` | `plugin_api`: integer | `rich_plugin_api::PLUGIN_API_VERSION`; `is_supported_api_version(n)`: equal | the registrar's: `highlighter`, `code-highlighter`, `theme`, `box-style`, `renderer`, `fence-renderer`, `transform`, `action`, `component` | must include `native-code`; any of `filesystem-read`, `filesystem-write`, `network`, `process`, `environment`, `clipboard` | `https://static.crates.io/crates/NAME/NAME-VERSION.crate` |
 | `micro-pack` | `micro_schema`: integer | `rich_micro::package::SCHEMA_VERSION`: equal | `asset`, named with micro names (`status/success`) | none | a `.zip` or `.richmicro` pack archive (a `pack.json` at its root), at most 8 MiB (micro's `Limits::default().max_archive_bytes`) |
 | `theme` | `theme_format`: integer | `1`: upstream `rich`'s `[styles]` INI file, as `--theme-file` reads it | `theme`, at least one | none | `.ini` or `.theme`, at most 1 MiB (the CLI's theme file limit) |
+| `agent` | `acp`: integer | `rich_marketplace::ACP_VERSION` (`1`, the Agent Client Protocol version rs-rich-acp speaks): equal | `agent`, optional | must include `native-code`; any of `filesystem-read`, `filesystem-write`, `network`, `process`, `environment`, `clipboard` (declared, not enforced) | any `https://` URL: the release the install hint installs, never downloaded by `rich` |
 
 `requires` names the host's own numbers; the format adds none of its own
 except `theme_format`, because a theme file has no version of its own.
@@ -322,7 +326,39 @@ library cannot be listed), `missing-abi`, `wasm-network-permission`,
 `yanked-without-reason`, `crate-without-native-code`, `http-artifact`,
 `unsorted-versions`, `ansi-without-permission`, `crate-url-mismatch`,
 `official-outside-repository`, `duplicate-version`,
-`recommended-long-note` and `recommended-bad-day`.
+`recommended-long-note`, `recommended-bad-day`, `agent-without-command`,
+`agent-command-path`, `agent-without-native-code`, `agent-wrong-requires`
+and `agent-field-on-theme`.
+
+### Agents
+
+An `agent` listing names a coding agent that speaks the Agent Client
+Protocol, for [Cornacai](cornacai.md) and other ACP clients:
+
+```json
+{"id": "echo-agent", "kind": "agent", "name": "Echo Agent",
+ "agent": {"command": "echo-agent", "args": ["--acp"],
+           "env": ["ECHO_AGENT_API_KEY"],
+           "install": "npm install -g @example/echo-agent"},
+ "versions": [{"version": "1.4.0", "published": "2026-10-30",
+               "requires": {"acp": 1},
+               "artifact": {"url": "https://registry.npmjs.org/@example/echo-agent/-/echo-agent-1.4.0.tgz",
+                            "sha256": "…", "size": 81920},
+               "capabilities": [{"kind": "agent", "name": "echo-agent"}],
+               "permissions": ["native-code", "network", "process"]}]}
+```
+
+Installing one never runs an installer and downloads nothing. `rich plugin
+install ID` reads the listing through the verified index, resolves a
+version whose `acp` this host speaks, and records the launch command, the
+environment variable names and the install hint in `agents.json` in the
+install directory (`rich_marketplace::AgentList`); it prints the hint for
+the user to follow. `rich plugin list` shows it, `rich plugin remove ID`
+forgets it. Cornacai reads `agents.json` and offers each recorded agent
+after its built-in ones, once the program is on `PATH`. The command is a
+bare program name so that a listing cannot point at a path of its own
+choosing; the environment is named, never given, so a listing carries no
+secrets and sets nothing.
 
 ## The index
 
@@ -678,6 +714,17 @@ ignores keys it does not know within a schema version it reads. So:
   meaning, a new kind) is version 2. A client refuses a version it does not
   know and says to update; the marketplace keeps serving version 1 beside it
   for a transition stated in that release's notes.
+
+**The `agent` kind (0.0.25) was added within version 1,** against the rule
+above, because `rich` releases before it read the whole marketplace at
+once: `rich plugin search` and `browse` of 0.0.24 and earlier fail on any
+listing they cannot read, whether its kind is new or its `schema_version`
+is 2, so a version 2 would have broken them the same way. From 0.0.25 a
+search leaves out a listing of a kind or a format it does not know, with a
+warning naming it, and asking for it by name says to update; the next new
+kind can follow the rule. Until the releases before 0.0.25 are out of use,
+**the marketplace should list no `agent` package**: the maintainer
+decides when, and says so in the release notes that announce it.
 
 ## Validating
 

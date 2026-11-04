@@ -29,12 +29,18 @@ impl !core::panic::unwind_safe::UnwindSafe for cornacai::app::Handle
 pub struct cornacai::app::Options
 pub cornacai::app::Options::cwd: std::path::PathBuf
 pub cornacai::app::Options::launch: cornacai::app::Launch
+pub cornacai::app::Options::pty: bool
 pub cornacai::app::Options::read: bool
+pub cornacai::app::Options::resume: core::option::Option<alloc::string::String>
 pub cornacai::app::Options::shell: core::option::Option<cornacai::app::ShellPane>
+pub cornacai::app::Options::store: core::option::Option<cornacai::store::SessionStore>
 pub cornacai::app::Options::terminal: bool
 pub cornacai::app::Options::write: bool
 impl cornacai::app::Options
 pub fn cornacai::app::Options::new(cornacai::app::Launch, impl core::convert::Into<std::path::PathBuf>) -> cornacai::app::Options
+pub fn cornacai::app::Options::pty(self, bool) -> cornacai::app::Options
+pub fn cornacai::app::Options::resume(self, impl core::convert::Into<alloc::string::String>) -> cornacai::app::Options
+pub fn cornacai::app::Options::session_store(self, cornacai::store::SessionStore) -> cornacai::app::Options
 pub fn cornacai::app::Options::shell_command(self, alloc::vec::Vec<alloc::string::String>) -> cornacai::app::Options
 pub fn cornacai::app::Options::shell_pane(self, impl core::ops::function::FnOnce() -> rich_embed::pane::TerminalPane + 'static) -> cornacai::app::Options
 impl core::marker::Freeze for cornacai::app::Options
@@ -74,8 +80,31 @@ pub fn cornacai::clean::is_hidden(char) -> bool
 pub fn cornacai::clean::markup(&str) -> alloc::string::String
 pub fn cornacai::clean::reveal(&str) -> alloc::string::String
 pub mod cornacai::config
+pub struct cornacai::config::AgentChoice
+pub cornacai::config::AgentChoice::command: alloc::vec::Vec<alloc::string::String>
+pub cornacai::config::AgentChoice::install: alloc::string::String
+pub cornacai::config::AgentChoice::listing: core::option::Option<(alloc::string::String, alloc::string::String)>
+pub cornacai::config::AgentChoice::name: alloc::string::String
+impl cornacai::config::AgentChoice
+pub fn cornacai::config::AgentChoice::installed(&self) -> bool
+impl core::clone::Clone for cornacai::config::AgentChoice
+pub fn cornacai::config::AgentChoice::clone(&self) -> cornacai::config::AgentChoice
+impl core::cmp::Eq for cornacai::config::AgentChoice
+impl core::cmp::PartialEq for cornacai::config::AgentChoice
+pub fn cornacai::config::AgentChoice::eq(&self, &cornacai::config::AgentChoice) -> bool
+impl core::fmt::Debug for cornacai::config::AgentChoice
+pub fn cornacai::config::AgentChoice::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for cornacai::config::AgentChoice
+impl core::marker::Freeze for cornacai::config::AgentChoice
+impl core::marker::Send for cornacai::config::AgentChoice
+impl core::marker::Sync for cornacai::config::AgentChoice
+impl core::marker::Unpin for cornacai::config::AgentChoice
+impl core::marker::UnsafeUnpin for cornacai::config::AgentChoice
+impl core::panic::unwind_safe::RefUnwindSafe for cornacai::config::AgentChoice
+impl core::panic::unwind_safe::UnwindSafe for cornacai::config::AgentChoice
 pub struct cornacai::config::Config
 pub cornacai::config::Config::agent: core::option::Option<alloc::vec::Vec<alloc::string::String>>
+pub cornacai::config::Config::pty: bool
 pub cornacai::config::Config::read: bool
 pub cornacai::config::Config::shell: core::option::Option<alloc::vec::Vec<alloc::string::String>>
 pub cornacai::config::Config::terminal: bool
@@ -122,9 +151,12 @@ impl core::marker::UnsafeUnpin for cornacai::config::KnownAgent
 impl core::panic::unwind_safe::RefUnwindSafe for cornacai::config::KnownAgent
 impl core::panic::unwind_safe::UnwindSafe for cornacai::config::KnownAgent
 pub const cornacai::config::KNOWN_AGENTS: &[cornacai::config::KnownAgent]
+pub fn cornacai::config::agent_choices(&[rich_marketplace::agents::ListedAgent]) -> alloc::vec::Vec<cornacai::config::AgentChoice>
 pub fn cornacai::config::config_path() -> core::option::Option<std::path::PathBuf>
 pub fn cornacai::config::installed_agents() -> alloc::vec::Vec<cornacai::config::KnownAgent>
+pub fn cornacai::config::marketplace_agents(&std::path::Path) -> alloc::vec::Vec<rich_marketplace::agents::ListedAgent>
 pub fn cornacai::config::on_path(&str) -> bool
+pub fn cornacai::config::rich_plugin_dir() -> core::option::Option<std::path::PathBuf>
 pub mod cornacai::mention
 pub struct cornacai::mention::Mention
 pub cornacai::mention::Mention::path: std::path::PathBuf
@@ -201,3 +233,91 @@ impl core::marker::UnsafeUnpin for cornacai::session::Session
 impl core::panic::unwind_safe::RefUnwindSafe for cornacai::session::Session
 impl core::panic::unwind_safe::UnwindSafe for cornacai::session::Session
 pub fn cornacai::session::chunk_text(&rich_acp::schema::ContentBlock) -> alloc::string::String
+pub mod cornacai::store
+pub struct cornacai::store::SessionStore
+impl cornacai::store::SessionStore
+pub fn cornacai::store::SessionStore::default_path() -> core::option::Option<std::path::PathBuf>
+pub fn cornacai::store::SessionStore::forget(&self, &str, &str) -> std::io::error::Result<()>
+pub fn cornacai::store::SessionStore::get(&self, &str, &str) -> core::option::Option<cornacai::store::StoredSession>
+pub fn cornacai::store::SessionStore::list(&self) -> alloc::vec::Vec<cornacai::store::StoredSession>
+pub fn cornacai::store::SessionStore::new(impl core::convert::Into<std::path::PathBuf>) -> cornacai::store::SessionStore
+pub fn cornacai::store::SessionStore::path(&self) -> &std::path::Path
+pub fn cornacai::store::SessionStore::remember(&self, cornacai::store::StoredSession) -> std::io::error::Result<()>
+pub fn cornacai::store::SessionStore::retitle(&self, &str, &str, &str) -> std::io::error::Result<()>
+pub fn cornacai::store::SessionStore::sessions_of(&self, &str, &std::path::Path) -> alloc::vec::Vec<cornacai::store::StoredSession>
+impl core::clone::Clone for cornacai::store::SessionStore
+pub fn cornacai::store::SessionStore::clone(&self) -> cornacai::store::SessionStore
+impl core::cmp::Eq for cornacai::store::SessionStore
+impl core::cmp::PartialEq for cornacai::store::SessionStore
+pub fn cornacai::store::SessionStore::eq(&self, &cornacai::store::SessionStore) -> bool
+impl core::fmt::Debug for cornacai::store::SessionStore
+pub fn cornacai::store::SessionStore::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for cornacai::store::SessionStore
+impl core::marker::Freeze for cornacai::store::SessionStore
+impl core::marker::Send for cornacai::store::SessionStore
+impl core::marker::Sync for cornacai::store::SessionStore
+impl core::marker::Unpin for cornacai::store::SessionStore
+impl core::marker::UnsafeUnpin for cornacai::store::SessionStore
+impl core::panic::unwind_safe::RefUnwindSafe for cornacai::store::SessionStore
+impl core::panic::unwind_safe::UnwindSafe for cornacai::store::SessionStore
+pub struct cornacai::store::StoredSession
+pub cornacai::store::StoredSession::agent: alloc::string::String
+pub cornacai::store::StoredSession::cwd: std::path::PathBuf
+pub cornacai::store::StoredSession::id: alloc::string::String
+pub cornacai::store::StoredSession::last_used: u64
+pub cornacai::store::StoredSession::title: alloc::string::String
+impl core::clone::Clone for cornacai::store::StoredSession
+pub fn cornacai::store::StoredSession::clone(&self) -> cornacai::store::StoredSession
+impl core::cmp::Eq for cornacai::store::StoredSession
+impl core::cmp::PartialEq for cornacai::store::StoredSession
+pub fn cornacai::store::StoredSession::eq(&self, &cornacai::store::StoredSession) -> bool
+impl core::fmt::Debug for cornacai::store::StoredSession
+pub fn cornacai::store::StoredSession::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for cornacai::store::StoredSession
+impl core::marker::Freeze for cornacai::store::StoredSession
+impl core::marker::Send for cornacai::store::StoredSession
+impl core::marker::Sync for cornacai::store::StoredSession
+impl core::marker::Unpin for cornacai::store::StoredSession
+impl core::marker::UnsafeUnpin for cornacai::store::StoredSession
+impl core::panic::unwind_safe::RefUnwindSafe for cornacai::store::StoredSession
+impl core::panic::unwind_safe::UnwindSafe for cornacai::store::StoredSession
+pub const cornacai::store::MAX_SESSIONS: usize
+pub fn cornacai::store::ago(u64, u64) -> alloc::string::String
+pub fn cornacai::store::now() -> u64
+pub mod cornacai::terminals
+pub struct cornacai::terminals::AgentTerminals
+impl cornacai::terminals::AgentTerminals
+pub fn cornacai::terminals::AgentTerminals::create(&self, &rich_acp::schema::CreateTerminalRequest) -> core::result::Result<rich_acp::schema::CreateTerminalResponse, rich_acp::error::RpcError>
+pub fn cornacai::terminals::AgentTerminals::kill(&self, &rich_acp::schema::TerminalRequest) -> core::result::Result<(), rich_acp::error::RpcError>
+pub fn cornacai::terminals::AgentTerminals::new(rich_acp::workspace::Workspace, bool) -> cornacai::terminals::AgentTerminals
+pub fn cornacai::terminals::AgentTerminals::output(&self, &rich_acp::schema::TerminalRequest) -> core::result::Result<rich_acp::schema::TerminalOutputResponse, rich_acp::error::RpcError>
+pub fn cornacai::terminals::AgentTerminals::release(&self, &rich_acp::schema::TerminalRequest) -> core::result::Result<(), rich_acp::error::RpcError>
+pub fn cornacai::terminals::AgentTerminals::uses_pty(&self) -> bool
+pub fn cornacai::terminals::AgentTerminals::wait_for_exit(&self, &rich_acp::schema::TerminalRequest) -> core::result::Result<rich_acp::schema::TerminalExitStatus, rich_acp::error::RpcError>
+impl core::ops::drop::Drop for cornacai::terminals::AgentTerminals
+pub fn cornacai::terminals::AgentTerminals::drop(&mut self)
+impl !core::marker::Freeze for cornacai::terminals::AgentTerminals
+impl core::marker::Send for cornacai::terminals::AgentTerminals
+impl core::marker::Sync for cornacai::terminals::AgentTerminals
+impl core::marker::Unpin for cornacai::terminals::AgentTerminals
+impl core::marker::UnsafeUnpin for cornacai::terminals::AgentTerminals
+impl core::panic::unwind_safe::RefUnwindSafe for cornacai::terminals::AgentTerminals
+impl core::panic::unwind_safe::UnwindSafe for cornacai::terminals::AgentTerminals
+pub struct cornacai::terminals::Plain
+impl cornacai::terminals::Plain
+pub fn cornacai::terminals::Plain::new(usize) -> cornacai::terminals::Plain
+pub fn cornacai::terminals::Plain::push(&mut self, &[u8])
+pub fn cornacai::terminals::Plain::text(&self) -> &str
+pub fn cornacai::terminals::Plain::truncated(&self) -> bool
+impl core::clone::Clone for cornacai::terminals::Plain
+pub fn cornacai::terminals::Plain::clone(&self) -> cornacai::terminals::Plain
+impl core::fmt::Debug for cornacai::terminals::Plain
+pub fn cornacai::terminals::Plain::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Freeze for cornacai::terminals::Plain
+impl core::marker::Send for cornacai::terminals::Plain
+impl core::marker::Sync for cornacai::terminals::Plain
+impl core::marker::Unpin for cornacai::terminals::Plain
+impl core::marker::UnsafeUnpin for cornacai::terminals::Plain
+impl core::panic::unwind_safe::RefUnwindSafe for cornacai::terminals::Plain
+impl core::panic::unwind_safe::UnwindSafe for cornacai::terminals::Plain
+pub const cornacai::terminals::PTY_SIZE: (u16, u16)

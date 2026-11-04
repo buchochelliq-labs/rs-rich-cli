@@ -1346,6 +1346,11 @@ fn stale_keys_hint(error: IndexError, keys: &KeySet, location: &Location) -> Fai
 impl Market {
     /// Read and check listing `id`.
     pub(crate) fn listing(&self, id: &str) -> Outcome<Listing> {
+        self.read_listing(id)?.map_err(listing_failure)
+    }
+
+    /// A listing as read, its own fault kept apart from the marketplace's.
+    fn read_listing(&self, id: &str) -> Outcome<Result<Listing, ListingError>> {
         let entry = self.index.entry(id).ok_or_else(|| {
             usage(format!(
                 "no package {:?} in the marketplace at {}",
@@ -1357,16 +1362,34 @@ impl Market {
             .location
             .fetch(&entry.path, MAX_LISTING_BYTES)?
             .ok_or_else(|| data(format!("{} is missing from the marketplace", entry.path)))?;
-        self.index.read_listing(id, &bytes).map_err(listing_failure)
+        Ok(self.index.read_listing(id, &bytes))
     }
 
-    /// Every listing, by id.
+    /// Every listing, by id. A listing of a kind or a format this release
+    /// does not know (a newer one's) is left out with a warning, so one new
+    /// kind in the marketplace does not stop an older `rich` from searching
+    /// the rest.
     pub(crate) fn listings(&self) -> Outcome<Vec<Listing>> {
-        self.index
-            .listings()
-            .keys()
-            .map(|id| self.listing(id))
-            .collect()
+        let mut out = Vec::new();
+        let mut skipped = Vec::new();
+        for id in self.index.listings().keys() {
+            match self.read_listing(id)? {
+                Ok(listing) => out.push(listing),
+                Err(ListingError::UnknownKind(_) | ListingError::UnsupportedSchema(_)) => {
+                    skipped.push(controls::shown(id).to_string());
+                }
+                Err(error) => return Err(listing_failure(error)),
+            }
+        }
+        if !skipped.is_empty() {
+            eprintln!(
+                "rich: warning: left out {} listing(s) of a kind or format this rich does not \
+                 know (update rich to see them): {}",
+                skipped.len(),
+                skipped.join(", ")
+            );
+        }
+        Ok(out)
     }
 }
 

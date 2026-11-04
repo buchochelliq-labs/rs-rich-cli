@@ -689,6 +689,41 @@ fn an_agent_is_found_by_kind_and_recorded_never_installed() {
     assert_code(&w.plugin(&["remove", "echo-agent"]), 2);
 }
 
+/// A kind this release does not know (a newer release's) is left out of
+/// a search with a warning, not fatal to it.
+#[test]
+fn a_listing_of_an_unknown_kind_does_not_stop_a_search() {
+    let mut w = world();
+    let mut future = agent_listing();
+    future["id"] = json!("hologram");
+    future["kind"] = json!("hologram-pack");
+    w.market.listings.push(("hologram".to_string(), future));
+    let serial = w.market.serial + 1;
+    w.market.publish(serial);
+    let out = w.plugin(&["search"]);
+    assert_code(&out, 0);
+    assert!(
+        text(&out.stdout).contains("solarized"),
+        "{}",
+        text(&out.stdout)
+    );
+    assert!(!text(&out.stdout).contains("hologram"));
+    assert!(
+        text(&out.stderr).contains("left out 1 listing(s)")
+            && text(&out.stderr).contains("hologram"),
+        "{}",
+        text(&out.stderr)
+    );
+    // Asked for by name, it is still refused, saying why.
+    let out = w.plugin(&["info", "hologram"]);
+    assert_code(&out, 4);
+    assert!(
+        text(&out.stderr).contains("update rs-rich"),
+        "{}",
+        text(&out.stderr)
+    );
+}
+
 #[test]
 fn install_list_disable_enable_and_remove_a_theme() {
     let w = world();

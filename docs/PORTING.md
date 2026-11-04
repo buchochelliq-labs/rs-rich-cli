@@ -387,7 +387,9 @@ Python `rich` has no agents. It drives an agent through `rs-rich-acp`'s
 public `Connection` and `Client`, draws with `rs-rich-intuituive`'s stock
 nodes (`markdown`, `collapsible_with`, `follow_end`, the prompt editor,
 `files::path_completer`, `widgets::diff_view_with`) and runs its shell pane
-on `rs-rich-embed`'s `PtyHost`. It adds nothing to intuiTUIve core. Core is
+on `rs-rich-embed`'s `PtyHost`, as it does the agent's commands with the
+`pty` setting. It reads the agents `rich plugin install` records through
+`rs-rich-marketplace`'s `AgentList`. It adds nothing to intuiTUIve core. Core is
 unchanged and no golden fixture covers it. See
 [the design note](design/cornacai.md) and [the guide](guide/cornacai.md).
 
@@ -437,6 +439,7 @@ Each area has its page in [the guide](guide/ext/index.md).
 | keys and the index | `KeySet` and its generations, `verify_index` (signature, serial, rollback, expiry) | 🟢 | `tests/marketplace.rs`, with test keys in `tests/fixtures/keys` |
 | listings and resolution | `read_listing`, the rules beyond the schema, `resolve` with the plugin API's own checks | 🟢 | `tests/marketplace.rs`; the CLI's `plugin_marketplace.rs` and CI's compatibility job |
 | installing and loading | `Installer` over HTTPS through a `Transport`, checks by kind, the lockfile | 🟢 | `tests/marketplace.rs`, `tests/https_trust.rs` (the system store first) |
+| agents | the `agent` kind (listed only: a launch command, the environment it reads, an install hint, `requires.acp`) and `AgentList`, the `agents.json` an install records it in | 🟢 | `listing.rs`'s and `agents.rs`'s unit tests, the schema's examples; the CLI's `plugin_marketplace.rs` |
 
 ### rs-rich-art
 
@@ -502,7 +505,7 @@ Each area has its page in [the guide](guide/ext/index.md).
 
 | area | what it offers | status | tests |
 |---|---|:---:|---|
-| the protocol | ACP version 1 over JSON-RPC on an agent's standard streams: `Connection`, typed messages, the `Client` trait | 🟢 | `tests/replay.rs`, replaying `tests/fixtures/claude_agent.jsonl` (a real agent's turn, recorded on 2026-11-02) |
+| the protocol | ACP version 1 over JSON-RPC on an agent's standard streams: `Connection`, typed messages, the `Client` trait; `authenticate` and `session/load` (refused unsent for an agent without `loadSession`) | 🟢 | `tests/replay.rs`, replaying `tests/fixtures/claude_agent.jsonl` (a real agent's turn, recorded on 2026-11-02) and `load.jsonl` |
 | the client's answers | `Workspace`, `fs` and `Terminals`, inside the session's roots, offered only when asked | 🟢 | `tests/replay.rs` and the unit tests |
 | the fake agent | `replay`: a recorded transcript replayed as the agent over in-process pipes, for testing clients | 🟢 | `tests/replay.rs` (its own tests run on it), the module's doctest |
 
@@ -513,8 +516,8 @@ Each area has its page in [the guide](guide/ext/index.md).
 | the conversation | streamed Markdown answers that follow the end, thoughts and tool calls as folded cards with a live status, the plan, the agent's session title | 🟢 | `tests/app.rs` (on the driver, against rs-rich-acp's fake agent) |
 | the prompt | the prompt editor with history, `@` file mentions completed over the workspace and sent as `resource_link`s | 🟢 | `tests/app.rs`, `mention.rs`'s unit tests |
 | what the agent asks | permission prompts (one button per option), writes reviewed as a diff hunk by hunk, commands asked about and run on pipes, reads inside the workspace | 🟢 | `tests/app.rs` |
-| sessions and the shell | several sessions on one connection as tabs; a shell pane on a PTY, the user's own | 🟡 no resume (`session/load`) or session store yet; agent terminals on pipes, not a PTY | `tests/app.rs` (the shell over a `ReplayHost`) |
-| finding agents | the known agents on `PATH`, the choice saved in the config | 🟡 the marketplace's `agent` kind is not built yet | `config.rs`'s unit tests |
+| sessions and the shell | several sessions on one connection as tabs; a session store and resume with `session/load` (Ctrl+O, `--resume`); sign-in with `authenticate` when the agent asks; a shell pane on a PTY, the user's own; agent terminals on a PTY behind `--pty`, falling back to pipes | 🟢 | `tests/app.rs` (the shell over a `ReplayHost`; `resume.jsonl`, `reopen.jsonl`, `signin.jsonl`, `terminal_pty.jsonl`), `store.rs`'s and `terminals.rs`'s unit tests |
+| finding agents | the known agents on `PATH`, then the marketplace's `agent` listings recorded with `rich plugin install`; the choice saved in the config | 🟢 | `config.rs`'s unit tests; rs-rich-marketplace's `agents.rs` and `listing.rs` tests; rs-rich-cli's `tests/plugin_marketplace.rs` |
 
 ### `rs-rich` on PyPI (crates/rich-py)
 

@@ -49,3 +49,10 @@ version = "0.0.4"
 lint = "enum_variant_added"
 items = ["variant PageAction:ScrollBox", "variant Command:ScrollBox", "variant Rule:Shelves"]
 why = "sideways shelves (real sites, second pass, fix 11): a shelf is paged by scrolling its box sideways, and the shelves adaptation draws its strip (0.0.25 plan)"
+
+[[break]]
+crate = "cornacai"
+version = "0.0.2"
+lint = "constructible_struct_adds_field"
+items = ["field Options.pty", "field Options.store", "field Options.resume", "field Config.pty"]
+why = "Cornacai phase 4 (0.0.25 plan, workstream 2): agent terminals on a PTY behind a setting, the session store and resuming a session with session/load"

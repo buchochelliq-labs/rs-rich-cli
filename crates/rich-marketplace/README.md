@@ -32,6 +32,9 @@ prints.
   `ArtifactChecker`.
 - **Load.** `Lockfile::verify` reads an installed file only after checking
   it against the lockfile: no network, and no index needed.
+- **Agents.** An `agent` listing (a coding agent's ACP launch command) is
+  never installed: `AgentList` records its verified command in
+  `agents.json` for Cornacai, and the user installs the program.
 
 The official keys are not compiled in yet: until they are,
 `KeySet::official` refuses and only explicit keys (in tests) verify
