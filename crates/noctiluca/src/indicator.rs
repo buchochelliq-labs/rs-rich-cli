@@ -275,7 +275,7 @@ pub fn stars(indicator: &Indicator) -> Line {
 /// draws it, as intuiTUIve's own snapshots show it. What it drew is kept
 /// for the same indicator in the same cells, so a page read again draws
 /// no new app.
-fn offscreen(
+pub(crate) fn offscreen(
     key: String,
     cols: usize,
     rows: usize,

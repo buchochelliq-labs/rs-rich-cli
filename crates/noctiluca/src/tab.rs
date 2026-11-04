@@ -168,6 +168,14 @@ pub enum Command {
         x: f64,
         y: f64,
     },
+    /// Scroll the box `node` of the document `document` sideways by `by`
+    /// CSS pixels ([`PageAction::ScrollBox`]): a shelf paged. The page is
+    /// read again, as a sideways scroll changes no DOM.
+    ScrollBox {
+        document: u64,
+        node: NodeId,
+        by: f64,
+    },
     Resize(u16, u16),
     /// Read the page again now.
     Refresh,
@@ -1364,6 +1372,27 @@ impl Worker<'_> {
             Command::Wheel(delta) => self.scroll(PageAction::Wheel(delta)).map_err(failed),
             Command::LoadMore => self.scroll(PageAction::ScrollTo(f64::MAX)).map_err(failed),
             Command::Refresh => {
+                self.read();
+                Ok(())
+            }
+            Command::ScrollBox { document, node, by } => {
+                let page = self
+                    .read()
+                    .ok_or_else(|| Refusal::Stale("The page is not ready.".into()))?;
+                if page.document != document {
+                    return Err(Refusal::Stale(
+                        "Stale document: the tab went to another page.".into(),
+                    ));
+                }
+                if !page.shelves.iter().any(|s| s.node == node) {
+                    return Err(Refusal::Stale("That shelf is gone from the page.".into()));
+                }
+                self.engine
+                    .act(TabId(0), &PageAction::ScrollBox { node, by })
+                    .map_err(failed)?;
+                // Its items moved, with no change to the DOM: read it
+                // again, and capture the pictures that came into view.
+                self.stills_pending = true;
                 self.read();
                 Ok(())
             }

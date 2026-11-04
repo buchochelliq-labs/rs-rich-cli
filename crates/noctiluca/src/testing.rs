@@ -248,6 +248,9 @@ pub struct PageBuilder {
     /// Each node's paint order: its parent's unless set ([`paint`](Self::paint)).
     paint: Vec<i64>,
     scroll_y: f64,
+    /// Boxes that scroll ([`scroll_box`](Self::scroll_box)): the node, its
+    /// scroll rectangle and its client box.
+    scrolls: HashMap<usize, (Rect, Rect)>,
 }
 
 /// The computed styles CSS inherits, among the snapshot's.
@@ -298,6 +301,7 @@ impl PageBuilder {
             current_source: Vec::new(),
             paint: Vec::new(),
             scroll_y: 0.0,
+            scrolls: HashMap::new(),
         };
         let all = Rect::new(0.0, 0.0, width, height);
         page.push(-1, 9, "#document", None, &[], Some(all));
@@ -360,6 +364,20 @@ impl PageBuilder {
         if let Some((_, rect)) = self.layout[0].as_mut() {
             rect.height = height;
         }
+    }
+
+    /// Make laid-out node `node` a box scrolled `left` CSS pixels sideways
+    /// over content `width` wide, showing `client` of it (its
+    /// `scrollRects` and `clientRects`, as Chrome reports them).
+    pub fn scroll_box(&mut self, node: usize, left: f64, width: f64, client: f64) {
+        let height = self.layout[node].as_ref().map_or(0.0, |(_, r)| r.height);
+        self.scrolls.insert(
+            node,
+            (
+                Rect::new(left, 0.0, width, height),
+                Rect::new(0.0, 0.0, client, height),
+            ),
+        );
     }
 
     /// Set a laid-out node's paint order (Chrome's `paintOrders`: boxes
@@ -449,6 +467,7 @@ impl PageBuilder {
             .collect();
         let (mut node_index, mut styles, mut bounds, mut text, mut paint) =
             (Vec::new(), Vec::new(), Vec::new(), Vec::new(), Vec::new());
+        let (mut scroll_rects, mut client_rects) = (Vec::new(), Vec::new());
         for (i, layout) in self.layout.iter().enumerate() {
             let Some((computed, rect)) = layout else {
                 continue;
@@ -457,6 +476,9 @@ impl PageBuilder {
             paint.push(self.paint[i]);
             styles.push(computed.iter().map(|v| s(v)).collect::<Vec<_>>());
             bounds.push(json!([rect.x, rect.y, rect.width, rect.height]));
+            let (scroll, client) = self.scrolls.get(&i).copied().unwrap_or_default();
+            scroll_rects.push(json!([scroll.x, scroll.y, scroll.width, scroll.height]));
+            client_rects.push(json!([client.x, client.y, client.width, client.height]));
             text.push(if self.kind[i] == 3 { values[i] } else { -1 });
         }
         let source = (
@@ -488,6 +510,7 @@ impl PageBuilder {
                 "layout": {
                     "nodeIndex": node_index, "styles": styles, "bounds": bounds, "text": text,
                     "paintOrders": paint,
+                    "scrollRects": scroll_rects, "clientRects": client_rects,
                 },
             }],
             "strings": strings,

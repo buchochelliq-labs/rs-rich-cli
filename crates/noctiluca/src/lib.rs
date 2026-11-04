@@ -138,6 +138,7 @@ pub mod layout;
 pub mod model;
 pub mod pictures;
 pub mod pixel_view;
+pub mod shelf;
 pub mod ssh;
 pub mod start;
 pub mod tab;

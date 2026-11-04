@@ -31,8 +31,9 @@ use crate::engine::{Engine, HistoryStep, MediaOp, NodeId, Playback};
 use crate::layout::{
     self, Line, LogScroll, Marks, Piece, Projection, hint_labels, matches, scroll_log, to_text,
 };
-use crate::model::{Binding, MediaKind, Page, Role};
+use crate::model::{Binding, MediaKind, Page, Role, Shelf};
 use crate::pictures::{self, Live};
+use crate::shelf::page_by;
 use crate::tab::{Command, Intent, Refusal, Tab, Update};
 use crate::video::{Encoder, Job, Pacing, VideoFrame};
 use crate::widgets::{WebControl, web_widget};
@@ -437,6 +438,12 @@ pub fn availability(b: Browser, id: &str) -> Result<(), String> {
                 Err("No video or audio on this page.".into())
             }
         }
+        "shelf.previous" | "shelf.next"
+            if b.page
+                .with(|p| p.as_ref().is_none_or(|p| p.shelves.is_empty())) =>
+        {
+            Err("No shelf on this page: nothing here scrolls sideways.".into())
+        }
         "log.older" | "log.newer"
             if b.page
                 .with(|p| p.as_ref().is_none_or(|p| p.logs.is_empty())) =>
@@ -640,6 +647,33 @@ pub fn run(b: Browser, id: &str, cx: &mut Ctx) {
                 });
             }
         }
+        "shelf.previous" | "shelf.next" => {
+            let forward = id == "shelf.next";
+            let found = b.page.with_untracked(|p| {
+                let p = p.as_ref()?;
+                // What the screen shows of it, as the projection draws it.
+                let right = b.viewport.get_untracked().0 as f64 * CELL.0 as f64;
+                let shelf = current_shelf(b, p)?.clipped(right);
+                Some((
+                    p.document,
+                    shelf.node,
+                    shelf.can_page(),
+                    page_by(&shelf, forward),
+                ))
+            });
+            let Some((document, node, (back, on), by)) = found else {
+                return;
+            };
+            if (forward && !on) || (!forward && !back) {
+                b.say(if forward {
+                    "shelf: at its end"
+                } else {
+                    "shelf: at its start"
+                });
+                return;
+            }
+            b.send(Command::ScrollBox { document, node, by });
+        }
         "about" => drop(b.send(Command::Open(crate::about::ADDRESS.into()))),
         "media.play_pause" | "media.mute" | "media.volume_up" | "media.volume_down"
         | "media.seek_back" | "media.seek_forward" => {
@@ -690,6 +724,25 @@ pub fn current_log(b: Browser) -> Option<(NodeId, usize)> {
                 .find(|(_, row, rows)| *row < top + height && top < row + rows)
                 .map(|(node, _, rows)| (*node, *rows))
         })
+        .or(first)
+}
+
+/// The shelf the shelf keys page: the first in view in the projection,
+/// else the page's first.
+pub fn current_shelf(b: Browser, page: &Page) -> Option<&Shelf> {
+    let first = page.shelves.first();
+    if b.view.get_untracked() == View::Reader {
+        return first;
+    }
+    let top = b.scroll.get_untracked().min(usize::MAX as u64) as usize;
+    let height = b.viewport.get_untracked().1 as usize;
+    let (from, to) = b.layout.with_untracked(|l| {
+        let top = top.min(l.lines.len().saturating_sub(1));
+        (l.y_of(top), l.y_of(top + height))
+    });
+    page.shelves
+        .iter()
+        .find(|s| s.rect.y < to && s.rect.bottom() > from)
         .or(first)
 }
 

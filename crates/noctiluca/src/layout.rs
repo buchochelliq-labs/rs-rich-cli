@@ -1254,6 +1254,32 @@ fn project_part(
             shrunk.push((items.len() - 1, region.rect.height, x0, x1));
         }
     }
+    // A shelf's strip, under its box: what it shows of its items, and
+    // the arrows that page it.
+    if part == Part::Flow && adapt.on(Rule::Shelves) {
+        for shelf in &page.shelves {
+            let (x0, x1) = snap(shelf.rect.x, shelf.rect.right());
+            let top = shelf.rect.bottom();
+            items.push(Item {
+                top,
+                bottom: top + ch,
+                left: shelf.rect.x,
+                x0,
+                x1,
+                wrap: None,
+                lines: vec![crate::shelf::strip(
+                    &shelf.clipped(columns as f64 * cw),
+                    x1 - x0,
+                )],
+                node: shelf.node,
+                log: None,
+                media: None,
+                one_line: false,
+                row: None,
+                caption: None,
+            });
+        }
+    }
     for block in &page.blocks {
         if block.region.is_some_and(|r| collapsed[r]) || block.stack.covered {
             continue;
@@ -1271,6 +1297,15 @@ fn project_part(
         // screen readers only (Wikipedia's reference back-links sit
         // 100,000 pixels up), never shown.
         if block.rect.bottom() < 0.0 || block.rect.right() < 0.0 {
+            continue;
+        }
+        // Scrolled out of a shelf's box sideways: Chrome shows it only
+        // once the shelf is paged to it.
+        if page
+            .shelves
+            .iter()
+            .any(|s| s.clipped(columns as f64 * cw).hides(&block.rect))
+        {
             continue;
         }
         // A block's text wraps within the box that holds it; but text that

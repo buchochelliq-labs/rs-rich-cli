@@ -54,6 +54,7 @@ pub const SNAPSHOT_STYLES: &[&str] = &[
     "clip",
     "clip-path",
     "position",
+    "overflow-x",
 ];
 
 /// The script of the isolated world. It reports only that something
@@ -697,6 +698,13 @@ impl Engine for ChromeBackend {
                 self.call_on(*node, function, vec![json!({"value": argument})])
                     .map(drop)
             }
+            PageAction::ScrollBox { node, by } => self
+                .call_on(
+                    *node,
+                    "function(by) { this.scrollBy({left: by, behavior: 'instant'}); }",
+                    vec![json!({"value": by})],
+                )
+                .map(drop),
             PageAction::ScrollTo(y) => {
                 let context = self.world()?;
                 // Past the end is the end: the document's own height.

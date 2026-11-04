@@ -73,6 +73,11 @@ pub enum Rule {
     /// states on a canvas or a drawing is drawn as a native bar, dial or
     /// stars in its place; off, the picture is.
     Indicators,
+    /// A [shelf](crate::model::Shelf) (a box that scrolls sideways over
+    /// alike items) has a strip under it, intuiTUIve's carousel's arrows
+    /// and count, `‹ 1–3 of 6 ›`, and the shelf keys page it. Off, it
+    /// shows the items in view, as Chrome does, with nothing to page it.
+    Shelves,
 }
 
 /// What a rule is, for the config, the command line and the about page.
@@ -166,6 +171,12 @@ pub const RULES: &[RuleInfo] = &[
         rule: Rule::Indicators,
         name: "indicators",
         what: "meters and ratings drawn on a canvas or SVG as native bars and dials",
+        default: true,
+    },
+    RuleInfo {
+        rule: Rule::Shelves,
+        name: "shelves",
+        what: "sideways shelves get a strip that pages them: ‹ 1–3 of 6 ›",
         default: true,
     },
     RuleInfo {

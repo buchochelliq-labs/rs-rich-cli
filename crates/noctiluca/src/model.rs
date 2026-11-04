@@ -47,6 +47,9 @@ const GAP: f64 = 4.0;
 /// At most this many options of one select.
 const MAX_OPTIONS: usize = 500;
 
+/// Where `overflow-x` is in [`SNAPSHOT_STYLES`](crate::cdp::SNAPSHOT_STYLES).
+const SNAPSHOT_OVERFLOW_X: usize = 15;
+
 /// A run of text with one style.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct Run {
@@ -651,6 +654,85 @@ pub struct Grid {
     pub items: Vec<Rect>,
 }
 
+/// A shelf: a box that scrolls sideways (`overflow-x: auto` or `scroll`,
+/// wider inside than out) over three or more alike items side by side,
+/// a shop's "Customers also viewed", a row of videos. The projection
+/// draws the items in its box, as Chrome shows them, with a strip under
+/// it that pages it (`‹ 1–3 of 6 ›`).
+#[derive(Clone, Debug, PartialEq)]
+pub struct Shelf {
+    /// The scrolling box's node.
+    pub node: NodeId,
+    /// Its box, in CSS pixels of the document.
+    pub rect: Rect,
+    /// Its items' boxes, in order, where Chrome lays them out at its
+    /// scroll now: an item scrolled away is outside [`rect`](Self::rect).
+    pub items: Vec<Rect>,
+    /// How far it is scrolled sideways, in CSS pixels.
+    pub scroll_left: f64,
+    /// How wide its content is, in CSS pixels (`scrollWidth`).
+    pub scroll_width: f64,
+    /// How wide what it shows is, in CSS pixels (`clientWidth`).
+    pub client_width: f64,
+    /// Its accessible name, if it has one.
+    pub label: String,
+}
+
+impl Shelf {
+    /// Whether item `index` is in view: at least half of it in the box.
+    pub fn shows(&self, index: usize) -> bool {
+        self.items.get(index).is_some_and(|item| {
+            let middle = item.x + item.width / 2.0;
+            middle >= self.rect.x && middle <= self.rect.right()
+        })
+    }
+
+    /// The items in view, as (first, how many); (0, 0) when none is.
+    pub fn shown(&self) -> (usize, usize) {
+        let shown: Vec<usize> = (0..self.items.len()).filter(|&i| self.shows(i)).collect();
+        match (shown.first(), shown.last()) {
+            (Some(&first), Some(&last)) => (first, last - first + 1),
+            _ => (0, 0),
+        }
+    }
+
+    /// Whether a box at `rect` is in the shelf (within its rows) but
+    /// scrolled out of its box: in an item not in view, or, outside every
+    /// item, with its middle outside the box.
+    pub fn hides(&self, rect: &Rect) -> bool {
+        let (middle_x, middle_y) = (rect.x + rect.width / 2.0, rect.y + rect.height / 2.0);
+        if middle_y < self.rect.y || middle_y > self.rect.bottom() {
+            return false;
+        }
+        match self
+            .items
+            .iter()
+            .position(|item| middle_x >= item.x && middle_x <= item.right())
+        {
+            Some(index) => !self.shows(index),
+            None => middle_x < self.rect.x || middle_x > self.rect.right(),
+        }
+    }
+
+    /// The shelf as a screen `right` CSS pixels wide shows it: its box
+    /// cut at that edge, so an item past the screen counts as out of view
+    /// (a page laid out wider than the terminal), and a page of it is
+    /// what the screen shows.
+    pub fn clipped(&self, right: f64) -> Shelf {
+        let mut shelf = self.clone();
+        shelf.rect.width = (right.min(self.rect.right()) - self.rect.x).max(0.0);
+        shelf
+    }
+
+    /// Whether it can scroll back, and on.
+    pub fn can_page(&self) -> (bool, bool) {
+        (
+            self.scroll_left > 0.5,
+            self.scroll_left + self.client_width < self.scroll_width - 0.5,
+        )
+    }
+}
+
 /// An action's binding to its target: the document, the node, and the
 /// meaning revision it was chosen at.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -692,6 +774,8 @@ pub struct Page {
     pub grids: Vec<Grid>,
     /// Its meters, progress bars and ratings.
     pub indicators: Vec<Indicator>,
+    /// Its boxes that scroll sideways over alike items ([`Shelf`]).
+    pub shelves: Vec<Shelf>,
     /// Its fixed and sticky boxes ([`Stack::layer`]).
     pub layers: Vec<Layer>,
     /// How far down the page Chrome was scrolled when it was read, in CSS
@@ -821,6 +905,11 @@ struct Dom {
     layout: Vec<Option<usize>>,
     styles: Vec<Vec<String>>,
     bounds: Vec<Rect>,
+    /// Each layout object's scroll (`scrollRects`: left, top, width,
+    /// height) and client box (`clientRects`); empty when the snapshot
+    /// has none.
+    scrolls: Vec<Rect>,
+    clients: Vec<Rect>,
     /// Each node's laid-out text: from the first of its layout objects
     /// that has any (a list marker's is on its second).
     text: Vec<Option<String>>,
@@ -961,17 +1050,21 @@ impl Dom {
                     .collect()
             })
             .unwrap_or_default();
-        let bounds = layout_tree["bounds"]
-            .as_array()
-            .map(|all| {
-                all.iter()
-                    .map(|b| {
-                        let at = |i: usize| b.get(i).and_then(Value::as_f64).unwrap_or(0.0);
-                        Rect::new(at(0), at(1), at(2), at(3))
-                    })
-                    .collect()
-            })
-            .unwrap_or_default();
+        let rects = |key: &str| -> Vec<Rect> {
+            layout_tree[key]
+                .as_array()
+                .map(|all| {
+                    all.iter()
+                        .map(|b| {
+                            let at = |i: usize| b.get(i).and_then(Value::as_f64).unwrap_or(0.0);
+                            Rect::new(at(0), at(1), at(2), at(3))
+                        })
+                        .collect()
+                })
+                .unwrap_or_default()
+        };
+        let bounds = rects("bounds");
+        let (scrolls, clients) = (rects("scrollRects"), rects("clientRects"));
         let mut dom = Dom {
             parent,
             kind,
@@ -983,6 +1076,8 @@ impl Dom {
             layout,
             styles,
             bounds,
+            scrolls,
+            clients,
             text,
             input_value: rare_strings("inputValue"),
             text_value: rare_strings("textValue"),
@@ -1039,6 +1134,13 @@ impl Dom {
 
     fn rect(&self, i: usize) -> Option<Rect> {
         self.layout[i].and_then(|k| self.bounds.get(k).copied())
+    }
+
+    /// Node `i`'s scroll (left, top, width, height) and client box, when
+    /// the snapshot has them.
+    fn scroll(&self, i: usize) -> Option<(Rect, Rect)> {
+        let k = self.layout[i]?;
+        Some((*self.scrolls.get(k)?, *self.clients.get(k)?))
     }
 
     fn is_element(&self, i: usize) -> bool {
@@ -1892,6 +1994,9 @@ impl Walker<'_> {
                 });
             }
         }
+        if laid_out && let Some(shelf) = self.shelf(i) {
+            self.page.shelves.push(shelf);
+        }
         match name {
             "B" | "STRONG" => inner.bold = true,
             "I" | "EM" | "CITE" | "DFN" => inner.italic = true,
@@ -2280,6 +2385,77 @@ impl Walker<'_> {
     }
 
     /// Its accessible name: the AX tree's, else `aria-label`.
+    /// Node `i` as a [`Shelf`], if it is one: it scrolls sideways
+    /// (`overflow-x` `auto` or `scroll`, its content wider than its box,
+    /// not taller), and three or more of its children that show are alike
+    /// (one tag, widths within a quarter of each other) and side by side
+    /// (one top). A list's items may sit one level down (a `<div>` holding
+    /// a `<ul>`).
+    fn shelf(&self, i: usize) -> Option<Shelf> {
+        let dom = self.dom;
+        if !matches!(dom.style(i, SNAPSHOT_OVERFLOW_X), "auto" | "scroll") {
+            return None;
+        }
+        let (scroll, client) = dom.scroll(i)?;
+        if scroll.width <= client.width + 1.0 || client.width <= 0.0 {
+            return None;
+        }
+        let rect = dom.rect(i)?;
+        let alike = |parent: usize| -> Vec<Rect> {
+            let children: Vec<(usize, Rect)> = dom.children[parent]
+                .iter()
+                .filter(|&&c| dom.is_element(c) && dom.shows(c))
+                .filter_map(|&c| Some((c, dom.rect(c).filter(|r| !r.is_empty())?)))
+                .collect();
+            // The most common tag among them.
+            let mut counts: HashMap<&str, usize> = HashMap::new();
+            for (c, _) in &children {
+                *counts.entry(dom.name[*c].as_str()).or_default() += 1;
+            }
+            let Some((tag, _)) = counts.into_iter().max_by_key(|(_, n)| *n) else {
+                return Vec::new();
+            };
+            let items: Vec<Rect> = children
+                .iter()
+                .filter(|(c, _)| dom.name[*c] == tag)
+                .map(|(_, r)| *r)
+                .collect();
+            let mut widths: Vec<f64> = items.iter().map(|r| r.width).collect();
+            widths.sort_by(f64::total_cmp);
+            let median = widths.get(widths.len() / 2).copied().unwrap_or(0.0);
+            let top = items.first().map_or(0.0, |r| r.y);
+            let ok = items.len() >= 3
+                && median > 0.0
+                && items.iter().all(|r| {
+                    (r.width - median).abs() <= median / 4.0 && (r.y - top).abs() < r.height / 2.0
+                });
+            if ok { items } else { Vec::new() }
+        };
+        let mut items = alike(i);
+        if items.is_empty()
+            && let [only] = dom.children[i]
+                .iter()
+                .copied()
+                .filter(|&c| dom.is_element(c) && dom.shows(c))
+                .collect::<Vec<_>>()
+                .as_slice()
+        {
+            items = alike(*only);
+        }
+        if items.is_empty() {
+            return None;
+        }
+        Some(Shelf {
+            node: dom.backend[i],
+            rect,
+            items,
+            scroll_left: scroll.x,
+            scroll_width: scroll.width,
+            client_width: client.width,
+            label: self.label(i),
+        })
+    }
+
     fn label(&self, i: usize) -> String {
         let dom = self.dom;
         self.ax
