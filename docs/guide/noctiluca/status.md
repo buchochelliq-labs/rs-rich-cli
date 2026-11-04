@@ -5,6 +5,35 @@ terminal for. The phases and their tests are in
 [the design note](../../design/browser.md#phases). This page says what the
 0.0.22 and 0.0.23 releases have, and what comes next.
 
+## Coming in 0.0.25: real sites, second pass (in progress)
+
+Planned in
+[Noctiluca on real sites, second pass](../../design/noctiluca-real-sites-2.md)
+for search, shop, speed-test, video and streaming pages; what each change
+does for which site is on [Noctiluca on real sites](real-sites.md#the-second-pass-0025-in-progress).
+
+| Works | Notes |
+|---|---|
+| Live drawings | A `<canvas>` is drawn and captured again while it changes; an inline SVG is captured again when it changes, and its `<text>` is read as text. Done |
+| Failed navigations | The address bar keeps the address asked for, with a line saying what failed, the error code and the reload key. Done |
+| Meters, progress and ratings as native controls | In progress |
+| Pinned and docked layers, badges over pictures, shelves as carousels | In progress |
+
+### Known limits in 0.0.25
+
+- **Checked on fixtures, not the live sites,** for Google, speedtest.net
+  and Amazon, which could not be reached from the checking machine;
+  YouTube and Twitch were checked live before the changes, and the
+  recorded pictures on [real sites](real-sites.md) are still 0.0.23's.
+- **Live canvases cost bytes:** at most four are captured at once,
+  nearest the view, within the byte budget; off screen or frozen (`F4`),
+  none is.
+- **A failed navigation from a link** (rather than an address you typed
+  or opened) shows the address Chrome's history keeps for it, which after
+  a redirect is where it was sent, not the link's own.
+- **The reload key in the error line** is named as the default keymap's
+  (`R`), even when it is rebound.
+
 ## Coming in 0.0.24 (Noctiluca 0.0.3)
 
 Merged for the next release so far (with the rest of 0.0.24's items in
@@ -35,7 +64,8 @@ scales the tiles up), and scrolling in it costs nearly a whole frame.
 ### Known limits in 0.0.23
 
 - **One tab.**
-- **No fixed or sticky layer** and no paint order in the projection.
+- **No fixed or sticky layer** and no paint order in the projection
+  (planned for 0.0.25).
 - **A frame** shows as its alt text. (A canvas and an inline SVG drawing
   are drawn, and stay live, from 0.0.25.)
 - **The byte budget starts as a guess** (4 MB a second, 256 kB over
@@ -109,9 +139,8 @@ the same pages through a real Chrome in CI.
 - **Forms and tables.** Every widget through the guarded commit, with
   conflicts caught; wide and long tables that scroll with their headers
   kept; signing in to a form.
-- **Layout.** Sticky headers that stay
-  pinned, a raster view from Chrome's screencast, a canvas as a region
-  inside projected text.
+- **Layout.** A raster view from Chrome's screencast. (Pinned headers
+  and a canvas as a live region inside projected text are in 0.0.25.)
 - **Tabs**, once rs-rich-embed drives several pages.
 - **Automation, further.** Recorded scripts that replay a session's
   agent actions, CSS selectors as targets, and a log of what an agent

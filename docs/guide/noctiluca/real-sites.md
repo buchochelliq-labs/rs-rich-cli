@@ -180,6 +180,59 @@ Still open:
   show more information.", once for each avatar.
 - **YouTube** answers the recording machine with its bot wall, so no video
   is shown playing there.
+  From 0.0.25, a page that cannot be opened at all keeps the address
+  you asked for; see [the second pass](#the-second-pass-0025-in-progress).
+
+## The second pass: 0.0.25 (in progress)
+
+A second look, on 3 November 2026, went after the sites people asked
+about: Google, Ookla's speed test, Amazon, YouTube and Twitch. Its
+findings and plan are in
+[Noctiluca on real sites, second pass](../../design/noctiluca-real-sites-2.md).
+Every fix is generic: none names a site, and each helps any page built
+the same way ([no site-specific code](../../design/browser.md#no-site-specific-code)).
+
+How each part was checked:
+
+| | Sites | How |
+|---|---|---|
+| **Live** | YouTube (search, a channel's videos, a watch page, an embedded player), Twitch (directory, a category, a live channel) | Noctiluca in `rich record` tapes at 120×40 with Kitty graphics, and `--dump json`, through a headless Chrome |
+| **Fixtures** | Google-like search results, an Amazon-like product grid, a speed test's dial drawn as SVG and on canvas, meters and ratings | Pages reduced from the sites' general shape, in [`crates/noctiluca/tests/fixtures/`](https://github.com/buchochelliq-labs/rs-rich-cli/tree/main/crates/noctiluca/tests/fixtures), opened through a real Chrome. Google, speedtest.net and Amazon could not be reached from the machine that checked; nothing here is from the live sites |
+
+The pictures above are from 0.0.23 and were not recorded again for this
+pass. What changes, and how far each change has got:
+
+| Change | Helps | State |
+|---|---|---|
+| **Canvas and SVG drawings are live.** A `<canvas>` is drawn from Chrome's pixels and captured again while it changes; an inline SVG is captured again when its content changes; an SVG's own `<text>` is read as text | A speed test's dial (a canvas dial showed grey boxes; an SVG dial stayed at `0.00`), charts, players' art | Done; checked on fixtures in real Chrome (`gauge-svg.html`, `gauge-canvas.html`) |
+| **Meters and ratings as native controls.** `<meter>`, `<progress>` and `role=progressbar` or `meter` drawn as a bar or a dial with their label and value; "4.5 out of 5 stars" as `★★★★½` with the number; a `<label>` of something that is not a control stays text | Speed tests' readouts, uploads, players' buffers, shops' star ratings | In progress; fixtures `meters.html`, `product-grid.html` |
+| **Pinned and docked layers.** A header fixed or stuck to the top stays at the top; a cookie banner or sign-up bar fixed to the bottom is docked over the bottom rows instead of drawn in the page's flow | Search's header (drawn under the first result before), Twitch's cookie and sign-up bars, a shop's header and cookie banner | In progress; fixtures `search-results.html`, `product-grid.html`; Twitch's bars seen live before the change |
+| **Badges over pictures.** A short text box the page puts over a picture is drawn inside the picture's cells | YouTube's durations, Twitch's LIVE and viewer counts, prices on product pictures | In progress; seen live before the change |
+| **Shelves as carousels.** A row of items that scrolls sideways is drawn as a strip with `‹ ›` and `1–4 of 12`, paged with keys and the wheel | YouTube's shelves, a shop's "Customers also viewed", Twitch's rows | In progress; fixture `product-grid.html` |
+| **Prices and buttons read right.** A price split into parts for looks reads as its screen-reader text (`$29.99`, not `$2999`); an icon-only button gets a face from its title or icon; controls at the right edge are shortened, not cut off | Shops, Twitch's and YouTube's top bars | In progress; fixtures, and Twitch's top bar live before the change |
+| **A failed navigation keeps its address.** When a page cannot be opened, the address bar keeps the address you asked for (it showed `chrome-error://chromewebdata/`), and a line above Chrome's error text says what could not be opened, the error code, and that Reload (`R`) tries again | Any blocked or unreachable site; YouTube's watch page from a machine it sends to a bot check | Done; checked on the test engine, and live in Chrome on an address the network refused (`ERR_TUNNEL_CONNECTION_FAILED`). YouTube's redirect to its bot check did not happen again on the day, so that path is covered by the test only |
+
+Fixed already with the second look, each with a test: YouTube's embedded
+player no longer reads as an empty page (a root that hides its overflow
+hid everything), YouTube's thumbnails no longer say "Image: true" (a
+script's `true` is not alt text), and a shop's sideways shelf is no
+longer followed as a live log.
+
+Still open after the second pass:
+
+- **Google, speedtest.net and Amazon** are covered by fixtures only.
+  Whether speedtest.net's dial is a canvas or an SVG, and whether it
+  states its value in ARIA, is not known; both paths are covered.
+- **A YouTube watch page playing** has not been seen: YouTube sends the
+  checking machine to its bot check.
+- **Twitch's chat following new messages** was not seen: the channel
+  checked had no chat lines.
+- **Smaller items, also in progress for 0.0.25:** paint order (a hidden
+  error panel drawn with the panel over it, Twitch's offline art taking
+  the player's rows), placeholders for thumbnails that have not loaded
+  yet, hover-only buttons such as "More actions" folded out of every
+  card, and two runs of text drawn into one ("16" and "13y ago" read as
+  "1613y ago").
 
 ## Recording them again
 
