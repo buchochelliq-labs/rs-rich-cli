@@ -663,10 +663,16 @@ mod tests {
         distinct.dedup();
         // Sixteen draws from 55 536 ports: all alike only if not random.
         assert!(distinct.len() > 8, "{drawn:?}");
-        let port = free_port().unwrap();
-        assert!(TUNNEL_PORTS.contains(&port));
-        // Free: it binds on loopback.
-        assert!(TcpListener::bind(SocketAddrV4::new(Ipv4Addr::LOCALHOST, port)).is_ok());
+        // Free when drawn: it binds on loopback. The port is let go before
+        // it is checked, so another socket (a parallel test's, or one the
+        // kernel hands out) can take it in between; a port free when drawn
+        // binds again on one of a few draws.
+        let rebinds = (0..4).any(|_| {
+            let port = free_port().unwrap();
+            assert!(TUNNEL_PORTS.contains(&port));
+            TcpListener::bind(SocketAddrV4::new(Ipv4Addr::LOCALHOST, port)).is_ok()
+        });
+        assert!(rebinds, "no drawn port bound again on loopback");
     }
 
     #[test]
