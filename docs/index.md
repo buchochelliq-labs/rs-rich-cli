@@ -50,26 +50,26 @@ topic and a widget index.
 
 </div>
 
-## New in 0.0.24
+## New in 0.0.25
 
 ![Memo, intuiTUIve's elephant, in the cartoon look](assets/intuituive/mascot/memo-cartoon.svg){ .tui-mascot width="128" }
-0.0.24, published on 2026-11-03 ([release notes](releases/0.0.24.md)),
-brings Cornacai, catches intuiTUIve up with Textual and opens Noctiluca to
-scripts and coding agents.
+0.0.25, to be published as one release ([release notes](releases/0.0.25.md)),
+is the last before 0.1.0's API review: it finishes Cornacai's phase 4 and
+intuiTUIve's Textual parity, and takes Noctiluca a second time round real
+sites.
 
-- **[Cornacai](guide/cornacai.md)** (new): a terminal client for coding
-  agents over the Agent Client Protocol, with edits reviewed hunk by hunk.
-- **intuiTUIve:** a Markdown viewer and a diff view, Textual's themes, user
-  keymaps, palette providers, modes, screenshots and more of Textual's
-  stylesheet language.
-- **[Noctiluca](guide/noctiluca.md):** a control socket for scripts and
-  agents, the mouse, video to 30 fps, a full-pixel view, `--ssh` and
-  `--transparent`.
-- **Also:** `inspect` for Rust values, animated banners, AVIF (opt in),
-  edition 2024, a threat model and a security policy, and the docs on
-  Zensical.
+- **[Cornacai](guide/cornacai.md):** resume with `session/load`, sign-in,
+  agent terminals on a PTY, and agents from the marketplace.
+- **intuiTUIve:** #812's last stylesheet properties, `DataTable` row labels
+  and renderable cells, list separators, and `dial`, `rating` and
+  `carousel` widgets.
+- **[Noctiluca](guide/noctiluca.md):** live canvas and SVG gauges, native
+  meters and ratings, pinned and docked bars, and shelves that page.
+- **Also:** named pipes on Windows for the control socket and
+  `rich console`, releases on rab, and every public item documented in ten
+  stable crates.
 
-Earlier releases are under [Releases](releases/0.0.24.md) in the
+Earlier releases are under [Releases](releases/0.0.25.md) in the
 navigation; the [roadmap](ROADMAP.md) says what comes next.
 
 ### Which version are these docs for?
@@ -282,6 +282,6 @@ published or not. Each crate versions independently; see
 | ![](assets/rs-rich/troubleshooting.svg){ .rs-icon width="20" } [Troubleshooting](troubleshooting.md) | When the output is not what you expected |
 | ![](assets/rs-rich/known-issues.svg){ .rs-icon width="20" } [Known issues](known-issues.md) | What is known not to work yet |
 | ![](assets/rs-rich/plans.svg){ .rs-icon width="20" } [Development plans](plans/1.0.0.md) | What each release sets out to do |
-| ![](assets/rs-rich/releases.svg){ .rs-icon width="20" } [Releases](releases/0.0.24.md) | What each release shipped |
+| ![](assets/rs-rich/releases.svg){ .rs-icon width="20" } [Releases](releases/0.0.25.md) | What each release shipped |
 | ![](assets/rs-rich/parity.svg){ .rs-icon width="20" } [Parity with Python rich](parity.md) | What matches upstream, and how it is proven |
 | ![](assets/rs-rich/contributing.svg){ .rs-icon width="20" } [Contributing](BRANCHING.md) | Branches, architecture and design notes |

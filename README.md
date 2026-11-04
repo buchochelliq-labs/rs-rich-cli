@@ -53,24 +53,25 @@ console.print_str("[bold red]Hello[/] [green]World[/] — 42");
 [Getting started](docs/getting-started.md) has a complete program; the
 [tutorial](docs/tutorial/index.md) builds up from there.
 
-## New in 0.0.24
+## New in 0.0.25
 
-Published on 2026-11-03 ([release notes](docs/releases/0.0.24.md)).
-Cornacai, Textual parity, and Noctiluca for scripts and agents:
+To be published as one release, `release-0.0.25`
+([release notes](docs/releases/0.0.25.md)), the last before 0.1.0's API
+review:
 
-- **[Cornacai](docs/guide/cornacai.md)** (new): a terminal client for
-  coding agents over the Agent Client Protocol, with streamed Markdown,
-  permission prompts, edits reviewed hunk by hunk, sessions as tabs and a
-  shell pane. Its protocol layer is the new `rs-rich-acp` crate.
-- **intuiTUIve:** a Markdown viewer and a diff view, Textual's themes, user
-  keymaps, palette providers, modes, screenshots, Pilot-style test helpers
-  and much more of Textual's stylesheet language.
-- **[Noctiluca](docs/guide/noctiluca.md):** a control socket for scripts and
-  coding agents, the mouse, video to 30 fps, a full-pixel view, `--ssh`
-  and `--transparent`.
-- **Also:** `inspect` for Rust values, animated banners, AVIF (opt in),
-  edition 2024, a threat model and a security policy, and the docs on
-  Zensical.
+- **[Cornacai](docs/guide/cornacai.md):** resumes sessions with
+  `session/load`, signs in when the agent asks, runs agent terminals on a
+  PTY behind `--pty`, and finds agents in the marketplace.
+- **intuiTUIve:** #812's last stylesheet properties (`offset`, `opacity`,
+  `tint`, `outline`, `hatch`, `keyline`, scrollbar size), `DataTable` row
+  labels and renderable cells, list separators, and new `dial`, `rating`
+  and `carousel` widgets.
+- **[Noctiluca](docs/guide/noctiluca.md) on real sites:** live canvas and
+  SVG gauges, meters and ratings as native controls, pinned and docked
+  bars, shelves that page, and better prices and icon buttons.
+- **Also:** the control socket and `rich console` on Windows over named
+  pipes, releases on rab (the Release Asset Bundle), and every public item
+  documented in ten stable crates.
 
 The [changelog](CHANGELOG.md) lists every change.
 
