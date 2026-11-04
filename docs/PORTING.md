@@ -398,7 +398,8 @@ port nothing: Python `rich` has no counterpart, so there is no golden
 fixture and no row to mirror. These tables say what each one offers, how
 far it is, and what tests it. Status, here: 🟢 shipped and tested ·
 🟡 shipped, with the gaps named · ⬜ planned. The CLI's table is the
-`rich-cli` one above, with its conveniences. Checked on 2026-11-02.
+`rich-cli` one above, with its conveniences. Checked on 2026-11-02; the 🟡 rows again on 2026-11-04, against `main` at
+`3514d742`.
 
 ### rs-rich-plugin-api
 
@@ -477,10 +478,10 @@ Each area has its page in [the guide](guide/ext/index.md).
 | area | what it offers | status | tests |
 |---|---|:---:|---|
 | the framework | signals, the retained tree, layout, focus, the cell screen and its paint strategies, screens and pop-ups, tasks | 🟢 | 131 test files under `tests/`, among them `app.rs`, `layout.rs`, `flex*.rs`, `driver.rs`; the `versus_ratatui` and `paint_bench` gates |
-| widgets | the [widget index](guide/intuituive/widget-index.md): lists, tables, trees, tabs, inputs, text editing, controls, charts, Markdown, logs, a diff view (#799) | 🟡 Textual parity's remaining gaps (#803, #805, #807 to #815) are 0.0.24's waves 2 and 3: [the audit](design/textual-parity.md#prioritised-gaps) | per widget, e.g. `components.rs`, `controls.rs`, `list_*.rs`, `table*.rs`, `markdown_stream.rs`, `log_view.rs` |
-| themes and keymaps | stylesheets, a semantic theme with Textual's palettes (#801), user keymaps (#806) | 🟡 stylesheet coverage (#812) is wave 3 | `colors.rs`, `bindings.rs`, `keys.rs` |
+| widgets | the [widget index](guide/intuituive/widget-index.md): lists, tables, trees, tabs, inputs, text editing, controls, charts, Markdown, logs, a diff view (#799) | 🟡 the audit's prioritised gaps all shipped in 0.0.24 (#797 to #815); what it still names: `DataTable` row labels and cells that hold renderables, separators in an option list, and highlighting state carried into a `TextArea`'s view from above it ([the audit](design/textual-parity.md)) | per widget, e.g. `components.rs`, `controls.rs`, `list_*.rs`, `table*.rs`, `markdown_stream.rs`, `log_view.rs` |
+| themes and keymaps | stylesheets, a semantic theme with Textual's palettes (#801), user keymaps (#806) | 🟡 #812's first three slices shipped in 0.0.24 (child combinators, `&` nesting, `$variables`; structural and theme pseudo-classes; `margin`, `visibility`, scrollbar colours); still missing: `offset`, `opacity` and `tint`, `outline`, `hatch`, `keyline`, the scrollbar's hover colour and size, `:inline` and `:first-of-type` ([the audit](design/textual-parity.md#framework-features)) | `colors.rs`, `bindings.rs`, `keys.rs`, `keymap.rs`, `stylesheet.rs`, `stylesheet_bounds.rs`, `theme_styles.rs` |
 | plugins | `art`, `pcm`/`audio`, `wav`, `watch`, `files`, `archive`, `viz`, `micro` | 🟢 | `files*.rs`, `audio_*.rs`, `charts*.rs`, `music.rs` |
-| testing and the inspector | a headless driver, snapshots, the inspector | 🟡 Pilot-style helpers (#810) and SVG snapshots (#809) are wave 2 | `inspector.rs`, `driver.rs` |
+| testing and the inspector | a headless driver, snapshots, the inspector; Pilot-style helpers by node name (`click_on`, `double_click_on`, `hover_on`, `scroll_on`, `wait_for_animations`, #810), screenshots and SVG snapshots (`Screen::to_svg`, `cx.screenshot`, `assert_screen_svg!`, #809) | 🟢 | `inspector.rs`, `driver.rs`, `pilot.rs`, `screenshots.rs` |
 
 ### rs-rich-embed
 
@@ -493,7 +494,7 @@ Each area has its page in [the guide](guide/ext/index.md).
 
 | area | what it offers | status | tests |
 |---|---|:---:|---|
-| reading pages | Chrome's layout drawn in cells, links, forms and controls, the mouse (#819) | 🟡 [known limits](guide/noctiluca/status.md#known-limits-in-0023): one tab, no fixed or sticky layer, inline SVG, canvas and frames as alt text | `app.rs`, `layout.rs`, `model.rs`, `mouse.rs`, `pixel_mouse.rs`, `settle.rs`, the snapshots |
+| reading pages | Chrome's layout drawn in cells, links, forms and controls, the mouse (#819) | 🟡 one tab, and a frame shows as its alt text ([what works](guide/noctiluca/status.md)); canvases and inline SVG are drawn and stay live, and fixed and sticky layers are pinned or docked, on `main` for 0.0.25 (`layout.rs`) | `app.rs`, `layout.rs`, `model.rs`, `mouse.rs`, `pixel_mouse.rs`, `settle.rs`, the snapshots |
 | pictures, video and sound | images and GIFs, video at up to 30 frames a second, audio | 🟢 | `pictures.rs`, `images.rs`, `video*.rs`, `audio.rs` |
 | live logs, SSH, split | live logs, `--ssh HOST` (#817), `--split` (#820) | 🟢 | `live*.rs`, `logs.rs`, `ssh.rs`, `split.rs` |
 | the start page | `about:noctiluca` and the animated banner | 🟢 | `start.rs`, `start_still.rs` |
@@ -513,7 +514,7 @@ Each area has its page in [the guide](guide/ext/index.md).
 | the conversation | streamed Markdown answers that follow the end, thoughts and tool calls as folded cards with a live status, the plan, the agent's session title | 🟢 | `tests/app.rs` (on the driver, against rs-rich-acp's fake agent) |
 | the prompt | the prompt editor with history, `@` file mentions completed over the workspace and sent as `resource_link`s | 🟢 | `tests/app.rs`, `mention.rs`'s unit tests |
 | what the agent asks | permission prompts (one button per option), writes reviewed as a diff hunk by hunk, commands asked about and run on pipes, reads inside the workspace | 🟢 | `tests/app.rs` |
-| sessions and the shell | several sessions on one connection as tabs; a shell pane on a PTY, the user's own | 🟡 no resume (`session/load`) or session store yet; agent terminals on pipes, not a PTY | `tests/app.rs` (the shell over a `ReplayHost`) |
+| sessions and the shell | several sessions on one connection as tabs; a shell pane on a PTY, the user's own | 🟡 phase 4: no resume or session store yet (rs-rich-acp's `Connection` has `load_session` and `authenticate`, which Cornacai does not use yet, so no sign-in either); agent terminals on pipes, not a PTY | `tests/app.rs` (the shell over a `ReplayHost`) |
 | finding agents | the known agents on `PATH`, the choice saved in the config | 🟡 the marketplace's `agent` kind is not built yet | `config.rs`'s unit tests |
 
 ### `rs-rich` on PyPI (crates/rich-py)
