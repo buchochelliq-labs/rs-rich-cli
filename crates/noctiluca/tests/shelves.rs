@@ -121,7 +121,7 @@ fn a_shelf_clips_only_what_is_in_it() {
         Some(Rect::new(0.0, 100.0, 180.0, 60.0)),
     );
     p.text(side, "Sidebar note", Rect::new(0.0, 100.0, 100.0, 18.0));
-    let mut shelf = |p: &mut PageBuilder, x0: f64, name: &str| {
+    let shelf = |p: &mut PageBuilder, x0: f64, name: &str| {
         let row = p.element(
             body,
             "UL",
