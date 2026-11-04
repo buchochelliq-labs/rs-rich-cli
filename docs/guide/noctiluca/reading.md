@@ -108,6 +108,32 @@ on screen shows the part in view (Sixel and iTerm2 included).
 A page too long to read whole (more than 20,000 blocks) says
 "page cut" in the status line.
 
+### Shelves
+
+A **shelf** is a box that scrolls sideways over a row of alike items: a
+shop's "Customers also viewed", a row of videos, a row of live channels.
+Noctiluca finds one from what the page lays out, never from the site: a
+box whose `overflow-x` is `auto` or `scroll`, wider inside than out,
+holding three or more items of one kind side by side. The projection
+draws the items in its box, as Chrome shows them, and under it a strip
+that says where it is, intuiTUIve's carousel's arrows and count:
+
+```text
+ ░░░░░░░░░░░░░░░░░░  ░░░░░░░░░░░░░░░░░░ ░░░░░░░░░░░░░░░░░░
+ Image: Kettle       Image: Tea tin     Image: Mug set
+ 1. Kettle descaler  2. Tea tin with    3. Mug set of 4
+ $8.99               seal $12.50        $21.00
+‹                     1–3 of 6                           ›
+```
+
+`>` pages the shelf in view on and `<` back (`shelf.next` and
+`shelf.previous`): Chrome scrolls the page's own box sideways by what the
+screen shows, so the next items come into it and a shelf that loads its
+items as they come into view loads them, and the page is read again. At
+an end, the status line says so. The strip is the
+[`shelves`](adaptations.md#terminal-adaptations) adaptation; off, the
+items in view still show, with no strip.
+
 ## Link hints
 
 Press `f`. Every link and every control on the page that is not disabled

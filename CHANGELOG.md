@@ -69,6 +69,31 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   (`Media::pending`). Before, a channel's videos past the first row were
   blank rows.
 
+### Noctiluca: shelves, and intuiTUIve's dials and stars (0.0.25)
+
+- **Sideways shelves page.** A box that scrolls sideways (`overflow-x`
+  `auto` or `scroll`, wider inside than out) over three or more alike
+  items side by side is a shelf (`Page::shelves`, `model::Shelf`): a
+  shop's "Customers also viewed", a row of videos. Found from layout only,
+  never from a site. The projection draws only the items in its box (cut
+  at the screen's edge), as Chrome shows them; before, the items past it
+  were squeezed into a column at the screen's edge, a letter a row. With
+  the new `shelves` adaptation a strip under it, intuiTUIve's `carousel`
+  drawn offscreen, says where it is: `‹ 1–3 of 6 ›`. `<` and `>`
+  (`shelf.previous`, `shelf.next`) scroll the page's box sideways by what
+  the screen shows (`PageAction::ScrollBox`, `Command::ScrollBox`), so
+  Chrome lays out the next items and a lazy shelf loads them, and the
+  page is read again. Snapshots read `overflow-x` and Chrome's scroll and
+  client rectangles; `PageBuilder::scroll_box` makes a scrolling box.
+- **Dials and stars are intuiTUIve's.** `indicator::dial` and
+  `indicator::stars` draw intuiTUIve's `dial` and `rating`, offscreen on
+  a thread of their own, read back as lines: a speed test's gauge is an
+  arc in Braille dots with its reading (in big digits when they fit), its
+  label under it and its range's ends; a meter's bands colour it.
+- **A rating keeps its count apart.** A one-row indicator drawn wider
+  than its box moves what follows it on its row right, in a grid's cell
+  too: `★★★★½ 4.5 12,408`, not `4.512,408` or `4… (1,204)`.
+
 ### intuiTUIve: dials, ratings and carousels
 
 New generic widgets in rs-rich-intuituive's core, for what a dashboard or

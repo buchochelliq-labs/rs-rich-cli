@@ -53,8 +53,8 @@ every reading, so a bar that moves on the page moves here:
 | `<meter>`, `role=meter` | A bar, green, yellow or red by the meter's `low`, `high` and `optimum`; a narrow meter of a few steps (a signal's "3 of 5 bars") as rising blocks `▁▃▄▆█` |
 | `<progress>`, `role=progressbar` with `aria-valuenow` | A bar and its share, `Upload ━━━━━━━━ 40%` |
 | A progress with no value | A busy bar, `busy` |
-| A roughly square box of at least 10 x 5 cells (a speed test's gauge, a `<canvas>` or `<svg>` given `role=meter`) | A dial: an arc lit to its value, its value text inside |
-| `role=img` named "4.5 out of 5 stars" or "4.5 / 5" | Stars and the number, `★★★★½ 4.5`; nothing when the name is not a rating |
+| A roughly square box of at least 10 x 5 cells (a speed test's gauge, a `<canvas>` or `<svg>` given `role=meter`) | intuiTUIve's `dial`: an arc in Braille dots filled to its value, its value text inside (in big digits when they fit), its label under it, and the range's ends when the page states the value in words |
+| `role=img` named "4.5 out of 5 stars" or "4.5 / 5" | intuiTUIve's `rating`: stars to the nearest half and the number, `★★★★½ 4.5`; what follows it on its line moves right, so the count keeps its space (`★★★★½ 4.5 12,408`); nothing when the name is not a rating |
 
 Each shows its label (its `<label for>` or accessible name) and its
 `aria-valuetext`, else its share. A canvas or drawing that is an

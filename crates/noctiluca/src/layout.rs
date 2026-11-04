@@ -1788,8 +1788,7 @@ fn project_part(
         if end > columns {
             continue;
         }
-        for m in 0..items.len() {
-            let item = &items[m];
+        for (m, item) in items.iter_mut().enumerate() {
             if m == n
                 || item.wrap.is_none()
                 || item.x0 <= x0
@@ -1801,7 +1800,6 @@ fn project_part(
                 continue;
             }
             let shift = end + 1 - item.x0;
-            let item = &mut items[m];
             if item.x1 + shift <= columns {
                 item.x0 += shift;
                 item.x1 += shift;
