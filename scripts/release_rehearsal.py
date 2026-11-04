@@ -51,8 +51,8 @@ def full_selection(kit, read):
 
 
 def git(*args, cwd=ROOT, capture=True):
-    return subprocess.run(["git", *args], cwd=cwd, check=True, text=True,
-                          capture_output=capture).stdout.strip()
+    result = subprocess.run(["git", *args], cwd=cwd, check=True, text=True, capture_output=capture)
+    return (result.stdout or "").strip()
 
 
 def run_kit(*args, cwd=ROOT):
