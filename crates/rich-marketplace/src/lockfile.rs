@@ -38,12 +38,19 @@ pub const LOCKFILE_NAME: &str = "marketplace.lock.json";
 #[derive(Clone, Debug, PartialEq, Eq)]
 #[non_exhaustive]
 pub struct LockEntry {
+    /// The package id.
     pub id: String,
+    /// What kind of package it is.
     pub kind: Kind,
+    /// The version installed.
     pub version: String,
+    /// Its tier when it was installed.
     pub tier: Tier,
+    /// Where it was downloaded from.
     pub url: String,
+    /// The lowercase hex SHA-256 of the installed file.
     pub sha256: String,
+    /// Its size in bytes.
     pub size: u64,
     /// The serial of the index it was installed from.
     pub index_serial: u64,

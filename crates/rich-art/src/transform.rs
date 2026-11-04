@@ -1,11 +1,16 @@
 //! Still-image geometry and grayscale before fit and final sampling.
 use image::{DynamicImage, RgbImage};
+/// A quarter-turn rotation, applied first of the [`ImageTransforms`].
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum Rotation {
+    /// Not rotated.
     #[default]
     None,
+    /// A quarter turn clockwise.
     Clockwise90,
+    /// A half turn.
     Clockwise180,
+    /// Three quarter turns clockwise.
     Clockwise270,
 }
 /// Still-image adjustments, applied in this fixed order: rotation, horizontal
@@ -25,12 +30,19 @@ pub enum Rotation {
 /// else as [`ImageArtError::InvalidAdjustment`](crate::ImageArtError::InvalidAdjustment).
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct ImageTransforms {
+    /// The rotation, applied first.
     pub rotation: Rotation,
+    /// Mirror left to right.
     pub flip_horizontal: bool,
+    /// Mirror top to bottom.
     pub flip_vertical: bool,
+    /// Reduce to grayscale, applied last.
     pub grayscale: bool,
+    /// The brightness factor (`1.0` leaves it unchanged).
     pub brightness: f32,
+    /// The contrast factor (`1.0` leaves it unchanged).
     pub contrast: f32,
+    /// The gamma (`1.0` leaves it unchanged; above 1 brightens mid-tones).
     pub gamma: f32,
 }
 impl Default for ImageTransforms {

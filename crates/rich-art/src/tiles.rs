@@ -39,12 +39,14 @@ pub const TILE_CELLS: (usize, usize) = (8, 4);
 /// One tile: where it is, in cells, and its picture.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Tile {
-    /// Its first column and row in the frame's cells.
+    /// Its first column in the frame's cells.
     pub col: usize,
+    /// Its first row in the frame's cells.
     pub row: usize,
     /// Its size in cells (the last column and row of tiles may be
     /// smaller).
     pub cols: usize,
+    /// Its height in cells (see [`Tile::cols`]).
     pub rows: usize,
     /// Its pixels, fitted to its cells: a new version when they change.
     pub picture: Picture,

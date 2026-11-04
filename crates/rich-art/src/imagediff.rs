@@ -62,9 +62,13 @@ impl Default for DiffSettings {
 /// One connected area of perceptible change.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Region {
+    /// The region's left edge, in pixels.
     pub x: u32,
+    /// The region's top edge, in pixels.
     pub y: u32,
+    /// Its width in pixels.
     pub width: u32,
+    /// Its height in pixels.
     pub height: u32,
     /// Pixels in the region *after* denoising.
     pub area_px: u64,
@@ -77,7 +81,9 @@ pub struct Region {
 /// The result of comparing two images.
 #[derive(Debug, Clone)]
 pub struct DiffReport {
+    /// The width of both images, in pixels.
     pub width: u32,
+    /// The height of both images, in pixels.
     pub height: u32,
     /// Fraction of pixels whose ΔE exceeds the threshold, measured *before*
     /// the morphological open. The regions are what survives the open; this is
@@ -87,7 +93,9 @@ pub struct DiffReport {
     /// the gap between this and [`Self::changed_fraction`] is the entire
     /// argument for the pipeline.
     pub naive_changed_fraction: f32,
+    /// Mean ΔE over every pixel.
     pub mean_delta_e: f32,
+    /// The largest ΔE of any pixel.
     pub max_delta_e: f32,
     /// Ranked by area × severity, largest first.
     pub regions: Vec<Region>,
@@ -102,7 +110,9 @@ pub enum DiffError {
     /// Comparing differently-sized images is meaningless — every pixel past
     /// the smaller extent would read as changed. Align them first.
     SizeMismatch {
+        /// The first image's width and height.
         before: (u32, u32),
+        /// The second image's width and height.
         after: (u32, u32),
     },
 }

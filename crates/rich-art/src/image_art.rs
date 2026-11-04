@@ -297,6 +297,7 @@ impl Default for ImageOptions {
 pub enum ImageArtError {
     /// An explicit mode was chosen that this build cannot honour.
     FeatureNotEnabled {
+        /// The mode that was asked for.
         mode: ImageMode,
         /// The Cargo feature that would enable it.
         feature: &'static str,

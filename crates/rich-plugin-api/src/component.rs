@@ -70,7 +70,12 @@ pub enum ComponentEvent {
     /// Text pasted at once.
     Paste(String),
     /// The terminal is now this size.
-    Resize { columns: u16, rows: u16 },
+    Resize {
+        /// The width in columns.
+        columns: u16,
+        /// The height in rows.
+        rows: u16,
+    },
     /// The component's [`tick`](PluginComponent::tick) interval passed.
     Tick,
     /// The mouse, in the component's own view (0-based), when it asked for
@@ -78,7 +83,9 @@ pub enum ComponentEvent {
     Mouse {
         /// `down`, `up`, `drag`, `moved`, `scroll_up` or `scroll_down`.
         kind: String,
+        /// The column, 0-based.
         column: u16,
+        /// The row, 0-based.
         row: u16,
     },
     /// A click on a hyperlink in the component's view: its URL.
@@ -115,12 +122,14 @@ pub enum ComponentFlow {
 #[derive(Clone, Debug, Default)]
 #[non_exhaustive]
 pub struct ComponentView {
+    /// The lines, top to bottom.
     pub lines: Vec<Vec<Segment>>,
     /// (row, column) within the view.
     pub cursor: Option<(usize, usize)>,
 }
 
 impl ComponentView {
+    /// A view of `lines`, with the cursor hidden.
     pub fn new(lines: Vec<Vec<Segment>>) -> ComponentView {
         ComponentView {
             lines,
@@ -140,6 +149,7 @@ impl ComponentView {
 /// with, and the space it has.
 #[non_exhaustive]
 pub struct ComponentContext<'a> {
+    /// The console to render with.
     pub console: &'a Console,
     /// Columns available.
     pub width: usize,
@@ -148,6 +158,7 @@ pub struct ComponentContext<'a> {
 }
 
 impl<'a> ComponentContext<'a> {
+    /// A context for rendering with `console` in `width` x `height` cells.
     pub fn new(console: &'a Console, width: usize, height: usize) -> ComponentContext<'a> {
         ComponentContext {
             console,
@@ -186,6 +197,7 @@ pub struct ComponentBinding {
 }
 
 impl ComponentBinding {
+    /// A binding of `keys` to `action`, described for people as `description`.
     pub fn new(
         action: impl Into<String>,
         keys: impl IntoIterator<Item = impl Into<String>>,

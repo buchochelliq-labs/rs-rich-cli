@@ -24,9 +24,12 @@ mod smush {
 /// How a rendered banner is positioned within the available width.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum Justify {
+    /// Against the left edge.
     #[default]
     Left,
+    /// Centred in the width.
     Center,
+    /// Against the right edge.
     Right,
 }
 

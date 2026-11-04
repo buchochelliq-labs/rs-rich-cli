@@ -52,6 +52,8 @@
 //! handle.finish_replay().unwrap().unwrap();
 //! ```
 
+#![warn(missing_docs)]
+
 pub mod app;
 pub mod bridge;
 pub mod clean;

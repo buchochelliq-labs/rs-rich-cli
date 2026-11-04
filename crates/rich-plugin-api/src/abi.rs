@@ -182,6 +182,7 @@ impl fmt::Display for CapabilityKind {
 /// One capability a runtime plugin declares.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct AbiCapability {
+    /// What the capability does with its input.
     pub kind: CapabilityKind,
     /// The capability's name; for a fence, the language (`mermaid`).
     pub name: String,
@@ -192,11 +193,15 @@ pub struct AbiCapability {
 /// one type, and one host adapter turns it into registry capabilities.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct PluginAbi {
+    /// The ABI major version the plugin was built for.
     pub abi_major: u32,
+    /// The ABI minor version the plugin was built for.
     pub abi_minor: u32,
     /// The plugin id: lowercase letters, digits, `-`, `_` and `.`.
     pub name: String,
+    /// The plugin's own version, as it states it.
     pub version: String,
+    /// A one-line description of the plugin.
     pub description: String,
     /// In declaration order; a call names a capability by its index here.
     pub capabilities: Vec<AbiCapability>,
@@ -206,7 +211,12 @@ pub struct PluginAbi {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum AbiError {
     /// Built for another major version of this ABI.
-    Incompatible { major: u32, minor: u32 },
+    Incompatible {
+        /// The ABI major version the plugin was built for.
+        major: u32,
+        /// The ABI minor version the plugin was built for.
+        minor: u32,
+    },
     /// The description is malformed; the message says how.
     Invalid(String),
 }
@@ -393,9 +403,13 @@ impl PluginAbi {
 ///   input at `ptr`, returning the output packed like the manifest, with bit
 ///   63 set when the output is an error message instead.
 pub mod wasm {
+    /// The linear memory's export name.
     pub const MEMORY: &str = "memory";
+    /// The allocator's export name.
     pub const ALLOC: &str = "rich_plugin_alloc";
+    /// The manifest function's export name.
     pub const MANIFEST: &str = "rich_plugin_manifest";
+    /// The call function's export name.
     pub const CALL: &str = "rich_plugin_call";
     /// Set in a call's result when the output is an error message.
     pub const ERROR_BIT: u64 = 1 << 63;
@@ -409,7 +423,9 @@ pub mod wasm {
 #[repr(C)]
 #[derive(Clone, Copy, Debug)]
 pub struct AbiStr {
+    /// The first byte; null only when `len` is 0.
     pub ptr: *const u8,
+    /// The length in bytes.
     pub len: usize,
 }
 
@@ -447,7 +463,9 @@ impl AbiStr {
 #[repr(C)]
 #[derive(Clone, Copy, Debug)]
 pub struct AbiCapabilityEntry {
+    /// The kind, as [`CapabilityKind::code`].
     pub kind: u32,
+    /// The capability's name.
     pub name: AbiStr,
 }
 
@@ -456,8 +474,11 @@ pub struct AbiCapabilityEntry {
 #[repr(C)]
 #[derive(Debug)]
 pub struct AbiOutput {
+    /// The first byte.
     pub ptr: *mut u8,
+    /// The length in bytes.
     pub len: usize,
+    /// The allocation's capacity, for the plugin's allocator to free it.
     pub cap: usize,
 }
 
@@ -501,14 +522,18 @@ pub type AbiFreeFn = unsafe extern "C" fn(output: AbiOutput);
 #[repr(C)]
 #[derive(Clone, Copy, Debug)]
 pub struct PluginVTable {
+    /// Run a capability.
     pub call: Option<AbiCallFn>,
+    /// Free an output a call returned.
     pub free: Option<AbiFreeFn>,
 }
 
 /// A [`PluginVTable`] that [`read_descriptor`] checked: neither is null.
 #[derive(Clone, Copy, Debug)]
 pub struct PluginFunctions {
+    /// Run a capability.
     pub call: AbiCallFn,
+    /// Free an output a call returned.
     pub free: AbiFreeFn,
 }
 
@@ -518,13 +543,21 @@ pub struct PluginFunctions {
 #[repr(C)]
 #[derive(Debug)]
 pub struct PluginDescriptor {
+    /// The ABI major version the plugin was built for: read first.
     pub abi_major: u32,
+    /// The ABI minor version the plugin was built for.
     pub abi_minor: u32,
+    /// The plugin id.
     pub name: AbiStr,
+    /// The plugin's own version.
     pub version: AbiStr,
+    /// A one-line description of the plugin.
     pub description: AbiStr,
+    /// The first of `capability_count` capability entries.
     pub capabilities: *const AbiCapabilityEntry,
+    /// How many capability entries there are.
     pub capability_count: usize,
+    /// The plugin's functions.
     pub vtable: PluginVTable,
 }
 
