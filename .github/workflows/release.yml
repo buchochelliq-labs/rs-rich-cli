@@ -100,10 +100,25 @@ jobs:
     if: needs.gate.outputs.crates-io == 'true' && needs.gate.outputs.verify-only != 'true'
     runs-on: ubuntu-latest
     steps:
+      # The release tag, not the bare commit: the gate requires it on that
+      # commit, and the next step stops the job if it has moved since. This
+      # job runs the tagged commit's code with no write permission, so it
+      # also stays off CodeQL's cache-poisoning pattern (a checkout of a
+      # sha/head/commit followed by repository code).
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ needs.gate.outputs.sha }}
+          ref: refs/tags/release-${{ needs.gate.outputs.release }}
           persist-credentials: false
+      - name: The release tag is still the gated commit
+        env:
+          SHA: ${{ needs.gate.outputs.sha }}
+          TAG: release-${{ needs.gate.outputs.release }}
+        run: |
+          head="$(git rev-parse HEAD)"
+          if [ "$head" != "$SHA" ]; then
+            echo "::error::$TAG is at $head, not the gated $SHA: it moved during the run."
+            exit 1
+          fi
       - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master
         with:
           toolchain: stable
@@ -258,6 +273,7 @@ jobs:
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: "22"
+          package-manager-cache: false   # a release run saves no cache
 
       - name: Install wasm-bindgen and wasm-opt
         run: |
