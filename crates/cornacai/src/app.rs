@@ -749,7 +749,7 @@ fn connect(hub: Arc<Hub>, start: Start, proxy: Proxy, ui: Ui) {
         ui,
         terminals: AgentTerminals::new(workspace.clone(), pty),
         workspace,
-        hub: hub.clone(),
+        hub: Arc::downgrade(&hub),
     };
     let connection = match launch {
         Launch::Command(argv) => {
@@ -1636,5 +1636,44 @@ pub fn wait_for(driver: &mut Driver, text: &str, timeout: Duration) {
             "{text:?} never showed:\n{screen}"
         );
         thread::sleep(Duration::from_millis(10));
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The hub owns the connection, and the connection owns the bridge:
+    /// the bridge's reference back to the hub must not keep it (and the
+    /// agent, its threads and terminals) alive once the app is gone.
+    #[test]
+    fn dropping_the_app_and_its_handle_frees_the_hub() {
+        let wait = Duration::from_secs(10);
+        let path = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fixtures/stream.jsonl");
+        let transcript = Transcript::parse(&std::fs::read_to_string(path).unwrap()).unwrap();
+        let dir = std::env::temp_dir().join(format!("cornacai-drop-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let launch = Launch::Replay {
+            transcript,
+            timeout: Some(wait),
+        };
+        let (app, handle) = app(Options::new(launch, &dir));
+        let mut driver = app.driver(100, 30);
+        wait_for(&mut driver, "Prompt", wait);
+        let start = std::time::Instant::now();
+        while handle.connection().is_none() && start.elapsed() < wait {
+            driver.settle();
+            thread::sleep(Duration::from_millis(10));
+        }
+        assert!(handle.connection().is_some(), "the agent never connected");
+        let hub = Arc::downgrade(&handle.hub);
+        drop(driver);
+        drop(handle);
+        let start = std::time::Instant::now();
+        while hub.upgrade().is_some() && start.elapsed() < wait {
+            thread::sleep(Duration::from_millis(10));
+        }
+        assert!(hub.upgrade().is_none(), "the hub outlived the app");
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

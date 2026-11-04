@@ -650,6 +650,17 @@ fn offset_moves_where_a_node_draws_but_not_its_neighbours() {
     assert_eq!(rows[1].trim_end(), "ab");
 }
 
+/// The screen has no cells left of or above its corner: a node moved
+/// past those edges stops there, drawn whole (the guide says so).
+#[test]
+fn offset_past_the_left_edge_stops_at_it() {
+    let app = App::new(|| row([label("abcd").name("x").fixed(4), label("ef")]))
+        .stylesheet("#x { offset: -1 0; }");
+    let mut driver = app.driver(10, 1);
+    let rows = frame(&mut driver, None);
+    assert_eq!(rows[0].trim_end(), "abcdef");
+}
+
 #[test]
 fn opacity_fades_colours_into_the_ground_and_tint_moves_them_to_a_colour() {
     let app = App::new(|| column([label("hi").name("faded"), label("hi").name("tinted")]))

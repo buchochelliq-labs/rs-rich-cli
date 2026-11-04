@@ -409,7 +409,7 @@ and other `@` rules are an error.
 | `visibility` | `hidden` keeps the node's room but draws nothing in it and takes it out of the Tab order (`display: none` gives the room up); `visible` |
 | `scrollbar-color`, `scrollbar-background`, `scrollbar-color-hover` | the thumb's colour, the track's ground, and the thumb's colour while the pointer is over the bar, of a node's scrollbars (a `scroll`, a list, a table, a log, …), as theme styles over the node: `scrollbar.thumb`, `scrollbar`, `scrollbar.thumb.hover` |
 | `scrollbar-size`, `scrollbar-size-horizontal`, `scrollbar-size-vertical` | how many cells a node's bars take: across, then down (`scrollbar-size: 1 2`), or one of them; `0` hides that bar. Code's `Scrollbar::size` wins |
-| `offset`, `offset-x`, `offset-y` | where a node draws, moved from where it is laid out, across then down (`offset: 2 -1`); its neighbours stay put, and it is clipped at the screen's edge |
+| `offset`, `offset-x`, `offset-y` | where a node draws, moved from where it is laid out, across then down (`offset: 2 -1`); its neighbours stay put. Past the right or bottom edge it is clipped; moved past the left or top edge it stops there, drawn whole |
 | `opacity` | `50%` or `0.5`: the node's colours (its children's too) that far from the ground behind it (the theme's `screen` style, else the terminal's usual black or white) to their own |
 | `tint` | a colour and how much of it (`tint: $accent 20%`; all of it when that is not said): the node's colours moved that far towards it |
 | `outline` | a `border` value: a box drawn over the node's edge, on its content, taking no room |

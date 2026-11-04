@@ -3343,8 +3343,10 @@ impl Node {
             self.hide();
             return;
         }
-        // `offset`: drawn moved from where it was laid out, clipped to the
-        // screen.
+        // `offset`: drawn moved from where it was laid out. Past the right
+        // or bottom edge it is clipped; the screen has no cells left of or
+        // above its corner, so moved past those edges it stops there, drawn
+        // whole, rather than clipped.
         let rect = match self.sheet.borrow().layout.offset {
             (0, 0) => rect,
             (dx, dy) => rect

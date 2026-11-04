@@ -123,14 +123,9 @@ jobs:
         uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master
         with:
           toolchain: ${{ steps.tools.outputs.semver_checks_toolchain }}
-      - name: Cache cargo-semver-checks
-        id: semver-tool
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: ~/.cargo/bin/cargo-semver-checks
-          key: semver-checks-${{ runner.os }}-${{ hashFiles('api/tools.toml') }}
+      # Installed every run, not cached: this job runs the tagged commit's
+      # code, and a cache it saved would reach later runs on main.
       - name: Install cargo-semver-checks
-        if: steps.semver-tool.outputs.cache-hit != 'true'
         env:
           VERSION: ${{ steps.tools.outputs.cargo_semver_checks }}
         run: cargo install --locked cargo-semver-checks --version "$VERSION"

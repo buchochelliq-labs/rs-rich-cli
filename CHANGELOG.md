@@ -288,7 +288,8 @@ Fixes 2, 4, 10, 12 and 14 of
 
 - **Stylesheets cover #812's last properties.** `offset` (and `offset-x`,
   `offset-y`) draws a node moved from where it is laid out, its
-  neighbours staying put. `opacity` (`50%` or `0.5`) fades a node's
+  neighbours staying put (moved past the screen's left or top edge, it
+  stops there). `opacity` (`50%` or `0.5`) fades a node's
   colours, its children's with them, into the ground behind it (the
   theme's `screen` style); `tint: $accent 20%` moves them towards a
   colour. `outline` is a `border` drawn over the node's edge, taking no

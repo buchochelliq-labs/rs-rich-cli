@@ -14,7 +14,7 @@
 //! - Reads are answered inside the workspace, without asking.
 
 use std::path::Path;
-use std::sync::{Arc, mpsc};
+use std::sync::{Weak, mpsc};
 
 use rich_acp::{
     CreateTerminalRequest, CreateTerminalResponse, Error, ReadTextFileRequest,
@@ -49,7 +49,9 @@ pub(crate) struct Bridge {
     pub ui: Ui,
     pub workspace: Workspace,
     pub terminals: AgentTerminals,
-    pub hub: Arc<Hub>,
+    /// Weak: the hub owns the connection, which owns this bridge, so a
+    /// strong reference would keep the agent alive after the app is gone.
+    pub hub: Weak<Hub>,
 }
 
 /// The error a refused write or command answers with.
@@ -86,8 +88,9 @@ impl rich_acp::Client for Bridge {
         if let SessionUpdate::Unknown { kind, value } = &notification.update
             && kind == "session_info_update"
             && let Some(title) = value.get("title").and_then(|t| t.as_str())
+            && let Some(hub) = self.hub.upgrade()
         {
-            self.hub.retitle(&notification.session_id, title);
+            hub.retitle(&notification.session_id, title);
         }
         let ui = self.ui;
         self.proxy.run(move || ui.route(notification));
