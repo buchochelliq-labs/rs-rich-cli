@@ -47,6 +47,9 @@ const GAP: f64 = 4.0;
 /// At most this many options of one select.
 const MAX_OPTIONS: usize = 500;
 
+/// Where `overflow-x` is in [`SNAPSHOT_STYLES`](crate::cdp::SNAPSHOT_STYLES).
+const SNAPSHOT_OVERFLOW_X: usize = 15;
+
 /// A run of text with one style.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct Run {
@@ -65,6 +68,23 @@ pub struct Run {
     /// A small picture in the line (an emote, a badge): the text is its
     /// alt text, which stands in where pictures are not drawn.
     pub picture: Option<Picture>,
+    /// Which of a pair of [screen-reader twins](Twin) it is, if either:
+    /// the [screen-reader twins](crate::adapt::Rule::ScreenReaderTwins)
+    /// rule draws one of the two.
+    pub twin: Option<Twin>,
+}
+
+/// One of two sibling runs saying the same thing two ways: the visually
+/// hidden text a page writes for screen readers (`$29.99`) and the parts
+/// it shows instead, hidden from assistive technology (`$`, `29`, `99`
+/// drawn apart, read together as `$2999`). Only a pair whose digits agree
+/// is a pair, so a hidden hint ("Use the Right Arrow Key…") never is.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum Twin {
+    /// The visually hidden text, for screen readers.
+    Spoken,
+    /// The `aria-hidden` parts shown in its place.
+    Shown,
 }
 
 /// A small picture inside a line of text.
@@ -131,6 +151,9 @@ pub enum BlockKind {
     Control(usize),
     /// A live log: an index into [`Page::logs`].
     Log(usize),
+    /// A value in a range the page states: an index into
+    /// [`Page::indicators`].
+    Indicator(usize),
 }
 
 /// A block of the page, in reading order.
@@ -148,6 +171,60 @@ pub struct Block {
     pub node: NodeId,
     /// The landmark it is in: an index into [`Page::regions`].
     pub region: Option<usize>,
+    /// Where it is in the page's stack of boxes: its fixed or sticky
+    /// layer, whether a box painted above it hides it, the picture it lies
+    /// on.
+    pub stack: Stack,
+}
+
+/// A block's place in the page's stack of boxes, from computed `position`
+/// and the snapshot's paint orders.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct Stack {
+    /// The fixed or sticky box it is in: an index into [`Page::layers`].
+    pub layer: Option<usize>,
+    /// An opaque box or a picture painted above it covers its whole box:
+    /// Chrome does not show it (a player's hidden error panel under an
+    /// interstitial).
+    pub covered: bool,
+    /// It lies inside a picture's box and is painted above it (a duration
+    /// badge on a thumbnail, art over a player): an index into
+    /// [`Page::media`].
+    pub over: Option<usize>,
+    /// The sideways-scrolling shelf it is in (its innermost): an index
+    /// into [`Page::shelves`]. Only that shelf's box clips it.
+    pub shelf: Option<usize>,
+}
+
+/// Where a fixed or sticky layer is drawn.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Place {
+    /// In the page's flow, at [`Layer::top`]: a sticky box at its static
+    /// place, a fixed box too tall to pin where it is on screen.
+    Flow,
+    /// On the strip above the page (a top bar), at [`Layer::top`] in it.
+    Pinned,
+    /// On the strip under the page, above the status bar (a cookie
+    /// banner, a sign-up bar), at [`Layer::top`] in the viewport.
+    Docked,
+    /// Wholly outside the viewport (a fixed menu slid away): not drawn.
+    Off,
+}
+
+/// A box the page takes out of its flow with `position: fixed` or
+/// `sticky`, and every block in it.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Layer {
+    pub node: NodeId,
+    /// `fixed`; else `sticky`.
+    pub fixed: bool,
+    /// Its box as the snapshot reports it: where it is on screen now, in
+    /// the document's pixels.
+    pub rect: Rect,
+    /// Where it is drawn: its top in the document ([`Place::Flow`]) or in
+    /// the viewport (pinned and docked).
+    pub top: f64,
+    pub place: Place,
 }
 
 impl Block {
@@ -157,9 +234,12 @@ impl Block {
     }
 }
 
-/// The text of `runs`.
+/// The text of `runs`: of a pair of [twins](Twin), the spoken one.
 pub fn plain(runs: &[Run]) -> String {
-    runs.iter().map(|r| r.text.as_str()).collect()
+    runs.iter()
+        .filter(|r| r.twin != Some(Twin::Shown))
+        .map(|r| r.text.as_str())
+        .collect()
 }
 
 /// A control's role, as the accessibility tree names it.
@@ -277,6 +357,14 @@ pub struct Control {
     /// A button with no text of its own: its name comes from a label or
     /// a title (an icon button).
     pub icon_only: bool,
+    /// An icon-only button's face, when its name or its icon's name is a
+    /// known one: `⋯` for "More actions", `✕` for "Close", `🔍` for
+    /// "Search". Its name stays its name, in hints and lists.
+    pub glyph: Option<String>,
+    /// Laid out but transparent until hovered (`opacity: 0` on it or an
+    /// ancestor: a card's "More actions"): not drawn, as Chrome draws it,
+    /// but on the page's lists (site keys) to bind and use.
+    pub hover_only: bool,
     /// The meaning's revision: role, name, type, destination, options.
     pub revision: u32,
     /// The state's revision: value, checked, choice.
@@ -348,6 +436,150 @@ pub struct Media {
     /// It is inside a heading, a link, a button or a label: a picture
     /// that stands for words.
     pub in_label: bool,
+    /// What its content was when read, as a hash: for an inline `<svg>`,
+    /// of its subtree's element names, attributes and text, so a drawing
+    /// a script changes (a dial's arc, needle and number) is captured
+    /// again; 0 for every other kind (a canvas changes no DOM: the tab
+    /// watches its pixels instead).
+    pub revision: u64,
+    /// The words it draws: an inline `<svg>`'s `<text>` (with its
+    /// `<tspan>`s), in document order, cleaned, so a dial's number reads
+    /// as text in reader mode and `--dump`; empty for every other kind.
+    pub text: String,
+    /// An `<img>` that has no source yet (a lazy thumbnail, transparent
+    /// until its picture loads): a placeholder in its box, with its alt
+    /// text or title, until it has one.
+    pub pending: bool,
+}
+
+/// What an [`Indicator`] is.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum IndicatorKind {
+    /// `<meter>` or `role=meter`: a measurement in a known range.
+    Meter,
+    /// `<progress>` or `role=progressbar` with a value.
+    Progress,
+    /// A progress with no value: busy, for an unknown time.
+    Busy,
+    /// A score out of a few (`role=img` named "4.5 out of 5 stars").
+    Rating,
+}
+
+/// A value in a range the page states, not a control (the user does not
+/// change it): a `<meter>`, a `<progress>`, `role=meter` or
+/// `role=progressbar` with `aria-value*`, a rating. Read again at every
+/// reading, so a moving bar moves.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Indicator {
+    /// The node it is on.
+    pub node: NodeId,
+    /// What it is.
+    pub kind: IndicatorKind,
+    /// Its accessible name, or its `<label for>`'s text; cleaned.
+    pub label: String,
+    /// `value` or `aria-valuenow`, within `min..=max`; `None` when busy.
+    pub value: Option<f64>,
+    /// The low end of its range: `min`, `aria-valuemin`, else 0.
+    pub min: f64,
+    /// The high end of its range, never below `min`: `max`,
+    /// `aria-valuemax`, else 1 for a `<meter>` or a `<progress>` and 100
+    /// for an ARIA one; a rating's scale (5).
+    pub max: f64,
+    /// `aria-valuetext`, or the text it holds; cleaned.
+    pub text: Option<String>,
+    /// Its box, in CSS pixels of the document.
+    pub rect: Rect,
+    /// A `<meter>`'s `low`, `high` and `optimum`: which colour its value
+    /// is drawn in, as browsers draw it.
+    pub bands: Option<(f64, f64, f64)>,
+    /// The media region it also is (a `<canvas>` or `<svg>` given the
+    /// role): an index into [`Page::media`]. The
+    /// [indicators](crate::adapt::Rule::Indicators) rule draws the
+    /// indicator in its place.
+    pub media: Option<usize>,
+    /// The text just before it on its line ends with its label (`Download
+    /// <span role=progressbar aria-label=Download>`): drawn without it.
+    pub label_in_text: bool,
+    /// Text comes before it on its line, in the same block.
+    pub after_text: bool,
+}
+
+impl Indicator {
+    /// Its value's share of its range, 0 to 1; `None` when busy.
+    pub fn share(&self) -> Option<f64> {
+        let span = self.max - self.min;
+        self.value
+            .map(|v| {
+                if span > 0.0 {
+                    (v - self.min) / span
+                } else {
+                    1.0
+                }
+            })
+            .map(|s| s.clamp(0.0, 1.0))
+    }
+
+    /// What it says, without its label: its value text, else its share as
+    /// a percentage (`72%`), `busy` for a busy one, the number of a rating
+    /// (`4.5`).
+    pub fn readout(&self) -> String {
+        if let Some(text) = self.text.as_deref().filter(|t| !t.trim().is_empty()) {
+            return text.to_string();
+        }
+        match (self.kind, self.value) {
+            (IndicatorKind::Rating, Some(value)) => number_text(value),
+            (_, None) | (IndicatorKind::Busy, _) => "busy".into(),
+            _ => format!("{:.0}%", self.share().unwrap_or(0.0) * 100.0),
+        }
+    }
+
+    /// What a reader says of it: its label, then its [readout](Self::readout)
+    /// (a rating's label says its number already).
+    pub fn said(&self) -> String {
+        if self.kind == IndicatorKind::Rating && !self.label.is_empty() {
+            return self.label.clone();
+        }
+        [self.label.clone(), self.readout()]
+            .into_iter()
+            .filter(|t| !t.is_empty())
+            .collect::<Vec<_>>()
+            .join(" ")
+    }
+}
+
+/// A number as people write it: `4.5`, `4`, `287.4`; at most two decimals.
+pub fn number_text(value: f64) -> String {
+    let text = format!("{value:.2}");
+    text.trim_end_matches('0').trim_end_matches('.').to_string()
+}
+
+/// A rating in an accessible name, as (value, out of): "4.5 out of 5
+/// stars", "Rated 4 out of 5", "4.5 / 5", "4.5/5 stars". `None` when it
+/// is not one: no pair of numbers, the value above the scale, or a scale
+/// of more than 10 (a count, not stars).
+pub fn rating_of(name: &str) -> Option<(f64, f64)> {
+    let lower = name.to_ascii_lowercase();
+    let (before, after) = lower
+        .split_once(" out of ")
+        .or_else(|| lower.split_once('/'))?;
+    let last_number = |text: &str| {
+        text.split(|c: char| c.is_whitespace() || c == '(')
+            .rfind(|w| !w.is_empty())
+            .and_then(|w| w.replace(',', ".").parse::<f64>().ok())
+    };
+    let first_number = |text: &str| {
+        text.split(|c: char| c.is_whitespace() || c == ')')
+            .find(|w| !w.is_empty())
+            .and_then(|w| w.replace(',', ".").parse::<f64>().ok())
+    };
+    let value = last_number(before.trim())?;
+    let scale = first_number(after.trim())?;
+    (value.is_finite()
+        && scale.is_finite()
+        && scale > 0.0
+        && scale <= 10.0
+        && (0.0..=scale).contains(&value))
+    .then_some((value, scale))
 }
 
 /// What made a box a live log.
@@ -425,6 +657,85 @@ pub struct Grid {
     pub items: Vec<Rect>,
 }
 
+/// A shelf: a box that scrolls sideways (`overflow-x: auto` or `scroll`,
+/// wider inside than out) over three or more alike items side by side,
+/// a shop's "Customers also viewed", a row of videos. The projection
+/// draws the items in its box, as Chrome shows them, with a strip under
+/// it that pages it (`‹ 1–3 of 6 ›`).
+#[derive(Clone, Debug, PartialEq)]
+pub struct Shelf {
+    /// The scrolling box's node.
+    pub node: NodeId,
+    /// Its box, in CSS pixels of the document.
+    pub rect: Rect,
+    /// Its items' boxes, in order, where Chrome lays them out at its
+    /// scroll now: an item scrolled away is outside [`rect`](Self::rect).
+    pub items: Vec<Rect>,
+    /// How far it is scrolled sideways, in CSS pixels.
+    pub scroll_left: f64,
+    /// How wide its content is, in CSS pixels (`scrollWidth`).
+    pub scroll_width: f64,
+    /// How wide what it shows is, in CSS pixels (`clientWidth`).
+    pub client_width: f64,
+    /// Its accessible name, if it has one.
+    pub label: String,
+}
+
+impl Shelf {
+    /// Whether item `index` is in view: at least half of it in the box.
+    pub fn shows(&self, index: usize) -> bool {
+        self.items.get(index).is_some_and(|item| {
+            let middle = item.x + item.width / 2.0;
+            middle >= self.rect.x && middle <= self.rect.right()
+        })
+    }
+
+    /// The items in view, as (first, how many); (0, 0) when none is.
+    pub fn shown(&self) -> (usize, usize) {
+        let shown: Vec<usize> = (0..self.items.len()).filter(|&i| self.shows(i)).collect();
+        match (shown.first(), shown.last()) {
+            (Some(&first), Some(&last)) => (first, last - first + 1),
+            _ => (0, 0),
+        }
+    }
+
+    /// Whether a box at `rect` is in the shelf (within its rows) but
+    /// scrolled out of its box: in an item not in view, or, outside every
+    /// item, with its middle outside the box.
+    pub fn hides(&self, rect: &Rect) -> bool {
+        let (middle_x, middle_y) = (rect.x + rect.width / 2.0, rect.y + rect.height / 2.0);
+        if middle_y < self.rect.y || middle_y > self.rect.bottom() {
+            return false;
+        }
+        match self
+            .items
+            .iter()
+            .position(|item| middle_x >= item.x && middle_x <= item.right())
+        {
+            Some(index) => !self.shows(index),
+            None => middle_x < self.rect.x || middle_x > self.rect.right(),
+        }
+    }
+
+    /// The shelf as a screen `right` CSS pixels wide shows it: its box
+    /// cut at that edge, so an item past the screen counts as out of view
+    /// (a page laid out wider than the terminal), and a page of it is
+    /// what the screen shows.
+    pub fn clipped(&self, right: f64) -> Shelf {
+        let mut shelf = self.clone();
+        shelf.rect.width = (right.min(self.rect.right()) - self.rect.x).max(0.0);
+        shelf
+    }
+
+    /// Whether it can scroll back, and on.
+    pub fn can_page(&self) -> (bool, bool) {
+        (
+            self.scroll_left > 0.5,
+            self.scroll_left + self.client_width < self.scroll_width - 0.5,
+        )
+    }
+}
+
 /// An action's binding to its target: the document, the node, and the
 /// meaning revision it was chosen at.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -464,6 +775,18 @@ pub struct Page {
     pub regions: Vec<Region>,
     /// Its grids and wrapping flex rows.
     pub grids: Vec<Grid>,
+    /// Its meters, progress bars and ratings.
+    pub indicators: Vec<Indicator>,
+    /// Its boxes that scroll sideways over alike items ([`Shelf`]).
+    pub shelves: Vec<Shelf>,
+    /// Its fixed and sticky boxes ([`Stack::layer`]).
+    pub layers: Vec<Layer>,
+    /// How far down the page Chrome was scrolled when it was read, in CSS
+    /// pixels.
+    pub scroll_y: f64,
+    /// The viewport's height in CSS pixels (0 when the snapshot does not
+    /// say).
+    pub view_height: f64,
 }
 
 impl Page {
@@ -512,6 +835,7 @@ impl Page {
                 BlockKind::Media(i) => out.push(format!("[{}]", self.media[*i].alt)),
                 BlockKind::Control(i) => out.push(self.controls[*i].name.clone()),
                 BlockKind::Log(i) => out.extend(self.logs[*i].entries.iter().map(Entry::text)),
+                BlockKind::Indicator(i) => out.push(self.indicators[*i].said()),
                 _ => out.push(block.text()),
             }
         }
@@ -584,6 +908,11 @@ struct Dom {
     layout: Vec<Option<usize>>,
     styles: Vec<Vec<String>>,
     bounds: Vec<Rect>,
+    /// Each layout object's scroll (`scrollRects`: left, top, width,
+    /// height) and client box (`clientRects`); empty when the snapshot
+    /// has none.
+    scrolls: Vec<Rect>,
+    clients: Vec<Rect>,
     /// Each node's laid-out text: from the first of its layout objects
     /// that has any (a list marker's is on its second).
     text: Vec<Option<String>>,
@@ -593,8 +922,22 @@ struct Dom {
     selected: HashSet<usize>,
     source: HashMap<usize, String>,
     /// Whether each node is visually hidden by itself or an ancestor
-    /// (see [`conceals`]): its text is not drawn.
+    /// (see [`transparent`] and [`veils`]): its text is not drawn.
     concealed: Vec<bool>,
+    /// Concealed by `opacity: 0` on it or an ancestor ([`transparent`]).
+    faded: Vec<bool>,
+    /// Concealed another way ([`veils`]): clipped or shrunk away.
+    veiled: Vec<bool>,
+    /// The [screen-reader twins](Twin): each element of a pair.
+    twins: HashMap<usize, Twin>,
+    /// Elements by their `id`, the first of each.
+    ids: HashMap<String, usize>,
+    /// Each layout object's paint order (`paintOrders`): boxes painted
+    /// together share one; empty when the snapshot has none.
+    paint: Vec<i64>,
+    scroll_y: f64,
+    /// The viewport's height: the document node's box.
+    view_height: f64,
     url: String,
     title: String,
     width: f64,
@@ -710,17 +1053,21 @@ impl Dom {
                     .collect()
             })
             .unwrap_or_default();
-        let bounds = layout_tree["bounds"]
-            .as_array()
-            .map(|all| {
-                all.iter()
-                    .map(|b| {
-                        let at = |i: usize| b.get(i).and_then(Value::as_f64).unwrap_or(0.0);
-                        Rect::new(at(0), at(1), at(2), at(3))
-                    })
-                    .collect()
-            })
-            .unwrap_or_default();
+        let rects = |key: &str| -> Vec<Rect> {
+            layout_tree[key]
+                .as_array()
+                .map(|all| {
+                    all.iter()
+                        .map(|b| {
+                            let at = |i: usize| b.get(i).and_then(Value::as_f64).unwrap_or(0.0);
+                            Rect::new(at(0), at(1), at(2), at(3))
+                        })
+                        .collect()
+                })
+                .unwrap_or_default()
+        };
+        let bounds = rects("bounds");
+        let (scrolls, clients) = (rects("scrollRects"), rects("clientRects"));
         let mut dom = Dom {
             parent,
             kind,
@@ -732,6 +1079,8 @@ impl Dom {
             layout,
             styles,
             bounds,
+            scrolls,
+            clients,
             text,
             input_value: rare_strings("inputValue"),
             text_value: rare_strings("textValue"),
@@ -743,18 +1092,32 @@ impl Dom {
             width: document["contentWidth"].as_f64().unwrap_or(0.0),
             height: document["contentHeight"].as_f64().unwrap_or(0.0),
             concealed: Vec::new(),
+            faded: Vec::new(),
+            veiled: Vec::new(),
+            twins: HashMap::new(),
+            ids: HashMap::new(),
+            paint: ints(&layout_tree["paintOrders"]),
+            scroll_y: document["scrollOffsetY"].as_f64().unwrap_or(0.0),
+            view_height: 0.0,
         };
+        dom.view_height = dom.rect(0).map_or(0.0, |r| r.height);
         // Parents come before their children in a snapshot's order; a
         // parent after its child is read as not concealing.
-        let mut concealed = vec![false; n];
+        let (mut faded, mut veiled) = (vec![false; n], vec![false; n]);
         for i in 0..n {
-            let from_parent = usize::try_from(dom.parent[i])
-                .ok()
-                .filter(|&p| p < i)
-                .is_some_and(|p| concealed[p]);
-            concealed[i] = from_parent || conceals(&dom, i);
+            let parent = usize::try_from(dom.parent[i]).ok().filter(|&p| p < i);
+            faded[i] = parent.is_some_and(|p| faded[p]) || transparent(&dom, i);
+            veiled[i] = parent.is_some_and(|p| veiled[p]) || veils(&dom, i);
         }
-        dom.concealed = concealed;
+        dom.concealed = faded.iter().zip(&veiled).map(|(f, v)| *f || *v).collect();
+        dom.faded = faded;
+        dom.veiled = veiled;
+        for i in 0..n {
+            if let Some(id) = dom.attr(i, "id").filter(|id| !id.is_empty()) {
+                dom.ids.entry(id.to_string()).or_insert(i);
+            }
+        }
+        dom.twins = twins(&dom);
         dom
     }
 
@@ -774,6 +1137,13 @@ impl Dom {
 
     fn rect(&self, i: usize) -> Option<Rect> {
         self.layout[i].and_then(|k| self.bounds.get(k).copied())
+    }
+
+    /// Node `i`'s scroll (left, top, width, height) and client box, when
+    /// the snapshot has them.
+    fn scroll(&self, i: usize) -> Option<(Rect, Rect)> {
+        let k = self.layout[i]?;
+        Some((*self.scrolls.get(k)?, *self.clients.get(k)?))
     }
 
     fn is_element(&self, i: usize) -> bool {
@@ -853,8 +1223,19 @@ impl Dom {
     }
 }
 
-/// Whether element `i` hides what is in it from sight, though it is laid
-/// out (text for screen readers only, a tooltip waiting for a hover):
+/// Whether a text alternative is a script's value rendered as text, not
+/// words: `alt="true"` from a boolean bound to the attribute (a video
+/// site's thumbnails), `undefined`, `null`, `NaN`, `[object Object]`. It
+/// says nothing, so the picture is taken to have no text alternative.
+fn script_value(text: &str) -> bool {
+    matches!(
+        text.trim(),
+        "true" | "false" | "null" | "undefined" | "NaN" | "[object Object]"
+    )
+}
+
+/// Whether element `i` conceals what is in it from sight, though it is
+/// laid out (text for screen readers only, a tooltip waiting for a hover):
 /// - it is fully transparent (`opacity: 0`, which its children do not
 ///   inherit as a computed style);
 /// - it is positioned and clipped to no area (`clip: rect(0 0 0 0)`, or
@@ -862,16 +1243,28 @@ impl Dom {
 /// - its `clip-path` is an inset of half its size or more
 ///   (`inset(50%)`), or a circle or ellipse of no radius;
 /// - it hides its overflow and is at most a pixel wide or tall (the
-///   1 x 1 box of a "visually hidden" class, a collapsed panel).
+///   1 x 1 box of a "visually hidden" class, a collapsed panel); not the
+///   root or the body, whose overflow clips the viewport, not their own
+///   box (CSS Overflow 3, 3.3): a root 0 pixels tall over an absolutely
+///   placed body still shows the whole page (a video site's embedded
+///   player).
 ///
 /// `visibility: hidden` needs no rule: it is inherited, so each hidden
 /// text node says so itself.
-fn conceals(dom: &Dom, i: usize) -> bool {
+///
+/// These are two tests: this one, the first, and [`veils`], the rest. A
+/// control hidden only by this one is waiting for a hover.
+fn transparent(dom: &Dom, i: usize) -> bool {
+    dom.is_element(i)
+        && dom.layout[i].is_some()
+        && number(Some(dom.style(i, 8))).is_some_and(|o| o <= 0.0)
+}
+
+/// The rest of [`transparent`]'s tests: element `i` is clipped or shrunk to
+/// nothing.
+fn veils(dom: &Dom, i: usize) -> bool {
     if !dom.is_element(i) || dom.layout[i].is_none() {
         return false;
-    }
-    if number(Some(dom.style(i, 8))).is_some_and(|o| o <= 0.0) {
-        return true;
     }
     let positioned = matches!(dom.style(i, 14), "absolute" | "fixed");
     if positioned && clipped_to_nothing(dom.style(i, 12)) {
@@ -883,6 +1276,7 @@ fn conceals(dom: &Dom, i: usize) -> bool {
     let display = dom.style(i, 0);
     let boxed = !display.is_empty() && display != "inline" && display != "contents";
     if boxed
+        && !matches!(dom.name[i].as_str(), "HTML" | "BODY")
         && matches!(dom.style(i, 10), "hidden" | "clip")
         && let Some(rect) = dom.rect(i)
         && (rect.width <= 1.0 || rect.height <= 1.0)
@@ -890,6 +1284,52 @@ fn conceals(dom: &Dom, i: usize) -> bool {
         return true;
     }
     false
+}
+
+/// The digits of `text`, in order.
+fn digits(text: &str) -> String {
+    text.chars().filter(char::is_ascii_digit).collect()
+}
+
+/// The page's [screen-reader twins](Twin): an element that starts a
+/// concealed run (visually hidden itself, its parent not) and a sibling
+/// marked `aria-hidden="true"` that shows, whose texts have the same
+/// digits, at least one. A hidden hint has no digits its sibling shows,
+/// so it stays hidden.
+fn twins(dom: &Dom) -> HashMap<usize, Twin> {
+    let mut out = HashMap::new();
+    let hidden = |n: usize| {
+        dom.attr(n, "aria-hidden")
+            .is_some_and(|v| v.eq_ignore_ascii_case("true"))
+    };
+    for i in 0..dom.name.len() {
+        if !dom.concealed[i] || !dom.is_element(i) {
+            continue;
+        }
+        let Some(parent) = usize::try_from(dom.parent[i]).ok().filter(|&p| p < i) else {
+            continue;
+        };
+        if dom.concealed[parent] {
+            continue;
+        }
+        let said = digits(&dom.raw_text(i));
+        if said.is_empty() {
+            continue;
+        }
+        let shown = dom.children[parent].iter().copied().find(|&s| {
+            s != i
+                && dom.is_element(s)
+                && hidden(s)
+                && dom.layout[s].is_some()
+                && !dom.concealed[s]
+                && digits(&dom.raw_text(s)) == said
+        });
+        if let Some(shown) = shown {
+            out.insert(i, Twin::Spoken);
+            out.insert(shown, Twin::Shown);
+        }
+    }
+    out
 }
 
 /// The page's background colour: the root element's, else the body's
@@ -1037,6 +1477,48 @@ fn background_picture(dom: &Dom, i: usize) -> Option<String> {
     (!has_text).then_some(url)
 }
 
+/// An inline `<svg>`'s content: a hash of its subtree (element names,
+/// attributes, text), its `<text>` runs joined, and its own `<title>`.
+/// What a reading sees of a drawing a script changes: the arc's dash, the
+/// needle's `transform`, the number's text.
+fn svg_content(dom: &Dom, svg: usize) -> (u64, String, String) {
+    let mut hasher = DefaultHasher::new();
+    let mut words: Vec<String> = Vec::new();
+    let mut title = String::new();
+    // Depth first, in document order: (node, inside a <text>).
+    let mut stack = vec![(svg, false)];
+    while let Some((i, in_text)) = stack.pop() {
+        dom.name[i].hash(&mut hasher);
+        dom.attrs[i].hash(&mut hasher);
+        if dom.kind[i] == 3 {
+            dom.value[i].hash(&mut hasher);
+            let word = clean_inline(&dom.value[i]);
+            if in_text && !word.trim().is_empty() {
+                words.push(word.trim().to_string());
+            }
+            continue;
+        }
+        let name = dom.name[i].as_str();
+        if name == "TITLE" && usize::try_from(dom.parent[i]).ok() == Some(svg) {
+            let all: Vec<&str> = dom.children[i]
+                .iter()
+                .filter(|&&c| dom.kind[c] == 3)
+                .map(|&c| dom.value[c].as_str())
+                .collect();
+            all.hash(&mut hasher);
+            if title.is_empty() {
+                title = clean(&all.join(" "));
+            }
+            continue;
+        }
+        let in_text = in_text || name == "TEXT";
+        for &child in dom.children[i].iter().rev() {
+            stack.push((child, in_text));
+        }
+    }
+    (hasher.finish(), clean(&words.join(" ")), title)
+}
+
 /// Whether node `i` is inside a `<figure>` (up to three levels up) that
 /// has a `<figcaption>`.
 fn captioned(dom: &Dom, i: usize) -> bool {
@@ -1156,6 +1638,9 @@ struct Context {
     /// Inside a link with nothing else to show: its visually hidden text
     /// is its name, and is read.
     name_only: bool,
+    /// Inside one of a pair of [screen-reader twins](Twin): the spoken
+    /// one's visually hidden text is read, marked so.
+    twin: Option<Twin>,
 }
 
 /// Tags whose content is never page text.
@@ -1213,6 +1698,7 @@ impl Walker<'_> {
                     && last.code == run.code
                     && last.control == run.control
                     && last.color == run.color
+                    && last.twin == run.twin
                     && last.picture.is_none()
                     && run.picture.is_none() =>
             {
@@ -1253,6 +1739,7 @@ impl Walker<'_> {
             frame: context.frame,
             node: context.node,
             region: context.region,
+            stack: Stack::default(),
         });
     }
 
@@ -1266,6 +1753,7 @@ impl Walker<'_> {
             frame: rect,
             node: self.dom.backend[i],
             region: context.region,
+            stack: Stack::default(),
         });
     }
 
@@ -1273,7 +1761,10 @@ impl Walker<'_> {
         let dom = self.dom;
         match dom.kind[i] {
             3 => {
-                if context.silent || !dom.shows(i) || dom.concealed[i] && !context.name_only {
+                if context.silent
+                    || !dom.shows(i)
+                    || dom.concealed[i] && !context.name_only && context.twin != Some(Twin::Spoken)
+                {
                     return;
                 }
                 let Some(text) = dom.text[i].clone() else {
@@ -1300,6 +1791,7 @@ impl Walker<'_> {
                     // layout's page-colors rule decides what of it shows.
                     color: (!color.is_empty()).then(|| truncate(&clean(color), 64)),
                     picture: None,
+                    twin: context.twin,
                 };
                 self.push(run, dom.rect(i));
             }
@@ -1354,8 +1846,19 @@ impl Walker<'_> {
             _ => None,
         };
         if let Some(kind) = media {
-            if laid_out && dom.shows(i) && !dom.concealed[i] {
+            if kind == MediaKind::Image
+                && let Some(rect) = pending_box(dom, i)
+            {
+                self.pending(i, rect, context);
+            } else if laid_out && dom.shows(i) && !dom.concealed[i] {
+                let index = self.page.media.len();
                 self.media(i, kind, context);
+                // A canvas or a drawing given a meter's or a progress
+                // bar's role, or a drawing named as a rating, is an
+                // indicator too.
+                if let Some(indicator) = self.indicator_kind(i) {
+                    self.indicator(i, indicator, Some(index), context);
+                }
             }
             return;
         }
@@ -1368,6 +1871,14 @@ impl Walker<'_> {
             self.log(i, kind, context);
             return;
         }
+        if laid_out
+            && dom.shows(i)
+            && !dom.concealed[i]
+            && let Some(kind) = self.indicator_kind(i)
+        {
+            self.indicator(i, kind, None, context);
+            return;
+        }
         // A CSS background picture on a box with no text of its own (a
         // thumbnail, an avatar, a banner): a picture region, under what
         // the box holds. A box with text keeps its text instead.
@@ -1377,6 +1888,16 @@ impl Walker<'_> {
         // Controls: an interactive role in the AX tree, or a form element.
         let role = self.ax.role(backend).or_else(|| dom_role(dom, i));
         if let Some(role) = role {
+            // Transparent until hovered: on the page's lists, not drawn.
+            if laid_out
+                && dom.faded[i]
+                && !dom.veiled[i]
+                && !matches!(dom.style(i, 1), "hidden" | "collapse")
+            {
+                let index = self.control(i, role);
+                self.page.controls[index].hover_only = true;
+                return;
+            }
             if !laid_out || !dom.shows(i) && role != Role::Link || dom.concealed[i] {
                 return;
             }
@@ -1413,11 +1934,15 @@ impl Walker<'_> {
                     frame: rect,
                     node: backend,
                     region: context.region,
+                    stack: Stack::default(),
                 });
             }
             return;
         }
         let mut inner = context.clone();
+        if let Some(twin) = dom.twins.get(&i) {
+            inner.twin = Some(*twin);
+        }
         let role_attr = dom.attr(i, "role").unwrap_or_default().to_ascii_lowercase();
         if dom
             .attr(i, "aria-hidden")
@@ -1472,16 +1997,28 @@ impl Walker<'_> {
                 });
             }
         }
+        if laid_out && let Some(shelf) = self.shelf(i) {
+            self.page.shelves.push(shelf);
+        }
         match name {
             "B" | "STRONG" => inner.bold = true,
             "I" | "EM" | "CITE" | "DFN" => inner.italic = true,
             "CODE" | "KBD" | "SAMP" | "TT" => inner.code = true,
             "LABEL" => {
-                let labels_a_control = dom.attr(i, "for").is_some()
-                    || dom
-                        .descendants(i)
-                        .into_iter()
-                        .any(|d| dom.is_element(d) && dom_role(dom, d).is_some());
+                // It names what it labels, which shows the name: a
+                // control, a meter or a progress bar that is drawn. A
+                // `for` that points at anything else, or at nothing, or
+                // at a control that is not drawn (a custom check box's
+                // transparent input), leaves it the text it is.
+                let labels_a_control = match dom.attr(i, "for") {
+                    Some(id) => dom
+                        .ids
+                        .get(id.trim())
+                        .is_some_and(|&t| self.labelable(t) && !dom.concealed[t]),
+                    None => dom.descendants(i).into_iter().any(|d| {
+                        dom.is_element(d) && dom_role(dom, d).is_some() && !dom.concealed[d]
+                    }),
+                };
                 if labels_a_control {
                     inner.silent = true;
                 }
@@ -1562,7 +2099,24 @@ impl Walker<'_> {
             .or_else(|| self.ax.get(backend).and_then(|n| ax_string(n, "name")))
             .or_else(|| dom.attr(i, "title").map(clean))
             .or_else(|| dom.attr(i, "aria-label").map(clean))
+            .filter(|a| !script_value(a))
             .unwrap_or_default();
+        // A drawing's own words: its `<text>`, and its `<title>` as its
+        // name when it has no other (Chrome's AX tree gives it one).
+        let (revision, text, title) = if kind == MediaKind::Svg {
+            svg_content(dom, i)
+        } else {
+            (0, String::new(), String::new())
+        };
+        let alt = if alt.is_empty() && kind == MediaKind::Svg {
+            if title.is_empty() {
+                text.clone()
+            } else {
+                title
+            }
+        } else {
+            alt
+        };
         let src = dom
             .source
             .get(&i)
@@ -1604,11 +2158,307 @@ impl Walker<'_> {
             in_label: context.control.is_some()
                 || context.silent
                 || matches!(context.kind, BlockKind::Heading(_)),
+            revision,
+            text: truncate(&text, 500),
+            pending: false,
         });
         self.block(BlockKind::Media(index), i, context);
     }
 
+    /// Whether a `<label for>` can name node `i`: a control, a meter or
+    /// a progress bar.
+    fn labelable(&self, i: usize) -> bool {
+        let dom = self.dom;
+        dom.is_element(i)
+            && (dom_role(dom, i).is_some()
+                || self.ax.role(dom.backend[i]).is_some()
+                || matches!(dom.name[i].as_str(), "METER" | "PROGRESS")
+                || matches!(
+                    self.indicator_kind(i),
+                    Some(IndicatorKind::Meter | IndicatorKind::Progress)
+                ))
+    }
+
+    /// Whether node `i` is an [`Indicator`], and which kind (a progress
+    /// with no value is told apart when it is read).
+    fn indicator_kind(&self, i: usize) -> Option<IndicatorKind> {
+        let dom = self.dom;
+        match dom.name[i].as_str() {
+            "METER" => return Some(IndicatorKind::Meter),
+            "PROGRESS" => return Some(IndicatorKind::Progress),
+            _ => {}
+        }
+        let role = dom
+            .attr(i, "role")
+            .and_then(|r| r.split_whitespace().next())
+            .unwrap_or_default()
+            .to_ascii_lowercase();
+        let ax_role = self
+            .ax
+            .get(dom.backend[i])
+            .and_then(|n| n["role"]["value"].as_str())
+            .unwrap_or_default();
+        match (role.as_str(), ax_role) {
+            ("progressbar", _) | (_, "progressbar" | "progressIndicator") => {
+                Some(IndicatorKind::Progress)
+            }
+            ("meter", _) | (_, "meter") => Some(IndicatorKind::Meter),
+            ("img" | "image", _) | ("", "img" | "image") if rating_of(&self.label(i)).is_some() => {
+                Some(IndicatorKind::Rating)
+            }
+            _ => None,
+        }
+    }
+
+    /// The text of the elements `ids` (space-separated) names, as
+    /// `aria-labelledby` points at them.
+    fn text_of_ids(&self, ids: &str) -> String {
+        ids.split_whitespace()
+            .filter_map(|id| self.dom.ids.get(id))
+            .map(|&t| clean(&self.dom.raw_text(t)))
+            .filter(|t| !t.is_empty())
+            .collect::<Vec<_>>()
+            .join(" ")
+    }
+
+    /// Node `i`'s indicator, of `kind`, as a block; `media` is the region
+    /// it also is.
+    fn indicator(
+        &mut self,
+        i: usize,
+        kind: IndicatorKind,
+        media: Option<usize>,
+        context: &Context,
+    ) {
+        let dom = self.dom;
+        let backend = dom.backend[i];
+        let ax = self.ax.get(backend);
+        let ax_number = |prop: &str| {
+            ax.and_then(|n| property(n, prop)).and_then(|v| {
+                v.as_f64()
+                    .or_else(|| v.as_str().and_then(|t| number(Some(t))))
+            })
+        };
+        let ax_value = ax.and_then(|n| match &n["value"]["value"] {
+            Value::Number(v) => v.as_f64(),
+            Value::String(t) => number(Some(t)),
+            _ => None,
+        });
+        let attr = |name: &str| number(dom.attr(i, name));
+        let label = Some(self.label(i))
+            .filter(|l| !l.is_empty())
+            .or_else(|| {
+                let id = dom.attr(i, "id")?;
+                (0..dom.name.len())
+                    .find(|&l| dom.name[l] == "LABEL" && dom.attr(l, "for") == Some(id))
+                    .map(|l| clean(&dom.raw_text(l)))
+                    .filter(|t| !t.is_empty())
+            })
+            .or_else(|| {
+                dom.attr(i, "aria-labelledby")
+                    .map(|ids| self.text_of_ids(ids))
+                    .filter(|t| !t.is_empty())
+            })
+            .or_else(|| dom.attr(i, "title").map(clean))
+            .map(|l| truncate(&l, 200))
+            .unwrap_or_default();
+        let (mut kind, value, min, max) = match (kind, dom.name[i].as_str()) {
+            (IndicatorKind::Rating, _) => {
+                let (value, scale) = rating_of(&label).unwrap_or((0.0, 5.0));
+                (kind, Some(value), 0.0, scale)
+            }
+            // A meter's value is 0 when it says none.
+            (_, "METER") => (
+                kind,
+                attr("value").or(ax_value).or(Some(0.0)),
+                attr("min").unwrap_or(0.0),
+                attr("max").unwrap_or(1.0),
+            ),
+            // A progress with no value is busy (indeterminate).
+            (_, "PROGRESS") => (kind, attr("value"), 0.0, attr("max").unwrap_or(1.0)),
+            _ => (
+                kind,
+                attr("aria-valuenow")
+                    .or_else(|| ax_number("valuenow"))
+                    .or(ax_value),
+                attr("aria-valuemin")
+                    .or_else(|| ax_number("valuemin"))
+                    .unwrap_or(0.0),
+                attr("aria-valuemax")
+                    .or_else(|| ax_number("valuemax"))
+                    .unwrap_or(100.0),
+            ),
+        };
+        let max = if max < min { min } else { max };
+        let value = value.map(|v| v.clamp(min, max));
+        if kind == IndicatorKind::Progress && value.is_none() {
+            kind = IndicatorKind::Busy;
+        }
+        if kind == IndicatorKind::Meter && value.is_none() {
+            kind = IndicatorKind::Busy;
+        }
+        let text = dom
+            .attr(i, "aria-valuetext")
+            .map(clean)
+            .or_else(|| {
+                ax.and_then(|n| property(n, "valuetext"))
+                    .and_then(Value::as_str)
+                    .map(clean)
+            })
+            .or_else(|| {
+                // What a styled box holds (a signal meter's glyphs); a
+                // meter's or a progress's own content is fallback, never
+                // shown, and a rating's is its picture.
+                if matches!(dom.name[i].as_str(), "METER" | "PROGRESS")
+                    || kind == IndicatorKind::Rating
+                {
+                    return None;
+                }
+                let text = clean(&dom.raw_text(i));
+                (!text.trim().is_empty() && text.trim() != label).then(|| text.trim().to_string())
+            })
+            .filter(|t| !t.trim().is_empty())
+            .map(|t| truncate(&t, 200));
+        let bands = (dom.name[i] == "METER"
+            && ["low", "high", "optimum"].iter().any(|a| attr(a).is_some()))
+        .then(|| {
+            let low = attr("low").unwrap_or(min).clamp(min, max);
+            let high = attr("high").unwrap_or(max).clamp(low, max);
+            let optimum = attr("optimum").unwrap_or((min + max) / 2.0).clamp(min, max);
+            (low, high, optimum)
+        });
+        let before = plain(&self.runs).trim_end().to_lowercase();
+        let label_in_text = !label.is_empty() && before.ends_with(&label.to_lowercase());
+        let after_text = !before.is_empty() && !before.ends_with('\n');
+        self.flush(context);
+        let index = self.page.indicators.len();
+        self.page.indicators.push(Indicator {
+            node: backend,
+            kind,
+            label,
+            value,
+            min,
+            max,
+            text,
+            rect: dom.rect(i).unwrap_or_default(),
+            bands,
+            media,
+            label_in_text,
+            after_text,
+        });
+        self.block(BlockKind::Indicator(index), i, context);
+    }
+
+    /// A placeholder for the `<img>` on node `i`, which has no picture yet,
+    /// in `rect`: its alt text or title, else its link's.
+    fn pending(&mut self, i: usize, rect: Rect, context: &Context) {
+        let dom = self.dom;
+        self.media(i, MediaKind::Image, context);
+        let mut alt = self
+            .page
+            .media
+            .last()
+            .map(|m| m.alt.clone())
+            .unwrap_or_default();
+        if alt.is_empty() {
+            let mut at = dom.parent[i];
+            for _ in 0..6 {
+                let Ok(p) = usize::try_from(at) else { break };
+                if dom.name[p] == "A" {
+                    alt = dom
+                        .attr(p, "title")
+                        .or_else(|| dom.attr(p, "aria-label"))
+                        .map(clean)
+                        .filter(|t| !script_value(t))
+                        .unwrap_or_default();
+                    break;
+                }
+                at = dom.parent[p];
+            }
+        }
+        if let Some(media) = self.page.media.last_mut() {
+            media.pending = true;
+            media.rect = rect;
+            media.alt = truncate(&alt, 500);
+        }
+        if let Some(block) = self.page.blocks.last_mut() {
+            block.rect = rect;
+            block.frame = rect;
+        }
+    }
+
     /// Its accessible name: the AX tree's, else `aria-label`.
+    /// Node `i` as a [`Shelf`], if it is one: it scrolls sideways
+    /// (`overflow-x` `auto` or `scroll`, its content wider than its box,
+    /// not taller), and three or more of its children that show are alike
+    /// (one tag, widths within a quarter of each other) and side by side
+    /// (one top). A list's items may sit one level down (a `<div>` holding
+    /// a `<ul>`).
+    fn shelf(&self, i: usize) -> Option<Shelf> {
+        let dom = self.dom;
+        if !matches!(dom.style(i, SNAPSHOT_OVERFLOW_X), "auto" | "scroll") {
+            return None;
+        }
+        let (scroll, client) = dom.scroll(i)?;
+        if scroll.width <= client.width + 1.0 || client.width <= 0.0 {
+            return None;
+        }
+        let rect = dom.rect(i)?;
+        let alike = |parent: usize| -> Vec<Rect> {
+            let children: Vec<(usize, Rect)> = dom.children[parent]
+                .iter()
+                .filter(|&&c| dom.is_element(c) && dom.shows(c))
+                .filter_map(|&c| Some((c, dom.rect(c).filter(|r| !r.is_empty())?)))
+                .collect();
+            // The most common tag among them.
+            let mut counts: HashMap<&str, usize> = HashMap::new();
+            for (c, _) in &children {
+                *counts.entry(dom.name[*c].as_str()).or_default() += 1;
+            }
+            let Some((tag, _)) = counts.into_iter().max_by_key(|(_, n)| *n) else {
+                return Vec::new();
+            };
+            let items: Vec<Rect> = children
+                .iter()
+                .filter(|(c, _)| dom.name[*c] == tag)
+                .map(|(_, r)| *r)
+                .collect();
+            let mut widths: Vec<f64> = items.iter().map(|r| r.width).collect();
+            widths.sort_by(f64::total_cmp);
+            let median = widths.get(widths.len() / 2).copied().unwrap_or(0.0);
+            let top = items.first().map_or(0.0, |r| r.y);
+            let ok = items.len() >= 3
+                && median > 0.0
+                && items.iter().all(|r| {
+                    (r.width - median).abs() <= median / 4.0 && (r.y - top).abs() < r.height / 2.0
+                });
+            if ok { items } else { Vec::new() }
+        };
+        let mut items = alike(i);
+        if items.is_empty()
+            && let [only] = dom.children[i]
+                .iter()
+                .copied()
+                .filter(|&c| dom.is_element(c) && dom.shows(c))
+                .collect::<Vec<_>>()
+                .as_slice()
+        {
+            items = alike(*only);
+        }
+        if items.is_empty() {
+            return None;
+        }
+        Some(Shelf {
+            node: dom.backend[i],
+            rect,
+            items,
+            scroll_left: scroll.x,
+            scroll_width: scroll.width,
+            client_width: client.width,
+            label: self.label(i),
+        })
+    }
+
     fn label(&self, i: usize) -> String {
         let dom = self.dom;
         self.ax
@@ -1726,11 +2576,37 @@ impl Walker<'_> {
             .or_else(|| dom.attr(i, "title").map(clean))
             .or_else(|| dom.attr(i, "placeholder").map(clean))
             .or_else(|| {
+                dom.attr(i, "aria-labelledby")
+                    .map(|ids| self.text_of_ids(ids))
+                    .filter(|t| !t.is_empty())
+            })
+            .or_else(|| {
+                // Its text, an inner drawing's `<title>` among it.
                 let text = clean(&dom.raw_text(i));
-                (!text.is_empty()).then_some(text)
+                (!text.trim().is_empty()).then(|| text.trim().to_string())
             })
             .or_else(|| dom.attr(i, "name").map(clean))
             .unwrap_or_default();
+        let icon_only = role == Role::Button
+            && if dom.name[i] == "INPUT" {
+                kind == "image"
+            } else {
+                !shows_text(dom, i)
+            };
+        // An icon button's face: a glyph for its name, else for its
+        // icon's (`<use href="#icon-close">`, `class="icon-search"`),
+        // which then names it too.
+        let (name, glyph) = if icon_only {
+            match glyph_for(&name) {
+                Some(glyph) => (name, Some(glyph)),
+                None => match icon_name(dom, i) {
+                    Some((word, glyph)) if name.is_empty() => (word, Some(glyph)),
+                    _ => (name, None),
+                },
+            }
+        } else {
+            (name, None)
+        };
         let options = if dom.name[i] == "SELECT" {
             dom.descendants(i)
                 .into_iter()
@@ -1853,12 +2729,9 @@ impl Walker<'_> {
                 .flatten(),
             rect: dom.rect(i).unwrap_or_default(),
             from_ax: ax.is_some(),
-            icon_only: role == Role::Button
-                && if dom.name[i] == "INPUT" {
-                    kind == "image"
-                } else {
-                    clean(&dom.raw_text(i)).trim().is_empty()
-                },
+            icon_only,
+            glyph: glyph.map(str::to_string),
+            hover_only: false,
             revision: 0,
             state_revision: 0,
         };
@@ -1984,6 +2857,33 @@ impl Walker<'_> {
     }
 }
 
+/// The box a placeholder for `<img>` `i` takes when the image has no
+/// source yet: a lazy thumbnail, transparent (`opacity: 0`) until its
+/// picture loads, in its own box; or one with no size of its own yet, in
+/// its parent's box when that holds nothing else. Not one hidden another
+/// way, and only a box of at least 16 x 16 CSS pixels.
+fn pending_box(dom: &Dom, i: usize) -> Option<Rect> {
+    let has_source = dom.source.get(&i).is_some_and(|s| !s.trim().is_empty())
+        || dom.attr(i, "src").is_some_and(|s| !s.trim().is_empty());
+    if has_source || dom.layout[i].is_none() || dom.veiled[i] {
+        return None;
+    }
+    if matches!(dom.style(i, 1), "hidden" | "collapse") {
+        return None;
+    }
+    let big = |r: &Rect| r.width >= 16.0 && r.height >= 16.0;
+    let own = dom.rect(i)?;
+    if big(&own) {
+        return Some(own);
+    }
+    let parent = usize::try_from(dom.parent[i]).ok()?;
+    let rect = dom.rect(parent).filter(big)?;
+    let alone = dom.children[parent].iter().all(|&c| {
+        c == i || dom.layout[c].is_none() || dom.kind[c] == 3 && dom.value[c].trim().is_empty()
+    });
+    alone.then_some(rect)
+}
+
 /// Whether table `i` lays a page out rather than holding data: it says
 /// so (`role="presentation"` or `"none"`), or a table is nested in it, as
 /// browsers' accessibility trees judge. Its contents are then read as the
@@ -2075,6 +2975,159 @@ pub fn live_runs(value: &Value, base: &str) -> Vec<Run> {
     merged
 }
 
+/// Whether node `i` shows text of its own: a laid-out, visible text node
+/// under it with words. A drawing's `<title>` is never laid out.
+fn shows_text(dom: &Dom, i: usize) -> bool {
+    dom.descendants(i).into_iter().any(|d| {
+        dom.kind[d] == 3
+            && dom.layout[d].is_some()
+            && dom.shows(d)
+            && !dom.concealed[d]
+            && dom.text[d].as_deref().is_some_and(|t| !t.trim().is_empty())
+    })
+}
+
+/// Icon words and the glyph each is drawn as, on an icon-only button.
+const GLYPHS: &[(&[&str], &str)] = &[
+    (&["more", "ellipsis", "kebab", "overflow", "dots"], "⋯"),
+    (&["close", "dismiss", "cancel", "x"], "✕"),
+    (&["search", "magnifier"], "🔍"),
+    (&["menu", "hamburger", "burger", "navigation"], "≡"),
+    (&["settings", "gear", "cog", "preferences"], "⚙"),
+    (&["home"], "⌂"),
+    (&["notifications", "notification", "bell", "alerts"], "🔔"),
+    (&["user", "profile", "account", "avatar"], "👤"),
+    (&["play"], "▶"),
+    (&["pause"], "⏸"),
+    (&["next", "forward"], "›"),
+    (&["previous", "prev", "back"], "‹"),
+    (&["share"], "⤴"),
+    (&["like", "heart", "favorite", "favourite"], "♥"),
+    (
+        &[
+            "chat", "message", "messages", "comment", "comments", "whispers",
+        ],
+        "💬",
+    ),
+    (&["cart", "basket"], "🛒"),
+    (&["download"], "⤓"),
+    (&["upload"], "⤒"),
+    (&["edit", "pencil"], "✎"),
+    (&["delete", "trash"], "🗑"),
+    (&["add", "plus"], "+"),
+    (&["remove", "minus"], "−"),
+    (&["expand", "chevron", "caret"], "▾"),
+    (&["collapse"], "▴"),
+    (&["fullscreen", "maximize"], "⛶"),
+    (&["mute", "volume", "unmute"], "🔈"),
+    (&["refresh", "reload"], "↻"),
+    (&["help", "question"], "?"),
+    (&["info", "information"], "ⓘ"),
+    (&["filter", "filters"], "⏷"),
+    (&["copy"], "⧉"),
+    (&["link"], "🔗"),
+    (&["bookmark", "save"], "🔖"),
+];
+
+/// The glyph of an icon word, if it is one.
+fn glyph_of_word(word: &str) -> Option<&'static str> {
+    GLYPHS
+        .iter()
+        .find(|(words, _)| words.contains(&word))
+        .map(|(_, glyph)| *glyph)
+}
+
+/// The glyph for an icon button named `name`: its first word an icon
+/// word, in a short name ("More actions", "Close", "Search the shop");
+/// not a sentence.
+fn glyph_for(name: &str) -> Option<&'static str> {
+    let words: Vec<String> = name
+        .split(|c: char| !c.is_alphanumeric())
+        .filter(|w| !w.is_empty())
+        .map(str::to_lowercase)
+        .collect();
+    if words.is_empty() || words.len() > 4 {
+        return None;
+    }
+    glyph_of_word(&words[0])
+}
+
+/// The name of the icon a button draws, as the page spells it in its
+/// own attributes or its icon's (`data-icon`, `<use href="#icon-close">`,
+/// `class="fa-search"`, `data-testid="CloseIcon"`), and its glyph: the
+/// first icon word found, capitalised (`Close`).
+fn icon_name(dom: &Dom, i: usize) -> Option<(String, &'static str)> {
+    let mut nodes = vec![i];
+    nodes.extend(
+        dom.descendants(i)
+            .into_iter()
+            .filter(|&d| dom.is_element(d))
+            .take(32),
+    );
+    for n in nodes {
+        for (key, value) in &dom.attrs[n] {
+            let value = match key.as_str() {
+                "data-icon" | "icon" | "data-testid" | "data-test-selector" | "data-a-target"
+                | "id" => value.clone(),
+                // Of its classes, only an icon's (`icon-search`,
+                // `fa-search`): the rest name its look (`…ButtonShapeNext…`).
+                "class" => value
+                    .split_whitespace()
+                    .filter(|c| {
+                        let c = c.to_ascii_lowercase();
+                        c.contains("icon")
+                            || ["fa-", "bi-", "mdi-", "ti-"]
+                                .iter()
+                                .any(|p| c.starts_with(p))
+                    })
+                    .collect::<Vec<_>>()
+                    .join(" "),
+                "href" | "xlink:href" if dom.name[n] == "USE" => {
+                    value.rsplit('#').next().unwrap_or_default().to_string()
+                }
+                _ => continue,
+            };
+            for word in words_of(&value) {
+                if let Some(glyph) = glyph_of_word(&word) {
+                    let mut name = word.clone();
+                    if let Some(first) = name.get_mut(0..1) {
+                        first.make_ascii_uppercase();
+                    }
+                    return Some((name, glyph));
+                }
+            }
+        }
+    }
+    None
+}
+
+/// The words of an identifier: split at anything not a letter, and
+/// between a lower-case letter and an upper-case one (`CloseIcon`), in
+/// lower case.
+fn words_of(text: &str) -> Vec<String> {
+    let mut words = Vec::new();
+    let mut word = String::new();
+    let mut lower = false;
+    for c in text.chars() {
+        if !c.is_ascii_alphabetic() {
+            if !word.is_empty() {
+                words.push(std::mem::take(&mut word));
+            }
+            lower = false;
+            continue;
+        }
+        if c.is_ascii_uppercase() && lower && !word.is_empty() {
+            words.push(std::mem::take(&mut word));
+        }
+        lower = c.is_ascii_lowercase();
+        word.push(c.to_ascii_lowercase());
+    }
+    if !word.is_empty() {
+        words.push(word);
+    }
+    words
+}
+
 /// A form element's role when the AX tree has none for it.
 fn dom_role(dom: &Dom, i: usize) -> Option<Role> {
     match dom.name[i].as_str() {
@@ -2140,6 +3193,284 @@ fn tidy(runs: &mut Vec<Run>) {
     }
 }
 
+/// How near the viewport's top a fixed box (or the bottom of the boxes
+/// pinned above it) may start and still be a top bar: about a row, in CSS
+/// pixels.
+const TOUCH: f64 = 24.0;
+/// The tags whose box is a picture: one covers what lies wholly under it.
+const PICTURE_TAGS: &[&str] = &["IMG", "VIDEO", "CANVAS", "SVG", "IFRAME", "EMBED", "OBJECT"];
+/// The most covering boxes looked at, the largest first.
+const MAX_COVERS: usize = 1024;
+
+/// Whether `outer` holds all of `inner`, to a pixel.
+fn holds(outer: Rect, inner: Rect) -> bool {
+    inner.x >= outer.x - 1.0
+        && inner.y >= outer.y - 1.0
+        && inner.right() <= outer.right() + 1.0
+        && inner.bottom() <= outer.bottom() + 1.0
+}
+
+/// The page's stack of boxes, read into [`Page::layers`] and each block's
+/// [`Stack`]:
+/// - a block in a `position: fixed` or `sticky` box (its outermost) is in
+///   that box's layer. A fixed box touching the viewport's top (or the
+///   boxes already pinned) is pinned, others are docked, one wholly off
+///   screen is not drawn, and one taller than a quarter of the viewport
+///   goes in the flow where it is on screen. A sticky box goes in the flow
+///   at its static place (recovered from the box after it, as the
+///   snapshot reports a stuck box where it is stuck), pinned instead when
+///   that place is the page's top;
+/// - a block a box painted above it covers wholly is `covered`: only a
+///   box with an opaque background or a picture covers, never one of its
+///   ancestors or descendants, nor a fixed or sticky one (they move);
+/// - a block wholly inside a picture's box and painted above it is
+///   `over` it.
+fn stack(dom: &Dom, page: &mut Page) {
+    page.scroll_y = dom.scroll_y;
+    page.view_height = dom.view_height;
+    let n = dom.parent.len();
+    let parent = |i: usize| usize::try_from(dom.parent[i]).ok().filter(|&p| p < i);
+    let shell = shell_bars(dom);
+    let mut root: Vec<Option<usize>> = vec![None; n];
+    for i in 0..n {
+        root[i] = parent(i).and_then(|p| root[p]).or_else(|| {
+            (dom.is_element(i)
+                && dom.layout[i].is_some()
+                && (matches!(dom.style(i, 14), "fixed" | "sticky") || shell.contains(&i)))
+            .then_some(i)
+        });
+    }
+    let fixed_at = |r: usize| dom.style(r, 14) == "fixed" || shell.contains(&r);
+    let index: HashMap<i64, usize> = dom
+        .backend
+        .iter()
+        .enumerate()
+        .filter(|(_, b)| **b >= 0)
+        .map(|(i, &b)| (b, i))
+        .collect();
+    // The layers, in the order of their tops on screen.
+    let mut roots: Vec<(usize, f64)> = Vec::new();
+    let mut seen = HashSet::new();
+    for block in &page.blocks {
+        if let Some(r) = index.get(&block.node).and_then(|&i| root[i])
+            && seen.insert(r)
+        {
+            let rect = dom.rect(r).unwrap_or_default();
+            let top = if fixed_at(r) {
+                rect.y - dom.scroll_y
+            } else {
+                static_top(dom, r, rect)
+            };
+            roots.push((r, top));
+        }
+    }
+    roots.sort_by(|a, b| a.1.total_cmp(&b.1));
+    let view = dom.view_height;
+    let quarter = if view > 0.0 {
+        view / 4.0
+    } else {
+        f64::INFINITY
+    };
+    let mut pinned_to = 0.0f64;
+    let mut layer_of = HashMap::new();
+    for (r, top) in roots {
+        let rect = dom.rect(r).unwrap_or_default();
+        let fixed = fixed_at(r);
+        let place = if fixed && view > 0.0 && (top >= view || top + rect.height <= 0.0) {
+            Place::Off
+        } else if rect.height > quarter {
+            Place::Flow
+        } else if top <= pinned_to + TOUCH {
+            pinned_to = pinned_to.max(top + rect.height);
+            Place::Pinned
+        } else if fixed {
+            Place::Docked
+        } else {
+            Place::Flow
+        };
+        let top = if fixed && place == Place::Flow {
+            top.max(0.0)
+        } else {
+            top
+        };
+        layer_of.insert(r, page.layers.len());
+        page.layers.push(Layer {
+            node: dom.backend[r],
+            fixed,
+            rect,
+            top,
+            place,
+        });
+    }
+    let order = |i: usize| dom.layout[i].and_then(|k| dom.paint.get(k)).copied();
+    let under = |a: usize, mut i: usize| {
+        while let Some(p) = parent(i) {
+            if p == a {
+                return true;
+            }
+            i = p;
+        }
+        false
+    };
+    let area = |r: &Rect| r.width * r.height;
+    let mut covers: Vec<(usize, Rect, i64)> = (0..n)
+        .filter_map(|i| {
+            if !dom.is_element(i)
+                || root[i].is_some()
+                || matches!(dom.name[i].as_str(), "HTML" | "BODY")
+                || dom.concealed[i]
+                || !dom.shows(i)
+            {
+                return None;
+            }
+            let (o, rect) = (order(i)?, dom.rect(i)?);
+            let picture = PICTURE_TAGS.contains(&dom.name[i].as_str());
+            (rect.width >= 4.0
+                && rect.height >= 4.0
+                && (picture || opaque(&dom.style(i, 3).trim().to_ascii_lowercase())))
+            .then_some((i, rect, o))
+        })
+        .collect();
+    covers.sort_by(|a, b| area(&b.1).total_cmp(&area(&a.1)));
+    covers.truncate(MAX_COVERS);
+    let media: Vec<(usize, Rect, Option<i64>)> = page
+        .media
+        .iter()
+        .enumerate()
+        .filter_map(|(m, media)| {
+            let i = *index.get(&media.node)?;
+            root[i].is_none().then(|| (m, media.rect, order(i)))
+        })
+        .collect();
+    // Each node's innermost shelf, from the shelves' own nodes.
+    let shelf_at: HashMap<usize, usize> = page
+        .shelves
+        .iter()
+        .enumerate()
+        .filter_map(|(k, s)| index.get(&s.node).map(|&i| (i, k)))
+        .collect();
+    let mut shelf_of: Vec<Option<usize>> = vec![None; n];
+    for i in 0..n {
+        shelf_of[i] = shelf_at
+            .get(&i)
+            .copied()
+            .or_else(|| parent(i).and_then(|p| shelf_of[p]));
+    }
+    for block in &mut page.blocks {
+        let Some(&i) = index.get(&block.node) else {
+            continue;
+        };
+        block.stack.shelf = shelf_of[i];
+        if let Some(r) = root[i] {
+            block.stack.layer = layer_of.get(&r).copied();
+            continue;
+        }
+        let (Some(o), rect) = (order(i), block.rect) else {
+            continue;
+        };
+        if rect.width <= 0.0 || rect.height <= 0.0 {
+            continue;
+        }
+        block.stack.covered = covers.iter().any(|&(c, by, co)| {
+            co > o && c != i && holds(by, rect) && !under(c, i) && !under(i, c)
+        });
+        if block.stack.covered {
+            continue;
+        }
+        block.stack.over = media
+            .iter()
+            .filter(|(m, by, mo)| {
+                page.media[*m].node != block.node
+                    && mo.is_some_and(|mo| mo <= o)
+                    && area(by) > area(&rect)
+                    && holds(*by, rect)
+            })
+            .min_by(|a, b| area(&a.1).total_cmp(&area(&b.1)))
+            .map(|(m, _, _)| *m);
+    }
+}
+
+/// The bars of an app shell: a page that does not scroll itself (its
+/// content fits the viewport) but scrolls its main box (`overflow-y: auto`
+/// or `scroll`, the largest that overflows, at least a quarter of the
+/// viewport) keeps the boxes above and under that box on screen, as if
+/// fixed: a site's top bar and its bottom sign-up bar. They are the boxes
+/// beside the main box's ancestors, wholly above or wholly under it.
+fn shell_bars(dom: &Dom) -> HashSet<usize> {
+    let view = dom.view_height;
+    let mut bars = HashSet::new();
+    let Some(page) = dom.rect(0) else {
+        return bars;
+    };
+    if view <= 0.0 || dom.height > view + 1.0 {
+        return bars;
+    }
+    let area = |r: Rect| r.width * r.height;
+    let main = (0..dom.parent.len())
+        .filter(|&i| dom.is_element(i) && matches!(dom.style(i, 10), "auto" | "scroll"))
+        .filter_map(|i| Some((i, dom.rect(i)?)))
+        .filter(|&(_, r)| area(r) >= area(page) / 4.0)
+        .filter(|&(i, r)| {
+            dom.descendants(i)
+                .iter()
+                .any(|&d| dom.rect(d).is_some_and(|b| b.bottom() > r.bottom() + 1.0))
+        })
+        .max_by(|a, b| area(a.1).total_cmp(&area(b.1)));
+    let Some((main, rect)) = main else {
+        return bars;
+    };
+    let mut on_chain = main;
+    while let Some(up) = usize::try_from(dom.parent[on_chain])
+        .ok()
+        .filter(|&p| p < on_chain)
+    {
+        for &c in &dom.children[up] {
+            if c == on_chain || !dom.is_element(c) {
+                continue;
+            }
+            if let Some(b) = dom.rect(c)
+                && b.height > 0.0
+                && (b.bottom() <= rect.y + 1.0 || b.y >= rect.bottom() - 1.0)
+            {
+                bars.insert(c);
+            }
+        }
+        on_chain = up;
+    }
+    bars
+}
+
+/// Where sticky box `r` sits in the flow when the page is at its top: as
+/// reported when the page is not scrolled; else the top of the next box in
+/// the flow under it less its height, or the bottom of the one before it,
+/// or its parent's top; never under where it is now.
+fn static_top(dom: &Dom, r: usize, rect: Rect) -> f64 {
+    if dom.scroll_y <= 0.0 {
+        return rect.y;
+    }
+    let Some(p) = usize::try_from(dom.parent[r]).ok().filter(|&p| p < r) else {
+        return rect.y;
+    };
+    let in_flow = |s: usize| {
+        s != r
+            && dom.is_element(s)
+            && !matches!(dom.style(s, 14), "absolute" | "fixed" | "sticky")
+            && dom
+                .rect(s)
+                .is_some_and(|b| b.height > 0.0 && b.x < rect.right() && rect.x < b.right())
+    };
+    let siblings = &dom.children[p];
+    let at = siblings.iter().position(|&s| s == r).unwrap_or(0);
+    let top = if let Some(&next) = siblings[at..].iter().find(|&&s| in_flow(s)) {
+        dom.rect(next).map_or(rect.y, |b| b.y - rect.height)
+    } else if let Some(&before) = siblings[..at].iter().rev().find(|&&s| in_flow(s)) {
+        dom.rect(before).map_or(rect.y, |b| b.bottom())
+    } else {
+        dom.rect(p).map_or(rect.y, |b| b.y)
+    };
+    top.min(rect.y)
+}
+
 /// The page in `snapshot`, its control revisions kept in `revisions`.
 pub fn build(snapshot: &PageSnapshot, revisions: &mut Revisions) -> Page {
     build_with(snapshot, revisions, &HashSet::new())
@@ -2192,12 +3523,14 @@ pub fn build_with(
         region: None,
         aria_hidden: false,
         name_only: false,
+        twin: None,
     };
     if !dom.parent.is_empty() {
         walker.walk(0, &top);
     }
     walker.flush(&top);
     let mut page = walker.page;
+    stack(&dom, &mut page);
     // A landmark with a field or a live log in it is not only links: it
     // never collapses.
     for block in &page.blocks {

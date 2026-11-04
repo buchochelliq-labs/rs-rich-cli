@@ -31,13 +31,16 @@ site, and each can be switched off.
 | `inline-pictures` | Keeps small pictures (emotes, badges) in their line | on |
 | `cap-pictures` | Caps a picture's height; what is under it moves up | on |
 | `captions` | An `Image: …` line under a picture with alt text and no caption | on |
-| `icon-buttons` | Shows every button, icon-only ones too, as `[ label ]` from its name | on |
+| `icon-buttons` | Shows every button, icon-only ones too, as `[ label ]` from its name; an icon-only one with a known icon's name as its glyph, `[⋯]`, `[✕]`, `[🔍]` | on |
 | `snap-grids` | Snaps a grid's columns to the cells, with fewer columns when they would be too narrow | on |
 | `collapse-nav` | On a narrow terminal (under 100 columns), a navigation or sidebar becomes one row of its links | on |
 | `collapse-gaps` | Rows blank across the whole page (an empty ad slot, a hidden menu, a spacer) collapse to one blank row | on |
 | `text-over-pictures` | Draws a picture of text (a heading or button image, a banner) as its text | off: it changes meaning |
 | `live-tail` | A live log shows its newest entries unless you scrolled it up | on |
 | `page-colors` | Keeps the page's saturated text colours (a red label, a chat name), readable on your terminal; greys follow your terminal's own colour. Off, the page's own colours: on a light terminal as the page wrote them, on white; on a dark one with their lightness turned over (dark text reads light, a red stays red), on black | on |
+| `screen-reader-twins` | A price shown in parts for looks (`$`, `29`, a raised `99`, hidden from screen readers) beside the whole price in visually hidden text reads as the whole one, `$29.99`, not `$2999`. Only when the two say the same digits, so hidden hints stay hidden | on |
+| `indicators` | A meter, progress bar or rating the page states on a `<canvas>` or `<svg>` is drawn as a native bar, dial or stars in its place; off, its picture is drawn | on |
+| `shelves` | A [shelf](reading.md#shelves) (a box that scrolls sideways over alike items: "Customers also viewed", a row of videos) gets a strip under it, `‹ 1–3 of 6 ›`, and `<` and `>` page it; off, the items in its box show with no strip | on |
 | `bandwidth` | Lowers a video's frame rate and picture tier when the terminal is short of bandwidth | on |
 
 - `a` (`Alt+A` in the plain keys) toggles between the adapted and the

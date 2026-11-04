@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<title>Root overflow fixture</title>
+<!-- Written for Noctiluca's corpus, reduced from a video site's embedded
+     player page: the root hides its overflow and the body is positioned
+     absolutely, so the root's own box is 0 pixels tall. The root's overflow
+     clips the viewport, not its box (CSS Overflow 3, 3.3), so everything
+     here shows; Noctiluca once took the root for a 1-pixel "visually
+     hidden" box and showed an empty page. -->
+<style>
+  html { overflow: hidden; }
+  body { position: absolute; inset: 0; margin: 0; overflow: hidden; font: 16px sans-serif; }
+</style>
+<div role="alert">
+  <h1>Video player configuration error</h1>
+  <p>Error 153</p>
+  <a href="#watch">Watch video elsewhere</a>
+</div>

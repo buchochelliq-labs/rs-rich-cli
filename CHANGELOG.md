@@ -9,6 +9,164 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Noctiluca: live regions (0.0.25)
+
+- **Canvases are drawn, and stay live.** A `<canvas>` gets a picture from
+  Chrome's pixels, as an inline SVG does; while the view shows it, it is
+  captured twice a second (every two seconds once it holds still), and a
+  capture that changed is sent as a frame within the byte budget GIFs and
+  video share. At most four are live at once, nearest the view; a big one
+  that changes at every capture for two seconds is cut from the
+  screencast, as a playing video is. Off screen or frozen, none is
+  captured. A speed test's canvas gauge, three grey boxes before, now
+  moves.
+- **A changing SVG drawing is captured again.** `Media::revision` hashes an
+  inline `<svg>`'s subtree, and its still is kept by it, so a dial whose
+  arc, needle and number a script moves no longer stays at its first
+  frame (`0.00`). Its last picture shows until the new one comes.
+- **An SVG's words are text.** `Media::text` holds an inline `<svg>`'s
+  `<text>` (the dial's `287.40 Mbps`): in reader mode under the drawing's
+  name, in `--dump json` as `"text"`, and as its alt text when it has no
+  other name (its `<title>` first).
+- **Testing:** `FakeState::paint` sets the colour the scripted engine's
+  captures show, and `FakeState::captures` lists the regions captured.
+
+### Noctiluca: page semantics (0.0.25)
+
+- **Meters, progress bars and ratings are native.** `<meter>`,
+  `<progress>`, `role=meter` and `role=progressbar` (with `aria-value*`)
+  are a new model kind, `Indicator` (`Page::indicators`,
+  `BlockKind::Indicator`), read again at every reading so a moving bar
+  moves. They are drawn by `noctiluca::indicator`: a bar as intuiTUIve's
+  `progress_bar` draws one (`Upload ━━━━━━━━ 40%`, a meter green, yellow or
+  red by its `low`, `high` and `optimum`, a busy one for a progress with no
+  value), rising blocks for a narrow meter of a few steps, a dial for a
+  roughly square box (a speed test's gauge), and stars for `role=img`
+  named "4.5 out of 5 stars" or "4.5 / 5" (`★★★★½ 4.5`; nothing new when
+  the name is not a rating). A `<canvas>` or `<svg>` that is one is drawn
+  as the indicator in its place by the new `indicators` adaptation; off,
+  its picture is. Before, a meter and its label showed nothing.
+- **A `<label for>` of something that is not a control stays text**, as
+  does one pointing at nothing or at a control that is not drawn (a custom
+  check box's transparent input). Before, its text was dropped.
+- **Screen-reader twins:** a price shown in parts for looks (`$`, `29`, a
+  raised `99`, `aria-hidden`) beside the whole price in visually hidden
+  text reads as `$29.99`, not `$2999`, by the new `screen-reader-twins`
+  adaptation (`Run::twin`; off, the parts). Only when the two say the same
+  digits, so hidden hints stay hidden.
+- **Icon-only buttons have a face.** Their name comes from `aria-label`,
+  `title`, `aria-labelledby` or an inner drawing's `<title>`; a name, or
+  the icon's own (`<use href="#icon-close">`, `class="icon-search"`), that
+  is a known icon's is drawn as its glyph (`Control::glyph`): `[⋯]` for
+  "More actions", `[✕]` for "Close", `[🔍]` for "Search", where `[  ]` was.
+- **Hover-only controls** (transparent until hovered: a card's "More
+  actions") are on the page's lists, so a site key can be bound to one,
+  but not drawn and not given a hint (`Control::hover_only`). Before, they
+  were not read at all.
+- **Lazy thumbnails get a placeholder**: an `<img>` with no source yet,
+  transparent until it loads or with no size of its own, takes its box (or
+  its parent's) with its alt text, else its link's title
+  (`Media::pending`). Before, a channel's videos past the first row were
+  blank rows.
+
+### Noctiluca: shelves, and intuiTUIve's dials and stars (0.0.25)
+
+- **Sideways shelves page.** A box that scrolls sideways (`overflow-x`
+  `auto` or `scroll`, wider inside than out) over three or more alike
+  items side by side is a shelf (`Page::shelves`, `model::Shelf`): a
+  shop's "Customers also viewed", a row of videos. Found from layout only,
+  never from a site. The projection draws only the items in its box (cut
+  at the screen's edge), as Chrome shows them; before, the items past it
+  were squeezed into a column at the screen's edge, a letter a row. With
+  the new `shelves` adaptation a strip under it, intuiTUIve's `carousel`
+  drawn offscreen, says where it is: `‹ 1–3 of 6 ›`. `<` and `>`
+  (`shelf.previous`, `shelf.next`) scroll the page's box sideways by what
+  the screen shows (`PageAction::ScrollBox`, `Command::ScrollBox`), so
+  Chrome lays out the next items and a lazy shelf loads them, and the
+  page is read again. Snapshots read `overflow-x` and Chrome's scroll and
+  client rectangles; `PageBuilder::scroll_box` makes a scrolling box.
+- **Dials and stars are intuiTUIve's.** `indicator::dial` and
+  `indicator::stars` draw intuiTUIve's `dial` and `rating`, offscreen on
+  a thread of their own, read back as lines: a speed test's gauge is an
+  arc in Braille dots with its reading (in big digits when they fit), its
+  label under it and its range's ends; a meter's bands colour it.
+- **A rating keeps its count apart.** A one-row indicator drawn wider
+  than its box moves what follows it on its row right, in a grid's cell
+  too: `★★★★½ 4.5 12,408`, not `4.512,408` or `4… (1,204)`.
+
+### intuiTUIve: dials, ratings and carousels
+
+New generic widgets in rs-rich-intuituive's core, for what a dashboard or
+a web page states (Noctiluca's native controls build on them):
+
+- **`dial(value, range)`**: a value on an arc (270° by default,
+  `.sweep(..)`), drawn in Braille dots or half blocks (`.arc_mode(..)`),
+  the reading in big digits inside it, `.unit(..)`, the range's ends,
+  `.caption(..)`, `.readout(..)`; colours by `.zones(..)` or an HTML
+  `<meter>`'s `.bands(low, high, optimum)`. In a small box or text mode it
+  is a bar and the reading. A `meter` to assistive technology.
+- **`rating(value, out_of)`** and **`rating_input(value, out_of)`**: a
+  score in stars, `★★★★½ 4.5`, said as `4.5 out of 5`; the input is set by
+  keys, digits, clicks and the wheel.
+- **`carousel(len, first, item)`**: items side by side a page at a time,
+  `‹ ›` and `1–4 of 12`; `[`/`]`, the arrows, clicks and Shift+wheel turn
+  pages, `.per_page(..)` or `.item_width(..)` sets how many show,
+  `.on_page(..)` hears each turn, and the focus moves into the new page.
+- **Accessibility:** roles `Role::Meter` and `Role::Img`; a meter's or a
+  slider's value in words goes to a browser as `aria-valuetext`.
+- `examples/indicators.rs`; the guide's "Dials, ratings and carousels".
+
+### Noctiluca: failed navigations keep their address (0.0.25)
+
+- **The address bar keeps the address asked for.** When a navigation
+  fails, Chrome shows its error page at `chrome-error://chromewebdata/`,
+  and the address bar showed that. The tab now keeps the address that
+  was opened (or, for a link or a history step, the one Chrome's history
+  keeps) in the page and its state, and puts a line above Chrome's text:
+  `Could not open ADDRESS: ERR_…. Reload (R) tries again.`
+  `noctiluca::tab::ERROR_PAGE` and `ERROR_NOTICE` (the notice's node) are
+  new.
+- **Docs:** [Noctiluca on real sites](docs/guide/noctiluca/real-sites.md)
+  gains the second pass (0.0.25, in progress): what changes for YouTube,
+  Twitch, and search, shop and speed-test pages, and which parts were
+  checked live and which on fixtures; [status](docs/guide/noctiluca/status.md)
+  gains 0.0.25's known limits.
+
+### Noctiluca: layers and placement (real sites, second pass, workstream B)
+
+Fixes 2, 4, 10, 12 and 14 of
+[Noctiluca on real sites, second pass](docs/design/noctiluca-real-sites-2.md).
+
+- **Fixed and sticky layers.** The model reads each box's `position`, the
+  snapshot's paint orders, Chrome's scroll offset and the viewport's
+  height (`Page::layers`, `Page::scroll_y`, `Page::view_height`, and each
+  block's `Stack`). Top bars (fixed or sticky at the top) are drawn on a
+  pinned strip above the page, bottom bars fixed to the screen (cookie
+  banners, sign-up bars) on a docked strip above the status bar, each at
+  most a quarter of the screen (`Projection::pinned`,
+  `Projection::docked`); a sticky box further down sits at its static
+  place, recovered from the box after it when it was read stuck; a fixed
+  box wholly off screen is not drawn. An app shell (a page that does not
+  scroll, its main box scrolling: a streaming site's directory) has its
+  bars above and under that box pinned and docked the same way.
+- **Short pages are not scrolled to their end.** The view's "near the
+  end" no longer scrolls Chrome to the bottom of a page that fits in two
+  screens, which made a search page's sticky header read under its first
+  result.
+- **Paint order.** A block wholly under an opaque box or a picture painted
+  above it is not drawn (a player's hidden error panel under an
+  interstitial).
+- **Text over pictures.** A short text over a picture (a duration, LIVE,
+  a viewer count) is drawn in the picture's cells, again over the picture
+  once it shows (`Projection::overlays`); a picture over a player (its
+  offline art) takes none of its rows.
+- **Right-edge controls** move left into free cells, then shorten their
+  faces with `…` (`[Sign…]`), instead of being cut by the screen.
+- **Runs that touch** ("16" views and "13y ago") keep a cell between them.
+- `testing::PageBuilder` gains `view` (scroll offset and viewport) and
+  `paint` (paint orders). New fixture `overlays.html`; Chrome's snapshots
+  of `search-results.html` and `product-grid.html` read scrolled.
+
 ### intuiTUIve: the stylesheet fuzz timeout (rs-rich-intuituive)
 
 - **Fixed: a stylesheet could take seconds and gigabytes to parse.** The

@@ -31,7 +31,9 @@ pub enum Rule {
     /// A picture with alt text and no caption gets an `Image: …` line.
     Captions,
     /// A button reads as its accessible name in brackets, an icon-only
-    /// one too.
+    /// one too; an icon-only one whose name, or whose icon's name, is a
+    /// known icon's is drawn as its glyph (`[⋯]` for "More actions",
+    /// `[✕]` for "Close").
     IconButtons,
     /// A grid's or a wrapping flex row's items are snapped to equal cell
     /// widths that tile it, with fewer columns when a column would be
@@ -62,6 +64,20 @@ pub enum Rule {
     /// blank row between what is above and what is below, as a reader
     /// collapses margins.
     CollapseGaps,
+    /// Of a pair of [screen-reader twins](crate::model::Twin) (a price
+    /// shown in parts, `aria-hidden`, beside the whole price in visually
+    /// hidden text) the whole one is drawn: `$29.99`, not `$2999`. Off,
+    /// the parts, as the page shows them.
+    ScreenReaderTwins,
+    /// A [meter, progress bar or rating](crate::model::Indicator) the page
+    /// states on a canvas or a drawing is drawn as a native bar, dial or
+    /// stars in its place; off, the picture is.
+    Indicators,
+    /// A [shelf](crate::model::Shelf) (a box that scrolls sideways over
+    /// alike items) has a strip under it, intuiTUIve's carousel's arrows
+    /// and count, `‹ 1–3 of 6 ›`, and the shelf keys page it. Off, it
+    /// shows the items in view, as Chrome does, with nothing to page it.
+    Shelves,
 }
 
 /// What a rule is, for the config, the command line and the about page.
@@ -106,7 +122,7 @@ pub const RULES: &[RuleInfo] = &[
     RuleInfo {
         rule: Rule::IconButtons,
         name: "icon-buttons",
-        what: "show buttons, icon-only ones too, as [ label ] from their name",
+        what: "show buttons as [ label ] from their name; known icons as glyphs [✕]",
         default: true,
     },
     RuleInfo {
@@ -146,6 +162,24 @@ pub const RULES: &[RuleInfo] = &[
         default: true,
     },
     RuleInfo {
+        rule: Rule::ScreenReaderTwins,
+        name: "screen-reader-twins",
+        what: "a price shown in parts reads as its screen-reader text ($29.99)",
+        default: true,
+    },
+    RuleInfo {
+        rule: Rule::Indicators,
+        name: "indicators",
+        what: "meters and ratings drawn on a canvas or SVG as native bars and dials",
+        default: true,
+    },
+    RuleInfo {
+        rule: Rule::Shelves,
+        name: "shelves",
+        what: "sideways shelves get a strip that pages them: ‹ 1–3 of 6 ›",
+        default: true,
+    },
+    RuleInfo {
         rule: Rule::Bandwidth,
         name: "bandwidth",
         what: "lower frame rate and tier when the terminal is short of bandwidth",
@@ -173,14 +207,14 @@ impl Rule {
             .map(|r| r.rule)
     }
 
-    fn bit(self) -> u16 {
-        1 << (self as u16)
+    fn bit(self) -> u32 {
+        1 << (self as u32)
     }
 }
 
 /// Which rules are on.
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
-pub struct Adapt(u16);
+pub struct Adapt(u32);
 
 impl Default for Adapt {
     /// The defaults: every rule that keeps the page's meaning.
@@ -594,7 +628,7 @@ mod tests {
         assert!(adapt.on(Rule::DecorativeImages) && adapt.on(Rule::LiveTail));
         assert!(!adapt.on(Rule::TextOverPictures));
         assert!(Adapt::none().is_none());
-        assert_eq!(RULES.len(), 12);
+        assert_eq!(RULES.len(), 15);
         for info in RULES {
             assert_eq!(Rule::parse(info.name), Some(info.rule));
         }

@@ -63,6 +63,13 @@ pub enum Role {
     /// A field that shows one choice and opens a list of the others: a
     /// [`select_field`](crate::select_field). Its value is the choice.
     ComboBox,
+    /// A value in a known range that the user does not change: a
+    /// [`dial`](crate::dial). Its value is the reading, as it is said
+    /// (`287 Mbps`).
+    Meter,
+    /// A picture whose name says what it shows: a
+    /// [`rating`](crate::rating)'s stars, `4.5 out of 5`.
+    Img,
 }
 
 impl Role {
@@ -96,6 +103,8 @@ impl Role {
             Role::Slider => "slider",
             Role::RadioGroup => "radiogroup",
             Role::ComboBox => "combobox",
+            Role::Meter => "meter",
+            Role::Img => "img",
         }
     }
 
@@ -111,6 +120,7 @@ impl Role {
             Role::CheckBox => "check box",
             Role::RadioGroup => "radio group",
             Role::ComboBox => "combo box",
+            Role::Img => "image",
             role => role.name(),
         }
     }
@@ -258,7 +268,8 @@ impl AccessNode {
     /// Its ARIA attributes, for a DOM renderer: `role`, `aria-label`, and
     /// each state that is set (`aria-expanded`, `aria-checked`,
     /// `aria-selected`, `aria-busy`, `aria-disabled`, `aria-invalid`,
-    /// a slider's `aria-valuenow`, `aria-posinset` and `aria-setsize`). A widget of items' states go
+    /// a slider's or a meter's `aria-valuenow`, or `aria-valuetext` for a
+    /// value in words, `aria-posinset` and `aria-setsize`). A widget of items' states go
     /// on its selected item's element.
     pub fn aria_attributes(&self) -> Vec<(&'static str, String)> {
         let mut out = vec![("role", self.role.name().to_string())];
@@ -284,9 +295,17 @@ impl AccessNode {
                 out.push((name, "true".to_string()));
             }
         }
-        // A slider's value is its number.
-        if let Some(value) = self.value.as_ref().filter(|_| self.role == Role::Slider) {
-            out.push(("aria-valuenow", value.clone()));
+        // A slider's value is its number; a value said in words (a
+        // meter's reading with its unit, `3 out of 5`) is its text.
+        if let Some(value) = self
+            .value
+            .as_ref()
+            .filter(|_| matches!(self.role, Role::Slider | Role::Meter))
+        {
+            match value.trim().parse::<f64>() {
+                Ok(_) => out.push(("aria-valuenow", value.clone())),
+                Err(_) => out.push(("aria-valuetext", value.clone())),
+            }
         }
         if let Some((at, of)) = state.position {
             out.push(("aria-posinset", at.to_string()));

@@ -383,6 +383,9 @@ mod tests {
             empty_alt: false,
             aria_hidden: false,
             in_label: false,
+            revision: 0,
+            text: String::new(),
+            pending: false,
         });
         page
     }

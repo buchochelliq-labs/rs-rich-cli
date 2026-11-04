@@ -196,6 +196,14 @@ impl Frames {
         (cut, missing)
     }
 
+    /// The number of a frame taken outside the regions' plan (a live
+    /// canvas's capture): after every frame numbered so far, so the
+    /// painter side never takes it for an older one.
+    pub fn number(&mut self) -> u64 {
+        self.seq += 1;
+        self.seq
+    }
+
     /// A frame of `node` taken some other way (a capture of its region).
     pub fn stamp(&mut self, node: NodeId, pixels: rich_embed::Pixels, now: Instant) -> VideoFrame {
         let every = self

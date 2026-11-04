@@ -65,7 +65,8 @@
 //!   (a selection by key with a visual range), [`list_search`] (find next
 //!   and previous over a list), [`tab_set`](fn@tab_set) (tabs' states with one
 //!   active), [`facts`] (a description list), [`digits`] (big digits
-//!   in any build), and [`state`]'s files and [`FrecencyStore`] (an
+//!   in any build), [`dial`] (a value on an arc), [`rating`] (a score
+//!   in stars), [`carousel`] (a paged strip of items), and [`state`]'s files and [`FrecencyStore`] (an
 //!   app's state between sessions). The core is generic only; the domain
 //!   plugins above build on these.
 //! - **Sprites and pixels**: [`sprite::stage`] draws [`sprite::Sprite`]s
@@ -101,6 +102,7 @@ mod bindings;
 pub mod border;
 mod builtin;
 mod calendar;
+mod carousel;
 mod clock;
 mod collapsible;
 pub mod command_line;
@@ -108,6 +110,7 @@ mod commands;
 pub mod complete;
 mod controls;
 mod datetime;
+mod dial;
 mod dialog;
 mod diff_view;
 mod digits;
@@ -149,6 +152,7 @@ pub mod pixels;
 mod place;
 pub mod preview;
 pub mod query;
+mod rating;
 pub mod reactive;
 mod reorder;
 mod rule;
@@ -207,6 +211,7 @@ pub use app::{
 pub use big_text::big_text;
 pub use bindings::{ModePage, Scaled, Stepped};
 pub use border::{Border, BorderSet, Edge, Shadow, Sides};
+pub use carousel::carousel;
 pub use collapsible::{Status, collapsible, collapsible_with};
 pub use command_line::{CommandLine, CommandLineOptions, command_line, command_line_with};
 pub use commands::{Hit, HitSink, Provider, SystemCommands, Themes};
@@ -218,6 +223,7 @@ pub use controls::{
     ButtonVariant, CheckState, button, button_of, checkbox, checkbox_of, checkbox_tri, radio,
     radio_keyed, slider, switch_of, switch_toggle,
 };
+pub use dial::dial;
 pub use dialog::{ConfirmOptions, PickOptions, PromptOptions};
 pub use digits::digits;
 pub use editor_theme::EditorTheme;
@@ -262,6 +268,7 @@ pub use parity::{
 };
 pub use place::{Offset, Origin, RectHandle};
 pub use preview::{PreviewOfOptions, preview_of, preview_of_with};
+pub use rating::{rating, rating_input};
 pub use reactive::{Memo, Proxy, Signal, memo, on_write, on_write_ref, signal, viewport, watch};
 /// What a text does with what does not fit a line: rich's.
 pub use rich::Overflow;

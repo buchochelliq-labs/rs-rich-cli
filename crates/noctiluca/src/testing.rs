@@ -65,6 +65,11 @@ pub struct FakeState {
     playing_since: HashMap<i64, std::time::Instant>,
     /// The viewport's width in CSS pixels.
     pub viewport_width: f64,
+    /// The colour a capture of Chrome's pixels shows (`None`: blue): a
+    /// test changes it, as a canvas's script draws.
+    pub paint: Option<[u8; 3]>,
+    /// The regions captured of Chrome's pixels, in order.
+    pub captures: Vec<Rect>,
 }
 
 impl FakeState {
@@ -240,6 +245,12 @@ pub struct PageBuilder {
     /// box, when it has a layout box.
     layout: Vec<Option<(Vec<String>, Rect)>>,
     current_source: Vec<(usize, String)>,
+    /// Each node's paint order: its parent's unless set ([`paint`](Self::paint)).
+    paint: Vec<i64>,
+    scroll_y: f64,
+    /// Boxes that scroll ([`scroll_box`](Self::scroll_box)): the node, its
+    /// scroll rectangle and its client box.
+    scrolls: HashMap<usize, (Rect, Rect)>,
 }
 
 /// The computed styles CSS inherits, among the snapshot's.
@@ -288,6 +299,9 @@ impl PageBuilder {
             attrs: Vec::new(),
             layout: Vec::new(),
             current_source: Vec::new(),
+            paint: Vec::new(),
+            scroll_y: 0.0,
+            scrolls: HashMap::new(),
         };
         let all = Rect::new(0.0, 0.0, width, height);
         page.push(-1, 9, "#document", None, &[], Some(all));
@@ -334,7 +348,43 @@ impl PageBuilder {
         self.value.push(value.map(str::to_string));
         self.attrs.push(Vec::new());
         self.layout.push(rect.map(|r| (computed, r)));
+        let paint = usize::try_from(parent)
+            .ok()
+            .and_then(|p| self.paint.get(p).copied())
+            .unwrap_or(0);
+        self.paint.push(paint);
         at
+    }
+
+    /// Chrome scrolled `scroll_y` CSS pixels down, its viewport `height`
+    /// tall (the document node's box, as Chrome reports it): fixed and
+    /// sticky boxes are then given where they are on screen.
+    pub fn view(&mut self, scroll_y: f64, height: f64) {
+        self.scroll_y = scroll_y;
+        if let Some((_, rect)) = self.layout[0].as_mut() {
+            rect.height = height;
+        }
+    }
+
+    /// Make laid-out node `node` a box scrolled `left` CSS pixels sideways
+    /// over content `width` wide, showing `client` of it (its
+    /// `scrollRects` and `clientRects`, as Chrome reports them).
+    pub fn scroll_box(&mut self, node: usize, left: f64, width: f64, client: f64) {
+        let height = self.layout[node].as_ref().map_or(0.0, |(_, r)| r.height);
+        self.scrolls.insert(
+            node,
+            (
+                Rect::new(left, 0.0, width, height),
+                Rect::new(0.0, 0.0, client, height),
+            ),
+        );
+    }
+
+    /// Set a laid-out node's paint order (Chrome's `paintOrders`: boxes
+    /// painted together share one, a positioned box paints after the flow
+    /// around it); its children made after take it.
+    pub fn paint(&mut self, node: usize, order: i64) {
+        self.paint[node] = order;
     }
 
     /// An element under `parent`: its tag, attributes, the computed
@@ -415,15 +465,20 @@ impl PageBuilder {
             .iter()
             .map(|list| list.iter().flat_map(|(k, v)| [s(k), s(v)]).collect())
             .collect();
-        let (mut node_index, mut styles, mut bounds, mut text) =
-            (Vec::new(), Vec::new(), Vec::new(), Vec::new());
+        let (mut node_index, mut styles, mut bounds, mut text, mut paint) =
+            (Vec::new(), Vec::new(), Vec::new(), Vec::new(), Vec::new());
+        let (mut scroll_rects, mut client_rects) = (Vec::new(), Vec::new());
         for (i, layout) in self.layout.iter().enumerate() {
             let Some((computed, rect)) = layout else {
                 continue;
             };
             node_index.push(i as i64);
+            paint.push(self.paint[i]);
             styles.push(computed.iter().map(|v| s(v)).collect::<Vec<_>>());
             bounds.push(json!([rect.x, rect.y, rect.width, rect.height]));
+            let (scroll, client) = self.scrolls.get(&i).copied().unwrap_or_default();
+            scroll_rects.push(json!([scroll.x, scroll.y, scroll.width, scroll.height]));
+            client_rects.push(json!([client.x, client.y, client.width, client.height]));
             text.push(if self.kind[i] == 3 { values[i] } else { -1 });
         }
         let source = (
@@ -442,7 +497,7 @@ impl PageBuilder {
             "documents": [{
                 "documentURL": url, "title": title, "baseURL": url,
                 "contentWidth": self.width, "contentHeight": self.height,
-                "scrollOffsetX": 0, "scrollOffsetY": 0,
+                "scrollOffsetX": 0, "scrollOffsetY": self.scroll_y,
                 "nodes": {
                     "parentIndex": self.parent, "nodeType": self.kind,
                     "nodeName": names, "nodeValue": values,
@@ -454,6 +509,8 @@ impl PageBuilder {
                 },
                 "layout": {
                     "nodeIndex": node_index, "styles": styles, "bounds": bounds, "text": text,
+                    "paintOrders": paint,
+                    "scrollRects": scroll_rects, "clientRects": client_rects,
                 },
             }],
             "strings": strings,
@@ -754,9 +811,15 @@ impl Engine for FakeEngine {
     }
 
     fn capture(&mut self, _tab: TabId, region: Rect, format: Format) -> io::Result<Frame> {
-        // A blue picture of the region's size, as PNG.
+        // A blue picture of the region's size (or the test's colour), as
+        // PNG.
+        let paint = {
+            let mut state = self.lock();
+            state.captures.push(region);
+            state.paint.unwrap_or([30, 90, 220])
+        };
         let (w, h) = (region.width.max(1.0) as u32, region.height.max(1.0) as u32);
-        let image = image::RgbImage::from_pixel(w, h, image::Rgb([30, 90, 220]));
+        let image = image::RgbImage::from_pixel(w, h, image::Rgb(paint));
         let mut bytes = Vec::new();
         image
             .write_to(

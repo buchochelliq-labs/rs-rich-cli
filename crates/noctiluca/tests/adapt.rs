@@ -91,9 +91,11 @@ fn navigation_collapses_to_a_row_on_a_narrow_terminal() {
 fn icon_buttons_read_as_their_name() {
     let page = page("adapt");
     let on = lines(&page, 72, only(Rule::IconButtons));
-    // Narrow boxes: the compact faces, `[Share]`.
+    // Narrow boxes: the compact faces, `[Share]`; the icon-only button
+    // named "Settings" is its glyph, and keeps its name for hints.
     let row = &on[row_of(&on, "[Share]")];
-    assert!(row.contains("[Settings] [Share]"), "{row:?}");
+    assert!(row.contains("[⚙]") && row.contains(" [Share]"), "{row:?}");
+    assert_eq!(page.find("button", "Settings").len(), 1);
     let off = lines(&page, 72, Adapt::none());
     let row = &off[row_of(&off, "[Share]")];
     assert!(

@@ -141,6 +141,20 @@ pub const ACTIONS: &[Action] = &[
         "alt+pagedown",
     ),
     action(
+        "shelf.previous",
+        "Page the shelf in view back (a sideways row: ‹ 1–3 of 12 ›)",
+        "view",
+        "<",
+        "<",
+    ),
+    action(
+        "shelf.next",
+        "Page the shelf in view on (Chrome scrolls it, so its items load)",
+        "view",
+        ">",
+        ">",
+    ),
+    action(
         "media.play_pause",
         "Play or pause the media",
         "media",

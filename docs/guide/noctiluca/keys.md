@@ -250,6 +250,8 @@ keys with a space (`g g`) is a sequence: press one, then the other.
 | `view.pixels` | Pixel view on or off: Chrome's own pixels (Kitty graphics) | `alt+x` | `alt+x` |
 | `log.older` | Scroll the live log up (it holds still) | `{` | `alt+pageup` |
 | `log.newer` | Scroll the live log down (at its end it follows again) | `}` | `alt+pagedown` |
+| `shelf.previous` | Page the shelf in view back (a sideways row: ‹ 1–3 of 12 ›) | `<` | `<` |
+| `shelf.next` | Page the shelf in view on (Chrome scrolls it, so its items load) | `>` | `>` |
 | `media.play_pause` | Play or pause the media | `p` | `alt+p` |
 | `media.mute` | Mute or unmute the media | `alt+m` | `alt+m` |
 | `media.volume_up` | Volume up | `+` | `alt+up` |

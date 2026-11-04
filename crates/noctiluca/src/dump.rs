@@ -108,6 +108,15 @@ pub fn json_of(page: &Page) -> Value {
                 ),
                 BlockKind::Media(i) => ("media", json!({"media": i})),
                 BlockKind::Control(i) => ("control", json!({"control": i})),
+                BlockKind::Indicator(i) => {
+                    let n = &page.indicators[*i];
+                    (
+                        "indicator",
+                        json!({"indicator": format!("{:?}", n.kind).to_lowercase(),
+                               "label": n.label, "value": n.value, "min": n.min, "max": n.max,
+                               "readout": n.readout()}),
+                    )
+                }
                 BlockKind::Log(i) => (
                     "log",
                     json!({"log": i, "label": page.logs[*i].label,
@@ -135,7 +144,14 @@ pub fn json_of(page: &Page) -> Value {
     let media: Vec<Value> = page
         .media
         .iter()
-        .map(|m| json!({"kind": format!("{:?}", m.kind).to_lowercase(), "alt": m.alt, "src": m.src, "rect": rect(&m.rect)}))
+        .map(|m| {
+            let mut media = json!({"kind": format!("{:?}", m.kind).to_lowercase(), "alt": m.alt, "src": m.src, "rect": rect(&m.rect)});
+            // A drawing's own words (an `<svg>`'s `<text>`), when it has any.
+            if !m.text.is_empty() {
+                media["text"] = json!(m.text);
+            }
+            media
+        })
         .collect();
     json!({"url": page.url, "title": page.title, "blocks": blocks, "controls": controls, "media": media})
 }

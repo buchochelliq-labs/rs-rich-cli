@@ -622,3 +622,184 @@ fn rows_blank_in_every_column_collapse_and_rows_beside_a_sidebar_stay() {
         "{faithful:#?}"
     );
 }
+
+/// The projection of a saved snapshot at `columns`: the page's lines, its
+/// pinned strip's and its docked strip's.
+fn strips(name: &str, columns: u16) -> (Vec<String>, Vec<String>, Vec<String>) {
+    use noctiluca::layout::project;
+    let projection = project(&page(name), columns, (8.0, 18.0), &Marks::default());
+    let plain = |lines: &[Line]| lines.iter().map(Line::plain).collect::<Vec<_>>();
+    (
+        plain(&projection.lines),
+        projection
+            .pinned
+            .as_ref()
+            .map_or(Vec::new(), |p| plain(&p.lines)),
+        projection
+            .docked
+            .as_ref()
+            .map_or(Vec::new(), |p| plain(&p.lines)),
+    )
+}
+
+#[test]
+fn a_sticky_header_read_while_scrolled_is_pinned_not_mid_page() {
+    // search-results.html read with Chrome scrolled to its bottom (as a
+    // short page was by the view's "near the end"): the sticky header is
+    // reported where it is stuck, 327 pixels down, under the first result.
+    let (lines, pinned, _) = strips("search-results-scrolled", 100);
+    assert!(
+        pinned.iter().any(|l| l.contains("Search ‹tide tables ▾›")),
+        "{pinned:#?}"
+    );
+    assert!(
+        !lines.iter().any(|l| l.contains("tide tables ▾")),
+        "{lines:#?}"
+    );
+    // The page starts with what is under the header: the result tabs.
+    let first = lines.iter().position(|l| !l.trim().is_empty()).unwrap();
+    assert!(lines[first].contains("All Images News"), "{lines:#?}");
+}
+
+#[test]
+fn a_cookie_banner_fixed_to_the_bottom_is_docked_and_the_shops_header_pinned() {
+    let (lines, pinned, docked) = strips("product-grid-scrolled", 100);
+    let all = |l: &[String]| l.join("\n");
+    assert!(all(&docked).contains("We use cookies"), "{docked:#?}");
+    assert!(all(&docked).contains("[Accept]"), "{docked:#?}");
+    assert!(!all(&lines).contains("We use cookies"), "{lines:#?}");
+    assert!(all(&pinned).contains("Search the shop"), "{pinned:#?}");
+    assert!(!all(&lines).contains("Search the shop"), "{lines:#?}");
+    assert!(lines.iter().any(|l| l.contains("1-3 of over 2,000")));
+}
+
+#[test]
+fn badges_over_a_picture_stay_in_its_cells() {
+    use noctiluca::layout::project;
+    let page = page("overlays");
+    let projection = project(&page, 100, (8.0, 18.0), &Marks::default());
+    let lines: Vec<String> = projection.lines.iter().map(Line::plain).collect();
+    let region = |alt: &str| {
+        let m = page
+            .media
+            .iter()
+            .position(|m| m.alt.starts_with(alt))
+            .unwrap();
+        *projection.regions.iter().find(|r| r.media == m).unwrap()
+    };
+    let inside = |text: &str, r: noctiluca::layout::Region| {
+        (r.row..r.row + r.rows).any(|row| {
+            // In cells, not bytes (the shading is three bytes a cell).
+            lines[row].find(text).is_some_and(|at| {
+                let at = lines[row][..at].chars().count();
+                at >= r.column && at + text.len() <= r.column + r.cols
+            })
+        })
+    };
+    let past = region("Harbour at dusk");
+    let live = region("Radar sweep");
+    assert!(inside("1:02:33", past), "{lines:#?}");
+    assert!(inside("LIVE", live), "{lines:#?}");
+    assert!(inside("412 viewers", live), "{lines:#?}");
+    // The duration at the picture's bottom right, LIVE at its top left.
+    assert!(lines[past.row + past.rows - 1].contains("1:02:33"));
+    assert!(lines[live.row].contains("LIVE"));
+    // They take no rows of their own under it: its caption follows.
+    assert!(lines[past.row + past.rows].contains("Image: Harbour at dusk"));
+    assert_eq!(projection.overlays.len(), 3, "{:?}", projection.overlays);
+}
+
+#[test]
+fn art_over_a_player_takes_none_of_its_rows() {
+    use noctiluca::layout::project;
+    let page = page("overlays");
+    let projection = project(&page, 100, (8.0, 18.0), &Marks::default());
+    let art = page
+        .media
+        .iter()
+        .position(|m| m.alt == "Channel offline art")
+        .unwrap();
+    let video = page
+        .media
+        .iter()
+        .position(|m| m.kind == noctiluca::model::MediaKind::Video)
+        .unwrap();
+    assert!(projection.regions.iter().all(|r| r.media != art));
+    let player = projection
+        .regions
+        .iter()
+        .find(|r| r.media == video)
+        .unwrap();
+    // The thumbnails start under the player, not under the art too.
+    let next = projection
+        .regions
+        .iter()
+        .find(|r| r.row > player.row)
+        .unwrap();
+    assert!(
+        next.row <= player.row + player.rows + 1,
+        "{:?}",
+        projection.regions
+    );
+}
+
+#[test]
+fn a_panel_under_an_opaque_layer_painted_above_it_is_not_drawn() {
+    let (lines, _, docked) = strips("overlays", 100);
+    let all = lines.join("\n");
+    assert!(!all.contains("An error occurred"), "{all}");
+    assert!(all.contains("This video is for viewers"), "{all}");
+    assert!(all.contains("[Start watching]"), "{all}");
+    assert!(docked.join(" ").contains("Join the Streams"), "{docked:#?}");
+}
+
+#[test]
+fn icon_buttons_at_the_right_edge_shorten_rather_than_being_cut() {
+    for columns in [100, 64, 50] {
+        let (_, pinned, _) = strips("overlays", columns);
+        let bar = &pinned[0];
+        assert!(rich::cells::cell_len(bar) <= columns as usize, "{bar}");
+        // Every face is whole or shortened with `…`, its bracket kept.
+        for name in ["Prime", "Log", "Sign", "User"] {
+            let at = bar
+                .find(&format!("[{name}"))
+                .unwrap_or_else(|| panic!("{bar}"));
+            let face = &bar[at..at + bar[at..].find(']').unwrap_or_else(|| panic!("{bar}")) + 1];
+            assert!(!face[1..].contains('['), "{name} in {bar}");
+        }
+    }
+    let (_, pinned, _) = strips("overlays", 50);
+    assert!(pinned[0].contains('…'), "{pinned:#?}");
+}
+
+#[test]
+fn two_runs_that_touch_in_cells_keep_a_space_between_them() {
+    use noctiluca::engine::Rect;
+    use noctiluca::testing::PageBuilder;
+    // "16" views and "13y ago", 2 pixels apart in Chrome: snapped, the
+    // first fills its cells up to where the second starts.
+    let mut p = PageBuilder::new("https://fixture.example/meta.html", "Meta", 800.0, 100.0);
+    let body = p.body();
+    let views = p.element(
+        body,
+        "DIV",
+        &[],
+        &[],
+        Some(Rect::new(100.0, 40.0, 16.0, 18.0)),
+    );
+    p.text(views, "16", Rect::new(100.0, 40.0, 16.0, 18.0));
+    let age = p.element(
+        body,
+        "DIV",
+        &[],
+        &[],
+        Some(Rect::new(118.0, 40.0, 50.0, 18.0)),
+    );
+    p.text(age, "13y ago", Rect::new(118.0, 40.0, 50.0, 18.0));
+    let page = build(&p.snapshot(), &mut Revisions::new());
+    let lines: Vec<String> = projection(&page, 100, (8.0, 18.0), &Marks::default())
+        .iter()
+        .map(Line::plain)
+        .collect();
+    assert!(lines.iter().any(|l| l.contains("16 13y ago")), "{lines:#?}");
+}

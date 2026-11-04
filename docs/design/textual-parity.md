@@ -211,4 +211,6 @@ counterpart, or only a smaller one:
   sequences; Miller columns (`miller_of`); a streaming fuzzy finder
   (`finder_of`); a jobs panel with cancel; calendars, time and date
   pickers; `hex_view`; a query language for filters (`query`); a state and
-  frecency store; `scroll_virtual` with measured heights.
+  frecency store; `scroll_virtual` with measured heights; a `dial` (a
+  value on an arc, with a `<meter>`'s bands), `rating` and `rating_input`
+  (stars), and a paged `carousel`.

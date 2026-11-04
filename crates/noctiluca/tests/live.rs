@@ -514,3 +514,51 @@ fn a_pages_own_background_is_read() {
     let page = live.open("with-background.html");
     assert_eq!(page.background.as_deref(), Some("rgb(255, 250, 230)"));
 }
+
+#[test]
+fn a_shelf_that_scrolls_sideways_is_not_a_live_log() {
+    // product-grid.html's "Customers also viewed" is a list that scrolls
+    // sideways; the parser appends its items as it builds the page. It is
+    // not a chat: its items stay where Chrome put them, side by side.
+    let Some(binary) = chrome() else { return };
+    let mut live = Live::start(binary);
+    let page = live.wait_open("product-grid.html", "Customers also viewed");
+    assert!(page.logs.is_empty(), "{:#?}", page.logs);
+    let shelf: Vec<_> = page
+        .media
+        .iter()
+        .filter(|m| m.rect.height < 120.0 && m.rect.width > 100.0)
+        .collect();
+    assert_eq!(shelf.len(), 6, "{:#?}", page.media);
+    assert!(shelf.windows(2).all(|w| w[0].rect.y == w[1].rect.y));
+}
+
+#[test]
+fn a_sticky_header_is_pinned_and_a_fixed_banner_docked() {
+    use noctiluca::layout::{Line, Marks, project};
+    let Some(binary) = chrome() else { return };
+    let mut live = Live::start(binary);
+    let plain = |lines: &[Line]| lines.iter().map(Line::plain).collect::<Vec<_>>().join("\n");
+    let page = live.wait_open("search-results.html", "Tide tables for today");
+    let projection = project(&page, 100, (8.0, 18.0), &Marks::default());
+    let pinned = projection.pinned.as_ref().map(|p| plain(&p.lines));
+    assert!(
+        pinned
+            .as_deref()
+            .is_some_and(|p| p.contains("tide tables ▾")),
+        "{pinned:?}"
+    );
+    assert!(!plain(&projection.lines).contains("tide tables ▾"));
+    let page = live.wait_open("overlays.html", "Following 1,204 channels");
+    let projection = project(&page, 100, (8.0, 18.0), &Marks::default());
+    let docked = projection.docked.as_ref().map(|p| plain(&p.lines));
+    assert!(
+        docked
+            .as_deref()
+            .is_some_and(|p| p.contains("Join the Streams")),
+        "{docked:?}"
+    );
+    let lines = plain(&projection.lines);
+    assert!(!lines.contains("An error occurred"), "{lines}");
+    assert_eq!(projection.overlays.len(), 3, "{lines}");
+}

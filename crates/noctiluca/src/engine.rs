@@ -173,6 +173,10 @@ pub enum PageAction {
     /// Play, pause, mute or set the volume of a video or audio element,
     /// as the user's own gesture.
     Media { node: NodeId, op: MediaOp },
+    /// Scroll the box `node` sideways by `by` CSS pixels (back when
+    /// negative), kept within its content: a [shelf](crate::model::Shelf)
+    /// paged, so its lazy items load.
+    ScrollBox { node: NodeId, by: f64 },
 }
 
 /// Where the page is scrolled and how tall it is, in CSS pixels: for the

@@ -399,7 +399,8 @@ fn a_key_toggles_the_adapted_and_the_faithful_projection_and_about_lists_the_rul
         Box::new(engine()),
         projection(Config::default(), "adapt.html"),
     )
-    .driver(72, 40);
+    // Tall enough for every rule and the codec table under them.
+    .driver(72, 48);
     wait_for(&mut driver, "≡ Sections: News Sea Sky About");
     driver.press("a");
     wait_for(&mut driver, "faithful");
@@ -611,4 +612,106 @@ fn transparent_is_read_from_the_config() {
     assert!(config.warnings.is_empty(), "{:?}", config.warnings);
     assert!(config.transparent);
     assert!(!Config::default().transparent);
+}
+
+/// A page `height` pixels long with a top bar and a cookie bar fixed to
+/// the screen (a viewport 360 pixels tall: the driver's 24 rows less the
+/// header and status bar's four, 18 pixels each), and a paragraph every
+/// 100 pixels.
+fn barred(height: f64) -> noctiluca::engine::PageSnapshot {
+    use noctiluca::engine::Rect;
+    use noctiluca::testing::PageBuilder;
+    let mut p = PageBuilder::new("https://fixture.example/barred.html", "Bars", 800.0, height);
+    p.view(0.0, 360.0);
+    let body = p.body();
+    let mut y = 60.0;
+    let mut n = 1;
+    while y + 18.0 < height {
+        let para = p.element(body, "P", &[], &[], Some(Rect::new(8.0, y, 784.0, 18.0)));
+        p.text(
+            para,
+            &format!("Paragraph {n}"),
+            Rect::new(8.0, y, 100.0, 18.0),
+        );
+        y += 100.0;
+        n += 1;
+    }
+    let top = p.element(
+        body,
+        "DIV",
+        &[],
+        &[("position", "fixed"), ("background-color", "rgb(0, 0, 0)")],
+        Some(Rect::new(0.0, 0.0, 800.0, 36.0)),
+    );
+    p.paint(top, 2);
+    p.text(top, "Top bar", Rect::new(8.0, 9.0, 60.0, 18.0));
+    let bottom = p.element(
+        body,
+        "DIV",
+        &[],
+        &[
+            ("position", "fixed"),
+            ("background-color", "rgb(255, 255, 255)"),
+        ],
+        Some(Rect::new(0.0, 324.0, 800.0, 36.0)),
+    );
+    p.paint(bottom, 3);
+    p.text(bottom, "We use cookies", Rect::new(8.0, 333.0, 110.0, 18.0));
+    p.snapshot()
+}
+
+fn barred_engine(height: f64) -> FakeEngine {
+    let dir = std::env::temp_dir().join(format!("noctiluca-bars-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let engine = FakeEngine::from_dir(&dir).unwrap();
+    {
+        let mut state = engine.state.lock().unwrap();
+        state.pages.insert("barred".into(), barred(height));
+        state.viewport_height = 360.0;
+    }
+    engine
+}
+
+#[test]
+fn a_top_bar_stays_pinned_and_a_cookie_bar_docked_while_the_page_scrolls() {
+    let engine = barred_engine(3000.0);
+    let url = "https://fixture.example/barred.html";
+    let mut driver = app(Box::new(engine), projection(Config::default(), url)).driver(80, 24);
+    wait_for(&mut driver, "Paragraph 1");
+    let rows = driver.screen().plain();
+    // Under the address line, above the status bar.
+    assert!(rows[2].contains("Top bar"), "{rows:#?}");
+    assert!(rows[24 - 3].contains("We use cookies"), "{rows:#?}");
+    assert_eq!(rows.iter().filter(|r| r.contains("Top bar")).count(), 1);
+    // To the end of the page: both bars are where they were.
+    driver.press("G");
+    wait_for(&mut driver, "Paragraph 30");
+    let rows = driver.screen().plain();
+    assert!(
+        !rows.iter().any(|r| r.trim_end().ends_with("Paragraph 1")),
+        "{rows:#?}"
+    );
+    assert!(rows[2].contains("Top bar"), "{rows:#?}");
+    assert!(rows[24 - 3].contains("We use cookies"), "{rows:#?}");
+}
+
+#[test]
+fn a_page_that_fits_in_two_screens_is_not_scrolled_to_its_end() {
+    let engine = barred_engine(600.0);
+    let state = engine.state.clone();
+    let url = "https://fixture.example/barred.html";
+    let mut driver = app(Box::new(engine), projection(Config::default(), url)).driver(80, 24);
+    wait_for(&mut driver, "Paragraph 5");
+    driver.press("G");
+    for _ in 0..20 {
+        driver.advance(Duration::from_millis(40));
+        std::thread::sleep(Duration::from_millis(5));
+    }
+    let actions = state.lock().unwrap().actions.clone();
+    assert!(
+        !actions
+            .iter()
+            .any(|a| matches!(a, PageAction::ScrollTo(y) if *y == f64::MAX)),
+        "{actions:?}"
+    );
 }

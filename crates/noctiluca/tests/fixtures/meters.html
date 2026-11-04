@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<title>Meters fixture</title>
+<!-- Written for Noctiluca's corpus: the ways a page says "a value in a
+     range" that a terminal could draw as a native bar or dial: <meter>,
+     <progress> (with a value and without one), role=progressbar, role=meter
+     and role=slider on plain <div>s with aria-value*, and a star rating as
+     an image named "4.5 out of 5 stars". A script moves the progress bars,
+     as an upload or a speed test does. -->
+<style>
+  body { font: 16px sans-serif; margin: 0 8px; }
+  .bar { width: 240px; height: 8px; background: #ddd; }
+  .bar > div { height: 8px; background: #2a7; width: 0; }
+  .stars { display: inline-block; width: 80px; height: 16px;
+           background: linear-gradient(90deg, #f90 90%, #ddd 90%); }
+</style>
+<h1>Meters</h1>
+<p><label for="disk">Disk</label> <meter id="disk" min="0" max="100" low="60" high="85" optimum="20" value="72">72%</meter></p>
+<p><label for="upload">Upload</label> <progress id="upload" max="100" value="10">10%</progress></p>
+<p><label for="wait">Waiting</label> <progress id="wait"></progress></p>
+<p>Download <span id="bar" class="bar" role="progressbar" aria-label="Download"
+   aria-valuemin="0" aria-valuemax="100" aria-valuenow="25"><div style="width: 25%"></div></span></p>
+<p>Signal <span role="meter" aria-label="Signal" aria-valuemin="0" aria-valuemax="5"
+   aria-valuenow="3" aria-valuetext="3 of 5 bars">▂▄▆</span></p>
+<p>Volume <span role="slider" tabindex="0" aria-label="Volume" aria-valuemin="0"
+   aria-valuemax="100" aria-valuenow="40" class="bar"><div style="width: 40%"></div></span></p>
+<p>Rating <i class="stars" role="img" aria-label="4.5 out of 5 stars"></i> (1,204)</p>
+<script>
+  let n = 10;
+  const timer = setInterval(() => {
+    n = Math.min(n + 9, 100);
+    document.getElementById('upload').value = n;
+    const bar = document.getElementById('bar');
+    bar.setAttribute('aria-valuenow', n);
+    bar.firstElementChild.style.width = n + '%';
+    if (n >= 100) clearInterval(timer);
+  }, 400);
+</script>

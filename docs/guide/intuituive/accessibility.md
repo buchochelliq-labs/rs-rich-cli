@@ -36,7 +36,8 @@ There are two modes for assistive technology:
   built-in: `list`, `table`, `tree`, `tablist`, `menu`, `region` for a
   panel, `button` for a clickable label or a `button`, `textbox` for an
   `Input` or a `TextArea`, `checkbox`, `switch`, `radiogroup`, `slider`
-  and `combobox` for the [form controls](controls.md), …) and a name: `.label("Save")`, else the text it shows,
+  and `combobox` for the [form controls](controls.md), `meter` for a
+  [dial](widgets.md#dials), `img` for a [rating](widgets.md#ratings), …) and a name: `.label("Save")`, else the text it shows,
   else a panel's title. `.role(Role::MenuBar)` sets a role in code. A node
   named by the text it shows (a live row, a button) speaks for what is
   inside it, so its children are not listed again. A chart (or any
@@ -75,7 +76,8 @@ There are two modes for assistive technology:
     condition that may read signals. `Widget::access_state` is the hook
     for a widget of your own. `AccessNode::aria_attributes()` maps them to
     ARIA (`aria-expanded`, `aria-checked`, `aria-selected`, `aria-busy`,
-    `aria-disabled`, `aria-invalid`, a slider's `aria-valuenow`,
+    `aria-disabled`, `aria-invalid`, a slider's or a meter's
+    `aria-valuenow`, or `aria-valuetext` when its value is in words,
     `aria-posinset`, `aria-setsize`) for a browser. `Widget::access_value`
     gives a widget of your own a value its cells do not say.
 - **Hidden from assistive technology.** `.access_hidden(true)` (ARIA's

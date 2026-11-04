@@ -6,7 +6,7 @@ Files  +153 more · tab                            │     1 # Cornacai: a termi
   docs/guide/noctiluca.md                         │     4 guide, plus "AI") is a terminal front end for coding
   docs/guide/ratatui.md                           │     5 [Agent Client Protocol](https://agentclientprotocol.
   docs/guide/write-a-plugin.md                    │     6 through its ACP adapter, Gemini CLI, Codex and the o
-Headings #  +1078 more · tab                      │     7 steer; the agent does the heavy lifting. It is a cra
+Headings #  +1089 more · tab                      │     7 steer; the agent does the heavy lifting. It is a cra
   Cornacai: a terminal client for coding agents   │     8 [`cornacai`](https://crates.io/crates/cornacai), bui
   Install and start  ## docs/guide/cornacai.md:27 │     9 [intuiTUIve](intuituive/index.md), rs-rich-acp (the
   The screen  ## docs/guide/cornacai.md:48        │    10 rs-rich-embed (the shell pane).

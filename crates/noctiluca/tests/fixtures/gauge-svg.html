@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<title>Speed gauge (SVG) fixture</title>
+<!-- Written for Noctiluca's corpus, reduced from the pattern of an internet
+     speed test (not copied from any site): a dial drawn as an inline <svg>
+     (a track arc, a value arc whose dash grows, tick labels as <text>, a
+     needle that turns) with the live number in the drawing's own <text>,
+     and the same number again in HTML beside it. A script moves the value
+     for about eight seconds, then holds it, as a test's download phase
+     does. What Noctiluca should show: the dial, moving, and the number. -->
+<style>
+  body { font: 16px sans-serif; margin: 0 8px; background: #141526; color: #fff; }
+  .test { display: flex; gap: 32px; align-items: center; }
+  .readout { font-size: 14px; color: #9193a8; }
+  .readout b { display: block; font-size: 40px; color: #fff; }
+  a.go { display: inline-block; border: 2px solid #1de0fa; border-radius: 50%;
+         width: 96px; height: 96px; line-height: 96px; text-align: center; color: #fff; }
+</style>
+<h1>Speed test</h1>
+<a class="go" href="#start">GO</a>
+<div class="test">
+  <svg id="dial" width="300" height="240" viewBox="0 0 300 240" class="gauge">
+    <path d="M 45 200 A 120 120 0 1 1 255 200" fill="none" stroke="#2a2c45" stroke-width="18"/>
+    <path id="arc" d="M 45 200 A 120 120 0 1 1 255 200" fill="none" stroke="#1de0fa"
+          stroke-width="18" stroke-dasharray="0 1000"/>
+    <g font-size="12" fill="#9193a8" text-anchor="middle">
+      <text x="40" y="225">0</text><text x="30" y="140">5</text><text x="60" y="70">10</text>
+      <text x="150" y="35">50</text><text x="240" y="70">100</text><text x="270" y="140">250</text>
+      <text x="260" y="225">500</text>
+    </g>
+    <line id="needle" x1="150" y1="140" x2="150" y2="50" stroke="#fff" stroke-width="4"
+          transform="rotate(-135 150 140)"/>
+    <text id="dial-value" x="150" y="200" font-size="36" fill="#fff" text-anchor="middle">0.00</text>
+    <text x="150" y="222" font-size="13" fill="#9193a8" text-anchor="middle">Mbps</text>
+  </svg>
+  <div class="readout">
+    <span>Download</span>
+    <b id="value">0.00</b>
+    <span>Mbps</span>
+  </div>
+</div>
+<p>Ping <span id="ping">12</span> ms. Upload waits for download to finish.</p>
+<script>
+  const arc = document.getElementById('arc');
+  const length = arc.getTotalLength();
+  const needle = document.getElementById('needle');
+  let step = 0;
+  const timer = setInterval(() => {
+    step += 1;
+    const mbps = Math.min(step * 11.7, 287.4);
+    const share = mbps / 500;
+    arc.setAttribute('stroke-dasharray', `${(share * length).toFixed(1)} 1000`);
+    needle.setAttribute('transform', `rotate(${-135 + share * 270} 150 140)`);
+    const text = mbps.toFixed(2);
+    document.getElementById('dial-value').textContent = text;
+    document.getElementById('value').textContent = text;
+    if (mbps >= 287.4) clearInterval(timer);
+  }, 300);
+</script>

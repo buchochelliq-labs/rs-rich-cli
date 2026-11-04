@@ -32,9 +32,11 @@ DevTools, and some bot checks notice that. Noctiluca does not try to hide
 it, or to get past bot checks, CAPTCHAs or sign-in walls. See
 [Bot checks](privacy.md#bot-checks).
 
-**The projection looks wrong.** The first projection has no fixed or
-sticky layer and no paint order, so sticky headers and overlapping boxes
-can read oddly. Press `r` for reader mode.
+**The projection looks wrong.** Top bars are pinned and bottom bars
+docked ([Top bars, bottom bars and layers](reading.md#top-bars-bottom-bars-and-layers)),
+but a page that moves its boxes with script, or stacks translucent
+layers, can still read oddly. Press `a` for the faithful projection, or
+`r` for reader mode.
 
 **The page stops where it should load more.** Keep going down: each time
 you near the end, Noctiluca asks the page for more. A feed that loads
@@ -53,9 +55,14 @@ rs-rich-embed, which is still to come.
 
 ## Pictures and sound
 
-**A picture shows as its alt text.** An inline SVG drawing, a canvas
-and a frame show as their alt text. A site table with `images = false`,
-or `--images none`, turns pictures off.
+**A picture shows as its alt text.** A frame shows as its alt text, and
+so does a canvas or an inline SVG drawing in reader mode. A site table
+with `images = false`, or `--images none`, turns pictures off.
+
+**A canvas stops moving.** Only four canvases are live at once (those on
+screen nearest the view), none while `F4` freezes moving pictures, and a
+canvas that has held still is looked at every two seconds, not twice a
+second.
 
 **Moving pictures stutter, or turn to half blocks.** GIFs and video
 share a byte budget, and step down when the terminal is short of it. Over
