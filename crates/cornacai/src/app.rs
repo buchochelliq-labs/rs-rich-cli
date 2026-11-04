@@ -1121,8 +1121,8 @@ fn view(ui: Ui, hub: Arc<Hub>, shell: Option<ShellPane>) -> Node {
         let busy = ui.current_tracked().busy.get();
         let esc = if busy { "Esc cancel · " } else { "" };
         format!(
-            "[dim]Enter send · Alt+Enter line · @ file · {esc}Ctrl+N new · Ctrl+O reopen · \
-             Alt+N/P switch · Ctrl+T shell · F2 log · Ctrl+Q quit[/]"
+            "[dim]Enter send · Alt+Enter line · {esc}Ctrl+N new · Ctrl+O reopen · \
+             Alt+N/P tab · Ctrl+T shell · F2 log · Ctrl+Q quit[/]"
         )
     })
     .fixed(1);
