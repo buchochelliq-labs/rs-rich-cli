@@ -1,0 +1,9 @@
+{"note": "session/load: the agent replays the conversation as session/update notifications, then answers with the session's modes."}
+{"client": {"id": 0, "method": "initialize"}}
+{"agent": {"jsonrpc": "2.0", "id": 0, "result": {"protocolVersion": 1, "agentCapabilities": {"loadSession": true}}}}
+{"client": {"id": 1, "method": "session/load", "params": {"sessionId": "sess_kept", "cwd": "/w", "mcpServers": []}}}
+{"agent": {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "sess_kept", "update": {"sessionUpdate": "user_message_chunk", "content": {"type": "text", "text": "Earlier question"}}}}}
+{"agent": {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "sess_kept", "update": {"sessionUpdate": "agent_message_chunk", "content": {"type": "text", "text": "Earlier answer."}}}}}
+{"agent": {"jsonrpc": "2.0", "id": 1, "result": {"modes": {"currentModeId": "ask", "availableModes": [{"id": "ask", "name": "Ask"}]}}}}
+{"client": {"id": 2, "method": "session/load", "params": {"sessionId": "sess_gone"}}}
+{"agent": {"jsonrpc": "2.0", "id": 2, "error": {"code": -32002, "message": "Resource not found: sess_gone"}}}
