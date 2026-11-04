@@ -62,11 +62,12 @@ def run_kit(*args, cwd=ROOT):
 
 
 def fetch_tags():
-    """origin's tags, with their commits (only those commits in a shallow
-    clone, as CI's is)."""
-    shallow = git("rev-parse", "--is-shallow-repository") == "true"
-    git("fetch", "--quiet", "--force", *(["--depth=1"] if shallow else []), "origin",
-        "+refs/tags/*:refs/tags/*", capture=False)
+    """origin's tags, with their history. A shallow clone is deepened first:
+    pushing the tags to the rehearsal's remote needs every object they reach,
+    and a depth-1 fetch of each tag leaves gaps that push cannot fill."""
+    if git("rev-parse", "--is-shallow-repository") == "true":
+        git("fetch", "--quiet", "--unshallow", "origin", capture=False)
+    git("fetch", "--quiet", "--force", "origin", "+refs/tags/*:refs/tags/*", capture=False)
 
 
 def tag_dry_run(head):

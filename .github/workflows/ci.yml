@@ -38,6 +38,9 @@ jobs:
       - uses: actions/checkout@v7
         with:
           ref: ${{ inputs.checkout_ref || github.ref }}
+          # The rehearsal pushes every tag to a throwaway remote, which
+          # needs their whole history.
+          fetch-depth: 0
 
       - uses: actions/setup-python@v7
         with:
