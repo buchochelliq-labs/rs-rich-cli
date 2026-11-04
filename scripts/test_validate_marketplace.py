@@ -31,7 +31,7 @@ class ExamplesTest(unittest.TestCase):
 
     def test_there_is_a_valid_example_of_every_kind(self):
         kinds = {json.loads(p.read_text())["kind"] for p in VALID}
-        self.assertEqual(kinds, {"crate", "wasm-plugin", "micro-pack", "theme"})
+        self.assertEqual(kinds, {"crate", "wasm-plugin", "micro-pack", "theme", "agent"})
 
     def test_every_valid_example_passes(self):
         for path in VALID:
@@ -61,6 +61,11 @@ class ExamplesTest(unittest.TestCase):
             "duplicate-version": "repeats",
             "recommended-long-note": "recommended.note",
             "recommended-bad-day": "recommended.since",
+            "agent-without-command": "missing 'agent'",
+            "agent-command-path": "agent.command",
+            "agent-without-native-code": "native-code",
+            "agent-wrong-requires": "missing 'acp'",
+            "agent-field-on-theme": "agent",
         }
         self.assertEqual(set(reasons), {p.stem for p in INVALID})
         for path in INVALID:

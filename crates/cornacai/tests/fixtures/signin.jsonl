@@ -1,0 +1,16 @@
+{"note": "Sign-in: session/new fails with auth_required; the user picks one of the agent's methods, authenticate is called with it, and session/new is sent again. Later a prompt fails the same way: the user signs in again and the same prompt is sent again. The terminal-type method is not offered."}
+{"client": {"id": 0, "method": "initialize"}}
+{"agent": {"jsonrpc": "2.0", "id": 0, "result": {"protocolVersion": 1, "authMethods": [{"id": "browser", "name": "Log in with the browser", "description": "Opens a page to sign in"}, {"id": "key", "name": "Use an API key", "type": "agent"}, {"id": "tty", "name": "Log in from a terminal", "type": "terminal"}]}}}
+{"client": {"id": 1, "method": "session/new"}}
+{"agent": {"jsonrpc": "2.0", "id": 1, "error": {"code": -32000, "message": "Authentication required"}}}
+{"client": {"id": 2, "method": "authenticate", "params": {"methodId": "key"}}}
+{"agent": {"jsonrpc": "2.0", "id": 2, "result": {}}}
+{"client": {"id": 3, "method": "session/new"}}
+{"agent": {"jsonrpc": "2.0", "id": 3, "result": {"sessionId": "sess_in"}}}
+{"client": {"id": 4, "method": "session/prompt", "params": {"sessionId": "sess_in", "prompt": [{"type": "text", "text": "Hello"}]}}}
+{"agent": {"jsonrpc": "2.0", "id": 4, "error": {"code": -32000, "message": "Your sign-in expired"}}}
+{"client": {"id": 5, "method": "authenticate", "params": {"methodId": "browser"}}}
+{"agent": {"jsonrpc": "2.0", "id": 5, "result": {}}}
+{"client": {"id": 6, "method": "session/prompt", "params": {"sessionId": "sess_in", "prompt": [{"type": "text", "text": "Hello"}]}}}
+{"agent": {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "sess_in", "update": {"sessionUpdate": "agent_message_chunk", "content": {"type": "text", "text": "Hello, signed-in user."}}}}}
+{"agent": {"jsonrpc": "2.0", "id": 6, "result": {"stopReason": "end_turn"}}}

@@ -20,6 +20,9 @@
 //!    move into place and the [`Lockfile`].
 //! 6. **Load** ([`Lockfile::verify`]): each run reads an installed file only
 //!    after checking it against the lockfile.
+//! 7. **Agents** ([`AgentList`]): an `agent` listing is never installed; its
+//!    verified launch command is recorded in `agents.json` for an ACP client
+//!    (Cornacai) to offer, and what to install is left to the user.
 //!
 //! There is no terminal code here: `rich plugin` in rs-rich-cli prompts,
 //! prints and decides. Time is passed in (`now`), so callers and tests
@@ -41,6 +44,7 @@
 
 #![warn(missing_docs)]
 
+mod agents;
 mod check;
 mod error;
 mod index;
@@ -56,6 +60,7 @@ pub mod tls;
 mod transport;
 mod util;
 
+pub use agents::{AGENTS_FILE_NAME, AGENTS_SCHEMA_VERSION, AgentList, ListedAgent};
 pub use check::{
     ArtifactChecker, BuiltinChecks, WasmExpectation, check_pack_json, check_theme,
     check_wasm_header, compare_wasm_manifest,
@@ -73,13 +78,13 @@ pub use keys::{
     KEYS_COMMENT_PREFIX, KEYS_SCHEMA_VERSION, KeyId, KeySet, Rotation, RotationKind, TrustedKey,
 };
 pub use listing::{
-    Artifact, Capability, CrateInfo, Kind, LISTING_SCHEMA_VERSION, ListedVersion, Listing,
-    MAX_RECOMMENDED_NOTE, OFFICIAL_PREFIX, Recommended, Requires, Tier,
+    AgentInfo, Artifact, Capability, CrateInfo, Kind, LISTING_SCHEMA_VERSION, ListedVersion,
+    Listing, MAX_RECOMMENDED_NOTE, OFFICIAL_PREFIX, Recommended, Requires, Tier,
 };
 pub use lockfile::{
     LOCKFILE_NAME, LOCKFILE_SCHEMA_VERSION, LockEntry, Lockfile, create_private_dir_all,
 };
-pub use resolve::{Host, MICRO_SCHEMA_VERSION, Request, THEME_FORMAT, resolve};
+pub use resolve::{ACP_VERSION, Host, MICRO_SCHEMA_VERSION, Request, THEME_FORMAT, resolve};
 #[cfg(feature = "http")]
 pub use transport::HttpsTransport;
 pub use transport::{MemoryTransport, Transport, require_https};

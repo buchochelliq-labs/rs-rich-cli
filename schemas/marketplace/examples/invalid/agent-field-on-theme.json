@@ -1,0 +1,49 @@
+{
+  "schema_version": 1,
+  "id": "echo-agent",
+  "kind": "theme",
+  "name": "Echo Agent",
+  "description": "A coding agent that answers over the Agent Client Protocol.",
+  "tier": "community",
+  "license": "Apache-2.0",
+  "authors": [
+    "Example Author"
+  ],
+  "repository": "https://github.com/example/echo-agent",
+  "homepage": "https://example.com/echo-agent",
+  "keywords": [
+    "acp",
+    "agent"
+  ],
+  "agent": {
+    "command": "echo-agent",
+    "args": [
+      "--acp"
+    ],
+    "env": [
+      "ECHO_AGENT_API_KEY"
+    ],
+    "install": "npm install -g @example/echo-agent"
+  },
+  "versions": [
+    {
+      "version": "1.4.0",
+      "published": "2026-10-30",
+      "requires": {
+        "theme_format": 1
+      },
+      "artifact": {
+        "url": "https://example.com/echo/echo.ini",
+        "sha256": "9f2c1e0b6f6d7f0c5a4b3e2d1c0b9a8f7e6d5c4b3a29180716253443526170ab",
+        "size": 81920
+      },
+      "capabilities": [
+        {
+          "kind": "theme",
+          "name": "echo"
+        }
+      ],
+      "permissions": []
+    }
+  ]
+}

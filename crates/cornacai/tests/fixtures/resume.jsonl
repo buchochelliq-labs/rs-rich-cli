@@ -1,0 +1,11 @@
+{"note": "Reopening a session: the agent offers loadSession, replays the conversation as updates before it answers session/load, and the session goes on."}
+{"client": {"id": 0, "method": "initialize"}}
+{"agent": {"jsonrpc": "2.0", "id": 0, "result": {"protocolVersion": 1, "agentCapabilities": {"loadSession": true}, "agentInfo": {"name": "replay-agent", "version": "0.1"}}}}
+{"client": {"id": 1, "method": "session/load", "params": {"sessionId": "sess_old", "cwd": "$WORKSPACE", "mcpServers": []}}}
+{"agent": {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "sess_old", "update": {"sessionUpdate": "user_message_chunk", "content": {"type": "text", "text": "What does main do?"}}}}}
+{"agent": {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "sess_old", "update": {"sessionUpdate": "agent_message_chunk", "content": {"type": "text", "text": "It prints a **greeting**."}}}}}
+{"agent": {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "sess_old", "update": {"sessionUpdate": "tool_call", "toolCallId": "call_r", "title": "Read main.rs", "kind": "read", "status": "completed"}}}}
+{"agent": {"jsonrpc": "2.0", "id": 1, "result": {"modes": {"currentModeId": "code", "availableModes": [{"id": "code", "name": "Code"}]}}}}
+{"client": {"id": 2, "method": "session/prompt", "params": {"sessionId": "sess_old", "prompt": [{"type": "text", "text": "And now?"}]}}}
+{"agent": {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "sess_old", "update": {"sessionUpdate": "agent_message_chunk", "content": {"type": "text", "text": "Now it greets by name."}}}}}
+{"agent": {"jsonrpc": "2.0", "id": 2, "result": {"stopReason": "end_turn"}}}

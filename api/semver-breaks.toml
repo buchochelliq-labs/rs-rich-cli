@@ -63,3 +63,10 @@ version = "0.0.10"
 lint = "constructible_struct_adds_field"
 items = ["field TableOptions.row_labels", "field TableOptions.renderables"]
 why = "Textual parity (0.0.25 plan, workstream 3): DataTable's row labels and cells holding renderables, as options of a table"
+
+[[break]]
+crate = "cornacai"
+version = "0.0.2"
+lint = "constructible_struct_adds_field"
+items = ["field Options.pty", "field Options.store", "field Options.resume", "field Config.pty"]
+why = "Cornacai phase 4 (0.0.25 plan, workstream 2): agent terminals on a PTY behind a setting, the session store and resuming a session with session/load"

@@ -8,24 +8,26 @@
 //! - A write is shown as a diff to review, hunk by hunk; what the user
 //!   accepted is written inside the workspace, and a write rejected whole
 //!   is refused.
-//! - A terminal command is asked about, then runs on rs-rich-acp's
-//!   [`Terminals`] (pipes); its output, as the agent reads it, is shown in
-//!   its tool call.
+//! - A terminal command is asked about, then runs on [`AgentTerminals`]
+//!   (pipes, or a PTY when the setting is on); its output, as the agent
+//!   reads it, is shown in its tool call.
 //! - Reads are answered inside the workspace, without asking.
 
 use std::path::Path;
-use std::sync::mpsc;
+use std::sync::{Arc, mpsc};
 
 use rich_acp::{
     CreateTerminalRequest, CreateTerminalResponse, Error, ReadTextFileRequest,
     ReadTextFileResponse, RequestPermissionRequest, RequestPermissionResponse, RpcError,
-    SessionNotification, TerminalExitStatus, TerminalOutputResponse, TerminalRequest, Terminals,
-    Workspace, WriteTextFileRequest, WriteTextFileResponse, controls_execution, fs,
+    SessionNotification, SessionUpdate, TerminalExitStatus, TerminalOutputResponse,
+    TerminalRequest, Workspace, WriteTextFileRequest, WriteTextFileResponse, controls_execution,
+    fs,
 };
 use rich_intuituive::Proxy;
 
-use crate::app::Ui;
+use crate::app::{Hub, Ui};
 use crate::clean::markup;
+use crate::terminals::AgentTerminals;
 
 /// What the user decided about a write.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -46,7 +48,8 @@ pub(crate) struct Bridge {
     pub proxy: Proxy,
     pub ui: Ui,
     pub workspace: Workspace,
-    pub terminals: Terminals,
+    pub terminals: AgentTerminals,
+    pub hub: Arc<Hub>,
 }
 
 /// The error a refused write or command answers with.
@@ -80,6 +83,12 @@ impl Bridge {
 
 impl rich_acp::Client for Bridge {
     fn session_update(&self, notification: SessionNotification) {
+        if let SessionUpdate::Unknown { kind, value } = &notification.update
+            && kind == "session_info_update"
+            && let Some(title) = value.get("title").and_then(|t| t.as_str())
+        {
+            self.hub.retitle(&notification.session_id, title);
+        }
         let ui = self.ui;
         self.proxy.run(move || ui.route(notification));
     }

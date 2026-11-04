@@ -42,10 +42,10 @@ use std::time::SystemTime;
 
 use rich_ext::plugin_loading::{RuntimeKind, RuntimePlugin};
 use rich_marketplace::{
-    AcceptedIndex, ArtifactChecker, CheckError, FetchError, Host, IndexError, InstallError,
-    Installer, KeyChainError, KeySet, Kind, LOCKFILE_NAME, ListedVersion, Listing, ListingError,
-    LockEntry, Lockfile, LockfileError, Request, Requires, ResolveError, Rotation, RotationKind,
-    Tier, Transport, VerifiedIndex, WasmExpectation, resolve, verify_index,
+    AcceptedIndex, AgentList, ArtifactChecker, CheckError, FetchError, Host, IndexError,
+    InstallError, Installer, KeyChainError, KeySet, Kind, LOCKFILE_NAME, ListedVersion, Listing,
+    ListingError, LockEntry, Lockfile, LockfileError, Request, Requires, ResolveError, Rotation,
+    RotationKind, Tier, Transport, VerifiedIndex, WasmExpectation, resolve, verify_index,
 };
 use serde_json::{Value, json};
 
@@ -151,7 +151,7 @@ pub(crate) fn spec() -> rich_ext::cli_doc::CommandSpec {
                 .arg(
                     ArgSpec::option("kind")
                         .value_name("KIND")
-                        .help("Only this kind: crate, wasm-plugin, micro-pack or theme"),
+                        .help("Only this kind: crate, wasm-plugin, micro-pack, theme or agent"),
                 )
                 .arg(
                     ArgSpec::option("tier")
@@ -523,7 +523,7 @@ fn parse(args: &[String]) -> Outcome<Options> {
         }
         options.kind = Some(Kind::parse(&name).ok_or_else(|| {
             usage(format!(
-                "unknown kind {:?} (crate, wasm-plugin, micro-pack, theme)",
+                "unknown kind {:?} (crate, wasm-plugin, micro-pack, theme, agent)",
                 controls::shown(&name)
             ))
         })?);
@@ -1346,6 +1346,11 @@ fn stale_keys_hint(error: IndexError, keys: &KeySet, location: &Location) -> Fai
 impl Market {
     /// Read and check listing `id`.
     pub(crate) fn listing(&self, id: &str) -> Outcome<Listing> {
+        self.read_listing(id)?.map_err(listing_failure)
+    }
+
+    /// A listing as read, its own fault kept apart from the marketplace's.
+    fn read_listing(&self, id: &str) -> Outcome<Result<Listing, ListingError>> {
         let entry = self.index.entry(id).ok_or_else(|| {
             usage(format!(
                 "no package {:?} in the marketplace at {}",
@@ -1357,16 +1362,34 @@ impl Market {
             .location
             .fetch(&entry.path, MAX_LISTING_BYTES)?
             .ok_or_else(|| data(format!("{} is missing from the marketplace", entry.path)))?;
-        self.index.read_listing(id, &bytes).map_err(listing_failure)
+        Ok(self.index.read_listing(id, &bytes))
     }
 
-    /// Every listing, by id.
+    /// Every listing, by id. A listing of a kind or a format this release
+    /// does not know (a newer one's) is left out with a warning, so one new
+    /// kind in the marketplace does not stop an older `rich` from searching
+    /// the rest.
     pub(crate) fn listings(&self) -> Outcome<Vec<Listing>> {
-        self.index
-            .listings()
-            .keys()
-            .map(|id| self.listing(id))
-            .collect()
+        let mut out = Vec::new();
+        let mut skipped = Vec::new();
+        for id in self.index.listings().keys() {
+            match self.read_listing(id)? {
+                Ok(listing) => out.push(listing),
+                Err(ListingError::UnknownKind(_) | ListingError::UnsupportedSchema(_)) => {
+                    skipped.push(controls::shown(id).to_string());
+                }
+                Err(error) => return Err(listing_failure(error)),
+            }
+        }
+        if !skipped.is_empty() {
+            eprintln!(
+                "rich: warning: left out {} listing(s) of a kind or format this rich does not \
+                 know (update rich to see them): {}",
+                skipped.len(),
+                skipped.join(", ")
+            );
+        }
+        Ok(out)
     }
 }
 
@@ -2312,6 +2335,13 @@ fn install(options: &Options) -> Outcome<Done> {
     let mut installed = Vec::new();
     for (id, request) in requests {
         let listing = market.listing(&id)?;
+        if listing.kind == Kind::Agent {
+            let version = resolve(&listing, &host, &request).map_err(resolve_failure)?;
+            let (line, value) = record_agent(&dir, &listing, version)?;
+            text.push_str(&line);
+            installed.push(value);
+            continue;
+        }
         if !listing.kind.is_installable() {
             return Err(crate_refusal(&listing));
         }
@@ -2345,6 +2375,50 @@ fn install(options: &Options) -> Outcome<Done> {
         }
     }
     Ok(Done::new(text, json!({"installed": installed})))
+}
+
+/// `install` of an agent: nothing is downloaded and nothing runs; the
+/// verified launch command is recorded in `agents.json` for Cornacai, and
+/// the install hint is printed for the user to follow.
+fn record_agent(
+    dir: &Path,
+    listing: &Listing,
+    version: &ListedVersion,
+) -> Outcome<(String, Value)> {
+    let mut agents = AgentList::load(dir).map_err(|e| agents_failure(dir, e))?;
+    let Some(agent) = agents.add(listing, version).cloned() else {
+        return Err(data(format!("{} lists no launch command", listing.id)));
+    };
+    agents.save(dir).map_err(|e| agents_failure(dir, e))?;
+    let command = agent.argv().join(" ");
+    let mut text = format!(
+        "Recorded agent {} {} ({}): Cornacai offers it as `{}`\n",
+        agent.id,
+        agent.version,
+        agent.tier.as_str(),
+        line(&command)
+    );
+    text.push_str(&format!(
+        "  Nothing was installed: install the program yourself with: {}\n",
+        line(&agent.install)
+    ));
+    if !agent.env.is_empty() {
+        text.push_str(&format!("  It reads: {}\n", line(&agent.env.join(", "))));
+    }
+    let value = json!({
+        "id": agent.id,
+        "version": agent.version,
+        "kind": "agent",
+        "tier": agent.tier.as_str(),
+        "command": agent.argv(),
+        "env": agent.env,
+        "install": agent.install,
+    });
+    Ok((text, value))
+}
+
+fn agents_failure(dir: &Path, error: std::io::Error) -> Failure {
+    data(format!("{}: {error}", AgentList::path(dir).display()))
 }
 
 /// `update [ID...]`: each installed package (or those named) to its newest
@@ -2448,7 +2522,14 @@ fn remove(options: &Options) -> Outcome<Done> {
     let mut state = State::load(&dir)?;
     let mut text = String::new();
     let mut removed = Vec::new();
+    let mut agents = AgentList::load(&dir).map_err(|e| agents_failure(&dir, e))?;
     for id in &options.positionals {
+        if agents.remove(id) {
+            agents.save(&dir).map_err(|e| agents_failure(&dir, e))?;
+            text.push_str(&format!("Forgot agent {}\n", line(id)));
+            removed.push(json!({"id": id, "kind": "agent"}));
+            continue;
+        }
         let entry = installer.remove(id).map_err(lockfile_failure)?;
         state.set_enabled(id, true);
         state.yanked.remove(id);
@@ -2504,6 +2585,26 @@ fn list(options: &Options) -> Outcome<Done> {
         value["status"] = json!(status);
         value["yank_reason"] = json!(yanked);
         packages.push(value);
+    }
+    // Agents are recorded, not installed: no file, never disabled.
+    let agents = AgentList::load(&dir).unwrap_or_default();
+    for agent in agents.agents() {
+        rows.push(vec![
+            escape(&agent.id),
+            escape(&agent.version),
+            "agent".into(),
+            tier_marker(agent.tier),
+            "yes".into(),
+            "-".into(),
+            escape(&format!("runs `{}`", agent.argv().join(" "))),
+        ]);
+        packages.push(json!({
+            "id": agent.id,
+            "version": agent.version,
+            "kind": "agent",
+            "tier": agent.tier.as_str(),
+            "command": agent.argv(),
+        }));
     }
     let text = if rows.is_empty() {
         format!("Nothing is installed in {}.\n", dir.display())

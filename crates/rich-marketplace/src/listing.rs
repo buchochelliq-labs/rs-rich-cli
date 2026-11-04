@@ -35,6 +35,10 @@ pub enum Kind {
     MicroPack,
     /// An upstream `[styles]` theme file.
     Theme,
+    /// A coding agent that speaks the Agent Client Protocol (ACP): its
+    /// launch command, for clients such as Cornacai. Listed only: what to
+    /// install is the listing's install hint, for the user to follow.
+    Agent,
 }
 
 impl Kind {
@@ -45,19 +49,27 @@ impl Kind {
             Kind::WasmPlugin => "wasm-plugin",
             Kind::MicroPack => "micro-pack",
             Kind::Theme => "theme",
+            Kind::Agent => "agent",
         }
     }
 
     /// The kind a listing's name spells.
     pub fn parse(name: &str) -> Option<Self> {
-        [Kind::Crate, Kind::WasmPlugin, Kind::MicroPack, Kind::Theme]
-            .into_iter()
-            .find(|kind| kind.as_str() == name)
+        [
+            Kind::Crate,
+            Kind::WasmPlugin,
+            Kind::MicroPack,
+            Kind::Theme,
+            Kind::Agent,
+        ]
+        .into_iter()
+        .find(|kind| kind.as_str() == name)
     }
 
-    /// Whether it installs from the marketplace (all but a crate).
+    /// Whether it installs from the marketplace (all but a crate and an
+    /// agent, which are listed only).
     pub const fn is_installable(self) -> bool {
-        !matches!(self, Kind::Crate)
+        !matches!(self, Kind::Crate | Kind::Agent)
     }
 
     /// The largest artifact of this kind, in bytes, if bounded:
@@ -65,7 +77,7 @@ impl Kind {
     /// `Limits::default().max_archive_bytes` and the CLI's theme file limit.
     pub const fn max_artifact_bytes(self) -> Option<u64> {
         match self {
-            Kind::Crate => None,
+            Kind::Crate | Kind::Agent => None,
             Kind::WasmPlugin => Some(16 << 20),
             Kind::MicroPack => Some(8 << 20),
             Kind::Theme => Some(1 << 20),
@@ -79,6 +91,7 @@ impl Kind {
             Kind::WasmPlugin => "abi",
             Kind::MicroPack => "micro_schema",
             Kind::Theme => "theme_format",
+            Kind::Agent => "acp",
         }
     }
 }
@@ -142,6 +155,8 @@ pub enum Requires {
     MicroSchema(u64),
     /// A theme's format.
     ThemeFormat(u64),
+    /// An agent's Agent Client Protocol version.
+    Acp(u64),
 }
 
 /// Where a version's file is and what it hashes to.
@@ -205,6 +220,30 @@ pub struct CrateInfo {
     pub features: Vec<String>,
 }
 
+/// For an agent: how a client starts it. Its environment is named, never
+/// given: the values (API keys and the like) are the user's.
+#[derive(Clone, Debug, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct AgentInfo {
+    /// The program, a bare name looked for on `PATH`.
+    pub command: String,
+    /// Its arguments, to speak ACP on standard input and output.
+    pub args: Vec<String>,
+    /// The environment variables it reads (names only).
+    pub env: Vec<String>,
+    /// How to install the program, for people: a command or a link.
+    pub install: String,
+}
+
+impl AgentInfo {
+    /// The launch command: the program, then its arguments.
+    pub fn argv(&self) -> Vec<String> {
+        std::iter::once(self.command.clone())
+            .chain(self.args.iter().cloned())
+            .collect()
+    }
+}
+
 /// A maintainer's pick (the optional `recommended`): the day it was
 /// given and why, in at most 140 characters. Like the tier, only a
 /// maintainer sets it, and it is signed with the rest of the listing.
@@ -246,6 +285,8 @@ pub struct Listing {
     pub keywords: Vec<String>,
     /// For a crate: its crates.io name and features.
     pub crate_info: Option<CrateInfo>,
+    /// For an agent: its launch command and install hint.
+    pub agent: Option<AgentInfo>,
     /// A maintainer's pick, when it is one.
     pub recommended: Option<Recommended>,
     /// Every version ever listed, newest first.
@@ -314,6 +355,12 @@ impl Listing {
             (_, Some(_)) => return Err(invalid("crate", "only for a crate")),
             (_, None) => None,
         };
+        let agent = match (kind, map.get("agent")) {
+            (Kind::Agent, Some(value)) => Some(agent_info(value)?),
+            (Kind::Agent, None) => return Err(invalid("agent", "required for an agent")),
+            (_, Some(_)) => return Err(invalid("agent", "only for an agent")),
+            (_, None) => None,
+        };
         let recommended = match map.get("recommended") {
             None => None,
             Some(value) => Some(recommended(value)?),
@@ -343,6 +390,7 @@ impl Listing {
             homepage,
             keywords,
             crate_info,
+            agent,
             recommended,
             versions,
         };
@@ -576,6 +624,79 @@ fn crate_info(value: &Value) -> Result<CrateInfo, ListingError> {
     })
 }
 
+/// A program name: a letter or digit, then letters, digits, `.`, `_`,
+/// `+` and `-`, at most 128 bytes; no path.
+fn is_program_name(text: &str) -> bool {
+    let bytes = text.as_bytes();
+    !bytes.is_empty()
+        && bytes.len() <= 128
+        && bytes[0].is_ascii_alphanumeric()
+        && bytes
+            .iter()
+            .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'.' | b'_' | b'+' | b'-'))
+}
+
+/// An environment variable's name: upper-case letters, digits and `_`,
+/// not starting with a digit, at most 128 bytes.
+fn is_env_name(text: &str) -> bool {
+    let bytes = text.as_bytes();
+    !bytes.is_empty()
+        && bytes.len() <= 128
+        && !bytes[0].is_ascii_digit()
+        && bytes
+            .iter()
+            .all(|b| b.is_ascii_uppercase() || b.is_ascii_digit() || *b == b'_')
+}
+
+fn agent_info(value: &Value) -> Result<AgentInfo, ListingError> {
+    let map = value
+        .as_object()
+        .ok_or_else(|| invalid("agent", "not an object"))?;
+    let command = string(map, "command", "agent.command")?;
+    if !is_program_name(command) {
+        return Err(invalid(
+            "agent.command",
+            "not a program name (no path, no spaces: its arguments go in args)",
+        ));
+    }
+    let args = optional_list(map, "args", 32, |text, at| {
+        line(text, at).map(str::to_string)
+    })
+    .map_err(|e| prefix(e, "agent."))?;
+    let env = optional_list(map, "env", 32, |text, at| {
+        if is_env_name(text) {
+            Ok(text.to_string())
+        } else {
+            Err(invalid(
+                at,
+                "not an environment variable name (A-Z, 0-9, _)",
+            ))
+        }
+    })
+    .map_err(|e| prefix(e, "agent."))?;
+    if has_duplicates(&env) {
+        return Err(invalid("agent.env", "listed twice"));
+    }
+    let install = line(string(map, "install", "agent.install")?, "agent.install")?;
+    Ok(AgentInfo {
+        command: command.to_string(),
+        args,
+        env,
+        install: install.to_string(),
+    })
+}
+
+/// `error` with its location under `prefix`.
+fn prefix(error: ListingError, prefix: &str) -> ListingError {
+    match error {
+        ListingError::Invalid { at, message } => ListingError::Invalid {
+            at: format!("{prefix}{at}"),
+            message,
+        },
+        other => other,
+    }
+}
+
 fn positive_integer(value: Option<&Value>, at: &str) -> Result<u64, ListingError> {
     value
         .and_then(Value::as_u64)
@@ -597,7 +718,7 @@ fn requires(kind: Kind, value: Option<&Value>, at: &str) -> Result<Requires, Lis
         .and_then(Value::as_object)
         .ok_or_else(|| invalid(&at, "missing or not an object"))?;
     let own = kind.requires_key();
-    for other in ["abi", "plugin_api", "micro_schema", "theme_format"] {
+    for other in ["abi", "plugin_api", "micro_schema", "theme_format", "acp"] {
         if other != own && map.contains_key(other) {
             return Err(invalid(&at, &format!("a {kind} does not name {other}")));
         }
@@ -618,6 +739,7 @@ fn requires(kind: Kind, value: Option<&Value>, at: &str) -> Result<Requires, Lis
         Kind::Crate => Requires::PluginApi(positive_integer(map.get(own), &key_at)?),
         Kind::MicroPack => Requires::MicroSchema(positive_integer(map.get(own), &key_at)?),
         Kind::Theme => Requires::ThemeFormat(positive_integer(map.get(own), &key_at)?),
+        Kind::Agent => Requires::Acp(positive_integer(map.get(own), &key_at)?),
     })
 }
 
@@ -633,6 +755,8 @@ fn artifact(kind: Kind, value: Option<&Value>, at: &str) -> Result<Artifact, Lis
         Kind::WasmPlugin => url.ends_with(".wasm"),
         Kind::MicroPack => url.ends_with(".zip") || url.ends_with(".richmicro"),
         Kind::Theme => url.ends_with(".ini") || url.ends_with(".theme"),
+        // The release the install hint installs: any HTTPS URL.
+        Kind::Agent => true,
     };
     if !shape {
         return Err(invalid(
@@ -715,6 +839,7 @@ fn capabilities(
                 Kind::WasmPlugin => is_keyword(ckind),
                 Kind::MicroPack => ckind == "asset",
                 Kind::Theme => ckind == "theme",
+                Kind::Agent => ckind == "agent",
             };
             if !kind_ok {
                 return Err(invalid(
@@ -756,7 +881,7 @@ fn permissions(kind: Kind, value: Option<&Value>, at: &str) -> Result<Vec<String
             return Err(invalid(&item_at, "listed twice"));
         }
         let allowed = match kind {
-            Kind::Crate => name != "ansi-output",
+            Kind::Crate | Kind::Agent => name != "ansi-output",
             Kind::WasmPlugin => name == "ansi-output",
             Kind::MicroPack | Kind::Theme => false,
         };
@@ -765,8 +890,8 @@ fn permissions(kind: Kind, value: Option<&Value>, at: &str) -> Result<Vec<String
         }
         out.push(name.to_string());
     }
-    if kind == Kind::Crate && !out.iter().any(|p| p == "native-code") {
-        return Err(invalid(&at, "a crate always has 'native-code'"));
+    if matches!(kind, Kind::Crate | Kind::Agent) && !out.iter().any(|p| p == "native-code") {
+        return Err(invalid(&at, &format!("a {kind} always has 'native-code'")));
     }
     Ok(out)
 }
@@ -915,6 +1040,74 @@ mod tests {
             .unwrap();
         let listing = Listing::parse(&std::fs::read(without).unwrap()).unwrap();
         assert_eq!(listing.recommended, None);
+    }
+
+    #[test]
+    fn an_agent_listing_reads_its_launch_command() {
+        let path = examples("valid")
+            .into_iter()
+            .find(|p| p.ends_with("echo-agent.json"))
+            .unwrap();
+        let text = std::fs::read_to_string(path).unwrap();
+        let listing = Listing::parse(text.as_bytes()).unwrap();
+        assert_eq!(listing.kind, Kind::Agent);
+        assert!(!listing.kind.is_installable());
+        let agent = listing.agent.as_ref().unwrap();
+        assert_eq!(agent.argv(), ["echo-agent", "--acp"]);
+        assert_eq!(agent.env, ["ECHO_AGENT_API_KEY"]);
+        assert_eq!(agent.install, "npm install -g @example/echo-agent");
+        assert_eq!(listing.versions[0].requires, Requires::Acp(1));
+        let host = crate::Host::current();
+        assert!(host.check(listing.kind, &listing.versions[0]).is_ok());
+        let newer = text.replace("\"acp\": 1", "\"acp\": 2");
+        let newer = Listing::parse(newer.as_bytes()).unwrap();
+        assert_eq!(
+            host.check(newer.kind, &newer.versions[0]),
+            Err(crate::Incompatibility::Acp {
+                required: 2,
+                host: 1
+            })
+        );
+        // The rules the schema states, refused here too.
+        for (from, to, at) in [
+            (
+                "\"command\": \"echo-agent\"",
+                "\"command\": \"bin/echo-agent\"",
+                "agent.command",
+            ),
+            (
+                "\"command\": \"echo-agent\"",
+                "\"command\": \"echo-agent --acp\"",
+                "agent.command",
+            ),
+            ("\"ECHO_AGENT_API_KEY\"", "\"lower_case\"", "agent.env[0]"),
+            (
+                "\"install\": \"npm install -g @example/echo-agent\"",
+                "\"install\": \"\"",
+                "agent.install",
+            ),
+            ("\"acp\": 1", "\"theme_format\": 1", "versions[0].requires"),
+            ("\"native-code\",", "", "versions[0].permissions"),
+            ("\"kind\": \"agent\",", "\"kind\": \"crate\",", "crate"),
+        ] {
+            let changed = text.replacen(from, to, 1);
+            assert_ne!(changed, text, "{from}");
+            match Listing::parse(changed.as_bytes()) {
+                Err(ListingError::Invalid { at: got, .. }) => assert_eq!(got, at, "{to}"),
+                other => panic!("{to}: {other:?}"),
+            }
+        }
+        let doubled = text.replacen(
+            "\"ECHO_AGENT_API_KEY\"",
+            "\"ECHO_AGENT_API_KEY\", \"ECHO_AGENT_API_KEY\"",
+            1,
+        );
+        assert!(Listing::parse(doubled.as_bytes()).is_err());
+        let without = text.replacen("\"agent\": {", "\"agent_gone\": {", 1);
+        assert!(matches!(
+            Listing::parse(without.as_bytes()),
+            Err(ListingError::Invalid { at, .. }) if at == "agent"
+        ));
     }
 
     #[test]

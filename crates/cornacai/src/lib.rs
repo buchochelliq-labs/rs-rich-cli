@@ -18,13 +18,17 @@
 //!   tabs, each a conversation that streams in as Markdown, follows its end
 //!   and folds tool calls into cards; the prompt editor with `@` file
 //!   mentions; permission prompts; each write reviewed as a diff, hunk by
-//!   hunk; terminal commands asked about; a shell pane.
+//!   hunk; terminal commands asked about; a shell pane; sign-in when
+//!   the agent asks for it; sessions reopened with `session/load`.
 //! - [`session`]: a session's conversation as state, and how a
 //!   `session/update` changes it.
 //! - [`bridge`]: rs-rich-acp's `Client`, handing everything to the app's
 //!   loop.
 //! - [`mention`]: `@` mentions sent as `resource_link`s.
-//! - [`config`]: the configuration file and the agents Cornacai knows.
+//! - [`config`]: the configuration file and the agents Cornacai knows,
+//!   built in and from the marketplace's `agent` listings.
+//! - [`store`]: the sessions opened, kept to be reopened.
+//! - [`terminals`]: the agent's commands, on pipes or on a PTY.
 //! - [`clean`]: agent text is untrusted: control sequences neutralised,
 //!   hidden characters revealed.
 //!
@@ -60,3 +64,5 @@ pub mod clean;
 pub mod config;
 pub mod mention;
 pub mod session;
+pub mod store;
+pub mod terminals;

@@ -2560,7 +2560,7 @@ rich plugin search [QUERY] [--kind KIND] [--tier TIER] [--recommended] [--sort i
 
 | Option | Description |
 | --- | --- |
-| `--kind <KIND>` | Only this kind: crate, wasm-plugin, micro-pack or theme. |
+| `--kind <KIND>` | Only this kind: crate, wasm-plugin, micro-pack, theme or agent. |
 | `--tier <TIER>` | Only this tier: official (rs-rich's own), reviewed (shown as approved) or community. |
 | `--recommended` | Only the maintainers' picks, marked `★ recommended`. |
 | `--sort <ORDER>` | id (the default), or downloads: most downloaded first, from the marketplace's unsigned stats.json, with a Downloads column. |

@@ -15,6 +15,11 @@ pub const MICRO_SCHEMA_VERSION: u64 = 1;
 /// file, as `--theme-file` reads it.
 pub const THEME_FORMAT: u64 = 1;
 
+/// The Agent Client Protocol version the workspace's ACP client
+/// (rs-rich-acp, Cornacai's) speaks: an agent listing that needs another
+/// is not offered.
+pub const ACP_VERSION: u64 = 1;
+
 /// What the running host loads. [`Host::current`] is this build's; a test
 /// changes a field to play a host of another version.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -30,6 +35,8 @@ pub struct Host {
     pub micro_schema: u64,
     /// [`THEME_FORMAT`].
     pub theme_format: u64,
+    /// [`ACP_VERSION`].
+    pub acp: u64,
 }
 
 impl Host {
@@ -41,6 +48,7 @@ impl Host {
             abi_minor: abi::ABI_MINOR,
             micro_schema: MICRO_SCHEMA_VERSION,
             theme_format: THEME_FORMAT,
+            acp: ACP_VERSION,
         }
     }
 
@@ -97,6 +105,12 @@ impl Host {
                 return Err(Incompatibility::ThemeFormat {
                     required,
                     host: self.theme_format,
+                });
+            }
+            Requires::Acp(required) if required != self.acp => {
+                return Err(Incompatibility::Acp {
+                    required,
+                    host: self.acp,
                 });
             }
             _ => {}

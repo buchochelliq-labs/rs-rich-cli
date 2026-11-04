@@ -9,6 +9,43 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Cornacai, phase 4: resume, sign-in, PTY terminals, agents from the marketplace (0.0.25)
+
+- **Sessions reopen.** Cornacai keeps the sessions it opens in
+  `cornacai/sessions.jsonl` in the state directory (`$XDG_STATE_HOME`,
+  else `~/.local/state`): id, agent, workspace, title, last used; the 200
+  most recent. With an agent that offers `loadSession`, Ctrl+O lists this
+  agent's sessions in this workspace and reopens one in a tab with
+  `session/load`, the replayed history filling it; `--resume ID` starts
+  with one, `--sessions` lists them. An agent without it says so.
+- **Sign-in.** When `session/new`, `session/load` or a prompt fails with
+  "authentication required", Cornacai offers the agent's advertised
+  methods, calls `authenticate` with the one picked and sends the request
+  again. Terminal sign-in methods are not offered.
+- **Agent terminals on a PTY,** behind `--pty` or `[terminal] pty = true`:
+  each command on a terminal of its own (rs-rich-embed's `LocalPty`), its
+  output read as the terminal shows it, as plain text; pipes when a PTY
+  cannot be opened. Pipes stay the default.
+- **Agents from the marketplace.** `--agents` and the first-run choice
+  offer the agents `rich plugin install` recorded, after the built-in ones.
+- **rs-rich-acp:** `Connection::load_session` is refused unsent, with
+  "method not found", once `initialize` said the agent does not offer
+  `loadSession`.
+- **rs-rich-marketplace: the `agent` kind.** `Kind::Agent`, listed only,
+  with `Listing::agent` (`AgentInfo`: a bare program name, its arguments,
+  the environment variables it reads by name, an install hint) and
+  `requires.acp` (`Requires::Acp`, `ACP_VERSION`, `Incompatibility::Acp`),
+  checked as the schema states; `AgentList`, the `agents.json` an install
+  records the verified command in. The listing schema, examples and the
+  marketplace site know the kind.
+- **rs-rich-cli:** `rich plugin install` of an agent records it, downloads
+  nothing and runs nothing, and prints its install hint; `list` shows it
+  and `remove` forgets it; `search --kind agent` finds them. A search now
+  leaves out, with a warning, a listing of a kind or format this release
+  does not know, rather than failing on it.
+- **Breaking (cornacai):** `Options` gains `pty`, `store` and `resume`, and
+  `Config` gains `pty`.
+
 ### Named pipes on Windows: the control socket and `rich console` (0.0.25)
 
 - **rs-rich-ext: `local_socket`**, behind a new `local-socket` feature: a

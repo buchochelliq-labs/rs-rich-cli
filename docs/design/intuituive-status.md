@@ -23,6 +23,12 @@ rules are in [the demo gaps](intuituive-demo-gaps.md).
 - **0.0.25 is planned** ([the plan](../plans/0.0.25.md)): the last release
   before 0.1.0, released with release-kit v1.2.0. Wave 1 is its
   workstreams 1 to 5.
+- **Wave 1, WS2 (Cornacai phase 4) is done** on `025-cornacai` (backup
+  `claude/next-priority-items-3c5p8e-wip-cornacai4`): resume and the
+  session store, sign-in, PTY agent terminals, the marketplace's `agent`
+  kind. Left: the tapes' re-recording (the hints line gained Ctrl+O), and
+  whether the marketplace may list an `agent` package before 0.0.24's
+  `rich` is out of use ([the marketplace note](marketplace.md#changing-the-format)).
 
 ## Where things stood (2026-11-03, evening)
 

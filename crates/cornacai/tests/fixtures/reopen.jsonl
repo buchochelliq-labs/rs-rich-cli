@@ -1,0 +1,11 @@
+{"note": "Ctrl+O: a new session opens first; then an earlier one, picked from the session store, is reopened in a tab of its own with session/load."}
+{"client": {"id": 0, "method": "initialize"}}
+{"agent": {"jsonrpc": "2.0", "id": 0, "result": {"protocolVersion": 1, "agentCapabilities": {"loadSession": true}}}}
+{"client": {"id": 1, "method": "session/new"}}
+{"agent": {"jsonrpc": "2.0", "id": 1, "result": {"sessionId": "sess_new"}}}
+{"agent": {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "sess_new", "update": {"sessionUpdate": "session_info_update", "title": "Fresh work"}}}}
+{"client": {"id": 2, "method": "session/load", "params": {"sessionId": "sess_old", "cwd": "$WORKSPACE"}}}
+{"agent": {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "sess_old", "update": {"sessionUpdate": "user_message_chunk", "content": {"type": "text", "text": "Earlier question"}}}}}
+{"agent": {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "sess_old", "update": {"sessionUpdate": "agent_message_chunk", "content": {"type": "text", "text": "Earlier answer."}}}}}
+{"agent": {"jsonrpc": "2.0", "id": 2, "result": {}}}
+{"quiet": 200}

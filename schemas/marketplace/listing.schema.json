@@ -16,8 +16,8 @@
       "$ref": "#/$defs/plugin_name"
     },
     "kind": {
-      "description": "crate: a Cargo crate, listed only. wasm-plugin: a sandboxed WASM module. micro-pack: a .richmicro pack. theme: an upstream [styles] theme file.",
-      "enum": ["crate", "wasm-plugin", "micro-pack", "theme"]
+      "description": "crate: a Cargo crate, listed only. wasm-plugin: a sandboxed WASM module. micro-pack: a .richmicro pack. theme: an upstream [styles] theme file. agent: a coding agent that speaks the Agent Client Protocol, listed only: its launch command and how to install it.",
+      "enum": ["crate", "wasm-plugin", "micro-pack", "theme", "agent"]
     },
     "name": {"description": "A human-readable name.", "$ref": "#/$defs/line"},
     "description": {"description": "One line on what the package adds.", "$ref": "#/$defs/line"},
@@ -64,6 +64,18 @@
         }
       }
     },
+    "agent": {
+      "description": "For kind agent only: how an ACP client starts the agent. Nothing is installed from the marketplace: install is a hint for the user.",
+      "type": "object",
+      "required": ["command", "install"],
+      "additionalProperties": false,
+      "properties": {
+        "command": {"description": "The program, a bare name looked for on PATH: no path, no spaces.", "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._+-]{0,127}$"},
+        "args": {"description": "Its arguments, to speak ACP on standard input and output.", "type": "array", "maxItems": 32, "items": {"$ref": "#/$defs/line"}},
+        "env": {"description": "The environment variables it reads, by name only: their values are the user's.", "type": "array", "maxItems": 32, "uniqueItems": true, "items": {"type": "string", "pattern": "^[A-Z_][A-Z0-9_]{0,127}$"}},
+        "install": {"description": "How to install the program: a command or a link, for people.", "$ref": "#/$defs/line"}
+      }
+    },
     "versions": {
       "description": "Every published version, newest first.",
       "type": "array",
@@ -97,6 +109,14 @@
     {
       "if": {"properties": {"kind": {"const": "theme"}}, "required": ["kind"]},
       "then": {"properties": {"versions": {"items": {"$ref": "#/$defs/theme_version"}}}}
+    },
+    {
+      "if": {"properties": {"kind": {"const": "agent"}}, "required": ["kind"]},
+      "then": {
+        "required": ["agent"],
+        "properties": {"versions": {"items": {"$ref": "#/$defs/agent_version"}}}
+      },
+      "else": {"not": {"required": ["agent"]}}
     }
   ],
   "$defs": {
@@ -126,7 +146,8 @@
             "abi": {"description": "The runtime plugin ABI, MAJOR.MINOR (rich_plugin_api::abi::ABI_MAJOR and ABI_MINOR).", "type": "string", "pattern": "^(0|[1-9][0-9]{0,8})\\.(0|[1-9][0-9]{0,8})$"},
             "plugin_api": {"description": "rich_plugin_api::PLUGIN_API_VERSION.", "type": "integer", "minimum": 1},
             "micro_schema": {"description": "The pack.json schema_version (rich_micro::package::SCHEMA_VERSION).", "type": "integer", "minimum": 1},
-            "theme_format": {"description": "The theme file format; 1 is upstream rich's [styles] INI file.", "type": "integer", "minimum": 1}
+            "theme_format": {"description": "The theme file format; 1 is upstream rich's [styles] INI file.", "type": "integer", "minimum": 1},
+            "acp": {"description": "The Agent Client Protocol version the agent speaks (rich_marketplace::ACP_VERSION).", "type": "integer", "minimum": 1}
           }
         },
         "artifact": {
@@ -215,6 +236,20 @@
           }
         },
         "permissions": {"maxItems": 0}
+      }
+    },
+    "agent_version": {
+      "properties": {
+        "requires": {"required": ["acp"], "propertyNames": {"enum": ["acp"]}},
+        "capabilities": {
+          "items": {
+            "properties": {
+              "kind": {"const": "agent"},
+              "name": {"$ref": "#/$defs/plugin_name"}
+            }
+          }
+        },
+        "permissions": {"contains": {"const": "native-code"}, "items": {"not": {"const": "ansi-output"}}}
       }
     },
     "theme_version": {
