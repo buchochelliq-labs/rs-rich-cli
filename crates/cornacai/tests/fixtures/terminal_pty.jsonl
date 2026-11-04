@@ -1,0 +1,17 @@
+{"note": "A command on a PTY (the pty setting): it sees a terminal, its colour is read as plain text, and the agent reads that text."}
+{"client": {"id": 0, "method": "initialize", "params": {"clientCapabilities": {"terminal": true}}}}
+{"agent": {"jsonrpc": "2.0", "id": 0, "result": {"protocolVersion": 1}}}
+{"client": {"id": 1, "method": "session/new"}}
+{"agent": {"jsonrpc": "2.0", "id": 1, "result": {"sessionId": "sess_p"}}}
+{"client": {"id": 2, "method": "session/prompt"}}
+{"agent": {"jsonrpc": "2.0", "id": 40, "method": "terminal/create", "params": {"sessionId": "sess_p", "command": "sh", "args": ["-c", "[ -t 1 ] && printf '\\033[32mon a terminal\\033[0m\\n' || echo 'on pipes'"]}}}
+{"client": {"id": 40, "result": {"terminalId": "pty_1"}}}
+{"agent": {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "sess_p", "update": {"sessionUpdate": "tool_call", "toolCallId": "call_p", "title": "Check the terminal", "kind": "execute", "status": "in_progress", "content": [{"type": "terminal", "terminalId": "pty_1"}]}}}}
+{"agent": {"jsonrpc": "2.0", "id": 41, "method": "terminal/wait_for_exit", "params": {"sessionId": "sess_p", "terminalId": "pty_1"}}}
+{"client": {"id": 41, "result": {"exitCode": 0}}}
+{"agent": {"jsonrpc": "2.0", "id": 42, "method": "terminal/output", "params": {"sessionId": "sess_p", "terminalId": "pty_1"}}}
+{"client": {"id": 42, "result": {"output": "on a terminal\n", "truncated": false}}}
+{"agent": {"jsonrpc": "2.0", "id": 43, "method": "terminal/release", "params": {"sessionId": "sess_p", "terminalId": "pty_1"}}}
+{"client": {"id": 43, "result": {}}}
+{"agent": {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "sess_p", "update": {"sessionUpdate": "tool_call_update", "toolCallId": "call_p", "status": "completed"}}}}
+{"agent": {"jsonrpc": "2.0", "id": 2, "result": {"stopReason": "end_turn"}}}

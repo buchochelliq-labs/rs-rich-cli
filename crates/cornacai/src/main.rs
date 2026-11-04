@@ -7,6 +7,7 @@ use std::process::ExitCode;
 
 use cornacai::app::{Launch, Options, app};
 use cornacai::config::{Config, KNOWN_AGENTS, config_path, installed_agents, on_path};
+use cornacai::store::{SessionStore, ago, now};
 
 const USAGE: &str = "\
 Usage: cornacai [OPTIONS] [-- AGENT COMMAND…]
@@ -21,16 +22,22 @@ Options:
   --no-read         do not let the agent read files through Cornacai
   --no-write        do not let the agent write files through Cornacai
   --no-terminal     do not let the agent run commands through Cornacai
+  --pty             run the agent's commands on a PTY (else as configured;
+                    pipes when a PTY cannot be opened)
+  --resume ID       reopen session ID (session/load) instead of a new one
+  --sessions        list the sessions kept to reopen, newest first
   --agents          list the agents Cornacai knows, and which are installed
   -h, --help        this help
   -V, --version     the version
 
 Keys: Enter sends, Alt+Enter adds a line, @ names a file, Esc cancels the
-turn, Ctrl+N opens a session, Alt+N and Alt+P switch sessions (Alt+1…9 picks one), Ctrl+T the
-shell pane, F2 the agent's log, Ctrl+Q quits.
+turn, Ctrl+N opens a session, Ctrl+O reopens an earlier one, Alt+N and
+Alt+P switch sessions (Alt+1…9 picks one), Ctrl+T the shell pane, F2 the
+agent's log, Ctrl+Q quits.
 
 The configuration is cornacai/config.toml in $XDG_CONFIG_HOME (else
-~/.config).";
+~/.config); the sessions kept are cornacai/sessions.jsonl in
+$XDG_STATE_HOME (else ~/.local/state).";
 
 #[derive(Default)]
 struct Args {
@@ -40,12 +47,15 @@ struct Args {
     no_read: bool,
     no_write: bool,
     no_terminal: bool,
+    pty: bool,
+    resume: Option<String>,
 }
 
 enum Run {
     Help,
     Version,
     Agents,
+    Sessions,
     Start(Args),
 }
 
@@ -63,6 +73,9 @@ fn parse(args: &[String]) -> Result<Run, String> {
             "-h" | "--help" => return Ok(Run::Help),
             "-V" | "--version" => return Ok(Run::Version),
             "--agents" => return Ok(Run::Agents),
+            "--sessions" => return Ok(Run::Sessions),
+            "--pty" => parsed.pty = true,
+            "--resume" => parsed.resume = Some(value("--resume")?),
             "--agent" => parsed.agent = Some(words(&value("--agent")?)),
             "--cwd" => parsed.cwd = Some(PathBuf::from(value("--cwd")?)),
             "--shell" => parsed.shell = Some(words(&value("--shell")?)),
@@ -88,6 +101,7 @@ fn main() -> ExitCode {
         Ok(Run::Help) => println!("{USAGE}"),
         Ok(Run::Version) => println!("cornacai {}", env!("CARGO_PKG_VERSION")),
         Ok(Run::Agents) => agents(),
+        Ok(Run::Sessions) => sessions(),
         Ok(Run::Start(args)) => {
             if let Err(error) = start(args) {
                 eprintln!("cornacai: {error}");
@@ -120,6 +134,36 @@ fn agents() {
     println!("\nMore agents are listed in the marketplace: rich plugin search --kind agent");
 }
 
+fn sessions() {
+    let Some(path) = SessionStore::default_path() else {
+        println!("No state directory: set HOME or XDG_STATE_HOME.");
+        return;
+    };
+    let kept = SessionStore::new(path).list();
+    if kept.is_empty() {
+        println!("No sessions are kept yet.");
+        return;
+    }
+    let now = now();
+    for session in kept {
+        let title = if session.title.is_empty() {
+            "untitled"
+        } else {
+            &session.title
+        };
+        println!(
+            "{}  {title}  ({})\n    {} in {}",
+            session.id,
+            ago(session.last_used, now),
+            session.agent,
+            session.cwd.display()
+        );
+    }
+    println!(
+        "\nReopen one with: cornacai --resume ID (with the same agent, in the same directory)"
+    );
+}
+
 fn start(args: Args) -> Result<(), String> {
     let path = config_path();
     let config = match &path {
@@ -145,7 +189,15 @@ fn start(args: Args) -> Result<(), String> {
                 .unwrap_or_else(|| "sh".into()),
         ]
     });
-    let mut options = Options::new(launch, cwd).shell_command(shell);
+    let mut options = Options::new(launch, cwd)
+        .shell_command(shell)
+        .pty(args.pty || config.pty);
+    if let Some(path) = SessionStore::default_path() {
+        options = options.session_store(SessionStore::new(path));
+    }
+    if let Some(id) = args.resume {
+        options = options.resume(id);
+    }
     options.read = config.read && !args.no_read;
     options.write = config.write && !args.no_write;
     options.terminal = config.terminal && !args.no_terminal;

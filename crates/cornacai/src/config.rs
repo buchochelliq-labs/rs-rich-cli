@@ -14,6 +14,11 @@
 //! read = true
 //! write = true
 //! terminal = true
+//!
+//! # The agent's commands on a PTY (colour, programs that want a
+//! # terminal) instead of pipes; pipes when a PTY cannot be opened.
+//! [terminal]
+//! pty = true
 //! ```
 
 use std::path::{Path, PathBuf};
@@ -31,6 +36,8 @@ pub struct Config {
     pub write: bool,
     /// Offer `terminal/*` (each command asked about).
     pub terminal: bool,
+    /// Run the agent's commands on a PTY.
+    pub pty: bool,
 }
 
 impl Default for Config {
@@ -43,6 +50,7 @@ impl Default for Config {
             read: true,
             write: true,
             terminal: true,
+            pty: false,
         }
     }
 }
@@ -86,6 +94,11 @@ impl Config {
                         .ok_or_else(|| format!("`capabilities.{key}`: true or false"))?;
                 }
             }
+        }
+        if let Some(terminal) = table.get("terminal").and_then(toml::Value::as_table)
+            && let Some(value) = terminal.get("pty")
+        {
+            config.pty = value.as_bool().ok_or("`terminal.pty`: true or false")?;
         }
         Ok(config)
     }
@@ -214,7 +227,10 @@ mod tests {
         );
         assert_eq!(config.shell.unwrap(), ["bash", "-l"].map(String::from));
         assert!(config.read && config.write && !config.terminal);
+        assert!(!config.pty);
+        assert!(Config::parse("[terminal]\npty = true\n").unwrap().pty);
         assert!(Config::parse("[capabilities]\nread = 1\n").is_err());
+        assert!(Config::parse("[terminal]\npty = \"yes\"\n").is_err());
     }
 
     #[test]

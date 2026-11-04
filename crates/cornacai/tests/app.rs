@@ -6,6 +6,7 @@ use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use cornacai::app::{Handle, Launch, Options, app, wait_for};
+use cornacai::store::{SessionStore, StoredSession};
 use rich_acp::replay::Transcript;
 use rich_intuituive::Driver;
 
@@ -29,13 +30,34 @@ fn workspace(name: &str) -> PathBuf {
 }
 
 fn start(name: &str, dir: &Path) -> (Driver, Handle) {
-    start_with(Options::new(
+    start_with(replay(name, dir))
+}
+
+fn replay(name: &str, dir: &Path) -> Options {
+    Options::new(
         Launch::Replay {
             transcript: fixture(name),
             timeout: Some(WAIT),
         },
         dir,
-    ))
+    )
+}
+
+/// A session store beside the workspace `dir`, holding `sess_old`, an
+/// earlier session of the replayed agent there.
+fn store_with_old_session(dir: &Path) -> SessionStore {
+    let store = SessionStore::new(dir.with_extension("state").join("sessions.jsonl"));
+    let _ = std::fs::remove_dir_all(dir.with_extension("state"));
+    store
+        .remember(StoredSession {
+            id: "sess_old".into(),
+            agent: "replay".into(),
+            cwd: dir.to_path_buf(),
+            title: "Greeting".into(),
+            last_used: 1,
+        })
+        .unwrap();
+    store
 }
 
 fn start_with(options: Options) -> (Driver, Handle) {
@@ -431,4 +453,121 @@ fn the_docs_tape_replays() {
             .contains("Hello, {name}!")
     );
     finish(&mut driver, &handle);
+}
+
+#[test]
+fn a_session_is_reopened_with_its_history_replayed_then_goes_on() {
+    let dir = workspace("resume");
+    let store = store_with_old_session(&dir);
+    let options = replay("resume.jsonl", &dir)
+        .session_store(store.clone())
+        .resume("sess_old");
+    let (mut driver, handle) = start_with(options);
+    wait_for(&mut driver, "Reopened", WAIT);
+    let text = screen(&driver);
+    // The tab keeps the stored title; the replayed history fills it.
+    assert!(text.contains("1 Greeting"), "{text}");
+    assert!(text.contains("❯ What does main do?"), "{text}");
+    assert!(text.contains("It prints a greeting."), "{text}");
+    assert!(text.contains("read Read main.rs"), "{text}");
+    assert!(text.contains("mode code"), "{text}");
+    send(&mut driver, "And now?");
+    wait_for(&mut driver, "Now it greets by name.", WAIT);
+    finish(&mut driver, &handle);
+    // Used again: the store says so, its title kept.
+    let kept = store.get("replay", "sess_old").unwrap();
+    assert!(kept.last_used > 1);
+    assert_eq!(kept.title, "Greeting");
+}
+
+#[test]
+fn ctrl_o_lists_the_stored_sessions_and_reopens_one_in_a_tab() {
+    let dir = workspace("reopen");
+    let store = store_with_old_session(&dir);
+    let (mut driver, handle) =
+        start_with(replay("reopen.jsonl", &dir).session_store(store.clone()));
+    wait_for(&mut driver, "1 Fresh work", WAIT);
+    // The new session is kept too, for next time, with the agent's title.
+    assert_eq!(store.get("replay", "sess_new").unwrap().title, "Fresh work");
+    driver.press("ctrl+o");
+    wait_for(&mut driver, "Reopen a session", WAIT);
+    let text = screen(&driver);
+    assert!(text.contains("Greeting"), "{text}");
+    assert!(text.contains("sess_old"), "{text}");
+    // The newest first: sess_new, then sess_old.
+    driver.press("down enter");
+    wait_for(&mut driver, "Earlier answer.", WAIT);
+    let text = screen(&driver);
+    assert!(text.contains("2 Greeting"), "{text}");
+    assert!(text.contains("❯ Earlier question"), "{text}");
+    finish(&mut driver, &handle);
+}
+
+#[test]
+fn resuming_with_an_agent_that_cannot_load_opens_a_new_session() {
+    let dir = workspace("no-load");
+    let store = store_with_old_session(&dir);
+    let options = replay("no_load.jsonl", &dir)
+        .session_store(store)
+        .resume("sess_old");
+    let (mut driver, handle) = start_with(options);
+    wait_for(&mut driver, "cannot reopen a session", WAIT);
+    wait_for(&mut driver, "Prompt", WAIT);
+    driver.press("ctrl+o");
+    wait_for(&mut driver, "cannot reopen sessions", WAIT);
+    finish(&mut driver, &handle);
+}
+
+#[test]
+fn signing_in_with_the_agents_method_then_the_failed_step_runs_again() {
+    let dir = workspace("signin");
+    let (mut driver, handle) = start("signin.jsonl", &dir);
+    wait_for(&mut driver, "The agent asks you to sign in", WAIT);
+    let text = screen(&driver);
+    assert!(text.contains("1 Log in with the browser"), "{text}");
+    assert!(text.contains("Opens a page to sign in"), "{text}");
+    assert!(text.contains("2 Use an API key"), "{text}");
+    // A terminal sign-in is not offered: Cornacai does not advertise it.
+    assert!(!text.contains("Log in from a terminal"), "{text}");
+    driver.press("2");
+    wait_for(&mut driver, "Signed in with Use an API key.", WAIT);
+    wait_for(&mut driver, "Prompt", WAIT);
+    // The prompt fails for want of a sign-in: signing in sends it again.
+    send(&mut driver, "Hello");
+    wait_for(&mut driver, "The agent asks you to sign in", WAIT);
+    driver.press("1");
+    wait_for(&mut driver, "Hello, signed-in user.", WAIT);
+    let text = screen(&driver);
+    assert_eq!(text.matches("❯ Hello").count(), 1, "{text}");
+    assert!(!text.contains("failed"), "{text}");
+    finish(&mut driver, &handle);
+}
+
+#[test]
+fn closing_the_sign_in_prompt_signs_in_with_nothing() {
+    let dir = workspace("signin-refused");
+    let (mut driver, handle) = start("signin_refused.jsonl", &dir);
+    wait_for(&mut driver, "The agent asks you to sign in", WAIT);
+    driver.press("escape");
+    wait_for(&mut driver, "Not signed in", WAIT);
+    assert!(screen(&driver).contains("waiting for the agent"));
+    finish(&mut driver, &handle);
+}
+
+#[cfg(unix)]
+#[test]
+fn with_the_pty_setting_a_command_runs_on_a_terminal() {
+    let dir = workspace("pty");
+    let (mut driver, handle) = start_with(replay("terminal_pty.jsonl", &dir).pty(true));
+    wait_for(&mut driver, "Prompt", WAIT);
+    send(&mut driver, "Check");
+    wait_for(&mut driver, "The agent wants to run a command", WAIT);
+    driver.press("y");
+    finish(&mut driver, &handle);
+    driver.settle();
+    assert!(driver.click_text("execute Check the terminal"));
+    driver.settle();
+    let text = screen(&driver);
+    assert!(text.contains("on a terminal"), "{text}");
+    assert!(!text.contains("on pipes"), "{text}");
 }
