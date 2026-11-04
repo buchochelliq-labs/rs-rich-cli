@@ -52,11 +52,10 @@ use windows_sys::Win32::Security::{
     SECURITY_ATTRIBUTES, TOKEN_QUERY, TOKEN_USER, TokenUser,
 };
 use windows_sys::Win32::Storage::FileSystem::{
-    CREATE_NEW, CreateDirectoryW, CreateFileW, FILE_ATTRIBUTE_NORMAL,
-    FILE_ATTRIBUTE_REPARSE_POINT, FILE_FLAG_BACKUP_SEMANTICS, FILE_FLAG_FIRST_PIPE_INSTANCE,
-    FILE_FLAG_OPEN_REPARSE_POINT, FILE_FLAG_OVERLAPPED, FILE_READ_ATTRIBUTES, OPEN_EXISTING,
-    PIPE_ACCESS_DUPLEX, READ_CONTROL, ReadFile, SECURITY_IDENTIFICATION, SECURITY_SQOS_PRESENT,
-    WriteFile,
+    CREATE_NEW, CreateDirectoryW, CreateFileW, FILE_ATTRIBUTE_NORMAL, FILE_ATTRIBUTE_REPARSE_POINT,
+    FILE_FLAG_BACKUP_SEMANTICS, FILE_FLAG_FIRST_PIPE_INSTANCE, FILE_FLAG_OPEN_REPARSE_POINT,
+    FILE_FLAG_OVERLAPPED, FILE_READ_ATTRIBUTES, OPEN_EXISTING, PIPE_ACCESS_DUPLEX, READ_CONTROL,
+    ReadFile, SECURITY_IDENTIFICATION, SECURITY_SQOS_PRESENT, WriteFile,
 };
 use windows_sys::Win32::System::IO::{CancelIoEx, GetOverlappedResult, OVERLAPPED};
 use windows_sys::Win32::System::Pipes::{
@@ -130,15 +129,8 @@ fn token_user(token: HANDLE) -> io::Result<Vec<u32>> {
     }
     let mut buffer = vec![0u64; (len as usize).div_ceil(8)];
     // SAFETY: `buffer` holds `len` bytes, aligned for TOKEN_USER.
-    let done = unsafe {
-        GetTokenInformation(
-            token,
-            TokenUser,
-            buffer.as_mut_ptr().cast(),
-            len,
-            &mut len,
-        )
-    };
+    let done =
+        unsafe { GetTokenInformation(token, TokenUser, buffer.as_mut_ptr().cast(), len, &mut len) };
     if done == 0 {
         return Err(io::Error::last_os_error());
     }
@@ -386,7 +378,11 @@ fn read_address(path: &Path) -> io::Result<String> {
     if !meta.is_file() || meta.len() > 256 {
         return Err(not_one());
     }
-    let security = Security::of(file.as_raw_handle(), SE_FILE_OBJECT, OWNER_SECURITY_INFORMATION)?;
+    let security = Security::of(
+        file.as_raw_handle(),
+        SE_FILE_OBJECT,
+        OWNER_SECURITY_INFORMATION,
+    )?;
     if !security.owned_by_me()? {
         return Err(refused(format!("{shown} is another user's socket")));
     }
@@ -406,8 +402,11 @@ fn parse_address(text: &str) -> Option<String> {
     }
     let name = lines.next()?;
     let token = name.strip_prefix(PIPE_PREFIX)?;
-    (token.len() == 32 && token.bytes().all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f')))
-        .then(|| name.to_string())
+    (token.len() == 32
+        && token
+            .bytes()
+            .all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f')))
+    .then(|| name.to_string())
 }
 
 pub(super) fn check_endpoint(path: &Path) -> io::Result<()> {
@@ -525,7 +524,9 @@ fn overlapped(
         if code != ERROR_IO_PENDING {
             return Err(io::Error::from_raw_os_error(code as i32));
         }
-        let wait = timeout.map_or(INFINITE, |d| d.as_millis().clamp(1, u128::from(INFINITE - 1)) as u32);
+        let wait = timeout.map_or(INFINITE, |d| {
+            d.as_millis().clamp(1, u128::from(INFINITE - 1)) as u32
+        });
         // SAFETY: the event lives until this function returns.
         if unsafe { WaitForSingleObject(ov.hEvent, wait) } != WAIT_OBJECT_0 {
             let mut done = 0;
@@ -893,7 +894,11 @@ mod tests {
         }
         let dir = private("address");
         let path = dir.join("app.sock");
-        std::fs::write(&path, format!("{HEADER}\n\\\\server\\pipe\\rich-local-{token}\n")).unwrap();
+        std::fs::write(
+            &path,
+            format!("{HEADER}\n\\\\server\\pipe\\rich-local-{token}\n"),
+        )
+        .unwrap();
         assert!(LocalStream::connect(&path).is_err());
         let _ = std::fs::remove_dir_all(dir.parent().unwrap());
     }

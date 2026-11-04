@@ -111,6 +111,20 @@ pub fn current_user() -> String {
     sys::current_user()
 }
 
+/// This process's effective user (Unix).
+#[cfg(unix)]
+pub fn current_uid() -> u32 {
+    sys::current_uid()
+}
+
+/// The user at the other end of a Unix socket, where the platform tells
+/// (`SO_PEERCRED` on Linux and Android, `getpeereid` on macOS and the
+/// BSDs); [`Unsupported`](io::ErrorKind::Unsupported) elsewhere.
+#[cfg(unix)]
+pub fn peer_uid(stream: &std::os::unix::net::UnixStream) -> io::Result<u32> {
+    sys::peer_uid(stream)
+}
+
 /// Whether `dir` is a real directory (not a link) of this user's that no
 /// one else can write to: a place to make a [private
 /// directory](private_dir) in, as `XDG_RUNTIME_DIR` should be.

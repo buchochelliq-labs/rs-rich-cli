@@ -54,10 +54,11 @@ termwiz = ["dep:termwiz"]
 # tmux, kitty, WezTerm and zellij. Off by default.
 host = ["dep:serde_json"]
 # `control`: a control socket (#816), so scripts and agents of the same
-# user can drive a running program: JSON lines over a Unix socket in a
-# private directory, the peer's user checked, read-only sessions, bounded
-# messages and timeouts. Unix only for now. Off by default.
-control = ["dep:serde_json"]
+# user can drive a running program: JSON lines over rs-rich-ext's local
+# socket (a Unix socket in a private directory, a named pipe on Windows),
+# the peer's user checked, read-only sessions, bounded messages and
+# timeouts. Off by default.
+control = ["dep:serde_json", "rich-ext/local-socket"]
 
 [[example]]
 name = "explore"
