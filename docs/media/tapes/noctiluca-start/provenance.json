@@ -1,9 +1,9 @@
 {
   "tape": "docs/tapes/noctiluca-start.tape",
   "tape_fnv1a64": "b8026096585065b8",
-  "recorder": "rs-rich-record 0.0.12",
+  "recorder": "rs-rich-record 0.0.13",
   "rich": null,
-  "commit": "133ea8ef1a7afc3bfa787185e9a409fc061cbf87",
+  "commit": "ca32d5fdb202f724078ce47ece6673ec53f385fd",
   "screenshots": [
     "start",
     "about",

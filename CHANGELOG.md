@@ -26,16 +26,16 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   nested rule in it), and a variable is looked up by name, not through
   every variable declared. Ordinary stylesheets parse as before.
 
-## 0.0.24 cohort — to be published
+## 0.0.24 cohort — published 2026-11-03
 
-To be published from `main` by one `release.yml` run (tag
+Published on 2026-11-03 from `c2d6588` by one `release.yml` run (tag
 `release-0.0.24`): core 0.0.14 / macros 0.0.8 / plugin API 0.0.8 /
 art 0.0.17 / diagram 0.0.7 / mermaid 0.0.10 / lumis 0.0.8 / ext 0.0.21 /
 micro 0.0.10 / record 0.0.12 / interact 0.0.12 / ratatui 0.0.9 /
 intuituive 0.0.9 / embed 0.0.7 / web 0.0.7 / data 0.0.8 /
 marketplace 0.0.3 / acp 0.0.1 (new) / noctiluca 0.0.3 / cornacai 0.0.1
 (new) / CLI 0.0.24, and `rs-rich` 0.0.12 on PyPI (`python-v0.0.12`, same
-commit). See [the release notes](docs/releases/0.0.24.md).
+commit, the same day). See [the release notes](docs/releases/0.0.24.md).
 
 ### Fixes from wave 2's review
 

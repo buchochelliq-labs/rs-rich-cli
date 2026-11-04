@@ -6,7 +6,7 @@
 # Independent SemVer from 0.0.1.
 [package]
 name = "cornacai"
-version = "0.0.1"
+version = "0.0.2"
 description = "A terminal client for coding agents over the Agent Client Protocol: streamed answers, permission prompts, reviewed edits and a shell beside them"
 edition.workspace = true
 license.workspace = true

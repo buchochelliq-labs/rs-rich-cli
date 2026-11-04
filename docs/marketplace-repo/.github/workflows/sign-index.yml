@@ -58,12 +58,12 @@ permissions:
 # Moving any of them is a reviewed change to this repository.
 env:
   # The rs-rich-cli revision whose validator and schemas apply: the commit
-  # of rs-rich-cli's release-0.0.23 tag, unless the repository variable
+  # of rs-rich-cli's release-0.0.24 tag, unless the repository variable
   # names another. Set the variable to the release the marketplace serves
   # (a tag, or better its commit), and move it with that release; this
   # default moves only by a change to this file, never by a push to
   # rs-rich-cli's main.
-  RS_RICH_CLI_REF: ${{ vars.RS_RICH_CLI_REF || '2624ce5b5d76c092a59033d61ae7db3b50b8c8e9' }}
+  RS_RICH_CLI_REF: ${{ vars.RS_RICH_CLI_REF || 'c2d65880a1e6416fac548ef362fe578b2db7cd76' }}
 
 jobs:
   validate:
