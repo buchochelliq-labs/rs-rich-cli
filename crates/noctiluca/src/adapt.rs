@@ -628,7 +628,7 @@ mod tests {
         assert!(adapt.on(Rule::DecorativeImages) && adapt.on(Rule::LiveTail));
         assert!(!adapt.on(Rule::TextOverPictures));
         assert!(Adapt::none().is_none());
-        assert_eq!(RULES.len(), 14);
+        assert_eq!(RULES.len(), 15);
         for info in RULES {
             assert_eq!(Rule::parse(info.name), Some(info.rule));
         }

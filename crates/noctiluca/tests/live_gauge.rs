@@ -179,7 +179,7 @@ fn a_canvas_gauge_with_a_meter_role_is_drawn_as_intuituives_dial() {
         p.url == url
             && p.indicators
                 .iter()
-                .any(|i| i.label == "Upload" && i.value.is_some_and(|v| v > 95.0))
+                .any(|i| i.label == "Upload" && i.text.as_deref() == Some("95.8 Mbps"))
     });
     let upload = page
         .indicators
