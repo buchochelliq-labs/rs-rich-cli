@@ -198,6 +198,14 @@ Fixes 2, 4, 10, 12 and 14 of
   `list_of`'s, now works on a markup `list` too: a rule under item `i` in
   the theme's border style, which the cursor and clicks pass over and the
   list scrolls by.
+- **A `text_area` highlights what starts above its view.** Highlighting
+  carries the state the lines above leave, so a block comment or a
+  multi-line string that opens above the view is highlighted as such
+  inside it. The lines from the top (or from 256 lines above the view)
+  are highlighted once and kept; an edit highlights again only from a
+  little above the line it changed, once that start gives the lines it
+  covers their old spans, and scrolling on highlights only what it brings
+  in.
 
 ### intuiTUIve: the stylesheet fuzz timeout (rs-rich-intuituive)
 

@@ -365,3 +365,60 @@ fn the_editor_example_edits_and_counts() {
         "{shown}"
     );
 }
+
+/// Highlighting carries the state from above the view: a block comment
+/// that starts above it is still a comment inside it, after an edit too,
+/// and closing it higher up makes the lines in view code again.
+#[test]
+fn highlighting_carries_what_starts_above_the_view() {
+    let mut source = String::from("/* a comment\n");
+    for _ in 0..30 {
+        source.push_str("let x = 1;\n");
+    }
+    source.push_str("*/\nfn main() {}");
+    let source: &'static str = Box::leak(source.into_boxed_str());
+    let mut driver = driven(editor(source, |n| n.language("rust")), 20, 6, vec![]);
+    let style_at = |driver: &intuituive::Driver, y: u16| {
+        let screen = driver.screen();
+        screen.style(screen.cell(0, y).style).cloned()
+    };
+    // At the top, `let` on line 1 is in the comment's style.
+    assert_eq!(rows(&driver)[1], "let x = 1;");
+    let comment = style_at(&driver, 1);
+    assert_eq!(style_at(&driver, 0), comment, "`/*` and its next line");
+    // Down to line 20: the view starts inside the comment, and its lines
+    // are still the comment's.
+    for _ in 0..20 {
+        driver.event(press("down"));
+        driver.update(Duration::ZERO);
+        let _ = driver.render();
+    }
+    let shown = rows(&driver);
+    assert_eq!(shown[0], "let x = 1;", "{shown:?}");
+    assert_eq!(style_at(&driver, 0), comment, "{shown:?}");
+    // Typing in view keeps them so.
+    for event in typed("y") {
+        driver.event(event);
+        driver.update(Duration::ZERO);
+        let _ = driver.render();
+    }
+    assert_eq!(style_at(&driver, 0), comment);
+    // Closing the comment at the top (Ctrl+Home, End, then `*/`) makes
+    // the lines in view code: `let` is a keyword again.
+    let mut events = vec![press("ctrl+home"), press("end")];
+    events.extend(typed(" */"));
+    for _ in 0..20 {
+        events.push(press("down"));
+    }
+    for event in events {
+        driver.event(event);
+        driver.update(Duration::ZERO);
+        let _ = driver.render();
+    }
+    let shown = rows(&driver);
+    let row = shown
+        .iter()
+        .position(|row| row.starts_with("let x"))
+        .expect("a `let` line in view") as u16;
+    assert_ne!(style_at(&driver, row), comment, "{shown:?}");
+}

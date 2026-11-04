@@ -129,11 +129,11 @@ Modules are under `crates/rich-intuituive/src/`.
 | **Web** | `textual serve`, textual-web | `rich serve` / rs-rich-web: xterm.js or a DOM renderer with ARIA, a session per tab | ✓ | |
 | **Accessibility** | limited | roles, states, announcements, linear text mode, screen-reader guide (`a11y.rs`) | ✓ | More than Textual |
 | **Markdown streaming** | `Markdown.append`, `Markdown.get_stream` → `MarkdownStream.write` (batches fragments that arrive faster than they can be drawn) | — | ✗ | The top gap for Cornacai |
-| **TextArea** | tree-sitter highlighting, `TextAreaTheme`s, undo and redo, selection, soft wrap, read-only, line numbers, bracket matching, tab behaviour | all, bracket matching and editor themes included (0.0.24); highlighting through the console's highlighter (syntect, or tree-sitter through rs-rich-lumis); Vim mode | partial | Highlighting state from above the view |
+| **TextArea** | tree-sitter highlighting, `TextAreaTheme`s, undo and redo, selection, soft wrap, read-only, line numbers, bracket matching, tab behaviour | all, bracket matching and editor themes included (0.0.24); highlighting through the console's highlighter (syntect, or tree-sitter through rs-rich-lumis), with the state from above the view carried into it (0.0.25); Vim mode | ✓ | |
 | **DataTable** | sorting, cell, row, column and no cursor, fixed rows and columns, zebra stripes, `update_cell`, virtual size | all (fixed rows: `freeze_rows`, 0.0.24; row labels and renderable cells, 0.0.25) | ✓ | |
 | **Inline apps** | `run(inline=True)` | `App::inline(height)`, `print_above` | ✓ | |
 
-**Counts:** 35 areas. 17 ✓, 14 partial, 3 ✗, 1 won't-do.
+**Counts:** 35 areas. 18 ✓, 13 partial, 3 ✗, 1 won't-do.
 
 ## Prioritised gaps
 
