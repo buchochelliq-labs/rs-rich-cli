@@ -194,6 +194,10 @@ Fixes 2, 4, 10, 12 and 14 of
   `Auto` columns measure it and multi-line rows take its height. Both are
   keyed by a row's index among the rows given, so they follow it when the
   table sorts its rows.
+- **Separators in an option list.** `Node::separator_after(|i| ..)`, a
+  `list_of`'s, now works on a markup `list` too: a rule under item `i` in
+  the theme's border style, which the cursor and clicks pass over and the
+  list scrolls by.
 
 ### intuiTUIve: the stylesheet fuzz timeout (rs-rich-intuituive)
 

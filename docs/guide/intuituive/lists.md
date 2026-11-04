@@ -25,6 +25,7 @@ list(move || messages.get(), selected)
     .scroll_padding(1)
     .multiline()
     .row_style(|i| (i % 2 == 1).then(|| "on grey15".into()))
+    .separator_after(|i| i == 2)
     .offset(first)
 ```
 
@@ -43,6 +44,11 @@ them on the list itself (or a reorderable one), before `.panel(..)`.
   **`.scroll_padding(n)`** keeps items in view round the selection.
 - **`.offset(signal)`** puts the first item in view in a signal you can
   read, or set to scroll; the selection is still kept in view.
+- **`.separator_after(|i| …)`** draws a rule under item `i`, across the
+  list in the theme's border style: Textual's separators between an
+  `OptionList`'s options. A rule is no item: ↑ and ↓ pass over it, a
+  click on it selects nothing, and the indices stay the items'. A
+  `list_of` takes it too.
 - **`list_optional(items, selected)`** takes a `Signal<Option<usize>>`, as
   `table_optional` does.
 - **`list_lazy(len, item, selected)`** asks only for the items it draws,

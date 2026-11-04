@@ -67,7 +67,7 @@ Modules are under `crates/rich-intuituive/src/`.
 | `Markdown` | `renderable(Markdown::new(..))`, rs-rich's port (`crates/rich/src/markdown.rs`) | partial | Static only. The whole document is parsed and drawn again on each change. Links cannot be clicked or focused, code blocks are not retained nodes, and nothing streams: Textual has `Markdown.append` and `MarkdownStream`. Core. **Cornacai's first need.** |
 | `MarkdownViewer` | `markdown_viewer(load)`, `MarkdownViewer` (`go`, `back`, `forward`, `toc`, `on_link`), `files::markdown_loader(root)` (`markdown_viewer.rs`) | ✓ | The loader is the app's (the `files` plugin reads files). Anchors are GitHub's slugs of the ATX and setext headings (#805) |
 | `MaskedInput` | — | ✗ | `.mask(char)` is a password mask, not a template such as `9999-99-99` or `>AAA`. Core. |
-| `OptionList` | `list`, `.multiline()`, `list_search`, `.row_style` | ✓ | Missing separators between options. Small, tracked with `ListView`. |
+| `OptionList` | `list`, `.multiline()`, `list_search`, `.row_style`, `.separator_after` | ✓ | Separators between options (`separator_after`, on `list` since 0.0.25, as on `list_of`) |
 | `Placeholder` | `fx::placeholder` | partial | `fx::placeholder` is a loading skeleton. Textual's is for laying out a prototype: each one labelled with its id, in cycling colours. Core, small. |
 | `Pretty` | `renderable(Pretty::new(&value))` or `Pretty::from_value` (rs-rich's port) | ✓ | Rust has no reflection, so it pretty-prints `Debug` or a `PrettyValue` |
 | `ProgressBar` | `renderable(rich::ProgressBar)`, `seg_gauge`, `jobs_panel` | partial | No progress node that shows a bar, a percentage and an ETA, with an indeterminate pulse. Core, small. |
