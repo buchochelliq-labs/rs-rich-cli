@@ -4,17 +4,17 @@
 //!
 //! The socket is rs-rich-interact's generic [`control`] piece
 //! (`rich_interact::control`): a Unix socket in a private directory
-//! (`$XDG_RUNTIME_DIR/noctiluca`, mode 0700), the peer's user checked, no
-//! symbolic links followed, bounded messages and timeouts, no network
-//! listener. A session listens only when asked (`--control`, `[agent]
+//! (`$XDG_RUNTIME_DIR/noctiluca`, mode 0700), or on Windows a named pipe
+//! whose security descriptor admits this user alone, named by a file in a
+//! directory only this user can use (`%TEMP%\noctiluca-SID`); the peer's
+//! user checked, no symbolic links followed, bounded messages and
+//! timeouts, no network listener. A session listens only when asked (`--control`, `[agent]
 //! control = true`, or `--read-only`); with `--read-only` every verb that
 //! changes anything is refused before Noctiluca sees it. This module is
 //! Noctiluca's side of it: the [`VERBS`], what each does to the browser
 //! ([`handle`]), the page as text with control ids ([`snapshot`]), and
 //! the client the `noctiluca ls` and `noctiluca action …` commands are.
 //! Each action an agent takes shows in the status bar as it happens.
-//!
-//! Unix only for now: on Windows the commands say so.
 //!
 //! [`control`]: https://docs.rs/rs-rich-interact/latest/rich_interact/control/
 
@@ -30,7 +30,6 @@ use crate::model::{Page, Role};
 /// The control socket's verbs. `info`, `snapshot` and `find` only read;
 /// every other verb changes something, and a read-only session refuses
 /// it.
-#[cfg(unix)]
 pub const VERBS: &[rich_interact::control::Verb] = {
     use rich_interact::control::Verb;
     &[
@@ -57,9 +56,7 @@ pub const SNAPSHOT_WIDTH: u16 = 100;
 /// it; the server is taken once, by the app that answers it.
 #[derive(Clone, Debug, Default)]
 pub struct ControlLink {
-    #[cfg(unix)]
     server: std::sync::Arc<std::sync::Mutex<Option<rich_interact::control::ControlServer>>>,
-    #[cfg(unix)]
     closer: Option<rich_interact::control::Closer>,
     path: Option<std::path::PathBuf>,
     read_only: bool,
@@ -68,7 +65,6 @@ pub struct ControlLink {
 impl ControlLink {
     /// Listen on this process's socket, in Noctiluca's private runtime
     /// directory.
-    #[cfg(unix)]
     pub fn bind(read_only: bool) -> std::io::Result<ControlLink> {
         let dir = rich_interact::control::runtime_dir("noctiluca")?;
         let path = dir.join(format!("{PREFIX}{}.sock", std::process::id()));
@@ -76,7 +72,6 @@ impl ControlLink {
     }
 
     /// Listen on the socket at `path` (its directory must be private).
-    #[cfg(unix)]
     pub fn bind_at(path: &std::path::Path, read_only: bool) -> std::io::Result<ControlLink> {
         let server = rich_interact::control::ControlServer::bind(path, VERBS)?.read_only(read_only);
         Ok(ControlLink {
@@ -87,25 +82,16 @@ impl ControlLink {
         })
     }
 
-    /// The control socket is Unix only for now.
-    #[cfg(not(unix))]
-    pub fn bind(_read_only: bool) -> std::io::Result<ControlLink> {
-        Err(unix_only())
-    }
-
     /// The server, once: the app answering it takes it.
-    #[cfg(unix)]
     pub fn take(&self) -> Option<rich_interact::control::ControlServer> {
         self.server.lock().unwrap_or_else(|e| e.into_inner()).take()
     }
 
     /// Stop listening and remove the socket file: on every way out.
     pub fn close(&self) {
-        #[cfg(unix)]
         if let Some(closer) = &self.closer {
             closer.close();
         }
-        #[cfg(unix)]
         drop(self.take());
     }
 
@@ -117,14 +103,6 @@ impl ControlLink {
     pub fn is_read_only(&self) -> bool {
         self.read_only
     }
-}
-
-/// The error the control commands give where there is no socket yet.
-pub fn unix_only() -> std::io::Error {
-    std::io::Error::new(
-        std::io::ErrorKind::Unsupported,
-        "the control socket is Unix only for now",
-    )
 }
 
 /// A control as a snapshot lists it.
@@ -590,14 +568,12 @@ pub fn parse_action(words: &[String]) -> Result<ActionArgs, String> {
 }
 
 /// The running sessions' sockets.
-#[cfg(unix)]
 pub fn sessions() -> std::io::Result<Vec<std::path::PathBuf>> {
     let dir = rich_interact::control::runtime_dir("noctiluca")?;
     rich_interact::control::sessions(&dir, PREFIX)
 }
 
 /// The socket `--session` names, or the only one running.
-#[cfg(unix)]
 fn session_path(session: Option<&str>) -> std::io::Result<std::path::PathBuf> {
     use std::io::{Error, ErrorKind};
     match session {
@@ -632,7 +608,6 @@ fn session_path(session: Option<&str>) -> std::io::Result<std::path::PathBuf> {
 }
 
 /// One request to the socket at `path`; the verb's refusal is an error.
-#[cfg(unix)]
 pub fn call(path: &std::path::Path, verb: &str, args: Value) -> std::io::Result<Value> {
     let request = rich_interact::control::Request::new(verb, args);
     rich_interact::control::call(path, &request, Duration::from_secs(30))?
@@ -641,7 +616,6 @@ pub fn call(path: &std::path::Path, verb: &str, args: Value) -> std::io::Result<
 
 /// `noctiluca ls`: each session's pid, address and title (one a line, or
 /// JSON).
-#[cfg(unix)]
 pub fn ls(json_out: bool) -> std::io::Result<String> {
     let mut found = Vec::new();
     for path in sessions()? {
@@ -677,7 +651,6 @@ pub fn ls(json_out: bool) -> std::io::Result<String> {
 /// `noctiluca action …`: the reply, as text for people or as JSON. After
 /// an action it waits (up to [`ActionArgs::wait`]) for the page to be
 /// read again and ready, so a `snapshot` next sees what it did.
-#[cfg(unix)]
 pub fn action(args: &ActionArgs) -> std::io::Result<String> {
     let path = session_path(args.session.as_deref())?;
     let reply = call(&path, &args.verb, args.args.clone())?;

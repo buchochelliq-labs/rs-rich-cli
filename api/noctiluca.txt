@@ -838,7 +838,6 @@ pub fn noctiluca::control::parse_action(&[alloc::string::String]) -> core::resul
 pub fn noctiluca::control::resolve(&noctiluca::model::Page, &str) -> core::result::Result<usize, alloc::string::String>
 pub fn noctiluca::control::sessions() -> std::io::error::Result<alloc::vec::Vec<std::path::PathBuf>>
 pub fn noctiluca::control::snapshot(&noctiluca::model::Page, bool, u16, noctiluca::adapt::Adapt) -> serde_json::value::Value
-pub fn noctiluca::control::unix_only() -> std::io::error::Error
 pub mod noctiluca::draft
 pub enum noctiluca::draft::DraftState<T>
 pub noctiluca::draft::DraftState::Clean

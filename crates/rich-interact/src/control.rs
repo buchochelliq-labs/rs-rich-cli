@@ -1,7 +1,9 @@
 //! A control socket (#816): a running program answers requests from
 //! scripts and agents of the same user, one JSON line in and one JSON line
-//! out per connection. Behind the off-by-default `control` feature, and
-//! Unix only for now (a named pipe on Windows is not written yet).
+//! out per connection. Behind the off-by-default `control` feature, on
+//! Unix and Windows: its transport is rs-rich-ext's
+//! [`local_socket`](rich_ext::local_socket), a Unix domain socket on Unix
+//! and a named pipe on Windows, behind the same API.
 //!
 //! The program names its [`Verb`]s, says which of them change anything
 //! ([`Verb::mutates`]), binds a [`ControlServer`] and [`serve`]s it with a
@@ -15,12 +17,18 @@
 //! **What is protected, and how:**
 //!
 //! - **Only this user reaches the socket.** It lives in a directory of its
-//!   own that is this user's, with mode 0700, made before the socket is
-//!   bound ([`private_dir`], [`runtime_dir`]); an existing directory that
-//!   is anyone else's, or open to others, or a symbolic link, is refused.
-//!   Where the platform tells (Linux's `SO_PEERCRED`, the BSDs' and
-//!   macOS's `getpeereid`), each connection's peer must be this user too,
-//!   and a client checks that the server is.
+//!   own that is this user's, made private before the socket is bound
+//!   ([`private_dir`], [`runtime_dir`]): mode 0700 on Unix, a protected
+//!   DACL granting this user's SID alone on Windows. An existing directory
+//!   that is anyone else's, or open to others, or a symbolic link, is
+//!   refused. Where the platform tells (Linux's `SO_PEERCRED`, the BSDs'
+//!   and macOS's `getpeereid`), each connection's peer must be this user
+//!   too, and a client checks that the server is.
+//! - **On Windows** the socket path is an address file naming the pipe
+//!   (`\\.\pipe\rich-local-` and 128 random bits), which only this user
+//!   can read; the pipe's own DACL admits this user's SID alone, it takes
+//!   no remote clients, and a client checks the pipe's owner is this user
+//!   (see [`local_socket`](rich_ext::local_socket) for the rest).
 //! - **The path is never followed.** A symbolic link where the socket or
 //!   its directory should be is refused, by the server and the client.
 //! - **Read-only sessions** ([`ControlServer::read_only`]) refuse every
@@ -29,10 +37,10 @@
 //! - **Bounded:** a request is at most [`MAX_REQUEST`] bytes and a reply
 //!   [`MAX_REPLY`]; reads and writes time out ([`IO_TIMEOUT`]); at most
 //!   [`MAX_CONNECTIONS`] are answered at once, and others are closed.
-//! - **No network listener:** a Unix socket, nothing else.
+//! - **No network listener:** a Unix socket or a local named pipe,
+//!   nothing else.
 //!
 //! ```no_run
-//! # #[cfg(unix)] {
 //! use rich_interact::control::{self, ControlServer, Request, Verb};
 //! use serde_json::json;
 //!
@@ -45,18 +53,16 @@
 //! }));
 //! let reply = control::call(&dir.join("my-app-1.sock"), &Request::new("info", json!({})), control::IO_TIMEOUT)?;
 //! assert_eq!(reply.unwrap()["name"], "my-app");
-//! # }
 //! # Ok::<(), std::io::Error>(())
 //! ```
 
 use std::io::{self, BufRead, BufReader, Read, Write};
-use std::os::unix::fs::{DirBuilderExt, FileTypeExt, MetadataExt};
-use std::os::unix::net::{UnixListener, UnixStream};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::time::Duration;
 
+use rich_ext::local_socket::{self, LocalListener, LocalStream};
 use serde_json::{Value, json};
 
 /// The most bytes a request may have, its newline included.
@@ -169,55 +175,32 @@ fn invalid(why: impl Into<String>) -> io::Error {
     io::Error::new(io::ErrorKind::InvalidData, why.into())
 }
 
-fn refused(why: impl Into<String>) -> io::Error {
-    io::Error::new(io::ErrorKind::PermissionDenied, why.into())
-}
-
-/// This process's effective user.
-#[allow(unsafe_code)] // geteuid has no preconditions and cannot fail.
+/// This process's effective user (Unix).
+#[cfg(unix)]
 pub fn current_uid() -> u32 {
-    // SAFETY: as above.
-    unsafe { libc::geteuid() }
+    local_socket::current_uid()
 }
 
-/// Make the directory `path` (its parent must exist) this user's, with
-/// mode 0700, or check that it already is: a real directory (not a
-/// symbolic link), owned by this user, with no permission for anyone
-/// else. Made with its mode at once, so it is never open to others.
+/// Make the directory `path` (its parent must exist) this user's alone,
+/// or check that it already is: a real directory (not a symbolic link),
+/// owned by this user, that no one else can use. Made private at once,
+/// so it is never open to others: mode 0700 on Unix, a protected DACL
+/// granting this user alone on Windows (rs-rich-ext's
+/// [`local_socket::private_dir`]).
 pub fn private_dir(path: &Path) -> io::Result<()> {
-    match std::fs::DirBuilder::new().mode(0o700).create(path) {
-        Ok(()) => check_private_dir(path),
-        Err(e) if e.kind() == io::ErrorKind::AlreadyExists => check_private_dir(path),
-        Err(e) => Err(e),
-    }
+    local_socket::private_dir(path)
 }
 
 /// Whether `path` is a private directory, as [`private_dir`] makes one.
 pub fn check_private_dir(path: &Path) -> io::Result<()> {
-    let meta = std::fs::symlink_metadata(path)?;
-    let shown = path.display();
-    if meta.file_type().is_symlink() {
-        return Err(refused(format!("{shown} is a symbolic link")));
-    }
-    if !meta.is_dir() {
-        return Err(refused(format!("{shown} is not a directory")));
-    }
-    if meta.uid() != current_uid() {
-        return Err(refused(format!("{shown} is another user's")));
-    }
-    if meta.mode() & 0o077 != 0 {
-        return Err(refused(format!(
-            "{shown} is open to other users (mode {:o}; it must be 700)",
-            meta.mode() & 0o777
-        )));
-    }
-    Ok(())
+    local_socket::check_private_dir(path)
 }
 
 /// The private directory for `app`'s sockets, made if need be:
 /// `$XDG_RUNTIME_DIR/APP` when that variable names an absolute directory
-/// of this user's that no one else can write to, else `TMPDIR/APP-UID`.
-/// `app` is letters, digits, `-` and `_`.
+/// of this user's that no one else can write to, else `TMPDIR/APP-USER`
+/// (the uid on Unix, the SID on Windows, whose temporary directory is the
+/// user's own already). `app` is letters, digits, `-` and `_`.
 pub fn runtime_dir(app: &str) -> io::Result<PathBuf> {
     runtime_dir_in(app, std::env::var_os("XDG_RUNTIME_DIR").map(PathBuf::from))
 }
@@ -232,101 +215,26 @@ pub fn runtime_dir_in(app: &str, runtime: Option<PathBuf>) -> io::Result<PathBuf
     {
         return Err(invalid(format!("{app:?} is not an app name")));
     }
-    let usable = |dir: &Path| {
-        dir.is_absolute()
-            && std::fs::symlink_metadata(dir)
-                .is_ok_and(|m| m.is_dir() && m.uid() == current_uid() && m.mode() & 0o022 == 0)
-    };
-    let dir = match runtime.filter(|d| usable(d)) {
+    let dir = match runtime.filter(|d| local_socket::is_own_dir(d)) {
         Some(base) => base.join(app),
-        None => std::env::temp_dir().join(format!("{app}-{}", current_uid())),
+        None => std::env::temp_dir().join(format!("{app}-{}", local_socket::current_user())),
     };
     private_dir(&dir)?;
     Ok(dir)
 }
 
 /// Whether `path` is a socket this user may talk to: not a symbolic link,
-/// a socket, this user's, in a private directory.
+/// a socket (on Windows the address file of a named pipe), this user's,
+/// in a private directory.
 pub fn check_socket(path: &Path) -> io::Result<()> {
-    let meta = std::fs::symlink_metadata(path)?;
-    let shown = path.display();
-    if meta.file_type().is_symlink() {
-        return Err(refused(format!("{shown} is a symbolic link")));
-    }
-    if !meta.file_type().is_socket() {
-        return Err(refused(format!("{shown} is not a socket")));
-    }
-    if meta.uid() != current_uid() {
-        return Err(refused(format!("{shown} is another user's socket")));
-    }
+    local_socket::check_endpoint(path)?;
     check_private_dir(path.parent().unwrap_or(Path::new("/")))
 }
 
 /// The user at the other end of `stream`, where the platform tells.
-#[cfg(any(target_os = "linux", target_os = "android"))]
-#[allow(unsafe_code)] // getsockopt into a ucred of the size given.
-pub fn peer_uid(stream: &UnixStream) -> io::Result<u32> {
-    use std::os::fd::AsRawFd;
-    let mut cred = libc::ucred {
-        pid: 0,
-        uid: 0,
-        gid: 0,
-    };
-    let mut len = std::mem::size_of::<libc::ucred>() as libc::socklen_t;
-    // SAFETY: the fd is open for `stream`'s life; `cred` and `len` are
-    // valid for writes of the size passed.
-    let done = unsafe {
-        libc::getsockopt(
-            stream.as_raw_fd(),
-            libc::SOL_SOCKET,
-            libc::SO_PEERCRED,
-            (&mut cred as *mut libc::ucred).cast(),
-            &mut len,
-        )
-    };
-    if done != 0 {
-        return Err(io::Error::last_os_error());
-    }
-    Ok(cred.uid)
-}
-
-/// The user at the other end of `stream`, where the platform tells.
-#[cfg(any(
-    target_os = "macos",
-    target_os = "ios",
-    target_os = "freebsd",
-    target_os = "openbsd",
-    target_os = "netbsd",
-    target_os = "dragonfly"
-))]
-#[allow(unsafe_code)] // getpeereid into two locals.
-pub fn peer_uid(stream: &UnixStream) -> io::Result<u32> {
-    use std::os::fd::AsRawFd;
-    let (mut uid, mut gid) = (0, 0);
-    // SAFETY: the fd is open for `stream`'s life; both pointers are to
-    // locals.
-    if unsafe { libc::getpeereid(stream.as_raw_fd(), &mut uid, &mut gid) } != 0 {
-        return Err(io::Error::last_os_error());
-    }
-    Ok(uid)
-}
-
-/// The user at the other end of `stream`: this platform does not tell.
-#[cfg(not(any(
-    target_os = "linux",
-    target_os = "android",
-    target_os = "macos",
-    target_os = "ios",
-    target_os = "freebsd",
-    target_os = "openbsd",
-    target_os = "netbsd",
-    target_os = "dragonfly"
-)))]
-pub fn peer_uid(_stream: &UnixStream) -> io::Result<u32> {
-    Err(io::Error::new(
-        io::ErrorKind::Unsupported,
-        "this platform does not tell a socket's peer",
-    ))
+#[cfg(unix)]
+pub fn peer_uid(stream: &std::os::unix::net::UnixStream) -> io::Result<u32> {
+    local_socket::peer_uid(stream)
 }
 
 /// Whether a peer may talk: its user is `me`; where the platform does not
@@ -334,7 +242,10 @@ pub fn peer_uid(_stream: &UnixStream) -> io::Result<u32> {
 pub fn peer_allowed(peer: io::Result<u32>, me: u32) -> io::Result<()> {
     match peer {
         Ok(uid) if uid == me => Ok(()),
-        Ok(uid) => Err(refused(format!("the peer is another user ({uid})"))),
+        Ok(uid) => Err(io::Error::new(
+            io::ErrorKind::PermissionDenied,
+            format!("the peer is another user ({uid})"),
+        )),
         Err(e) if e.kind() == io::ErrorKind::Unsupported => Ok(()),
         Err(e) => Err(e),
     }
@@ -354,7 +265,7 @@ fn read_line(stream: impl Read, limit: u64) -> io::Result<String> {
 /// The socket file goes when it is dropped (or [`Closer::close`]d).
 #[derive(Debug)]
 pub struct ControlServer {
-    listener: UnixListener,
+    listener: LocalListener,
     path: PathBuf,
     verbs: Vec<Verb>,
     read_only: bool,
@@ -375,27 +286,7 @@ impl ControlServer {
             .filter(|p| !p.as_os_str().is_empty())
             .ok_or_else(|| invalid("a socket path needs a directory"))?;
         check_private_dir(dir)?;
-        match std::fs::symlink_metadata(&path) {
-            Ok(meta) if meta.file_type().is_symlink() => {
-                return Err(refused(format!("{} is a symbolic link", path.display())));
-            }
-            Ok(meta)
-                if meta.file_type().is_socket()
-                    && meta.uid() == current_uid()
-                    && UnixStream::connect(&path).is_err() =>
-            {
-                std::fs::remove_file(&path)?;
-            }
-            Ok(_) => {
-                return Err(io::Error::new(
-                    io::ErrorKind::AddrInUse,
-                    format!("{} is in use", path.display()),
-                ));
-            }
-            Err(e) if e.kind() == io::ErrorKind::NotFound => {}
-            Err(e) => return Err(e),
-        }
-        let listener = UnixListener::bind(&path)?;
+        let listener = LocalListener::bind(&path)?;
         Ok(ControlServer {
             listener,
             path,
@@ -476,7 +367,7 @@ impl Drop for ControlServer {
 
 /// One connection: its peer checked, its request read and answered.
 fn answer(
-    mut stream: UnixStream,
+    stream: LocalStream,
     verbs: &[Verb],
     read_only: bool,
     timeout: Duration,
@@ -484,7 +375,7 @@ fn answer(
 ) -> io::Result<()> {
     stream.set_read_timeout(Some(timeout))?;
     stream.set_write_timeout(Some(timeout))?;
-    peer_allowed(peer_uid(&stream), current_uid())?;
+    stream.peer_allowed()?;
     let reply = match read_line(&stream, MAX_REQUEST).and_then(|line| Request::parse(&line)) {
         Err(e) => Err(format!("bad request: {e}")),
         Ok(request) => match verbs.iter().find(|v| v.name == request.verb) {
@@ -500,8 +391,8 @@ fn answer(
     if line.len() as u64 > MAX_REPLY {
         line = reply_line(&Err(format!("the reply is longer than {MAX_REPLY} bytes")));
     }
-    stream.write_all(line.as_bytes())?;
-    stream.flush()
+    (&stream).write_all(line.as_bytes())?;
+    (&stream).flush()
 }
 
 /// Stops a [`ControlServer`]'s [`serve`](ControlServer::serve) and removes
@@ -516,16 +407,14 @@ impl Closer {
     pub fn close(&self) {
         if !self.closed.swap(true, Ordering::SeqCst) {
             // Wake the accept, which then sees it is closed.
-            let _ = UnixStream::connect(&self.path);
+            let _ = LocalStream::connect(&self.path);
         }
         self.remove();
     }
 
     /// Remove the socket file, if it is still a socket.
     fn remove(&self) {
-        if std::fs::symlink_metadata(&self.path).is_ok_and(|m| m.file_type().is_socket()) {
-            let _ = std::fs::remove_file(&self.path);
-        }
+        local_socket::remove_endpoint(&self.path);
     }
 
     pub fn path(&self) -> &Path {
@@ -539,8 +428,7 @@ impl Closer {
 /// tells.
 pub fn call(path: &Path, request: &Request, timeout: Duration) -> io::Result<Reply> {
     check_socket(path)?;
-    let mut stream = UnixStream::connect(path)?;
-    peer_allowed(peer_uid(&stream), current_uid())?;
+    let mut stream = LocalStream::connect(path)?;
     stream.set_read_timeout(Some(timeout))?;
     stream.set_write_timeout(Some(timeout))?;
     let line = request.to_line();
@@ -555,7 +443,9 @@ pub fn call(path: &Path, request: &Request, timeout: Duration) -> io::Result<Rep
 }
 
 /// The sockets in `dir` whose names start with `prefix` and end in
-/// `.sock`, this user's, sorted; symbolic links are left out. A socket no
+/// `.sock`, this user's, sorted; symbolic links are left out. On Windows
+/// each is a named pipe's address file, so the directory lists the
+/// running programs there as it does on Unix. A socket no
 /// one answers is listed too: [`call`] says so.
 pub fn sessions(dir: &Path, prefix: &str) -> io::Result<Vec<PathBuf>> {
     check_private_dir(dir)?;
@@ -568,9 +458,7 @@ pub fn sessions(dir: &Path, prefix: &str) -> io::Result<Vec<PathBuf>> {
             continue;
         }
         let path = entry.path();
-        if std::fs::symlink_metadata(&path)
-            .is_ok_and(|m| m.file_type().is_socket() && m.uid() == current_uid())
-        {
+        if local_socket::is_endpoint(&path) {
             found.push(path);
         }
     }

@@ -26,6 +26,8 @@
 //! `--split` switch, a "send to agent" key), never for what a page or a
 //! file says. The socket must be a socket and this user's
 //! ([`SocketHost::connect`]).
+// The socket protocol is Unix only: off Unix its client is not built.
+#![cfg_attr(not(unix), allow(unused_imports, dead_code))]
 
 use std::fmt;
 use std::io::{self, BufRead, Write};

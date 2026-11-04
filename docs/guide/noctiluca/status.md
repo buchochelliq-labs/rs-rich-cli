@@ -41,10 +41,10 @@ Merged for the next release so far (with the rest of 0.0.24's items in
 
 | Works | Notes |
 |---|---|
-| Scripts and coding agents | `--control` and `--read-only`; `noctiluca ls` and `noctiluca action` (open, snapshot with control ids, click, type, key, scroll, find, back, forward); `Ctrl+G` sends a picked element to the clipboard or an agent's pane. Unix only for now. See [Scripts and coding agents](agents.md) |
+| Scripts and coding agents | `--control` and `--read-only`; `noctiluca ls` and `noctiluca action` (open, snapshot with control ids, click, type, key, scroll, find, back, forward); `Ctrl+G` sends a picked element to the clipboard or an agent's pane. On Windows too, over a named pipe (0.0.25). See [Scripts and coding agents](agents.md) |
 | The pixel view | `Alt+X` or `--pixels`: Chrome's pixels in Kitty graphics, sent as tiles only where they change, within the byte budget; clicks, the wheel and keys go to the page. See [the pixel view](media.md#the-pixel-view) |
 
-Known limits: the control socket has no Windows named pipe yet; `click`
+Known limits: `click`
 takes an id or an accessible name, not a CSS selector; nothing records an
 agent's actions beyond the status bar; and the pixel view draws through
 Kitty only, at the usual 8 by 16 pixel cell (a terminal with larger cells

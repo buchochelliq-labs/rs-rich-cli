@@ -492,11 +492,14 @@ jobs:
   # a job object, which ends it and what it started when the session ends or
   # the server dies. Only these tests; the rest of the crate's run on Linux
   # and macOS. It also lints, on Windows, the core, intuiTUIve and the CLI's
-  # tests, whose code differs off Unix and off Linux.
+  # tests, whose code differs off Unix and off Linux; and runs the local
+  # socket's tests on its named pipes (rs-rich-ext's `local_socket`, the
+  # control socket, intuiTUIve's log console, `rich console` and
+  # Noctiluca's agent control), including another user's access refused.
   windows-web:
     name: Windows web sessions
     runs-on: windows-latest
-    timeout-minutes: 30
+    timeout-minutes: 50
     steps:
       - uses: actions/checkout@v7
         with:
@@ -523,6 +526,8 @@ jobs:
           cargo clippy -p rs-rich --all-targets --locked -- -D warnings
           cargo clippy -p rs-rich-intuituive --all-features --all-targets --locked -- -D warnings
           cargo clippy -p rs-rich-cli --no-default-features --all-targets --locked -- -D warnings
+          cargo clippy -p rs-rich-ext --features local-socket --all-targets --locked -- -D warnings
+          cargo clippy -p rs-rich-interact --features control --all-targets --locked -- -D warnings
 
       # One command a step: in a pwsh step of several, only the last one's
       # exit code would fail it.
@@ -531,6 +536,20 @@ jobs:
 
       - name: Test session job objects
         run: cargo test -p rs-rich-web --locked --test isolation_windows
+
+      # The named pipes behind the control socket and the log console: the
+      # same tests as on Unix where they apply, and the pipe's own (its
+      # DACL, the anonymous logon refused, a name taken first).
+      - name: Test the local sockets (named pipes)
+        shell: bash
+        run: |
+          cargo test -p rs-rich-ext --locked --features local-socket --lib local_socket
+          cargo test -p rs-rich-interact --locked --features control --lib control::
+          cargo test -p rs-rich-interact --locked --features control --test control
+          cargo test -p rs-rich-intuituive --locked --features tracing --lib log::console
+          cargo test -p rs-rich-intuituive --locked --features tracing --test console
+          cargo test -p rs-rich-cli --locked --no-default-features --lib console::tests
+          cargo test -p noctiluca --locked --test control
 
   # The whole workspace's tests on macOS: PTYs, terminal modes, signals and
   # paths differ enough from Linux to break on their own.

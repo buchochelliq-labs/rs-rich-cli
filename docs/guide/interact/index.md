@@ -832,7 +832,7 @@ arguments are unit tested; tmux is tested against a real server).
 
 ## A control socket: driven by scripts and agents
 
-Behind the `control` feature (Unix only for now), `rich_interact::control`
+Behind the `control` feature, on Unix and Windows, `rich_interact::control`
 lets a running program answer requests from scripts and agents of the same
 user: one JSON line in, `{"verb": "open", "args": {…}}`, and one JSON line
 out, `{"ok": true, "result": …}` or `{"ok": false, "error": "…"}`. The
@@ -844,7 +844,7 @@ use rich_interact::control::{self, ControlServer, Request, Verb};
 use serde_json::json;
 
 const VERBS: &[Verb] = &[Verb::read("info", "who is here"), Verb::write("open", "open it")];
-let dir = control::runtime_dir("my-app")?; // $XDG_RUNTIME_DIR/my-app, mode 700
+let dir = control::runtime_dir("my-app")?; // $XDG_RUNTIME_DIR/my-app, mode 700 (Windows: %TEMP%\my-app-SID)
 let server = ControlServer::bind(dir.join("my-app-1.sock"), VERBS)?.read_only(true);
 std::thread::spawn(move || server.serve(|request: &Request| match request.verb.as_str() {
     "info" => Ok(json!({"name": "my-app"})),
@@ -860,6 +860,17 @@ What it protects:
   another user's, open to others, or a symbolic link is refused. Where the
   platform tells (Linux, macOS, the BSDs), each peer's user is checked
   (`peer_uid`, `peer_allowed`), and `call` checks the server's.
+- **On Windows, a named pipe.** The transport is rs-rich-ext's
+  `local_socket` (its `local-socket` feature), the same API on both: on
+  Windows the socket's path is a file naming a pipe,
+  `\\.\pipe\rich-local-` and 128 random bits. The directory is made
+  with an access list granting the user's SID alone, and refused when it
+  grants anyone else; the pipe's security descriptor makes the user its
+  owner and grants the user alone (`O:<sid>D:P(A;;GA;;;<sid>)`), it is
+  made with `FILE_FLAG_FIRST_PIPE_INSTANCE` (a name someone else took
+  first fails the bind) and `PIPE_REJECT_REMOTE_CLIENTS`; `call` reads
+  only such a file of the user's naming such a pipe, checks the pipe's
+  owner, and connects at `SECURITY_IDENTIFICATION`.
 - **No links followed:** the server and `call` refuse a symbolic link at
   the socket's path or its directory, and `bind` replaces only a socket of
   the user's that no one answers.
@@ -871,7 +882,8 @@ What it protects:
   `ControlServer::timeout`), at most `MAX_CONNECTIONS` answered at once.
 - **No network listener.**
 
-`sessions(dir, prefix)` lists the sockets of a program's running sessions;
+`sessions(dir, prefix)` lists the sockets of a program's running sessions
+(on Windows, their pipes' address files: the same directory listing);
 `Closer::close` stops `serve` from another thread and removes the socket.
 
 ## Several at once: the event loop

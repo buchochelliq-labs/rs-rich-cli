@@ -148,21 +148,24 @@ INTUITUIVE_CONSOLE=1 cargo run --example demo   # terminal 2
   `rich console --socket PATH` listens there. Unset (or `0`), nothing is
   opened. `log::console_layer(path)` adds the console to a subscriber of
   your own.
-- The socket is a Unix domain socket, never a TCP port, and only yours:
-  `rich console` creates it 0600, in a directory only you can use (made
-  0700 when missing; a `--socket` in a directory others can enter or write
-  is refused, as is a symbolic link), and drops another user's
-  connection; the app connects only to a socket, and a listener, of its
-  own user. Events go through a
+- The socket is a Unix domain socket, or on Windows a named pipe, never
+  a TCP port, and only yours: `rich console` creates it 0600, in a
+  directory only you can use (made 0700 when missing; a `--socket` in a
+  directory others can enter or write is refused, as is a symbolic link),
+  and drops another user's connection; the app connects only to a socket,
+  and a listener, of its own user. On Windows the file at the socket's
+  path names the pipe; the directory and the pipe have access lists that
+  grant you alone, the pipe takes no connection from another machine, and
+  the app checks the pipe is yours before it sends anything
+  (rs-rich-ext's `local_socket`). Events go through a
   bounded queue on a thread of their own, so a slow console drops events
   rather than slowing the app.
 - The inspector's trace (keys, focus, screens, signal writes) goes too,
   while no inspector shows it: `rich console --trace` prints it.
   `-x TARGET` leaves a target out, `-v` puts each event's fields on lines
   of their own.
-- Unix only for now: on Windows, `install_console` does nothing (std has
-  no local socket there; a named pipe is a follow-up), and `rich console`
-  says so.
+- On Unix and Windows (a named pipe there, since 0.0.25). Elsewhere (WASI,
+  a browser) `install_console` does nothing and `rich console` says so.
 
 ## Inspector
 

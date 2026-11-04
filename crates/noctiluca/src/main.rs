@@ -82,20 +82,13 @@ fn run(args: &[String]) -> std::io::Result<ExitCode> {
 }
 
 /// `noctiluca ls`.
-#[cfg(unix)]
 fn ls(json: bool) -> std::io::Result<()> {
     println!("{}", noctiluca::control::ls(json)?);
     Ok(())
 }
 
-#[cfg(not(unix))]
-fn ls(_json: bool) -> std::io::Result<()> {
-    Err(noctiluca::control::unix_only())
-}
-
 /// `noctiluca action …`: its reply on stdout; a refusal on stderr, and
 /// exit status 1.
-#[cfg(unix)]
 fn control_action(action: &noctiluca::control::ActionArgs) -> ExitCode {
     match noctiluca::control::action(action) {
         Ok(out) => {
@@ -107,12 +100,6 @@ fn control_action(action: &noctiluca::control::ActionArgs) -> ExitCode {
             ExitCode::FAILURE
         }
     }
-}
-
-#[cfg(not(unix))]
-fn control_action(_action: &noctiluca::control::ActionArgs) -> ExitCode {
-    eprintln!("noctiluca: {}", noctiluca::control::unix_only());
-    ExitCode::FAILURE
 }
 
 /// `--control`, `--read-only` or `[agent] control`: listen on the control
