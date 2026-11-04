@@ -9,6 +9,7 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+<<<<<<< HEAD
 ### Documentation and the API review's groundwork (0.0.25)
 
 - **Every public item documented in ten stable crates**, with
@@ -24,6 +25,33 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   helpers (#809, #810) are 🟢; its widgets and stylesheets rows name what
   is still missing after 0.0.24 rather than its waves; Noctiluca's and
   Cornacai's say what `main` has for 0.0.25.
+=======
+### Releases run on release-kit (0.0.25)
+
+- **`release-kit.yml` and the kit, v1.7.0.** Every package of
+  `RELEASES.toml`, in its order, is declared for
+  [release-kit](https://github.com/buchochelliq-labs/release-kit), installed
+  under `.github/release-kit/` (`release.py vendored` keeps it unedited). The
+  PyPI `rs-rich` keeps its `python-v…` tags and builds as a maturin wheel per
+  target, pypi-release.yml's five, each installed and imported; the linux
+  x86_64 one runs the compatibility suite and the stub check too.
+- **One run publishes crates.io and PyPI.** `release.yml` is the kit's: its
+  gate, CI on the tagged commit (`checkout_ref`), the wheels' build, then
+  `publish-crates` and `publish-pypi`, which verify each version and use it
+  as a stranger would. This repository's `semver` job
+  (`scripts/release.py plan --semver-checks`) and `publish-playground` stay.
+  A release is tagged with `python3 .github/release-kit/scripts/release.py
+  tag`; a failed one is resumed the same way.
+- **`pypi-release.yml` starts on no tag**, so the kit's `python-v…` records
+  cannot publish twice; it is a manual fallback until the kit has published
+  a release, and `RELEASES.toml` and `release_cohort.py check` stay in step
+  until then.
+- **Rehearsed in CI:** `scripts/release_rehearsal.py` runs the kit's
+  `check`, `vendored`, `plan` and `tag --dry-run` against a throwaway remote
+  holding `HEAD` and origin's tags. Every tag from before the kit names a
+  published version, so the kit never selects or moves one
+  ([Branching and releases](docs/BRANCHING.md#tags-from-before-release-kit)).
+>>>>>>> 025-kit
 
 ### Noctiluca: live regions (0.0.25)
 

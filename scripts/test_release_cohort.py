@@ -165,9 +165,9 @@ class Unreleased(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "HTTP 503"):
             cohort.unreleased(self.cli().tag, self.packages, lambda package: 503)
 
-    def test_both_release_workflows_run_the_guard_before_anything_else(self):
-        crates = (ROOT / ".github/workflows/release.yml").read_text()
-        self.assertLess(crates.index("release_cohort.py unreleased"), crates.index("uses: ./.github/workflows/ci.yml"))
+    def test_the_pypi_fallback_runs_the_guard_before_anything_else(self):
+        # release.yml is release-kit's now (test_release_kit.py); the old PyPI
+        # workflow stays as a manual fallback until the kit has published.
         pypi = (ROOT / ".github/workflows/pypi-release.yml").read_text()
         self.assertLess(pypi.index("release_cohort.py unreleased"), pypi.index("  wheels:"))
 
@@ -249,73 +249,24 @@ class ReleaseTags(unittest.TestCase):
                              'selection={"rs-rich-cli":"0.0.20","rs-rich-ext":"0.0.18","rs-rich":"0.0.10"}\n')
 
 
-class Workflow(unittest.TestCase):
-    """release.yml: one release tag, one gate, one CI, one publish."""
+class PypiFallback(unittest.TestCase):
+    """pypi-release.yml, the old PyPI path, kept until release-kit has
+    published a release: release-kit's record tags (python-v...) must not
+    start it, or one release would upload twice."""
 
-    text = (ROOT / ".github/workflows/release.yml").read_text()
+    text = (ROOT / ".github/workflows/pypi-release.yml").read_text()
 
-    def test_only_a_release_tag_push_or_a_dispatch_starts_it(self):
+    def test_no_tag_push_starts_it(self):
         on = self.text[self.text.index("\non:"):self.text.index("\npermissions:")]
-        self.assertIn('  push:\n    tags: ["release-*"]\n  workflow_dispatch:', on)
-        self.assertEqual(on.count("tags:"), 1)
-        self.assertNotIn('"v*"', on)
-        self.assertNotIn("-v*", on)
-        self.assertIn("      tag:", on)
-        self.assertIn("      verify_only:", on)
+        self.assertNotIn("push:", on)
+        self.assertNotIn("tags:", on)
+        self.assertIn("  workflow_dispatch:", on)
 
-    def test_ci_runs_once_on_the_validated_commit(self):
-        self.assertEqual(self.text.count("uses: ./.github/workflows/ci.yml"), 1)
-        self.assertIn("checkout_ref: ${{ needs.gate.outputs.sha }}", self.text)
-        # The gate, the publish job and the docs playground's module.
-        self.assertEqual(self.text.count("runs-on:"), 3)
-
-    def test_the_gate_checks_the_release_before_ci(self):
-        ci = self.text.index("uses: ./.github/workflows/ci.yml")
-        steps = ["release.py validate-tag", "release_cohort.py check", "release_cohort.py same-commit",
-                 "release_cohort.py unreleased", "release.py plan"]
-        positions = [self.text.index(step) for step in steps]
-        self.assertEqual(positions, sorted(positions))
-        self.assertLess(positions[-1], ci)
-        self.assertIn("RELEASE_SELECTION: ${{ steps.due.outputs.selection || steps.done.outputs.selection }}",
-                      self.text)
-
-    def test_one_publish_job_uploads_the_whole_selection(self):
-        publish = self.text[self.text.index("  publish:"):]
-        self.assertEqual(publish.count("run: python3 scripts/release.py publish\n"), 1)
-        self.assertEqual(publish.count("run: python3 scripts/release.py publish --dry-run\n"), 1)
-        self.assertEqual(publish.count("run: python3 scripts/release.py verify\n"), 1)
-        self.assertIn("needs: [gate, ci]", publish)
-        self.assertIn("RELEASE_SELECTION: ${{ needs.gate.outputs.selection }}", publish)
-        # ...with one multi-package `cargo publish -p a -p b`, dry run and upload.
-        with mock.patch.object(cohort.release.subprocess, "run") as run:
-            cohort.release.publish({"rs-rich": "1.0.0", "rs-rich-ext": "1.0.0"}, dry_run=True)
-            cohort.release.publish({"rs-rich": "1.0.0", "rs-rich-ext": "1.0.0"}, dependencies={},
-                                   environ={"RELEASE_TRUSTED_TOKEN": "t"})
-        self.assertEqual([c.args[0] for c in run.call_args_list], [
-            ["cargo", "publish", "-p", "rs-rich", "-p", "rs-rich-ext", "--locked", "--dry-run"],
-            ["cargo", "publish", "-p", "rs-rich", "-p", "rs-rich-ext", "--locked"]])
-
-    def test_the_playground_job_only_adds_a_release_asset(self):
-        # docs/design/docs-playground.md, decision 3: after the crates are out,
-        # never instead of them, and never failing the run release_cohort.py
-        # waits on. Its name must not read as a publish job's start.
-        job = self.text[self.text.index("  playground:"):]
-        self.assertIn("name: docs playground module", job)
-        self.assertIn("needs: [gate, publish]", job)
-        self.assertIn("continue-on-error: true", job)
-        self.assertIn("startsWith(inputs.tag || github.ref_name, 'release-')", job)
-        self.assertIn("inputs.verify_only != true", job)
-        for forbidden in ("cargo publish", "release.py", "CARGO_REGISTRY_TOKEN", "id-token", "maturin", "twine"):
-            self.assertNotIn(forbidden, job)
-        self.assertIn("gh release upload", job)
-
-    def test_releases_never_cancel_each_other(self):
-        self.assertIn("group: crates-io-release\n  cancel-in-progress: false", self.text)
-
-    def test_pypi_does_not_start_on_a_release_tag(self):
-        pypi = (ROOT / ".github/workflows/pypi-release.yml").read_text()
-        self.assertIn('tags: ["python-v*"]', pypi)
-        self.assertNotIn("release-*\"", pypi)
+    def test_every_job_builds_the_dispatched_tag(self):
+        self.assertNotIn("GITHUB_REF_NAME", self.text)
+        self.assertNotIn("GITHUB_SHA", self.text)
+        self.assertEqual(self.text.count("uses: actions/checkout@"),
+                         self.text.count("ref: refs/tags/${{ inputs.tag }}"))
 
 
 class Tag(unittest.TestCase):
@@ -728,9 +679,7 @@ class Tag(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "records commit"):
             cohort.same_commit("rs-rich-art-v0.2.0", "origin")
 
-    def test_both_release_workflows_refuse_a_split_release_before_building(self):
-        crates = (ROOT / ".github/workflows/release.yml").read_text()
-        self.assertLess(crates.index("release_cohort.py same-commit"), crates.index("uses: ./.github/workflows/ci.yml"))
+    def test_the_pypi_fallback_refuses_a_split_release_before_building(self):
         pypi = (ROOT / ".github/workflows/pypi-release.yml").read_text()
         self.assertLess(pypi.index("release_cohort.py same-commit"), pypi.index("  wheels:"))
 

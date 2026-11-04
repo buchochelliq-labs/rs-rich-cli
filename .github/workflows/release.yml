@@ -1,13 +1,22 @@
-# Publish a release to crates.io: every crate of it not yet published, in one
-# run, from the `release-X.Y.Z` tag `scripts/release_cohort.py tag` pushes.
+# Publish a release: release-kit's workflow (https://github.com/buchochelliq-labs/release-kit,
+# v1.7.0, installed under .github/release-kit/), with this repository's own
+# jobs. It started from the kit's template; it is this repository's file.
 #
-# Publishing is IRREVERSIBLE — a version can be yanked but never deleted or
-# edited — so this workflow is deliberately paranoid. It checks the tag and its
-# release once, re-runs the full gate on the tagged commit once, refuses to
-# publish anything that is not on `main`, and aborts before upload if any
-# selected crate/version already exists. The crates' own `<crate>-vX.Y.Z`
-# tags are records and start nothing; dispatching one by hand publishes that
-# crate alone. PyPI is pypi-release.yml's, from `python-v…` tags.
+# `python3 .github/release-kit/scripts/release.py tag`, on main after the
+# release pull request merges, pushes one annotated record tag per package of
+# release-kit.yml (they start nothing) and then `release-X.Y.Z`, which starts
+# this run: the gate checks the tag once, CI runs once on the tagged commit,
+# the wheels are built and tested, and every package not yet on crates.io or
+# PyPI is published, then waited for and used as a stranger would. A run that
+# fails is fixed and resumed with `release.py tag` again (docs/BRANCHING.md).
+#
+# Publishing is permanent, so only the publish jobs write, and only from the
+# `crates-io` and `pypi` environments, whose trusted publishers name this
+# file. The kit reads a run in which a job named `publish…` started as one
+# that may have uploaded, and never moves its tags: every job that uploads
+# anywhere is named `publish…`, and no other job is.
+#
+# Third-party actions are pinned to commits (the version is in the comment).
 name: release
 
 on:
@@ -16,10 +25,12 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: Existing tag, release-X.Y.Z for a release (what of it is unpublished), or <crate>-vX.Y.Z for that crate alone
+        description: An existing release tag (release-X.Y.Z) to run again
         required: true
       verify_only:
-        description: Verify already-published exact versions without uploading
+        description: >-
+          Verify only: every package is already published (a run that failed
+          after uploading); check them again and upload nothing
         type: boolean
         default: false
 
@@ -27,81 +38,80 @@ permissions:
   contents: read
 
 concurrency:
-  # Serialize releases and single-crate uploads, including manual dispatches.
-  # Never cancel a partially published release.
-  group: crates-io-release
+  # One release at a time; never cancel one that may be half published.
+  group: release
   cancel-in-progress: false
 
 jobs:
   gate:
-    name: verify the tag
     runs-on: ubuntu-latest
     outputs:
-      selection: ${{ steps.plan.outputs.selection }}
-      sha: ${{ steps.commit.outputs.sha }}
-    env:
-      RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
+      sha: ${{ steps.gate.outputs.sha }}
+      release: ${{ steps.gate.outputs.release }}
+      selection: ${{ steps.gate.outputs.selection }}
+      verify-only: ${{ steps.gate.outputs.verify-only }}
+      crates-io: ${{ steps.gate.outputs.crates-io }}
+      pypi: ${{ steps.gate.outputs.pypi }}
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          fetch-depth: 0                       # need main to test ancestry
-          ref: ${{ format('refs/tags/{0}', inputs.tag || github.ref_name) }}
+          fetch-depth: 0
+          ref: refs/tags/${{ inputs.tag || github.ref_name }}
+          persist-credentials: false
+      - id: gate
+        uses: ./.github/release-kit/gate
+        with:
+          tag: ${{ inputs.tag || github.ref_name }}
+          verify-only: ${{ inputs.verify_only == true }}
 
-      # The invariant the whole branching model exists to protect: a published
-      # artifact must be reachable from main. See docs/BRANCHING.md.
-      - name: Refuse to publish content that is not on main
-        run: |
-          git fetch origin main --depth=0 2>/dev/null || git fetch origin main
-          if git merge-base --is-ancestor HEAD origin/main; then
-            echo "tagged commit is on main"
-          else
-            echo "::error::This tag does not point at a commit on main."
-            echo "::error::Tags are placed on main after the release PR merges — see docs/BRANCHING.md."
-            exit 1
-          fi
+  # The same gate every pull request passes, on the exact tagged tree. `cargo
+  # publish`'s own verification does not compile these crates' tests (their
+  # `include` omits them), so this is the real check. ci.yml's input is
+  # `checkout_ref`.
+  ci:
+    needs: gate
+    uses: ./.github/workflows/ci.yml
+    with:
+      checkout_ref: ${{ needs.gate.outputs.sha }}
 
-      - uses: dtolnay/rust-toolchain@stable
+  # The wheels release-kit.yml declares (a maturin artifact per target, each
+  # installed and imported, the linux x86_64 one also tested against rich
+  # 15.0.0), from the tagged commit. Skipped in a verify-only run.
+  build:
+    needs: [gate, ci]
+    if: needs.gate.outputs.verify-only != 'true'
+    permissions:
+      contents: read
+      actions: read   # a ci-artifact reads this repository's CI artifacts
+    uses: ./.github/workflows/release-kit-build.yml
+    with:
+      sha: ${{ needs.gate.outputs.sha }}
+      selection: ${{ needs.gate.outputs.selection }}
 
-      - uses: actions/setup-python@v7
+  # This repository's own check, which release-kit does not carry: each
+  # selected crate's version bump must fit its change by Cargo's rules,
+  # against its last release on crates.io (cargo-semver-checks, pinned in
+  # api/tools.toml, as CI's `api` job runs it), and the selected manifests and
+  # the workspace's exact internal requirements must agree. A 0.0.x bump is a
+  # breaking one and fits any change; CI's `api` job holds 0.0.x breaks to
+  # api/semver-breaks.toml instead. The publish jobs wait for it.
+  semver:
+    needs: gate
+    if: needs.gate.outputs.crates-io == 'true' && needs.gate.outputs.verify-only != 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.gate.outputs.sha }}
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master
+        with:
+          toolchain: stable
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: "3.12"
-
-      - name: Require an annotated tag and pin its validated commit
-        id: commit
-        run: python3 scripts/release.py validate-tag "$RELEASE_TAG"
-
-      - name: RELEASES.toml at the tagged commit matches its manifests
-        run: python3 scripts/release_cohort.py check
-
-      # One release, one commit. Every package of a release is tagged on the
-      # commit the release was cut from (release_cohort.py records it in each
-      # tag's message); a package tagged on another commit that would ship
-      # other code beside the rest of its release under the same numbers is
-      # refused here, before the gate. The job summary names the commit.
-      - name: Refuse a tag that splits its release across commits
-        run: python3 scripts/release_cohort.py same-commit "$RELEASE_TAG"
-
-      # Fail in seconds, not after the full gate: a version on crates.io is
-      # permanent. For a release tag this computes the selection: every crate
-      # of the release not yet on crates.io, in RELEASES.toml order, each of
-      # which must have its own tag on this commit; none due is refused. A
-      # crate tag selects its crate, refused when it is out. `verify_only`
-      # selects what the tag already released instead.
-      - name: Select what is due, refusing what is already released
-        id: due
-        if: ${{ inputs.verify_only != true }}
-        run: python3 scripts/release_cohort.py unreleased "$RELEASE_TAG"
-
-      - name: Select what the tag released (verify only)
-        id: done
-        if: ${{ inputs.verify_only == true }}
-        run: python3 scripts/release_cohort.py published "$RELEASE_TAG"
-
-      # cargo-semver-checks, for the plan's SemVer gate (Stage 3 of the plan
-      # to 1.0.0): pinned in api/tools.toml, cached as CI's `api` job caches it.
       - name: Read the pinned SemVer tools
         id: tools
-        if: ${{ inputs.verify_only != true }}
         run: |
           python3 - >> "$GITHUB_OUTPUT" <<'PY'
           import tomllib
@@ -109,142 +119,148 @@ jobs:
           for key, value in tools.items():
               print(f"{key.replace('-', '_')}={value}")
           PY
-
       - name: Install the toolchain cargo-semver-checks reads
-        if: ${{ inputs.verify_only != true }}
-        uses: dtolnay/rust-toolchain@master
+        uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master
         with:
           toolchain: ${{ steps.tools.outputs.semver_checks_toolchain }}
-
       - name: Cache cargo-semver-checks
         id: semver-tool
-        if: ${{ inputs.verify_only != true }}
-        uses: actions/cache@v6
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.cargo/bin/cargo-semver-checks
           key: semver-checks-${{ runner.os }}-${{ hashFiles('api/tools.toml') }}
-
       - name: Install cargo-semver-checks
-        if: ${{ inputs.verify_only != true && steps.semver-tool.outputs.cache-hit != 'true' }}
-        run: cargo install --locked cargo-semver-checks --version "${{ steps.tools.outputs.cargo_semver_checks }}"
-
-      # With --semver-checks the plan also refuses a version bump smaller than
-      # the change, by Cargo's rules, against each crate's last release. A
-      # 0.0.x bump is a breaking one and fits any change; CI's `api` job holds
-      # 0.0.x breaks to api/semver-breaks.toml instead.
-      - name: Selected manifests and internal requirements must agree
-        id: plan
+        if: steps.semver-tool.outputs.cache-hit != 'true'
         env:
-          RELEASE_SELECTION: ${{ steps.due.outputs.selection || steps.done.outputs.selection }}
-          SEMVER_CHECKS: ${{ inputs.verify_only != true && '--semver-checks' || '' }}
-        run: python3 scripts/release.py plan "$RELEASE_TAG" $SEMVER_CHECKS
+          VERSION: ${{ steps.tools.outputs.cargo_semver_checks }}
+        run: cargo install --locked cargo-semver-checks --version "$VERSION"
+      # The gate's selection, crates only, as scripts/release.py reads it:
+      # {crate: version}, in release-kit.yml's order.
+      - name: Selected manifests, internal requirements and version bumps agree
+        env:
+          SELECTION: ${{ needs.gate.outputs.selection }}
+          RELEASE: ${{ needs.gate.outputs.release }}
+        run: |
+          RELEASE_SELECTION="$(python3 -c 'import json, os; print(json.dumps({p["name"]: p["version"] for p in json.loads(os.environ["SELECTION"]) if p["registry"] == "crates.io"}))')"
+          export RELEASE_SELECTION
+          python3 scripts/release.py plan "release-$RELEASE" --semver-checks
 
-  # The same gate every PR passes, re-run on the exact tagged tree. `cargo
-  # publish`'s own verification does NOT compile test targets for these crates
-  # (their `include` omits tests), so this is the real check.
-  ci:
-    name: full gate
-    needs: gate
-    uses: ./.github/workflows/ci.yml
-    with:
-      checkout_ref: ${{ needs.gate.outputs.sha }}
-
-  publish:
-    name: publish and verify from crates.io
-    needs: [gate, ci]
+  # crates.io publishes from source. Crates already on crates.io upload with
+  # Trusted Publishing; a crate's first version cannot (crates.io offers it
+  # only for an existing crate), so it uploads with the environment's
+  # CARGO_REGISTRY_TOKEN secret, which reaches the step only when the
+  # preflight found a new crate. Add each new crate's Trusted Publisher once
+  # it is up.
+  publish-crates:
+    # From source, but after the build and the SemVer check: a release whose
+    # wheels fail to build or test, or whose bumps are too small, publishes
+    # nothing anywhere.
+    needs: [gate, ci, build, semver]
+    if: >-
+      !cancelled() && needs.gate.outputs.crates-io == 'true' && needs.ci.result == 'success'
+      && ((needs.build.result == 'success' && needs.semver.result == 'success')
+          || (needs.build.result == 'skipped' && needs.gate.outputs.verify-only == 'true'))
     runs-on: ubuntu-latest
-    environment: crates-io          # trusted publisher is bound to this environment
-    # crates.io Trusted Publishing: GitHub's OIDC token is exchanged for a
-    # short-lived crates.io token. A brand-new crate cannot use it (crates.io
-    # offers Trusted Publishing only on an existing crate), so its first
-    # version alone uploads with this environment's CARGO_REGISTRY_TOKEN.
+    environment: crates-io          # the Trusted Publisher is bound to it
     permissions:
       contents: read
       id-token: write
-    env:
-      RELEASE_SELECTION: ${{ needs.gate.outputs.selection }}
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ needs.gate.outputs.sha }}
-
-      - uses: dtolnay/rust-toolchain@stable
-
-      - uses: actions/setup-python@v7
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master
+        with:
+          toolchain: stable
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: "3.12"
-
-      - name: Refuse an already-published selected crate
-        id: preflight
-        if: ${{ inputs.verify_only != true }}
-        run: python3 scripts/release.py preflight
-
-      # One `cargo publish --dry-run -p a -p b …` for the whole selection:
-      # each crate is packaged and verified against the earlier ones'
-      # tarballs before anything uploads.
-      - name: Dry run selected packages
-        if: ${{ inputs.verify_only != true }}
-        run: python3 scripts/release.py publish --dry-run
-
-      # Exchange only after the preflight and dry run pass; a failed exchange
-      # stops the job before anything is uploaded. Skipped when every
-      # selected crate is new.
-      - name: Authenticate with crates.io Trusted Publishing
-        id: crates-io-auth
-        if: ${{ inputs.verify_only != true && steps.preflight.outputs.existing_crate == 'true' }}
-        uses: rust-lang/crates-io-auth-action@v1
-
-      # `cargo publish -p … -p …`, once per run of crates sharing a
-      # credential, in RELEASES.toml's dependency order (release.py
-      # publish_runs): existing crates with the exchanged token, a brand-new
-      # crate's first version with the environment's CARGO_REGISTRY_TOKEN,
-      # since Trusted Publishing needs the crate to exist. The secret reaches
-      # this step only when the preflight found a new crate. Add each new
-      # crate's Trusted Publishing entry once it is up.
-      - name: Publish selected packages
-        if: ${{ inputs.verify_only != true }}
+      - run: python3 -m pip install --quiet pyyaml
+      # Refuses a version already out, and says which crates are new.
+      - id: preflight
+        if: needs.gate.outputs.verify-only != 'true'
         env:
-          RELEASE_NEW_CRATES: ${{ steps.preflight.outputs.new_crates }}
-          RELEASE_TRUSTED_TOKEN: ${{ steps.crates-io-auth.outputs.token }}
-          RELEASE_NEW_CRATE_TOKEN: ${{ steps.preflight.outputs.new_crate == 'true' && secrets.CARGO_REGISTRY_TOKEN || '' }}
-        run: python3 scripts/release.py publish
+          SELECTION: ${{ needs.gate.outputs.selection }}
+        run: python3 .github/release-kit/scripts/release.py preflight --registry crates.io --selection "$SELECTION"
+      - id: auth
+        if: steps.preflight.outputs.existing_crate == 'true'
+        uses: rust-lang/crates-io-auth-action@3268eb413133e2960fa4ae0e963ca76380c54cd9 # v1.0.6
+      - uses: ./.github/release-kit/publish-crates
+        with:
+          selection: ${{ needs.gate.outputs.selection }}
+          new-crates: ${{ steps.preflight.outputs.new_crates || '[]' }}
+          token: ${{ steps.auth.outputs.token }}
+          new-crate-token: ${{ steps.preflight.outputs.new_crate == 'true' && secrets.CARGO_REGISTRY_TOKEN || '' }}
+          verify-only: ${{ needs.gate.outputs.verify-only }}
 
-      # Reuse the protected, validated checkout. Registry consumers still build
-      # in fresh temporary directories, without the upload step's credential.
-      - name: Wait for selected versions, then build as a stranger would
-        run: python3 scripts/release.py verify
+  # PyPI `rs-rich`, with Trusted Publishing: PyPI's publisher for it names this
+  # file (release.yml) and the `pypi` environment. The SemVer check is
+  # skipped when no crate is selected.
+  publish-pypi:
+    needs: [gate, ci, build, semver]
+    if: >-
+      !cancelled() && needs.gate.outputs.pypi == 'true' && needs.ci.result == 'success'
+      && ((needs.build.result == 'success'
+           && (needs.semver.result == 'success' || needs.semver.result == 'skipped'))
+          || (needs.build.result == 'skipped' && needs.gate.outputs.verify-only == 'true'))
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.gate.outputs.sha }}
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.12"
+      - run: python3 -m pip install --quiet pyyaml
+      - if: needs.gate.outputs.verify-only != 'true'
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: release--*
+          path: dist
+      - uses: ./.github/release-kit/publish-pypi
+        with:
+          selection: ${{ needs.gate.outputs.selection }}
+          verify-only: ${{ needs.gate.outputs.verify-only }}
 
   # The docs playground's module for this release (docs/design/docs-playground.md,
   # decision 3): built from the tagged commit and attached to the release's
   # GitHub release as playground-X.Y.Z.tar.gz, which build_versioned_docs.py
-  # downloads into the X.Y.Z docs. Additive: it runs only after a release tag's
-  # crates are published, uploads nothing to a registry, and cannot fail the
-  # run (`continue-on-error`), whose conclusion release_cohort.py waits on. A
-  # crate tag, a verify-only run or a failed publish attaches nothing. The
-  # job's name must not start with "publish": release_cohort.py reads such a
-  # job's start as an upload.
-  playground:
-    name: docs playground module
-    needs: [gate, publish]
-    if: ${{ startsWith(inputs.tag || github.ref_name, 'release-') && inputs.verify_only != true }}
+  # downloads into the X.Y.Z docs. It uploads, so it is named `publish…` (the
+  # kit's rule); it starts only after publish-crates has succeeded, so it never
+  # turns a run that published nothing into one that may have. It uploads
+  # nothing to a registry and cannot fail the run (`continue-on-error`), whose
+  # conclusion `release.py tag` waits on. A verify-only run attaches nothing.
+  publish-playground:
+    name: publish-playground (docs playground module)
+    needs: [gate, publish-crates]
+    if: >-
+      !cancelled() && needs.publish-crates.result == 'success' && needs.gate.outputs.verify-only != 'true'
     continue-on-error: true
     runs-on: ubuntu-latest
     permissions:
       contents: write   # create the GitHub release and attach the archive
       actions: write    # re-run docs.yml, so the site picks the archive up
     env:
-      RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
+      RELEASE_TAG: release-${{ needs.gate.outputs.release }}
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ needs.gate.outputs.sha }}
+          persist-credentials: false
 
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master
         with:
+          toolchain: stable
           # The playground's modules, and the `rich` CLI for its terminal.
           targets: wasm32-unknown-unknown, wasm32-wasip1
 
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: "22"
 
@@ -272,7 +288,7 @@ jobs:
           if ! gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
             gh release create "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --verify-tag \
               --title "Release $version" \
-              --notes "The crates of release $version, published to crates.io. Release notes: docs/releases/$version.md. playground-$version.tar.gz is the docs playground's module for the $version docs."
+              --notes "The crates of release $version, published to crates.io and PyPI. Release notes: docs/releases/$version.md. playground-$version.tar.gz is the docs playground's module for the $version docs."
           fi
           gh release upload "$RELEASE_TAG" "$RUNNER_TEMP/playground-$version.tar.gz" \
             --repo "$GITHUB_REPOSITORY" --clobber
