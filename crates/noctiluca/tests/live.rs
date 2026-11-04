@@ -532,3 +532,33 @@ fn a_shelf_that_scrolls_sideways_is_not_a_live_log() {
     assert_eq!(shelf.len(), 6, "{:#?}", page.media);
     assert!(shelf.windows(2).all(|w| w[0].rect.y == w[1].rect.y));
 }
+
+#[test]
+fn a_sticky_header_is_pinned_and_a_fixed_banner_docked() {
+    use noctiluca::layout::{Line, Marks, project};
+    let Some(binary) = chrome() else { return };
+    let mut live = Live::start(binary);
+    let plain = |lines: &[Line]| lines.iter().map(Line::plain).collect::<Vec<_>>().join("\n");
+    let page = live.wait_open("search-results.html", "Tide tables for today");
+    let projection = project(&page, 100, (8.0, 18.0), &Marks::default());
+    let pinned = projection.pinned.as_ref().map(|p| plain(&p.lines));
+    assert!(
+        pinned
+            .as_deref()
+            .is_some_and(|p| p.contains("tide tables ▾")),
+        "{pinned:?}"
+    );
+    assert!(!plain(&projection.lines).contains("tide tables ▾"));
+    let page = live.wait_open("overlays.html", "Following 1,204 channels");
+    let projection = project(&page, 100, (8.0, 18.0), &Marks::default());
+    let docked = projection.docked.as_ref().map(|p| plain(&p.lines));
+    assert!(
+        docked
+            .as_deref()
+            .is_some_and(|p| p.contains("Join the Streams")),
+        "{docked:?}"
+    );
+    let lines = plain(&projection.lines);
+    assert!(!lines.contains("An error occurred"), "{lines}");
+    assert_eq!(projection.overlays.len(), 3, "{lines}");
+}

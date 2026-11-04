@@ -680,6 +680,7 @@ impl Worker<'_> {
                 frame: rect,
                 node: ERROR_NOTICE,
                 region: None,
+                stack: Default::default(),
             },
         );
         if let Some(address) = shown {

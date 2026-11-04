@@ -2193,9 +2193,18 @@ fn near_end(b: Browser) -> u64 {
 
 /// Near the end of what was read: scroll Chrome to its bottom, so an
 /// infinite feed loads more. The page is read again on its change ping;
-/// the view asks again only once it has more rows.
+/// the view asks again only once it has more rows. Not for a page that
+/// fits in two screens, whose every row is near its end: it is not a feed
+/// waiting to grow (one that is sees its end in Chrome's viewport
+/// already), and scrolled, its sticky and fixed boxes would be read where
+/// they are stuck.
 fn load_more(b: Browser) {
-    if b.page.with_untracked(Option::is_some) {
+    let rows = b.viewport.get_untracked().1.saturating_sub(CHROME_ROWS);
+    let screen = f64::from(rows) * f64::from(CELL.1);
+    let long = b
+        .page
+        .with_untracked(|p| p.as_ref().is_some_and(|p| p.height > 2.0 * screen));
+    if long {
         b.send(Command::LoadMore);
     }
 }
@@ -2291,6 +2300,161 @@ fn click_control(b: Browser, index: usize, cx: &mut Ctx) {
     activate(b, index, cx);
 }
 
+/// The page's own colours as a backdrop for its rows, when the page
+/// colours rule is off: on white (a light terminal) or black; with
+/// `--transparent`, on the page's own background, or the terminal's where
+/// it sets none.
+fn backdrop(b: Browser) -> Option<String> {
+    if b.effective_adapt().on(crate::adapt::Rule::PageColors) {
+        return None;
+    }
+    let transparent = b.config.with(|c| c.transparent);
+    let page = b
+        .page
+        .with(|p| p.as_ref().and_then(|p| p.background.clone()));
+    crate::adapt::page_backdrop(page.as_deref(), transparent, crate::adapt::background())
+}
+
+/// Row `row` of the projection `l` (the page, or one of its strips) drawn
+/// `width` cells wide: its text, the pictures over it spliced in, the short
+/// texts over a picture drawn over it again, and the play marks.
+fn draw_row(
+    b: Browser,
+    console: &rich::Console,
+    cells: &pictures::Cells,
+    l: &Projection,
+    row: usize,
+    width: usize,
+    marks: &Marks,
+) -> Vec<rich::Segment> {
+    let Some(line) = l.lines.get(row) else {
+        return Vec::new();
+    };
+    let render = |line: &Line, marks: &Marks| {
+        let text = to_text(std::slice::from_ref(line), marks, row);
+        let options = console.options().update_width(width);
+        console
+            .render_lines(&text, &options, false)
+            .into_iter()
+            .next()
+            .unwrap_or_default()
+    };
+    let segments = render(line, marks);
+    // Only a row a picture covers reads the pictures.
+    let inline: Vec<&(layout::Region, String)> =
+        l.inline.iter().filter(|(r, _)| r.on(row)).collect();
+    if b.images.get() == Images::None || (inline.is_empty() && !l.regions.iter().any(|r| r.on(row)))
+    {
+        return segments;
+    }
+    let nodes: Vec<Option<NodeId>> = b.page.with(|p| {
+        l.regions
+            .iter()
+            .map(|r| p.as_ref()?.media.get(r.media).map(|m| m.node))
+            .collect()
+    });
+    // The media regions, then the small pictures in the row's lines, each
+    // with its picture.
+    let mut on_row: Vec<layout::Region> = l.regions.iter().filter(|r| r.on(row)).copied().collect();
+    on_row.extend(inline.iter().map(|(r, _)| *r));
+    let pixels = b.pixels.get();
+    let small = |region: &layout::Region| -> Option<(Picture, Pixels)> {
+        let (_, src) = inline.iter().find(|(r, _)| r == region)?;
+        let picture = b
+            .page
+            .with(|p| p.as_ref()?.inline_pictures.get(src).cloned())?;
+        Some((picture, pixels))
+    };
+    let mut spliced = pictures::splice(console, cells, segments, width, row, &on_row, |region| {
+        if region.media == usize::MAX {
+            return small(region);
+        }
+        let at = l.regions.iter().position(|r| r == region)?;
+        shown_picture(b, nodes.get(at).copied().flatten()?)
+    });
+    // A badge over a picture stays on it: its cells are text again.
+    for (_, column, over) in l.overlays.iter().filter(|(r, _, _)| *r == row) {
+        let drawn = render(over, &Marks::default());
+        let end = (column + over.width()).min(width);
+        if *column >= end {
+            continue;
+        }
+        let mut pieces = rich::Segment::divide(&spliced, &[*column, end, width]);
+        pieces.resize(3, Vec::new());
+        let mut joined = std::mem::take(&mut pieces[0]);
+        joined.extend(rich::Segment::adjust_line_length(
+            &drawn,
+            end - column,
+            None,
+        ));
+        joined.extend(std::mem::take(&mut pieces[2]));
+        spliced = joined;
+    }
+    // The play mark as cells only where pictures are cells: in pixels it
+    // is drawn into the poster ([`marked`]).
+    b.page.with(|p| match p {
+        Some(page) if pixels == Pixels::Cells => play_marks(spliced, width, row, &l.regions, page),
+        _ => spliced,
+    })
+}
+
+/// The most rows a pinned or docked strip takes: a quarter of the screen.
+fn strip_rows(b: Browser) -> usize {
+    usize::from(b.viewport.get().1 / 4)
+}
+
+/// The page's pinned strip (its top bars, `docked` false) or its docked
+/// strip (its bottom bars: cookie banners, sign-up bars): drawn above or
+/// under the page, never scrolled, at most [`strip_rows`] tall.
+fn strip_view(b: Browser, docked: bool) -> Node {
+    fn strip(l: &Projection, docked: bool) -> Option<&Projection> {
+        if docked {
+            l.docked.as_deref()
+        } else {
+            l.pinned.as_deref()
+        }
+    }
+    let cells = Rc::new(pictures::Cells::default());
+    let rows = move || {
+        b.layout
+            .with(|l| strip(l, docked).map_or(0, |s| s.lines.len()))
+            .min(strip_rows(b))
+    };
+    leaf(move |console, width, _| {
+        let width = usize::from(width.max(1));
+        let (rows, backdrop) = (rows(), backdrop(b));
+        b.layout.with(|l| {
+            let Some(s) = strip(l, docked) else {
+                return Vec::new();
+            };
+            (0..rows)
+                .map(|row| {
+                    let line = draw_row(b, console, &cells, s, row, width, &Marks::default());
+                    match &backdrop {
+                        Some(backdrop) => pictures::on_backdrop(line, width, backdrop),
+                        None => line,
+                    }
+                })
+                .collect()
+        })
+    })
+    .size_with(move || Size::Fixed(rows() as u16))
+    .on_click_at(move |cx, column, row| {
+        let control = b.layout.with_untracked(|l| {
+            let s = strip(l, docked)?;
+            layout::control_at(s.lines.get(usize::from(row))?, usize::from(column))
+        });
+        match control {
+            Some(index) => {
+                click_control(b, index, cx);
+                true
+            }
+            None => false,
+        }
+    })
+    .name(if docked { "docked" } else { "pinned" })
+}
+
 fn projection_view(b: Browser) -> Node {
     // The pictures' cells, made once per frame and size, shared by rows.
     let cells = Rc::new(pictures::Cells::default());
@@ -2311,77 +2475,13 @@ fn projection_view(b: Browser) -> Node {
                 ..Marks::default()
             };
             let width = usize::from(width.max(1));
-            // The page colours rule off: the page's own colours, on white
-            // (a light terminal) or black; with `--transparent`, on the
-            // page's own background, or the terminal's where it sets none.
-            let backdrop = if b.effective_adapt().on(crate::adapt::Rule::PageColors) {
-                None
-            } else {
-                let transparent = b.config.with(|c| c.transparent);
-                let page = b
-                    .page
-                    .with(|p| p.as_ref().and_then(|p| p.background.clone()));
-                crate::adapt::page_backdrop(
-                    page.as_deref(),
-                    transparent,
-                    crate::adapt::background(),
-                )
-            };
+            let backdrop = backdrop(b);
             let drawn = b.layout.with(|l| {
                 let row = l.rows.get(&key).copied().unwrap_or(i);
-                let Some(line) = l.lines.get(row) else {
+                if row >= l.lines.len() {
                     return vec![Vec::new()];
-                };
-                let text = to_text(std::slice::from_ref(line), &marks, row);
-                let options = console.options().update_width(width);
-                let segments = console
-                    .render_lines(&text, &options, false)
-                    .into_iter()
-                    .next()
-                    .unwrap_or_default();
-                // Only a row a picture covers reads the pictures.
-                let inline: Vec<&(layout::Region, String)> =
-                    l.inline.iter().filter(|(r, _)| r.on(row)).collect();
-                if b.images.get() == Images::None
-                    || (inline.is_empty() && !l.regions.iter().any(|r| r.on(row)))
-                {
-                    return vec![segments];
                 }
-                let nodes: Vec<Option<NodeId>> = b.page.with(|p| {
-                    l.regions
-                        .iter()
-                        .map(|r| p.as_ref()?.media.get(r.media).map(|m| m.node))
-                        .collect()
-                });
-                // The media regions, then the small pictures in the row's
-                // lines, each with its picture.
-                let mut on_row: Vec<layout::Region> =
-                    l.regions.iter().filter(|r| r.on(row)).copied().collect();
-                on_row.extend(inline.iter().map(|(r, _)| *r));
-                let pixels = b.pixels.get();
-                let small = |region: &layout::Region| -> Option<(Picture, Pixels)> {
-                    let (_, src) = inline.iter().find(|(r, _)| r == region)?;
-                    let picture = b
-                        .page
-                        .with(|p| p.as_ref()?.inline_pictures.get(src).cloned())?;
-                    Some((picture, pixels))
-                };
-                let spliced =
-                    pictures::splice(console, &cells, segments, width, row, &on_row, |region| {
-                        if region.media == usize::MAX {
-                            return small(region);
-                        }
-                        let at = l.regions.iter().position(|r| r == region)?;
-                        shown_picture(b, nodes.get(at).copied().flatten()?)
-                    });
-                // The play mark as cells only where pictures are cells:
-                // in pixels it is drawn into the poster ([`marked`]).
-                vec![b.page.with(|p| match p {
-                    Some(page) if pixels == Pixels::Cells => {
-                        play_marks(spliced, width, row, &l.regions, page)
-                    }
-                    _ => spliced,
-                })]
+                vec![draw_row(b, console, &cells, l, row, width, &marks)]
             });
             match backdrop {
                 Some(backdrop) => drawn
@@ -2431,7 +2531,7 @@ fn projection_view(b: Browser) -> Node {
         })
         .fixed(1)
     };
-    scroll_virtual_with(
+    let page = scroll_virtual_with(
         move || b.layout.with(|l| l.lines.len()),
         |_| 1,
         line,
@@ -2444,6 +2544,8 @@ fn projection_view(b: Browser) -> Node {
     .on_near_end(near_end(b), move |_| load_more(b))
     .autofocus()
     .name("page")
+    .flex(1);
+    column([strip_view(b, false), page, strip_view(b, true)])
 }
 
 /// The rows the header and the status bar take.

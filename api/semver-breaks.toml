@@ -108,7 +108,7 @@ why = "the pixel view (#818): the view, its screencast frames, and clicks at a p
 
 [[break]]
 crate = "noctiluca"
-version = "0.0.3"
+version = "0.0.4"
 lint = "constructible_struct_adds_field"
 items = ["field Media.revision", "field Media.text"]
 why = "live regions (0.0.25 plan, Noctiluca real sites fixes 1 and 6): an inline svg's content revision keys its still, and its <text> is read as its text"
@@ -122,14 +122,18 @@ why = "frozen rows in tables, Textual's fixed_rows, are a TableOptions field lik
 
 [[break]]
 crate = "noctiluca"
-version = "0.0.3"
+version = "0.0.4"
 lint = "constructible_struct_adds_field"
 items = ["field Run.twin", "field Control.glyph", "field Control.hover_only", "field Media.pending", "field Page.indicators"]
 why = "page semantics (0.0.25 plan, Noctiluca real sites fixes 3, 7, 8, 9, 13, 16): screen-reader twins, icon buttons' glyphs, hover-only controls, lazy thumbnails' placeholders, and meters, progress bars and ratings as indicators"
 
 [[break]]
 crate = "noctiluca"
-version = "0.0.3"
+version = "0.0.4"
 lint = "enum_variant_added"
 items = ["variant BlockKind:Indicator", "variant Rule:ScreenReaderTwins", "variant Rule:Indicators"]
 why = "page semantics (0.0.25 plan, Noctiluca real sites fixes 3 and 7): an indicator block, and the screen-reader-twins and indicators adaptations"
+version = "0.0.4"
+lint = "constructible_struct_adds_field"
+items = ["field Block.stack", "field Page.layers", "field Page.scroll_y", "field Page.view_height", "field Projection.overlays", "field Projection.pinned", "field Projection.docked"]
+why = "fixed and sticky layers, paint order and text over pictures (real sites, second pass, fixes 2, 4 and 12): the model reads each block's place in the page's stack, the projection draws pinned and docked strips and badges over pictures (0.0.25 plan)"
