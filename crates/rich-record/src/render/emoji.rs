@@ -22,7 +22,9 @@ const DESCENT: f32 = 64.0;
 
 /// An emoji drawn into a square, straight (not premultiplied) RGBA.
 pub struct Bitmap {
+    /// The square's side, in pixels.
     pub side: usize,
+    /// The pixels, row by row.
     pub rgba: Vec<[u8; 4]>,
 }
 

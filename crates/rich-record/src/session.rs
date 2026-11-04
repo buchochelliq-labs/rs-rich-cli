@@ -43,12 +43,18 @@ pub enum Event {
     /// Bytes typed into the terminal.
     Input(String),
     /// The terminal was resized.
-    Resize { columns: u16, rows: u16 },
+    Resize {
+        /// The new width in columns.
+        columns: u16,
+        /// The new height in rows.
+        rows: u16,
+    },
 }
 
 /// The recorded timeline: seconds from the start, with hidden stretches cut.
 #[derive(Clone, Debug, Default)]
 pub struct Timeline {
+    /// What happened, at seconds from the start.
     pub events: Vec<(f64, Event)>,
     /// The screen after each settled update (output that read in full, no
     /// synchronized update open), packed. Of the updates within one frame
@@ -615,6 +621,7 @@ impl Session {
         self.outgoing.send(data.as_bytes())
     }
 
+    /// Resize the terminal to `columns` x `rows`.
     pub fn resize(&mut self, columns: u16, rows: u16) -> std::io::Result<()> {
         check_size(columns, rows)?;
         self.master
@@ -649,6 +656,7 @@ impl Session {
         self.lock().terminal.contents()
     }
 
+    /// Whether the program is still running.
     pub fn alive(&self) -> bool {
         self.lock().alive
     }
@@ -666,11 +674,14 @@ impl Session {
         spans
     }
 
+    /// The current screen.
     pub fn snapshot(&self) -> Snapshot {
         let state = self.lock();
         state.terminal.snapshot(&state.theme)
     }
 
+    /// Stop recording: what the next steps show is cut from the recording
+    /// until [`Session::show`].
     pub fn hide(&self) {
         let mut state = self.lock();
         if !state.hidden {

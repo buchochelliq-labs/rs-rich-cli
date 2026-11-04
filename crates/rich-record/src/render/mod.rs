@@ -13,9 +13,11 @@ pub mod video;
 /// title, and a caption under the terminal.
 #[derive(Clone, Copy, Debug)]
 pub struct Look<'a> {
+    /// The window's title.
     pub title: &'a str,
     /// Draw the window frame (title bar and buttons).
     pub window: bool,
+    /// The caption under the terminal, if any.
     pub caption: Option<&'a str>,
     /// The text size of video frames, in pixels.
     pub text_size: f32,
