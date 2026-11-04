@@ -167,3 +167,40 @@ fn canvas_dials_get_pictures_and_frames_while_they_draw() {
     let after: usize = live.frames.values().map(Vec::len).sum();
     assert_eq!(after, sent, "frames from canvases holding still");
 }
+
+#[test]
+fn a_canvas_gauge_with_a_meter_role_is_drawn_as_intuituives_dial() {
+    let Some(binary) = chrome() else { return };
+    let mut live = Live::start(binary);
+    let url = fixture("gauge-canvas.html");
+    live.tab.send(Command::Open(url.clone()));
+    // The script moves the meter's value to its end, 95.8 Mbps of 500.
+    let page = live.wait("the meter at its end", |p| {
+        p.url == url
+            && p.indicators
+                .iter()
+                .any(|i| i.label == "Upload" && i.value.is_some_and(|v| v > 95.0))
+    });
+    let upload = page.indicators.iter().find(|i| i.label == "Upload").unwrap();
+    assert!(upload.media.is_some(), "the canvas is the meter");
+    let lines: Vec<String> = noctiluca::layout::project(
+        &page,
+        100,
+        (8.0, 16.0),
+        &noctiluca::layout::Marks::default(),
+    )
+    .lines
+    .iter()
+    .map(noctiluca::layout::Line::plain)
+    .collect();
+    let braille = |c: char| ('\u{2801}'..='\u{28ff}').contains(&c);
+    assert!(
+        lines.iter().any(|l| l.chars().any(braille)),
+        "the dial's arc: {lines:#?}"
+    );
+    assert!(
+        lines.iter().any(|l| l.contains("95.8 Mbps")),
+        "{lines:#?}"
+    );
+    assert!(lines.iter().any(|l| l.contains("500")), "the range's end");
+}

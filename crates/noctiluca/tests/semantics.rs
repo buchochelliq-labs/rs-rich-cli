@@ -184,7 +184,13 @@ fn a_canvas_gauge_with_a_meter_role_is_a_dial_in_its_place() {
     assert_eq!(page.indicators[0].media, Some(0));
     let dial = lines(&page, 80, Adapt::default());
     assert!(dial.iter().any(|l| l.contains("287.4 Mbps")), "{dial:#?}");
-    assert!(dial.iter().any(|l| l.contains('┏')), "{dial:#?}");
+    // intuiTUIve's dial: its arc in Braille dots, its caption under it.
+    assert!(
+        dial.iter()
+            .any(|l| l.chars().any(|c| ('\u{2801}'..='\u{28ff}').contains(&c))),
+        "{dial:#?}"
+    );
+    assert!(dial.iter().any(|l| l.contains("Upload")), "{dial:#?}");
     assert!(
         !dial.iter().any(|l| l.contains('░')),
         "no grey box: {dial:#?}"
