@@ -213,13 +213,18 @@ impl RawFormat {
 /// Raw pixels to transmit: their layout, the bytes, and the size.
 #[derive(Clone, Copy, Debug)]
 pub struct RawImage<'a> {
+    /// How the bytes are laid out.
     pub format: RawFormat,
+    /// The pixels, row by row.
     pub pixels: &'a [u8],
+    /// The image's width in pixels.
     pub width: u32,
+    /// The image's height in pixels.
     pub height: u32,
 }
 
 impl<'a> RawImage<'a> {
+    /// Raw pixels of `width` by `height` in `format`.
     pub fn new(format: RawFormat, pixels: &'a [u8], width: u32, height: u32) -> RawImage<'a> {
         RawImage {
             format,
@@ -236,10 +241,15 @@ impl<'a> RawImage<'a> {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[must_use = "builder methods return a new value; it does nothing until it is used"]
 pub struct Transmit {
+    /// The image id (`i`).
     pub id: u32,
+    /// The placement id (`p`), if any.
     pub placement: Option<u32>,
+    /// The virtual placement's width in cells.
     pub cols: usize,
+    /// The virtual placement's height in cells.
     pub rows: usize,
+    /// Whether the pixels are zlib-compressed (`o=z`).
     pub compress: bool,
 }
 

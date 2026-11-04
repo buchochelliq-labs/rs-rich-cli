@@ -10,6 +10,7 @@ use crate::error::FetchError;
 /// and never returns more than `max_bytes`: a longer body is
 /// [`FetchError::TooLarge`], not a truncated one.
 pub trait Transport {
+    /// The body at `url`, at most `max_bytes` long.
     fn get(&self, url: &str, max_bytes: u64) -> Result<Vec<u8>, FetchError>;
 }
 
@@ -43,6 +44,7 @@ pub struct MemoryTransport {
 }
 
 impl MemoryTransport {
+    /// A transport with no files yet.
     pub fn new() -> Self {
         MemoryTransport::default()
     }
@@ -100,6 +102,7 @@ pub struct HttpsTransport {
 
 #[cfg(feature = "http")]
 impl HttpsTransport {
+    /// A transport that trusts the system's certificate store first, then the bundled roots.
     pub fn new() -> Self {
         let agent = |trust: crate::tls::Trust| {
             let config = ureq::Agent::config_builder()

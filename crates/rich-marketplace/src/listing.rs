@@ -130,7 +130,12 @@ impl fmt::Display for Tier {
 #[non_exhaustive]
 pub enum Requires {
     /// A WASM plugin's runtime ABI, `MAJOR.MINOR`.
-    Abi { major: u32, minor: u32 },
+    Abi {
+        /// The ABI major version.
+        major: u32,
+        /// The ABI minor version it needs.
+        minor: u32,
+    },
     /// A crate's `PLUGIN_API_VERSION`.
     PluginApi(u64),
     /// A micro pack's `pack.json` schema.
@@ -155,7 +160,9 @@ pub struct Artifact {
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 #[non_exhaustive]
 pub struct Capability {
+    /// The capability's kind.
     pub kind: String,
+    /// Its name.
     pub name: String,
 }
 
@@ -163,13 +170,19 @@ pub struct Capability {
 #[derive(Clone, Debug, PartialEq, Eq)]
 #[non_exhaustive]
 pub struct ListedVersion {
+    /// The version.
     pub version: Version,
     /// `YYYY-MM-DD`.
     pub published: String,
+    /// What it needs from the host.
     pub requires: Requires,
+    /// Its file.
     pub artifact: Artifact,
+    /// The source revision it was built from, if the listing names one.
     pub source_revision: Option<String>,
+    /// What it adds.
     pub capabilities: Vec<Capability>,
+    /// The permissions it asks for.
     pub permissions: Vec<String>,
     /// The reason, when the version is yanked.
     pub yanked: Option<String>,
@@ -186,7 +199,9 @@ impl ListedVersion {
 #[derive(Clone, Debug, PartialEq, Eq)]
 #[non_exhaustive]
 pub struct CrateInfo {
+    /// The crate's name on crates.io.
     pub name: String,
+    /// The features that enable the plugin.
     pub features: Vec<String>,
 }
 
@@ -198,6 +213,7 @@ pub struct CrateInfo {
 pub struct Recommended {
     /// `YYYY-MM-DD`.
     pub since: String,
+    /// Why, in at most [`MAX_RECOMMENDED_NOTE`] characters.
     pub note: String,
 }
 
@@ -208,19 +224,31 @@ pub const MAX_RECOMMENDED_NOTE: usize = 140;
 #[derive(Clone, Debug, PartialEq, Eq)]
 #[non_exhaustive]
 pub struct Listing {
+    /// The package id.
     pub id: String,
+    /// What kind of package it is.
     pub kind: Kind,
+    /// Its display name.
     pub name: String,
+    /// A one-line description.
     pub description: String,
+    /// Its tier, which only a maintainer sets.
     pub tier: Tier,
+    /// Its licence, as the listing states it.
     pub license: String,
+    /// Its authors.
     pub authors: Vec<String>,
+    /// Its source repository's URL.
     pub repository: String,
+    /// Its home page, if it has one.
     pub homepage: Option<String>,
+    /// Search keywords.
     pub keywords: Vec<String>,
+    /// For a crate: its crates.io name and features.
     pub crate_info: Option<CrateInfo>,
     /// A maintainer's pick, when it is one.
     pub recommended: Option<Recommended>,
+    /// Every version ever listed, newest first.
     pub versions: Vec<ListedVersion>,
 }
 

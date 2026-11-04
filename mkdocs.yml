@@ -307,6 +307,7 @@ nav:
       - "Design: Cornacai, a terminal client for coding agents (#794)": design/cornacai.md
       - "Design: fuzzing": design/fuzzing.md
       - "Design: the threat model": design/threat-model.md
+      - "Design: the 0.1.0 API review, groundwork": design/api-review.md
       - "Security policy": https://github.com/buchochelliq-labs/rs-rich-cli/blob/main/SECURITY.md
       - "Design: the clones' gap reports":
           - "git (gitui)": design/gaps/git.md

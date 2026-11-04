@@ -39,6 +39,8 @@
 //! # let _ = bytes; Ok(()) }
 //! ```
 
+#![warn(missing_docs)]
+
 mod check;
 mod error;
 mod index;

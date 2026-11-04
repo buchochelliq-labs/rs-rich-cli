@@ -12,8 +12,11 @@ type Rgb = (u8, u8, u8);
 /// per pixel, rows top to bottom.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Pixels {
+    /// The frame's width in pixels.
     pub width: u32,
+    /// The frame's height in pixels.
     pub height: u32,
+    /// `width * height * 3` bytes: red, green and blue for each pixel.
     pub rgb: Vec<u8>,
 }
 

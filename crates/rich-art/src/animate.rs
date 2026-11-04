@@ -150,7 +150,9 @@ impl Default for BannerPalette {
 /// terminal's own, for blanks).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct BannerCell {
+    /// The character drawn.
     pub ch: char,
+    /// Its colour; `None` is the terminal's own.
     pub fg: Option<Rgb>,
 }
 

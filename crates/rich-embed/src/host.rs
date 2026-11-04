@@ -127,6 +127,7 @@ pub struct Command {
 }
 
 impl Command {
+    /// The program `program`, with no arguments yet.
     pub fn new(program: impl Into<OsString>) -> Command {
         Command {
             program: program.into(),
@@ -136,12 +137,14 @@ impl Command {
         }
     }
 
+    /// Add one argument.
     #[must_use]
     pub fn arg(mut self, arg: impl Into<OsString>) -> Command {
         self.args.push(arg.into());
         self
     }
 
+    /// Add several arguments, in order.
     #[must_use]
     pub fn args<I: IntoIterator<Item = S>, S: Into<OsString>>(mut self, args: I) -> Command {
         self.args.extend(args.into_iter().map(Into::into));
@@ -276,6 +279,8 @@ pub struct LocalPty {
 }
 
 impl LocalPty {
+    /// A pane for `command`, started on a PTY (ConPTY on Windows) when the
+    /// pane is first laid out.
     pub fn new(command: impl Into<Command>) -> LocalPty {
         LocalPty {
             command: command.into(),
@@ -587,6 +592,7 @@ pub struct ReplayHost {
 }
 
 impl ReplayHost {
+    /// A host with nothing to replay yet.
     pub fn new() -> ReplayHost {
         ReplayHost::default()
     }

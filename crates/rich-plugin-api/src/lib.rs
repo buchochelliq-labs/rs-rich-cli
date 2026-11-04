@@ -43,6 +43,7 @@
 
 // A builder method that returns `Self` is `#[must_use]`: dropping its
 // result drops the value (CONTRIBUTING.md, "API conventions").
+#![warn(missing_docs)]
 #![warn(clippy::return_self_not_must_use)]
 
 use std::fmt;
@@ -252,13 +253,21 @@ pub trait Plugin: Send + Sync {
 pub enum Capability {
     /// A regex highlighter (these are not named).
     Highlighter,
+    /// A code highlighter, by name.
     CodeHighlighter(String),
+    /// A theme, by name.
     Theme(String),
+    /// A box style, by name.
     BoxStyle(String),
+    /// A renderer, by name.
     Renderer(String),
+    /// A Markdown fence renderer, by language.
     FenceRenderer(String),
+    /// A text transform, by name.
     Transform(String),
+    /// An action, by name.
     Action(String),
+    /// A component, by name.
     Component(String),
 }
 
@@ -284,23 +293,42 @@ impl fmt::Display for Capability {
 pub enum PluginError {
     /// The plugin was built for another [`PLUGIN_API_VERSION`].
     IncompatibleApi {
+        /// The plugin's id.
         plugin: String,
+        /// The API version it was built for.
         built_for: u32,
+        /// This host's API version.
         host: u32,
     },
     /// A plugin with this id is already registered.
-    DuplicatePlugin { id: String },
+    DuplicatePlugin {
+        /// The id.
+        id: String,
+    },
     /// Two plugins registered the same capability under the same name.
     Conflict {
+        /// The capability both registered.
         capability: Capability,
+        /// The plugin that registered it first.
         existing: String,
+        /// The plugin that registered it again.
         plugin: String,
     },
     /// An id or capability name is empty or uses characters other than
     /// lowercase letters, digits, `-`, `_` and `.`.
-    InvalidName { plugin: String, name: String },
+    InvalidName {
+        /// The plugin's id.
+        plugin: String,
+        /// The name refused.
+        name: String,
+    },
     /// The plugin's own `register` failed.
-    Failed { plugin: String, message: String },
+    Failed {
+        /// The plugin's id.
+        plugin: String,
+        /// What it said went wrong.
+        message: String,
+    },
     /// A plugin-defined error, for example from a [`SourceRenderer`].
     Other(String),
 }

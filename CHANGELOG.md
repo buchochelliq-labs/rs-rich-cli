@@ -9,6 +9,22 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Documentation and the API review's groundwork (0.0.25)
+
+- **Every public item documented in ten stable crates**, with
+  `#![warn(missing_docs)]` on: rs-rich-plugin-api, rs-rich-macros,
+  rs-rich-cli, rs-rich-marketplace, rs-rich-art, rs-rich-micro,
+  rs-rich-record, rs-rich-embed, rs-rich-acp and cornacai (about 510 doc
+  comments added; a few one-line struct variants now take a line a field).
+  The other five's counts are in
+  [the API review's groundwork](docs/design/api-review.md), with every
+  foreign type in the stable set's public APIs, the list 0.1.0's review
+  of public dependencies works through. No API change.
+- **PORTING's partial rows checked against the code:** intuiTUIve's testing
+  helpers (#809, #810) are 🟢; its widgets and stylesheets rows name what
+  is still missing after 0.0.24 rather than its waves; Noctiluca's and
+  Cornacai's say what `main` has for 0.0.25.
+
 ### Noctiluca: live regions (0.0.25)
 
 - **Canvases are drawn, and stay live.** A `<canvas>` gets a picture from

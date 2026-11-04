@@ -19,6 +19,7 @@ pub struct BrailleArt {
 }
 
 impl BrailleArt {
+    /// Braille art of `image`, at the width it is rendered to.
     pub fn new(image: DynamicImage) -> Self {
         Self {
             image: std::sync::Arc::new(image),
@@ -46,11 +47,13 @@ impl BrailleArt {
         self
     }
 
+    /// A fixed width in cells (at least 1), instead of the width rendered to.
     pub fn width(mut self, width: usize) -> Self {
         self.width = Some(width.max(1));
         self
     }
 
+    /// A fixed height in rows (at least 1), instead of one derived from the width.
     pub fn height(mut self, height: usize) -> Self {
         self.height = Some(height.max(1));
         self
@@ -114,6 +117,7 @@ impl BrailleArt {
             .collect()
     }
 
+    /// The art at `width` cells as plain text, one line per row.
     pub fn to_text(&self, width: usize) -> String {
         self.rows(width, None).join("\n")
     }

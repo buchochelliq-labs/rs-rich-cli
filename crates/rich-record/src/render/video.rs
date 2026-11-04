@@ -26,8 +26,11 @@ const BATCH_BYTES: usize = 256 * 1024 * 1024;
 pub struct VideoFrame {
     /// An index into [`Timeline::frames`].
     pub frame: usize,
+    /// Whether the cursor is shown.
     pub cursor: bool,
+    /// The key-overlay label, when a key was just pressed.
     pub key: Option<String>,
+    /// How long the frame lasts, in seconds.
     pub seconds: f64,
 }
 

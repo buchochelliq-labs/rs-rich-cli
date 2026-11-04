@@ -21,7 +21,9 @@ pub const INDEX_COMMENT_PREFIX: &str = "rs-rich-marketplace index serial=";
 /// rollback: its serial and the SHA-256 of its bytes.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct AcceptedIndex {
+    /// The index's serial.
     pub serial: u64,
+    /// The lowercase hex SHA-256 of its bytes.
     pub sha256: String,
 }
 

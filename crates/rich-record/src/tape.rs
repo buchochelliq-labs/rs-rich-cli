@@ -57,11 +57,14 @@ use crate::keyboard::Press;
 /// A parse or run error, with the tape line it came from (0 when none).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TapeError {
+    /// The tape line, from 1; 0 when there is none.
     pub line: usize,
+    /// What went wrong.
     pub message: String,
 }
 
 impl TapeError {
+    /// An error at `line`.
     pub fn new(line: usize, message: impl Into<String>) -> Self {
         TapeError {
             line,
@@ -85,22 +88,37 @@ impl std::error::Error for TapeError {}
 /// A key `Type` cannot send as text.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Key {
+    /// `Enter`.
     Enter,
+    /// `Tab`.
     Tab,
+    /// `Space`.
     Space,
+    /// `Backspace`.
     Backspace,
+    /// `Escape`.
     Escape,
+    /// `Up`.
     Up,
+    /// `Down`.
     Down,
+    /// `Left`.
     Left,
+    /// `Right`.
     Right,
+    /// `Home`.
     Home,
+    /// `End`.
     End,
+    /// `PageUp`.
     PageUp,
+    /// `PageDown`.
     PageDown,
     /// `Shift+Tab`.
     ShiftTab,
+    /// `Delete`.
     Delete,
+    /// `Insert`.
     Insert,
     /// A function key, `F1` to `F24`.
     F(u8),
@@ -114,7 +132,9 @@ pub enum Key {
     /// like. `mods` is xterm's modifier parameter: 1, plus 1 for Shift, 2
     /// for Alt and 4 for Ctrl.
     Modified {
+        /// The key.
         key: Modifiable,
+        /// xterm's modifier parameter.
         mods: u8,
     },
 }
@@ -123,16 +143,27 @@ pub enum Key {
 /// `CSI n ; mods ~` forms.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Modifiable {
+    /// `Up`.
     Up,
+    /// `Down`.
     Down,
+    /// `Left`.
     Left,
+    /// `Right`.
     Right,
+    /// `Home`.
     Home,
+    /// `End`.
     End,
+    /// `PageUp`.
     PageUp,
+    /// `PageDown`.
     PageDown,
+    /// `Delete`.
     Delete,
+    /// `Insert`.
     Insert,
+    /// A function key, `F1` to `F24`.
     F(u8),
 }
 
@@ -341,8 +372,11 @@ fn function_key(n: u8) -> String {
 /// A mouse button a tape presses.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Button {
+    /// The left button.
     Left,
+    /// The middle button.
     Middle,
+    /// The right button.
     Right,
 }
 
@@ -365,9 +399,15 @@ pub enum MouseAction {
     /// `DoubleClick`: two left clicks in quick succession.
     DoubleClick,
     /// `Drag`: press the left button, move to `to` a cell at a time, release.
-    Drag { to: (u16, u16) },
+    Drag {
+        /// The cell (column, row) it ends at.
+        to: (u16, u16),
+    },
     /// `ScrollUp` or `ScrollDown`: one turn of the wheel.
-    Scroll { up: bool },
+    Scroll {
+        /// Up, or down.
+        up: bool,
+    },
     /// `MouseMove`: the pointer moves there with no button held.
     Move,
 }
@@ -375,8 +415,11 @@ pub enum MouseAction {
 /// A mouse step: what, where, and how many times.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Mouse {
+    /// What it does.
     pub action: MouseAction,
+    /// The cell (column, row), from 0 at the top left.
     pub at: (u16, u16),
+    /// How many times.
     pub count: u32,
 }
 
@@ -450,6 +493,7 @@ pub enum Format {
     Svg,
     /// The asciinema cast.
     Cast,
+    /// An animated GIF.
     Gif,
     /// An animated PNG, in full colour.
     Apng,
@@ -460,6 +504,7 @@ pub enum Format {
 }
 
 impl Format {
+    /// Every format.
     pub const ALL: [Format; 7] = [
         Format::Png,
         Format::Svg,
@@ -501,6 +546,7 @@ impl Format {
 /// was a path.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Output {
+    /// The format.
     pub format: Format,
     /// Relative to the tape's output directory.
     pub path: Option<String>,
@@ -509,11 +555,14 @@ pub struct Output {
 /// What `Wait` waits for.
 #[derive(Debug, Clone)]
 pub enum Pattern {
+    /// Text the screen contains.
     Text(String),
+    /// A regular expression the screen matches.
     Regex(Regex),
 }
 
 impl Pattern {
+    /// Whether `screen` has the text or matches.
     pub fn is_match(&self, screen: &str) -> bool {
         match self {
             Pattern::Text(text) => screen.contains(text.as_str()),
@@ -534,30 +583,51 @@ impl fmt::Display for Pattern {
 /// One step of a tape.
 #[derive(Debug, Clone)]
 pub enum Step {
+    /// `Set TypingDelay`: the pause between typed characters.
     TypingDelay(Duration),
+    /// `Set Timeout`: how long a `Wait` waits when it does not say.
     Timeout(Duration),
+    /// `Type`: text typed, a character at a time.
     Type(String),
+    /// A key pressed, `count` times.
     Key {
+        /// The key.
         key: Key,
+        /// How many times.
         count: u32,
     },
+    /// `Sleep`: wait.
     Sleep(Duration),
+    /// `Wait`: until the screen shows the pattern.
     Wait {
+        /// What to wait for.
         pattern: Pattern,
+        /// How long, over the tape's `Set Timeout`.
         timeout: Option<Duration>,
     },
+    /// `Screenshot`: a screenshot by this name.
     Screenshot(String),
+    /// `Hide`: stop recording what the next steps show.
     Hide,
+    /// `Show`: record again.
     Show,
+    /// `Resize`: the terminal's new size.
     Resize {
+        /// The width in columns.
         columns: u16,
+        /// The height in rows.
         rows: u16,
     },
+    /// `Write`: a file in the workspace.
     Write {
+        /// Its path, relative to the workspace.
         path: String,
+        /// Its contents.
         content: String,
     },
+    /// `Exec`: a command run outside the terminal.
     Exec(String),
+    /// A mouse step.
     Mouse(Mouse),
     /// `KeyDown`: press a key and hold it.
     KeyDown(Press),
@@ -565,7 +635,9 @@ pub enum Step {
     KeyUp(Press),
     /// `Hold`: press a key, hold it for a while, let it go.
     Hold {
+        /// The key.
         key: Press,
+        /// How long it is held.
         duration: Duration,
     },
 }
@@ -574,14 +646,19 @@ pub enum Step {
 /// profile or rc files and with the same `❯` prompt.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum Shell {
+    /// `bash`.
     #[default]
     Bash,
+    /// `zsh`.
     Zsh,
+    /// `fish`.
     Fish,
+    /// `sh`.
     Sh,
 }
 
 impl Shell {
+    /// The shell named `name`: `bash`, `zsh`, `fish` or `sh`.
     pub fn parse(name: &str) -> Option<Shell> {
         Some(match name {
             "bash" => Shell::Bash,
@@ -606,10 +683,15 @@ impl Shell {
 /// A parsed tape: its settings, and its steps with their line numbers.
 #[derive(Debug, Clone)]
 pub struct Tape {
+    /// `Set Size`: the width in columns.
     pub columns: u16,
+    /// `Set Size`: the height in rows.
     pub rows: u16,
+    /// `Set Title`, if the tape has one.
     pub title: Option<String>,
+    /// `Set Shell`.
     pub shell: Shell,
+    /// `Set Env`: variables set for the shell.
     pub env: Vec<(String, String)>,
     /// Rewrites applied to text grids (what `--check` compares), for output
     /// that differs on every run: temporary paths, timings. Images and casts
@@ -635,6 +717,7 @@ pub struct Tape {
     pub key_repeat: Option<(Duration, Duration)>,
     /// `Set Audio`: record the program's sound ([`crate::audio`]).
     pub audio: bool,
+    /// The steps, with their line numbers.
     pub steps: Vec<(usize, Step)>,
 }
 
@@ -665,11 +748,13 @@ pub const MAX_DURATION: Duration = Duration::from_secs(3600);
 /// The smallest terminal a tape may ask for: the emulator needs room for a
 /// wide character.
 pub const MIN_COLUMNS: u16 = 2;
+/// The fewest rows a tape may ask for.
 pub const MIN_ROWS: u16 = 2;
 /// The largest terminal a tape may ask for (`Set Size`, `Resize`): its
 /// screenshots and video frames are drawn in memory, and a 500x200 PNG
 /// screenshot is already about 8500x7400 pixels.
 pub const MAX_COLUMNS: u16 = 500;
+/// The most rows a tape may ask for.
 pub const MAX_ROWS: u16 = 200;
 /// The frame rates a tape may ask for (`Set Framerate`).
 pub const FRAME_RATES: std::ops::RangeInclusive<f64> = 1.0..=60.0;

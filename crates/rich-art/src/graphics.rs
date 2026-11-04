@@ -24,7 +24,9 @@ use crate::image_art::{ImageAnchor, ImageFit};
 /// The size of one terminal cell in pixels.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct CellPixels {
+    /// A cell's width in pixels.
     pub width: u32,
+    /// A cell's height in pixels.
     pub height: u32,
 }
 
@@ -228,7 +230,9 @@ pub fn reduce_colors(
 /// One frame of an animation, as a full canvas, and how long it shows.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct AnimationFrame {
+    /// The whole canvas at this frame.
     pub image: RgbaImage,
+    /// How long the frame shows.
     pub delay: Duration,
 }
 

@@ -55,6 +55,7 @@ pub struct Options {
     /// Exported as `$REPO` to the shell and to `Exec`, so tapes can copy
     /// fixtures from the repository.
     pub repo: Option<PathBuf>,
+    /// The palette to draw in.
     pub theme: Theme,
     /// Video frames a second, over the tape's `Set Framerate`.
     pub frame_rate: Option<f64>,
@@ -91,16 +92,21 @@ impl Default for Presentation {
 /// What a tape produced.
 #[derive(Clone, Debug)]
 pub struct Recording {
+    /// The tape's title.
     pub title: String,
+    /// How it is presented.
     pub presentation: Presentation,
     /// The tape's `Output` words; empty for [`Formats::DEFAULT`].
     pub outputs: Vec<Output>,
+    /// The terminal's width in columns.
     pub columns: u16,
+    /// The terminal's height in rows.
     pub rows: u16,
     /// Screenshots in the order they were taken.
     pub shots: Vec<(String, Snapshot)>,
     /// The tape's `Mask` rewrites, applied to text grids.
     pub masks: Vec<(fancy_regex::Regex, String)>,
+    /// What happened, and the screens it showed.
     pub timeline: Timeline,
     /// Video frames a second: the tape's `Set Framerate` (or
     /// [`Options::frame_rate`]), else [`FRAME_RATE`].
@@ -690,9 +696,13 @@ impl Recording {
 /// needs them.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Formats {
+    /// A PNG per screenshot.
     pub png: bool,
+    /// An SVG per screenshot.
     pub svg: bool,
+    /// The asciinema cast.
     pub cast: bool,
+    /// A GIF of the recording.
     pub gif: bool,
     /// An animated PNG.
     pub apng: bool,
@@ -703,6 +713,7 @@ pub struct Formats {
 }
 
 impl Formats {
+    /// Every format.
     pub const ALL: Formats = Formats {
         png: true,
         svg: true,
@@ -736,6 +747,7 @@ impl Formats {
         html: false,
     };
 
+    /// Whether `format` is written.
     pub fn contains(self, format: Format) -> bool {
         match format {
             Format::Png => self.png,
@@ -748,6 +760,7 @@ impl Formats {
         }
     }
 
+    /// Write `format` or not.
     pub fn set(&mut self, format: Format, on: bool) {
         match format {
             Format::Png => self.png = on,
@@ -811,9 +824,17 @@ pub fn orphans(recording: &Recording, dir: &Path) -> Vec<String> {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Problem {
     /// The screenshot's text differs from `<name>.txt`: a unified-style diff.
-    Differs { name: String, diff: String },
+    Differs {
+        /// The screenshot's name.
+        name: String,
+        /// The diff.
+        diff: String,
+    },
     /// A committed screenshot the tape no longer takes.
-    Orphaned { name: String },
+    Orphaned {
+        /// The screenshot's name.
+        name: String,
+    },
 }
 
 impl std::fmt::Display for Problem {

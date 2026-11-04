@@ -29,12 +29,16 @@ const OUTLINE: Rgb = (70, 70, 70);
 /// An RGB image.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Canvas {
+    /// The width in pixels.
     pub width: usize,
+    /// The height in pixels.
     pub height: usize,
+    /// Three bytes (red, green, blue) a pixel, rows top to bottom.
     pub pixels: Vec<u8>,
 }
 
 impl Canvas {
+    /// A canvas of `width` by `height` pixels, all `fill`.
     pub fn new(width: usize, height: usize, fill: Rgb) -> Canvas {
         let mut pixels = Vec::with_capacity(width * height * 3);
         for _ in 0..width * height {
@@ -64,6 +68,7 @@ impl Canvas {
         }
     }
 
+    /// Fill a rectangle, clipped to the canvas.
     pub fn fill_rect(&mut self, x: i64, y: i64, width: i64, height: i64, colour: Rgb) {
         let x0 = x.clamp(0, self.width as i64) as usize;
         let x1 = (x + width).clamp(0, self.width as i64) as usize;
@@ -123,6 +128,7 @@ impl Canvas {
         }
     }
 
+    /// Fill a circle centred at (`cx`, `cy`), clipped to the canvas.
     pub fn fill_circle(&mut self, cx: f64, cy: f64, radius: f64, colour: Rgb) {
         self.fill_rounded(
             cx - radius,
@@ -507,6 +513,7 @@ impl Fonts {
 /// Options for [`render`].
 #[derive(Clone, Debug)]
 pub struct Frame<'a> {
+    /// The window's title.
     pub title: &'a str,
     /// The key-overlay label, when a key was just pressed.
     pub key: Option<&'a str>,

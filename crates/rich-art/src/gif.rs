@@ -255,6 +255,7 @@ impl AnimatedArt {
         self
     }
 
+    /// How many times playback repeats; once by default.
     pub fn repeat(mut self, repeat: Repeat) -> Self {
         self.repeat = repeat;
         self

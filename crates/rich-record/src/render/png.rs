@@ -77,7 +77,12 @@ impl<'a> PngOptions<'a> {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum PngError {
     /// The image would be larger than [`MAX_PIXELS`].
-    TooLarge { width: usize, height: usize },
+    TooLarge {
+        /// The width it would have, in pixels.
+        width: usize,
+        /// The height it would have, in pixels.
+        height: usize,
+    },
     /// The text size is not a positive, finite number of pixels.
     BadSize(String),
 }

@@ -17,12 +17,22 @@ pub enum SignatureError {
     UnsupportedAlgorithm,
     /// Made by a key other than the one trusted for it: refused before the
     /// signature is checked.
-    WrongKeyId { expected: KeyId, found: KeyId },
+    WrongKeyId {
+        /// The key id trusted for it.
+        expected: KeyId,
+        /// The key id that made the signature.
+        found: KeyId,
+    },
     /// The signature does not verify.
     Invalid,
     /// The trusted comment (which the signature covers) is not the one this
     /// document needs, so the signature belongs to another document.
-    TrustedComment { expected: String, found: String },
+    TrustedComment {
+        /// The comment this document needs.
+        expected: String,
+        /// The comment the signature has.
+        found: String,
+    },
 }
 
 impl fmt::Display for SignatureError {
@@ -63,19 +73,32 @@ pub enum KeyChainError {
     UnsupportedSchema(u64),
     /// A rotation's signature failed.
     Signature {
+        /// Which generation's rotation.
         generation: u64,
         /// `main` or `backup`.
         which: &'static str,
+        /// Why its signature failed.
         source: SignatureError,
     },
     /// A generation out of order.
-    GenerationOrder { expected: u64, found: u64 },
+    GenerationOrder {
+        /// The generation that should come next.
+        expected: u64,
+        /// The generation found.
+        found: u64,
+    },
     /// A generation signed by the backup key alone that does not revoke and
     /// replace the main key.
-    MainSignatureRequired { generation: u64 },
+    MainSignatureRequired {
+        /// The generation.
+        generation: u64,
+    },
     /// A generation signed by the backup key alone that changes the backup
     /// key: that needs the main key's signature too.
-    BackupReplacedWithoutMain { generation: u64 },
+    BackupReplacedWithoutMain {
+        /// The generation.
+        generation: u64,
+    },
     /// A generation that names a revoked key as one of its own.
     RevokedKey(KeyId),
 }
@@ -136,13 +159,29 @@ pub enum IndexError {
     /// An index format this release does not read.
     UnsupportedSchema(u64),
     /// The signature names one serial and the index another.
-    SerialMismatch { signed: u64, index: u64 },
+    SerialMismatch {
+        /// The serial in the signature's trusted comment.
+        signed: u64,
+        /// The serial in `index.json`.
+        index: u64,
+    },
     /// Older than the last index this client accepted.
-    Rollback { serial: u64, last: u64 },
+    Rollback {
+        /// This index's serial.
+        serial: u64,
+        /// The serial of the last index accepted.
+        last: u64,
+    },
     /// The same serial as the last accepted index, but different bytes.
-    SerialReused { serial: u64 },
+    SerialReused {
+        /// The serial.
+        serial: u64,
+    },
     /// Past its `expires`.
-    Expired { expires: String },
+    Expired {
+        /// When it expired, as the index states it.
+        expires: String,
+    },
 }
 
 impl fmt::Display for IndexError {
@@ -202,17 +241,30 @@ pub enum ListingError {
     /// A kind this release does not know.
     UnknownKind(String),
     /// Breaks the schema or a rule beyond it; `at` is the JSON path.
-    Invalid { at: String, message: String },
+    Invalid {
+        /// The JSON path.
+        at: String,
+        /// What is wrong there.
+        message: String,
+    },
     /// The index has no listing with this id.
     NotInIndex(String),
     /// The file's SHA-256 is not the one the index records.
     HashMismatch {
+        /// The listing's id.
         id: String,
+        /// The SHA-256 the index records.
         expected: String,
+        /// The file's SHA-256.
         actual: String,
     },
     /// The listing's `id` is not the key the index files it under.
-    IdMismatch { filed: String, found: String },
+    IdMismatch {
+        /// The key the index files it under.
+        filed: String,
+        /// The listing's own `id`.
+        found: String,
+    },
 }
 
 impl fmt::Display for ListingError {
@@ -254,17 +306,37 @@ impl std::error::Error for ListingError {}
 pub enum Incompatibility {
     /// A WASM plugin built for another ABI major.
     Abi {
+        /// The ABI it was built for, `(major, minor)`.
         required: (u32, u32),
+        /// This host's ABI, `(major, minor)`.
         host: (u32, u32),
     },
     /// A WASM capability kind this host does not know (a newer ABI minor).
-    UnknownCapability { kind: String },
+    UnknownCapability {
+        /// The kind.
+        kind: String,
+    },
     /// A crate built against another plugin API.
-    PluginApi { required: u64, host: u32 },
+    PluginApi {
+        /// The plugin API version it was built against.
+        required: u64,
+        /// This host's `PLUGIN_API_VERSION`.
+        host: u32,
+    },
     /// A micro pack of another pack schema.
-    MicroSchema { required: u64, host: u64 },
+    MicroSchema {
+        /// The pack schema it has.
+        required: u64,
+        /// The pack schema this host reads.
+        host: u64,
+    },
     /// A theme of another theme format.
-    ThemeFormat { required: u64, host: u64 },
+    ThemeFormat {
+        /// The theme format it has.
+        required: u64,
+        /// The theme format this host reads.
+        host: u64,
+    },
 }
 
 impl Incompatibility {
@@ -317,23 +389,36 @@ impl std::error::Error for Incompatibility {}
 #[non_exhaustive]
 pub enum ResolveError {
     /// The exact version asked for is not listed.
-    NoSuchVersion { id: String, version: String },
+    NoSuchVersion {
+        /// The package id.
+        id: String,
+        /// The version asked for.
+        version: String,
+    },
     /// The exact version asked for is yanked.
     Yanked {
+        /// The package id.
         id: String,
+        /// The version asked for.
         version: String,
+        /// Why it was yanked.
         reason: String,
     },
     /// The exact version asked for does not suit this host.
     Incompatible {
+        /// The package id.
         id: String,
+        /// The version asked for.
         version: String,
+        /// Why it does not suit this host.
         reason: Incompatibility,
     },
     /// No version suits this host. `newer_host_needed` names the newest one
     /// skipped because it needs a newer host, if any.
     NoCandidate {
+        /// The package id.
         id: String,
+        /// The newest version skipped for needing a newer host, if any.
         newer_host_needed: Option<String>,
     },
 }
@@ -382,15 +467,36 @@ impl std::error::Error for ResolveError {
 #[non_exhaustive]
 pub enum FetchError {
     /// Not an `https://` URL (or a redirect away from HTTPS).
-    NotHttps { url: String },
+    NotHttps {
+        /// The URL.
+        url: String,
+    },
     /// Longer than the most it may be.
-    TooLarge { url: String, limit: u64 },
+    TooLarge {
+        /// The URL.
+        url: String,
+        /// The most it may be, in bytes.
+        limit: u64,
+    },
     /// The server answered with an error status.
-    Status { url: String, status: u16 },
+    Status {
+        /// The URL.
+        url: String,
+        /// The HTTP status.
+        status: u16,
+    },
     /// Nothing at that URL (an in-memory transport).
-    NotFound { url: String },
+    NotFound {
+        /// The URL.
+        url: String,
+    },
     /// The connection or read failed.
-    Transport { url: String, message: String },
+    Transport {
+        /// The URL.
+        url: String,
+        /// What failed.
+        message: String,
+    },
 }
 
 impl fmt::Display for FetchError {
@@ -417,8 +523,11 @@ pub enum CheckError {
     NotWasm,
     /// The module's manifest differs from the listing.
     ManifestMismatch {
+        /// The manifest field that differs.
         field: &'static str,
+        /// What the listing says.
         expected: String,
+        /// What the module's manifest says.
         found: String,
     },
     /// The micro pack's archive or `pack.json` is wrong.
@@ -455,7 +564,12 @@ impl std::error::Error for CheckError {}
 #[non_exhaustive]
 pub enum LockfileError {
     /// Reading or writing failed.
-    Io { path: String, message: String },
+    Io {
+        /// The file's path.
+        path: String,
+        /// What failed.
+        message: String,
+    },
     /// The lockfile is malformed.
     Invalid(String),
     /// A lockfile format this release does not read.
@@ -463,11 +577,19 @@ pub enum LockfileError {
     /// Nothing with this id is installed.
     NotInstalled(String),
     /// The installed file is missing.
-    Missing { id: String, path: String },
+    Missing {
+        /// The package id.
+        id: String,
+        /// Where it should be.
+        path: String,
+    },
     /// The installed file changed on disk: it is not loaded.
     Mismatch {
+        /// The package id.
         id: String,
+        /// The SHA-256 the lockfile records.
         expected: String,
+        /// The file's SHA-256 now.
         actual: String,
     },
 }
@@ -504,7 +626,12 @@ impl std::error::Error for LockfileError {}
 #[non_exhaustive]
 pub enum InstallError {
     /// A crate, which is listed only.
-    NotInstallable { id: String, kind: &'static str },
+    NotInstallable {
+        /// The package id.
+        id: String,
+        /// Its kind.
+        kind: &'static str,
+    },
     /// The index is not usable (expired, say).
     Index(IndexError),
     /// The listing is not the one the index names.
@@ -514,9 +641,19 @@ pub enum InstallError {
     /// The download failed.
     Fetch(FetchError),
     /// The download's size is not the declared size.
-    SizeMismatch { expected: u64, actual: u64 },
+    SizeMismatch {
+        /// The declared size, in bytes.
+        expected: u64,
+        /// The download's size, in bytes.
+        actual: u64,
+    },
     /// The download's SHA-256 is not the listed one.
-    HashMismatch { expected: String, actual: String },
+    HashMismatch {
+        /// The listed SHA-256.
+        expected: String,
+        /// The download's SHA-256.
+        actual: String,
+    },
     /// The artifact failed its check by kind.
     Check(CheckError),
     /// Writing the file or the lockfile failed.

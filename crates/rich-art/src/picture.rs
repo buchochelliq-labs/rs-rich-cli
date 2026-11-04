@@ -158,6 +158,7 @@ impl Default for ImageView {
 }
 
 impl ImageView {
+    /// A view with the defaults: the same as [`ImageView::default`].
     pub fn new() -> ImageView {
         ImageView::default()
     }
@@ -881,15 +882,22 @@ pub fn shrink(image: DynamicImage) -> DynamicImage {
 /// protocol.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct PictureTag {
+    /// The picture's id, as terminal graphics know it ([`Picture::id`]).
     pub id: u32,
+    /// Which frame of the picture ([`Picture::version`]).
     pub version: u32,
+    /// The picture's width in cells.
     pub cols: usize,
+    /// The picture's height in cells.
     pub rows: usize,
+    /// Which of its rows this cell is in.
     pub row: usize,
+    /// The protocol its pixels are drawn with.
     pub pixels: Pixels,
     /// How the cells were fitted ([`ImageView::fit`]), so the pixels
     /// drawn over them are fitted the same way.
     pub fit: Option<ImageFit>,
+    /// Where the fitted picture sits in its cells ([`ImageView::anchor`]).
     pub anchor: ImageAnchor,
 }
 

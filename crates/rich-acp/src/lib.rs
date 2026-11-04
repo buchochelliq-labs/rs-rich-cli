@@ -66,6 +66,8 @@
 //! # }
 //! ```
 
+#![warn(missing_docs)]
+
 mod client;
 mod connection;
 mod error;
