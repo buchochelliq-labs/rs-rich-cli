@@ -92,6 +92,7 @@ pub struct MicroAssetRef {
 }
 
 impl MicroAssetRef {
+    /// A reference to `asset`, with the default fallback preference.
     pub fn new(asset: impl Into<Arc<MicroAsset>>) -> Self {
         MicroAssetRef {
             asset: asset.into(),
@@ -104,12 +105,14 @@ impl MicroAssetRef {
         Ok(MicroAssetRef::new(Arc::clone(registry.require(name)?)))
     }
 
+    /// Which fallback to show where no image can be drawn.
     #[must_use]
     pub fn preference(mut self, preference: FallbackPreference) -> Self {
         self.preference = preference;
         self
     }
 
+    /// The asset referred to.
     pub fn asset(&self) -> &MicroAsset {
         &self.asset
     }
@@ -143,6 +146,7 @@ pub struct MicroPlugin {
 }
 
 impl MicroPlugin {
+    /// The plugin, substituting the assets of `registry`.
     pub fn new(registry: Arc<MicroRegistry>) -> Self {
         MicroPlugin { registry }
     }

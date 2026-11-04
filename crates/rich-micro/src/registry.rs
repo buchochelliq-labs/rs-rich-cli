@@ -82,10 +82,13 @@ impl MicroRoots {
 /// A package that could not be loaded, and why.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Rejected {
+    /// The layer it was to load into.
     pub layer: Layer,
+    /// Where it is.
     pub path: PathBuf,
     /// The package's path within its pack, for a package in a pack.
     pub package: Option<String>,
+    /// Why it was rejected.
     pub error: MicroError,
 }
 
@@ -93,7 +96,9 @@ pub struct Rejected {
 /// the order of [`MicroRegistry::add`] calls) keeps it.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Collision {
+    /// The layer both claims are in.
     pub layer: Layer,
+    /// The name both claim.
     pub name: String,
     /// The claim that kept the name.
     pub kept: String,
@@ -105,7 +110,9 @@ pub struct Collision {
 /// rejected and the rest still load.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct LoadReport {
+    /// The packages that could not be loaded.
     pub rejected: Vec<Rejected>,
+    /// The names claimed twice within a layer.
     pub collisions: Vec<Collision>,
     /// A project directory that exists but was not loaded, because the
     /// project is not trusted.

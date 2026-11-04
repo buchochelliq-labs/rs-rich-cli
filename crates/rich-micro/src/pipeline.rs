@@ -84,6 +84,7 @@ pub struct Pipeline {
     /// size terminals draw at when they do not say; a package made for it
     /// is scaled by the terminal (or the cache) for other cell sizes.
     pub cell: CellPixels,
+    /// How the image is fitted to the asset's cells.
     pub fit: ImageFit,
     /// What [`ImageFit::Cover`] keeps.
     pub anchor: ImageAnchor,
@@ -92,16 +93,19 @@ pub struct Pipeline {
     pub transforms: ImageTransforms,
     /// An unsharp mask of this radius in pixels, after fitting.
     pub sharpen: Option<f32>,
+    /// What happens to transparent pixels.
     pub transparency: Transparency,
     /// A reduced palette (with `dither`), for assets that should look the
     /// same in 256 or 16 colours.
     pub colors: ImageColorMode,
+    /// How the reduced palette is dithered.
     pub dither: Dither,
     /// Frames kept, their decoded size, and the shortest frame time.
     pub budget: FrameBudget,
 }
 
 impl Pipeline {
+    /// A pipeline for an asset of `size`, with the defaults.
     pub fn new(size: CellSize) -> Pipeline {
         Pipeline {
             size,
@@ -287,8 +291,11 @@ fn composite(pixel: &mut [u8; 4], under: [u8; 3]) {
 /// What the pipeline made: frames of exactly the asset's canvas.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Processed {
+    /// The frames, one for a still image.
     pub frames: Vec<AnimationFrame>,
+    /// The asset's size in cells.
     pub size: CellSize,
+    /// The cell size in pixels the frames are made for.
     pub cell: CellPixels,
 }
 

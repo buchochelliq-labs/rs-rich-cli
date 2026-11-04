@@ -257,6 +257,7 @@ pub struct MicroRows<R> {
 }
 
 impl<R> MicroRows<R> {
+    /// `inner`, with the rows its two-row assets reserve.
     pub fn new(inner: R) -> Self {
         MicroRows { inner }
     }
@@ -266,6 +267,7 @@ impl<R> MicroRows<R> {
         &self.inner
     }
 
+    /// What it wraps, given back.
     pub fn into_inner(self) -> R {
         self.inner
     }
