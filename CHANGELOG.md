@@ -9,6 +9,18 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Releases: rab v2.0.1
+
+- **PyPI publishes again from `release.yml`.** 0.0.25's run uploaded the
+  crates but its `publish-pypi` job failed before uploading: rab 2.0.0 ran
+  `pypa/gh-action-pypi-publish` inside its composite action, where that
+  Docker action takes its image name from the caller and pulled
+  `ghcr.io/buchochelliq-labs/rs-rich-cli:release-0.0.25` (denied). rab
+  2.0.1 exchanges the run's OIDC token with PyPI itself and uploads with
+  `twine`, attestations kept; `rs-rich` 0.0.13 went out through the
+  `pypi-release.yml` fallback. Installed from rab's `v2.0.1` tag; the
+  trusted publisher is unchanged (`release.yml`, environment `pypi`).
+
 ## 0.0.25 cohort — to be published
 
 To be published from `main` by one `release.yml` run, the first on rab

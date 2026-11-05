@@ -147,7 +147,7 @@ There are two separate decisions here:
    again.
 
 Releases run on [rab, the Release Asset Bundle](https://github.com/buchochelliq-labs/release-asset-bundle)
-v2.0.0 (formerly release-kit, renamed with 2.0.0), the organisation's release
+v2.0.1 (formerly release-kit, renamed with 2.0.0), the organisation's release
 standard, generalised from this repository's own scripts: its rules are the
 ones below (a published version is permanent; releases come from `main`; tags
 are records; a release is one commit; re-run, don't repair; least privilege).
