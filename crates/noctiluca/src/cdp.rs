@@ -624,15 +624,34 @@ impl Engine for ChromeBackend {
     }
 
     fn snapshot(&mut self, _tab: TabId) -> io::Result<PageSnapshot> {
+        let at = crate::trace::start();
         let dom = self.call(
             "DOMSnapshot.captureSnapshot",
             json!({"computedStyles": SNAPSHOT_STYLES, "includeDOMRects": true,
                    "includePaintOrder": true}),
         )?;
+        let dom_ms = crate::trace::ms(at);
+        let at = crate::trace::start();
         // The page reads without its AX tree when Chrome refuses one.
         let ax = self
             .call("Accessibility.getFullAXTree", json!({}))
             .unwrap_or(Value::Null);
+        if crate::trace::on() {
+            let documents = dom["documents"].as_array().map_or(&[][..], Vec::as_slice);
+            let count = |key: &str, list: &str| -> usize {
+                documents
+                    .iter()
+                    .map(|d| d[key][list].as_array().map_or(0, Vec::len))
+                    .sum()
+            };
+            crate::trace::event(
+                "snapshot",
+                json!({"dom_ms": dom_ms, "ax_ms": crate::trace::ms(at),
+                       "nodes": count("nodes", "nodeName"), "boxes": count("layout", "nodeIndex"),
+                       "documents": documents.len(),
+                       "ax_nodes": ax["nodes"].as_array().map_or(0, Vec::len)}),
+            );
+        }
         Ok(PageSnapshot { dom, ax })
     }
 

@@ -159,7 +159,16 @@ pub fn plan(previous: &[Placement], next: &[Placement], changes: &[Change]) -> G
         }
     }
     for new in next {
-        let kept = previous.iter().any(|old| old.same(new));
+        // A graphic in the cells is held by the terminal under its key: one
+        // that only moved (the page scrolled) is shown by its cells, which
+        // the cell diff wrote, so it is not sent again.
+        let kept = previous.iter().any(|old| {
+            old.same(new)
+                || (new.graphic.in_cells()
+                    && old.graphic.in_cells()
+                    && old.graphic.key() == new.graphic.key()
+                    && old.frame == new.frame)
+        });
         let wiped = !new.graphic.in_cells()
             && (changes.iter().any(|change| new.touched_by(change))
                 || out.repaint.iter().any(|(row, columns)| {
@@ -270,5 +279,39 @@ mod tests {
         );
         assert!(again.is_empty());
         assert!(plan(std::slice::from_ref(&kitty), &[], &[]).is_empty());
+    }
+
+    #[test]
+    fn graphics_in_cells_that_move_are_not_sent_again() {
+        let kitty = |row, column| Placement {
+            graphic: Arc::new(Image(9, true)),
+            ..at(row, column, 9, 0)
+        };
+        // Scrolled up a row, partly off the top: the same image, its cells
+        // written by the cell diff; nothing is sent again.
+        let moved = Placement {
+            rows: 1,
+            ..kitty(0, 4)
+        };
+        assert!(
+            plan(
+                &[kitty(3, 4)],
+                std::slice::from_ref(&moved),
+                &[change(0, 4..6)]
+            )
+            .is_empty()
+        );
+        // Another frame of it is sent.
+        let next = Placement {
+            frame: 1,
+            ..kitty(2, 4)
+        };
+        assert_eq!(plan(&[kitty(3, 4)], &[next], &[]).draw.len(), 1);
+        // A picture drawn over its cells (Sixel, iTerm2) is drawn again
+        // where it moved.
+        assert_eq!(
+            plan(&[at(3, 4, 9, 0)], &[at(2, 4, 9, 0)], &[]).draw.len(),
+            1
+        );
     }
 }

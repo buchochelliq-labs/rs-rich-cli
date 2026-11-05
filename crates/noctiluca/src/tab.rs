@@ -75,6 +75,30 @@ pub const SETTLE_MAX: Duration = Duration::from_secs(3);
 /// How long a new document is watched at least: a quiet step sooner does
 /// not settle it, since a script's first move can come after one.
 pub const SETTLE_MIN: Duration = Duration::from_secs(1);
+/// A reading the page pinged for waits this many times the last
+/// reading's cost after it ended, so reading takes at most a quarter of
+/// the tab's time however large the page is (a large page's snapshot
+/// costs hundreds of milliseconds). Reading for an action, a navigation
+/// or a load never waits.
+pub const READ_DUTY: u32 = 3;
+/// While a video plays on screen, a reading the page pinged for waits at
+/// least this long after the last: a player's clock and progress bar
+/// change the page several times a second, and the tab takes no frame
+/// while it reads.
+pub const READ_WHILE_PLAYING: Duration = Duration::from_secs(1);
+
+/// How long after a reading that cost `cost` a reading the page pinged
+/// for may run: [`DEBOUNCE`], [`READ_DUTY`] times the cost, and
+/// [`READ_WHILE_PLAYING`] while a video plays, whichever is longest.
+pub fn ping_read_gap(cost: Duration, playing: bool) -> Duration {
+    let gap = DEBOUNCE.max(cost * READ_DUTY);
+    if playing {
+        gap.max(READ_WHILE_PLAYING)
+    } else {
+        gap
+    }
+}
+
 /// How often the tab looks at its engine when nothing happens.
 const TICK: Duration = Duration::from_millis(25);
 /// At most this many stills are captured per reading.
@@ -432,6 +456,9 @@ struct Worker<'a> {
     state: PageState,
     /// When the first change ping since the last reading came.
     dirty: Option<Instant>,
+    /// When the last reading ended and what it cost: a pinged reading
+    /// waits [`ping_read_gap`] after it.
+    last_read: Option<(Instant, Duration)>,
     stills: HashMap<StillKey, Arc<[u8]>>,
     /// The pictures decoded from the stills.
     pictures: HashMap<StillKey, Picture>,
@@ -548,11 +575,15 @@ impl Worker<'_> {
     /// Read the page and publish it; `None` if the engine refused (a
     /// navigation swapping the page's process, say).
     fn read(&mut self) -> Option<Arc<Page>> {
+        let at = crate::trace::start();
         let snapshot = self.engine.snapshot(TabId(0)).ok()?;
+        let snapshot_ms = crate::trace::ms(at);
         if let Ok(boxes) = self.engine.appended(TabId(0)) {
             self.appended = boxes.into_iter().collect();
         }
+        let built = crate::trace::start();
         let mut page = build_with(&snapshot, &mut self.revisions, &self.appended);
+        let build_ms = crate::trace::ms(built);
         self.dress_error(&mut page);
         if self.page.as_ref().map(|p| p.document) != Some(page.document) {
             self.live.clear();
@@ -593,8 +624,17 @@ impl Worker<'_> {
             _ => None,
         };
         let page = Arc::new(page);
-        if self.page.as_deref() != Some(&*page) {
+        let changed = self.page.as_deref() != Some(&*page);
+        if changed {
             (self.update)(Update::Page(page.clone()));
+        }
+        if crate::trace::on() {
+            crate::trace::event(
+                "read",
+                serde_json::json!({"snapshot_ms": snapshot_ms, "build_ms": build_ms,
+                    "total_ms": crate::trace::ms(at), "blocks": page.blocks.len(),
+                    "media": page.media.len(), "changed": changed}),
+            );
         }
         self.page = Some(page.clone());
         self.dirty = None;
@@ -1175,6 +1215,13 @@ impl Worker<'_> {
         {
             return;
         }
+        if crate::trace::on() {
+            crate::trace::event(
+                "frame",
+                serde_json::json!({"node": video.node, "seq": video.seq,
+                    "w": video.pixels.width, "h": video.pixels.height}),
+            );
+        }
         (self.update)(Update::Frame(Arc::new(video)));
     }
 
@@ -1238,9 +1285,17 @@ impl Worker<'_> {
         if !plan.due {
             return;
         }
+        let at = crate::trace::start();
         let frame = self.engine.screencast_frame(TabId(0));
         if frame.is_some() {
             self.last_frame = Some(now);
+        }
+        if let Some(f) = frame.as_ref().filter(|_| crate::trace::on()) {
+            crate::trace::event(
+                "cast",
+                serde_json::json!({"take_ms": crate::trace::ms(at),
+                    "w": f.pixels.width, "h": f.pixels.height}),
+            );
         }
         // No new frame for a while: what Chrome's viewport does not hold
         // is not painted there, so it is captured on its own.
@@ -1296,7 +1351,16 @@ impl Worker<'_> {
     /// Frames of regions taken with a capture of each.
     fn capture_regions(&mut self, regions: &[Region], now: Instant) {
         for region in regions {
-            if let Some(pixels) = self.capture_pixels(region.rect, Format::Jpeg) {
+            let at = crate::trace::start();
+            let pixels = self.capture_pixels(region.rect, Format::Jpeg);
+            if crate::trace::on() {
+                crate::trace::event(
+                    "capture",
+                    serde_json::json!({"node": region.node, "ms": crate::trace::ms(at),
+                        "ok": pixels.is_some()}),
+                );
+            }
+            if let Some(pixels) = pixels {
                 let video = self.frames.stamp(region.node, pixels, now);
                 self.deliver(video, now);
             }
@@ -1598,6 +1662,7 @@ fn run(
         page: None,
         state: PageState::default(),
         dirty: None,
+        last_read: None,
         stills: HashMap::new(),
         pictures: HashMap::new(),
         decode,
@@ -1694,15 +1759,32 @@ fn run(
             worker.video();
             worker.poll_canvases();
         }
+        let now = Instant::now();
+        let held = worker
+            .last_read
+            .is_some_and(|(end, cost)| now < end + ping_read_gap(cost, worker.frames.on));
         let due = worker
             .dirty
-            .is_some_and(|since| since.elapsed() >= DEBOUNCE)
+            .is_some_and(|since| since.elapsed() >= DEBOUNCE && !held)
             || worker
                 .settle
                 .is_some_and(|(next, _, _)| Instant::now() >= next);
         if read_now || due {
+            if crate::trace::on() {
+                let why = if read_now {
+                    "asked"
+                } else if worker.dirty.is_some() {
+                    "changed"
+                } else {
+                    "settling"
+                };
+                crate::trace::event("read_why", serde_json::json!({ "why": why }));
+            }
             // A refused reading stays due, and is tried at the next tick.
-            if worker.read().is_some() {
+            let began = Instant::now();
+            let read = worker.read();
+            worker.last_read = Some((Instant::now(), began.elapsed()));
+            if read.is_some() {
                 read_now = false;
                 live_due = false;
                 worker.capture_stills();
@@ -1723,6 +1805,100 @@ fn run(
 mod tests {
     use super::*;
     use crate::testing::FakeEngine;
+
+    /// An engine whose page pings a change at every look and whose
+    /// snapshot takes `cost`, counting the time spent in snapshots.
+    struct Busy {
+        inner: FakeEngine,
+        cost: Duration,
+        spent: Arc<Mutex<(u32, Duration)>>,
+    }
+
+    impl Engine for Busy {
+        fn resize(&mut self, columns: u16, rows: u16) -> std::io::Result<()> {
+            self.inner.resize(columns, rows)
+        }
+        fn open(&mut self, tab: TabId, url: &str) -> std::io::Result<()> {
+            self.inner.open(tab, url)
+        }
+        fn history(&mut self, tab: TabId, step: HistoryStep) -> std::io::Result<()> {
+            self.inner.history(tab, step)
+        }
+        fn state(&self, tab: TabId) -> PageState {
+            self.inner.state(tab)
+        }
+        fn snapshot(&mut self, tab: TabId) -> std::io::Result<crate::engine::PageSnapshot> {
+            thread::sleep(self.cost);
+            let mut spent = self.spent.lock().unwrap();
+            spent.0 += 1;
+            spent.1 += self.cost;
+            self.inner.snapshot(tab)
+        }
+        fn capture(
+            &mut self,
+            tab: TabId,
+            region: Rect,
+            format: Format,
+        ) -> std::io::Result<crate::engine::Frame> {
+            self.inner.capture(tab, region, format)
+        }
+        fn act(&mut self, tab: TabId, action: &PageAction) -> std::io::Result<()> {
+            self.inner.act(tab, action)
+        }
+        fn events(&mut self) -> Vec<EngineEvent> {
+            let mut events = self.inner.events();
+            events.push(EngineEvent::Changed);
+            events
+        }
+    }
+
+    #[test]
+    fn a_page_that_keeps_changing_is_read_at_most_a_quarter_of_the_time() {
+        let snapshots = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/snapshots");
+        let spent = Arc::new(Mutex::new((0, Duration::ZERO)));
+        let engine = Busy {
+            inner: FakeEngine::from_dir(&snapshots).unwrap(),
+            cost: Duration::from_millis(120),
+            spent: spent.clone(),
+        };
+        let tab = Tab::spawn(Box::new(engine), |_| {});
+        tab.send(Command::Open("https://fixture.example/second.html".into()));
+        // Past the new document's settling, then a span of pings alone.
+        thread::sleep(SETTLE_MAX + Duration::from_millis(200));
+        let before = *spent.lock().unwrap();
+        let span = Duration::from_secs(3);
+        thread::sleep(span);
+        let after = *spent.lock().unwrap();
+        drop(tab);
+        let reads = after.0 - before.0;
+        let share = (after.1 - before.1).as_secs_f64() / span.as_secs_f64();
+        // Read again and again (a ping is never dropped), but each reading
+        // waits three times its cost: about a quarter of the time. Without
+        // the wait it would read after each debounce, over half the time.
+        assert!(reads >= 2, "{reads} readings");
+        assert!(
+            share < 0.4,
+            "reading took {:.0}% of the time",
+            share * 100.0
+        );
+    }
+
+    #[test]
+    fn pinged_readings_wait_for_their_cost_and_for_playing_video() {
+        assert_eq!(ping_read_gap(Duration::from_millis(5), false), DEBOUNCE);
+        assert_eq!(
+            ping_read_gap(Duration::from_millis(300), false),
+            Duration::from_millis(900)
+        );
+        assert_eq!(
+            ping_read_gap(Duration::from_millis(50), true),
+            READ_WHILE_PLAYING
+        );
+        assert_eq!(
+            ping_read_gap(Duration::from_millis(500), true),
+            Duration::from_millis(1500)
+        );
+    }
 
     #[test]
     fn ended_tabs_leave_the_registry() {

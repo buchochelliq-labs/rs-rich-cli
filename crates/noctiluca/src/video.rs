@@ -486,8 +486,17 @@ impl Encoder {
                     }
                     queue.waiting.remove(0)
                 };
+                let at = crate::trace::start();
                 job.picture
                     .prepare(crate::pictures::view(job.pixels), job.cols, job.rows);
+                if crate::trace::on() {
+                    crate::trace::event(
+                        "encode",
+                        serde_json::json!({"node": job.node, "ms": crate::trace::ms(at),
+                            "pixels": format!("{:?}", job.pixels),
+                            "cols": job.cols, "rows": job.rows}),
+                    );
+                }
                 done(job);
             }
         });

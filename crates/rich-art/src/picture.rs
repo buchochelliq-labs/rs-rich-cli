@@ -221,9 +221,9 @@ struct Shown {
     version: u32,
     image: Arc<DynamicImage>,
     animation: Option<Arc<[AnimationFrame]>>,
-    /// Sent to Kitty as raw pixels (`f=32`, or `f=24` when opaque), not
-    /// PNG: a live frame, where a PNG encode per frame costs more than the
-    /// bytes it saves.
+    /// Sent to Kitty as raw pixels (`f=32`, or `f=24` zlib-compressed when
+    /// opaque), not PNG: a live frame, where a PNG encode per frame costs
+    /// more than the bytes it saves.
     raw: bool,
     /// The last escape made of the whole picture, and what it was made
     /// for: [`Picture::prepare`] makes it ahead, on a thread of the app's,
@@ -657,16 +657,22 @@ impl Picture {
                 let fitted = fitted(&self.shown.image);
                 if self.shown.raw {
                     let (width, height) = fitted.dimensions();
-                    // A video's frames are opaque: three bytes a pixel.
+                    // A video's frames are opaque: three bytes a pixel,
+                    // zlib-compressed at its fastest (`o=z`): a frame of a
+                    // film halves, a flat one shrinks tenfold, for a few
+                    // milliseconds on the thread that encodes it, against
+                    // hundreds of kilobytes of base64 a frame the terminal
+                    // would otherwise read.
                     if fitted.pixels().all(|p| p[3] == 255) {
                         let rgb = DynamicImage::ImageRgba8(fitted).into_rgb8();
-                        return Some(crate::kitty::transmit_rgb(
-                            self.id(),
-                            rgb.as_raw(),
-                            width,
-                            height,
-                            cols,
-                            rows,
+                        return Some(crate::kitty::transmit_raw(
+                            &crate::kitty::RawImage::new(
+                                crate::kitty::RawFormat::Rgb,
+                                rgb.as_raw(),
+                                width,
+                                height,
+                            ),
+                            &crate::kitty::Transmit::new(self.id(), cols, rows).compress(true),
                         ));
                     }
                     return Some(crate::kitty::transmit_rgba(
@@ -1316,9 +1322,13 @@ mod tests {
         );
         assert!(picture.encode(Pixels::Cells, 4, 2).is_none());
         // A raw frame goes to Kitty as raw pixels, not PNG: RGB when it is
-        // opaque, RGBA when it is not.
+        // opaque, and zlib-compressed, RGBA when it is not.
         let raw = Picture::from_rgba(2, 2, vec![255; 16]).unwrap();
-        assert!(raw.encode(Pixels::Kitty, 4, 2).unwrap().contains("f=24"));
+        let sent = raw.encode(Pixels::Kitty, 4, 2).unwrap();
+        assert!(sent.contains("f=24") && sent.contains(",o=z,"), "{sent}");
+        let flat = Picture::from_rgba(64, 64, vec![255; 64 * 64 * 4]).unwrap();
+        let sent = flat.encode(Pixels::Kitty, 8, 4).unwrap();
+        assert!(sent.len() < 64 * 64 * 3 / 10, "{} bytes", sent.len());
         let clear = Picture::from_rgba(2, 2, [255, 0, 0, 128].repeat(4)).unwrap();
         assert!(clear.encode(Pixels::Kitty, 4, 2).unwrap().contains("f=32"));
         assert!(Picture::from_rgba(2, 2, vec![0; 3]).is_none());

@@ -280,6 +280,19 @@ impl Browser {
 /// rows of nothing), or the projection, with each row's key and place on
 /// the page.
 pub(crate) fn lay_out(page: &Page, view: View, width: u16, marks: &Marks) -> Projection {
+    let at = crate::trace::start();
+    let projection = lay_out_untimed(page, view, width, marks);
+    if crate::trace::on() {
+        crate::trace::event(
+            "layout",
+            serde_json::json!({"ms": crate::trace::ms(at), "view": format!("{view:?}"),
+                "width": width, "lines": projection.lines.len()}),
+        );
+    }
+    projection
+}
+
+fn lay_out_untimed(page: &Page, view: View, width: u16, marks: &Marks) -> Projection {
     match view {
         View::Reader => {
             let mut lines = Vec::new();
@@ -2697,6 +2710,29 @@ impl OutputRate {
     }
 }
 
+/// Once a second while tracing, the painter's counters over that second:
+/// frames drawn and skipped, bytes written, and the time drawing,
+/// painting and writing took.
+fn trace_frames(app: App, stats: rich_intuituive::StatsHandle) -> App {
+    let mut last = rich_intuituive::FrameStats::default();
+    app.every(Duration::from_secs(1), move |_| {
+        let now = stats.get();
+        let ms = |a: Duration, b: Duration| {
+            (a.saturating_sub(b).as_secs_f64() * 1e3 * 1e3).round() / 1e3
+        };
+        crate::trace::event(
+            "paint",
+            serde_json::json!({"frames": now.frames - last.frames,
+                "skipped": now.skipped - last.skipped,
+                "bytes": now.total_bytes - last.total_bytes,
+                "draw_ms": ms(now.total_draw, last.total_draw),
+                "paint_ms": ms(now.total_paint, last.total_paint),
+                "write_ms": ms(now.total_write, last.total_write)}),
+        );
+        last = now;
+    })
+}
+
 /// The frames' pacing: within the guessed byte budget, at most the
 /// config's frame rate and never more than thirty a second, starting at
 /// the protocol the user asked for, else character art over SSH, else
@@ -3054,7 +3090,10 @@ pub fn app(engine: Box<dyn Engine>, options: Options) -> App {
     })
     .graphics(image_graphics());
     let stats = app.stats_handle();
-    OUTPUT.with(|o| o.borrow_mut().stats = Some(stats));
+    OUTPUT.with(|o| o.borrow_mut().stats = Some(stats.clone()));
+    if crate::trace::on() {
+        return trace_frames(app, stats);
+    }
     app
 }
 
