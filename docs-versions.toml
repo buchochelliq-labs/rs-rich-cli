@@ -22,3 +22,7 @@
 # versions open. The tags are on c2d6588, the commit before the release PR
 # (#844) merged, with the same code; the notes came after.
 "0.0.24" = "395b7b12c43083a010fb0ff504e0047c996e4b44"
+# 0.0.25's notes (the publication), the last commit before the 0.1.0
+# versions open. The tags are on b0bfdc4c, the release PR's (#852) merge;
+# the notes came after.
+"0.0.25" = "517b7a00e1c74ae6b7b46bd154e8e1cbba17e49f"

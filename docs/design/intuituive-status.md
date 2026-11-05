@@ -3,9 +3,33 @@
 Status: handoff note, updated when a session ends mid-round. The loop and its
 rules are in [the demo gaps](intuituive-demo-gaps.md).
 
-## Where things stand (2026-11-04)
+## Where things stand (2026-11-05)
 
-- **0.0.25 is in release.** Wave 1 merged as #850 (rab v2.0.0, Cornacai
+- **0.0.25 is published** (21 crates from `main` at `b0bfdc4c` by one
+  release run, `release-0.0.25`, on 2026-11-05, the first on rab v2.0.0;
+  see the [0.0.25 release notes](../releases/0.0.25.md#publication)). The
+  run's record is "partial": its `publish-pypi` failed (a Docker action
+  nested in rab's composite action), so `rs-rich` 0.0.13 went to PyPI
+  through the `pypi-release.yml` fallback, `python-v0.0.13`. rab v2.0.1
+  (#853) uploads to PyPI itself. `docs-versions.toml` builds the 0.0.25
+  docs from its publication notes.
+- **The 0.1.0 versions are open** (every package at 0.1.0, stage 3 of
+  [the plan to 1.0.0](../plans/1.0.0.md#stage-3-api-review-and-stability-tooling-010)),
+  on `claude/next-priority-items-3c5p8e-wip-published025`, stacked on
+  #853.
+- **After the publication:** the marketplace lists the 0.0.25 crates
+  (mermaid 0.0.11, dot 0.0.8, lumis 0.0.9) and moves `RS_RICH_CLI_REF` to
+  release-0.0.25's commit (`b0bfdc4c`); `RELEASES.toml`, `pypi-release.yml` and
+  `release_cohort.py` retire once a release has published PyPI through
+  rab.
+- **Next: 0.1.0's API review**, which takes what 0.0.25 moved on
+  ([the plan](../plans/0.0.25.md#what-shipped-and-what-moves-on)).
+- **Waiting on the maintainer:** Memo's reference pictures; lumis 0.17
+  (its minimum Rust is 1.95); #791 (a residential network).
+
+## Where things stood (2026-11-04)
+
+- **0.0.25 was in release.** Wave 1 merged as #850 (rab v2.0.0, Cornacai
   phase 4, the rest of Textual parity, named pipes on Windows, the
   bookkeeping), after #847 (the stylesheet fuzz fix), #848 (the versions)
   and #849 (Noctiluca on real sites, second pass). The release PR, on

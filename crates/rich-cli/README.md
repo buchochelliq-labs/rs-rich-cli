@@ -52,8 +52,8 @@ rich record demo.tape                                   # run a scripted termina
 rich serve -- htop                                      # a program in a browser tab (the `serve` feature)
 ```
 
-This source is **`0.0.15`**, prepared but not yet published (the latest
-published version is 0.0.14). It follows independent SemVer; its version does
+This source is **`0.1.0`**, prepared but not yet published (the latest
+published version is 0.0.25). It follows independent SemVer; its version does
 not mirror Python `rich-cli`. The tracked upstream release is **`rich-cli`
 1.8.1**, recorded in [`UPSTREAM.toml`](https://github.com/buchochelliq-labs/rs-rich-cli/blob/main/UPSTREAM.toml).
 

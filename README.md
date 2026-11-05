@@ -55,9 +55,8 @@ console.print_str("[bold red]Hello[/] [green]World[/] — 42");
 
 ## New in 0.0.25
 
-To be published as one release, `release-0.0.25`
-([release notes](docs/releases/0.0.25.md)), the last before 0.1.0's API
-review:
+Published on 2026-11-05 ([release notes](docs/releases/0.0.25.md)), the
+last before 0.1.0's API review:
 
 - **[Cornacai](docs/guide/cornacai.md):** resumes sessions with
   `session/load`, signs in when the agent asks, runs agent terminals on a
@@ -95,27 +94,27 @@ in the release notes; the crates.io links show available packages.
 <!-- BEGIN MANIFEST VERSIONS -->
 | Package | Manifest version |
 |---|---|
-| [`rs-rich`](https://crates.io/crates/rs-rich) | `0.0.15` |
-| [`rs-rich-plugin-api`](https://crates.io/crates/rs-rich-plugin-api) | `0.0.9` |
-| [`rs-rich-macros`](https://crates.io/crates/rs-rich-macros) | `0.0.9` |
-| [`rs-rich-ext`](https://crates.io/crates/rs-rich-ext) | `0.0.22` |
-| [`rs-rich-cli`](https://crates.io/crates/rs-rich-cli) | `0.0.25` |
-| [`rs-rich-art`](https://crates.io/crates/rs-rich-art) | `0.0.18` |
-| [`rs-rich-mermaid`](https://crates.io/crates/rs-rich-mermaid) | `0.0.11` |
-| [`rs-rich-lumis`](https://crates.io/crates/rs-rich-lumis) | `0.0.9` |
-| [`rs-rich-record`](https://crates.io/crates/rs-rich-record) | `0.0.13` |
-| [`rs-rich-interact`](https://crates.io/crates/rs-rich-interact) | `0.0.13` |
-| [`rs-rich-micro`](https://crates.io/crates/rs-rich-micro) | `0.0.11` |
-| [`rs-rich-diagram`](https://crates.io/crates/rs-rich-diagram) | `0.0.8` |
-| [`rs-rich-data`](https://crates.io/crates/rs-rich-data) | `0.0.9` |
-| [`rs-rich-ratatui`](https://crates.io/crates/rs-rich-ratatui) | `0.0.10` |
-| [`rs-rich-intuituive`](https://crates.io/crates/rs-rich-intuituive) | `0.0.10` |
-| [`rs-rich-web`](https://crates.io/crates/rs-rich-web) | `0.0.8` |
-| [`rs-rich-embed`](https://crates.io/crates/rs-rich-embed) | `0.0.8` |
-| [`rs-rich-marketplace`](https://crates.io/crates/rs-rich-marketplace) | `0.0.4` |
-| [`rs-rich-acp`](https://crates.io/crates/rs-rich-acp) | `0.0.2` |
-| [`noctiluca`](https://crates.io/crates/noctiluca) | `0.0.4` |
-| [`cornacai`](https://crates.io/crates/cornacai) | `0.0.2` |
+| [`rs-rich`](https://crates.io/crates/rs-rich) | `0.1.0` |
+| [`rs-rich-plugin-api`](https://crates.io/crates/rs-rich-plugin-api) | `0.1.0` |
+| [`rs-rich-macros`](https://crates.io/crates/rs-rich-macros) | `0.1.0` |
+| [`rs-rich-ext`](https://crates.io/crates/rs-rich-ext) | `0.1.0` |
+| [`rs-rich-cli`](https://crates.io/crates/rs-rich-cli) | `0.1.0` |
+| [`rs-rich-art`](https://crates.io/crates/rs-rich-art) | `0.1.0` |
+| [`rs-rich-mermaid`](https://crates.io/crates/rs-rich-mermaid) | `0.1.0` |
+| [`rs-rich-lumis`](https://crates.io/crates/rs-rich-lumis) | `0.1.0` |
+| [`rs-rich-record`](https://crates.io/crates/rs-rich-record) | `0.1.0` |
+| [`rs-rich-interact`](https://crates.io/crates/rs-rich-interact) | `0.1.0` |
+| [`rs-rich-micro`](https://crates.io/crates/rs-rich-micro) | `0.1.0` |
+| [`rs-rich-diagram`](https://crates.io/crates/rs-rich-diagram) | `0.1.0` |
+| [`rs-rich-data`](https://crates.io/crates/rs-rich-data) | `0.1.0` |
+| [`rs-rich-ratatui`](https://crates.io/crates/rs-rich-ratatui) | `0.1.0` |
+| [`rs-rich-intuituive`](https://crates.io/crates/rs-rich-intuituive) | `0.1.0` |
+| [`rs-rich-web`](https://crates.io/crates/rs-rich-web) | `0.1.0` |
+| [`rs-rich-embed`](https://crates.io/crates/rs-rich-embed) | `0.1.0` |
+| [`rs-rich-marketplace`](https://crates.io/crates/rs-rich-marketplace) | `0.1.0` |
+| [`rs-rich-acp`](https://crates.io/crates/rs-rich-acp) | `0.1.0` |
+| [`noctiluca`](https://crates.io/crates/noctiluca) | `0.1.0` |
+| [`cornacai`](https://crates.io/crates/cornacai) | `0.1.0` |
 <!-- END MANIFEST VERSIONS -->
 
 | | Package | Role | Import / installed name |
@@ -186,9 +185,10 @@ why, is in [docs/ROADMAP.md](docs/ROADMAP.md); the tracking epic is
 ## Releases
 
 Each release has notes in [`docs/releases/`](docs/releases/) (the newest
-published one is [0.0.24](docs/releases/0.0.24.md)), and
+published one is [0.0.25](docs/releases/0.0.25.md)), and
 [`CHANGELOG.md`](CHANGELOG.md) lists every change. What comes next is in the
-[roadmap](docs/ROADMAP.md) and the [0.0.25 plan](docs/plans/0.0.25.md). The
+[roadmap](docs/ROADMAP.md) and the [plan to 1.0.0](docs/plans/1.0.0.md),
+whose stage 3 is 0.1.0. The
 manifest table above describes this checkout; crates.io is the source for
 published versions.
 
