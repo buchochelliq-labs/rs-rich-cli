@@ -16,6 +16,7 @@
 use std::io::{self, ErrorKind};
 use std::path::PathBuf;
 use std::sync::mpsc::Receiver;
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use rich_embed::{
@@ -339,8 +340,9 @@ pub struct ChromeBackend {
     devtools: DevTools,
     events: Receiver<DevToolsEvent>,
     /// The execution context of the isolated world that pings, from its
-    /// last ping: live logs are read in it, where their state is.
-    world: Option<i64>,
+    /// last ping: live logs are read in it, where their state is. Shared
+    /// with the [reader](ChromeReader), which reads in it too.
+    world: Arc<Mutex<Option<i64>>>,
 }
 
 impl ChromeBackend {
@@ -407,7 +409,7 @@ impl ChromeBackend {
             engine,
             devtools,
             events,
-            world: None,
+            world: Arc::default(),
         })
     }
 
@@ -576,6 +578,180 @@ impl ChromeBackend {
     }
 }
 
+/// The page's snapshot and accessibility tree, through `devtools`: from
+/// any thread.
+fn snapshot_of(devtools: &DevTools) -> io::Result<PageSnapshot> {
+    let at = crate::trace::start();
+    let dom = devtools.call(
+        "DOMSnapshot.captureSnapshot",
+        json!({"computedStyles": SNAPSHOT_STYLES, "includeDOMRects": true,
+               "includePaintOrder": true}),
+        CALL,
+    )?;
+    let dom_ms = crate::trace::ms(at);
+    let at = crate::trace::start();
+    // The page reads without its AX tree when Chrome refuses one.
+    let ax = devtools
+        .call("Accessibility.getFullAXTree", json!({}), CALL)
+        .unwrap_or(Value::Null);
+    if crate::trace::on() {
+        let documents = dom["documents"].as_array().map_or(&[][..], Vec::as_slice);
+        let count = |key: &str, list: &str| -> usize {
+            documents
+                .iter()
+                .map(|d| d[key][list].as_array().map_or(0, Vec::len))
+                .sum()
+        };
+        crate::trace::event(
+            "snapshot",
+            json!({"dom_ms": dom_ms, "ax_ms": crate::trace::ms(at),
+                   "nodes": count("nodes", "nodeName"), "boxes": count("layout", "nodeIndex"),
+                   "documents": documents.len(),
+                   "ax_nodes": ax["nodes"].as_array().map_or(0, Vec::len)}),
+        );
+    }
+    Ok(PageSnapshot { dom, ax })
+}
+
+/// The isolated world the ping script runs in, once it pinged.
+fn live_world(world: &Mutex<Option<i64>>) -> io::Result<i64> {
+    world
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .ok_or_else(|| io::Error::new(ErrorKind::NotFound, "no live world yet"))
+}
+
+/// The live log on `node`'s entries, read in the isolated world `context`
+/// ([`Engine::read_live`]), its objects in `group` (released after):
+/// from any thread.
+fn read_live_in(
+    devtools: &DevTools,
+    group: &str,
+    context: i64,
+    node: i64,
+    full: bool,
+) -> io::Result<LiveRead> {
+    let result = (|| {
+        let object = devtools.call(
+            "DOM.resolveNode",
+            json!({"backendNodeId": node, "executionContextId": context,
+                   "objectGroup": group}),
+            CALL,
+        )?;
+        let object = object["object"]["objectId"]
+            .as_str()
+            .ok_or_else(|| io::Error::new(ErrorKind::NotFound, "the log is gone"))?;
+        // Not as a user's gesture: a read must leave the page as it was.
+        devtools.call(
+            "Runtime.callFunctionOn",
+            json!({"objectId": object, "functionDeclaration": LIVE_READ,
+                   "arguments": [{"value": full}], "returnByValue": true}),
+            CALL,
+        )
+    })();
+    let _ = devtools.call(
+        "Runtime.releaseObjectGroup",
+        json!({"objectGroup": group}),
+        CALL,
+    );
+    let value = result?;
+    if value.get("exceptionDetails").is_some() {
+        return Err(io::Error::other("the live read failed"));
+    }
+    let value = &value["result"]["value"];
+    let key = |v: &Value| v.as_u64();
+    Ok(LiveRead {
+        order: value["order"]
+            .as_array()
+            .map(|all| all.iter().filter_map(key).collect())
+            .unwrap_or_default(),
+        fresh: value["fresh"]
+            .as_array()
+            .map(|all| {
+                all.iter()
+                    .filter_map(|pair| Some((key(&pair[0])?, pair[1].clone())))
+                    .collect()
+            })
+            .unwrap_or_default(),
+        first_shown: key(&value["first"]),
+        interactive: value["interactive"].as_bool().unwrap_or(false),
+    })
+}
+
+/// A media element's playback, as [`playback_of`] reads it.
+const PLAYBACK_READ: &str = "function() { return [this.paused, this.muted, this.volume, \
+    this.currentTime, isFinite(this.duration) ? this.duration : -1, this.ended, \
+    this.readyState, this.error !== null]; }";
+
+/// The playback [`PLAYBACK_READ`] returned.
+fn playback_of(value: &Value) -> Playback {
+    let at = |i: usize| value.get(i).cloned().unwrap_or(Value::Null);
+    Playback {
+        paused: at(0).as_bool().unwrap_or(true),
+        muted: at(1).as_bool().unwrap_or(false),
+        volume: at(2).as_f64().unwrap_or(1.0),
+        time: at(3).as_f64().unwrap_or(0.0),
+        duration: at(4).as_f64().filter(|d| *d >= 0.0),
+        ended: at(5).as_bool().unwrap_or(false),
+        ready: at(6).as_u64().unwrap_or(0).min(4) as u8,
+        failed: at(7).as_bool().unwrap_or(false),
+    }
+}
+
+/// The objects the reader's thread makes, released after each read: not
+/// [`LIVE_GROUP`], which the tab's thread releases as it reads.
+const READER_GROUP: &str = "noctiluca-reader";
+
+/// What reads the page on the tab's reader thread
+/// ([`Engine::reader`]): DevTools calls of its own, in the isolated world
+/// the ping script runs in.
+struct ChromeReader {
+    devtools: DevTools,
+    world: Arc<Mutex<Option<i64>>>,
+}
+
+impl crate::engine::PageReader for ChromeReader {
+    fn snapshot(&mut self) -> io::Result<PageSnapshot> {
+        snapshot_of(&self.devtools)
+    }
+
+    fn playback(&mut self, node: i64) -> io::Result<Playback> {
+        let context = live_world(&self.world)?;
+        let result = (|| {
+            let object = self.devtools.call(
+                "DOM.resolveNode",
+                json!({"backendNodeId": node, "executionContextId": context,
+                       "objectGroup": READER_GROUP}),
+                CALL,
+            )?;
+            let object = object["object"]["objectId"]
+                .as_str()
+                .ok_or_else(|| io::Error::new(ErrorKind::NotFound, "the node is gone"))?;
+            self.devtools.call(
+                "Runtime.callFunctionOn",
+                json!({"objectId": object, "functionDeclaration": PLAYBACK_READ,
+                       "returnByValue": true}),
+                CALL,
+            )
+        })();
+        let _ = self.devtools.call(
+            "Runtime.releaseObjectGroup",
+            json!({"objectGroup": READER_GROUP}),
+            CALL,
+        );
+        let value = result?;
+        if value.get("exceptionDetails").is_some() {
+            return Err(io::Error::other("the playback read failed"));
+        }
+        Ok(playback_of(&value["result"]["value"]))
+    }
+
+    fn read_live(&mut self, node: i64, full: bool) -> io::Result<LiveRead> {
+        let context = live_world(&self.world)?;
+        read_live_in(&self.devtools, READER_GROUP, context, node, full)
+    }
+}
+
 /// Standard base64, as DevTools sends captures.
 pub fn base64_decode(text: &str) -> Option<Vec<u8>> {
     let mut out = Vec::with_capacity(text.len() / 4 * 3);
@@ -624,35 +800,14 @@ impl Engine for ChromeBackend {
     }
 
     fn snapshot(&mut self, _tab: TabId) -> io::Result<PageSnapshot> {
-        let at = crate::trace::start();
-        let dom = self.call(
-            "DOMSnapshot.captureSnapshot",
-            json!({"computedStyles": SNAPSHOT_STYLES, "includeDOMRects": true,
-                   "includePaintOrder": true}),
-        )?;
-        let dom_ms = crate::trace::ms(at);
-        let at = crate::trace::start();
-        // The page reads without its AX tree when Chrome refuses one.
-        let ax = self
-            .call("Accessibility.getFullAXTree", json!({}))
-            .unwrap_or(Value::Null);
-        if crate::trace::on() {
-            let documents = dom["documents"].as_array().map_or(&[][..], Vec::as_slice);
-            let count = |key: &str, list: &str| -> usize {
-                documents
-                    .iter()
-                    .map(|d| d[key][list].as_array().map_or(0, Vec::len))
-                    .sum()
-            };
-            crate::trace::event(
-                "snapshot",
-                json!({"dom_ms": dom_ms, "ax_ms": crate::trace::ms(at),
-                       "nodes": count("nodes", "nodeName"), "boxes": count("layout", "nodeIndex"),
-                       "documents": documents.len(),
-                       "ax_nodes": ax["nodes"].as_array().map_or(0, Vec::len)}),
-            );
-        }
-        Ok(PageSnapshot { dom, ax })
+        snapshot_of(&self.devtools)
+    }
+
+    fn reader(&mut self, _tab: TabId) -> Option<Box<dyn crate::engine::PageReader>> {
+        Some(Box::new(ChromeReader {
+            devtools: self.devtools.clone(),
+            world: Arc::clone(&self.world),
+        }))
     }
 
     fn capture(&mut self, _tab: TabId, region: Rect, format: Format) -> io::Result<Frame> {
@@ -754,24 +909,8 @@ impl Engine for ChromeBackend {
     }
 
     fn playback(&mut self, _tab: TabId, node: i64) -> io::Result<Playback> {
-        let value = self.call_on(
-            node,
-            "function() { return [this.paused, this.muted, this.volume, this.currentTime, \
-               isFinite(this.duration) ? this.duration : -1, this.ended, this.readyState, \
-               this.error !== null]; }",
-            vec![],
-        )?;
-        let at = |i: usize| value.get(i).cloned().unwrap_or(Value::Null);
-        Ok(Playback {
-            paused: at(0).as_bool().unwrap_or(true),
-            muted: at(1).as_bool().unwrap_or(false),
-            volume: at(2).as_f64().unwrap_or(1.0),
-            time: at(3).as_f64().unwrap_or(0.0),
-            duration: at(4).as_f64().filter(|d| *d >= 0.0),
-            ended: at(5).as_bool().unwrap_or(false),
-            ready: at(6).as_u64().unwrap_or(0).min(4) as u8,
-            failed: at(7).as_bool().unwrap_or(false),
-        })
+        let value = self.call_on(node, PLAYBACK_READ, vec![])?;
+        Ok(playback_of(&value))
     }
 
     fn resource(&mut self, _tab: TabId, url: &str) -> io::Result<Vec<u8>> {
@@ -808,55 +947,12 @@ impl Engine for ChromeBackend {
     }
 
     fn read_live(&mut self, _tab: TabId, node: i64, full: bool) -> io::Result<LiveRead> {
-        let context = self
-            .world
-            .ok_or_else(|| io::Error::new(ErrorKind::NotFound, "no live world yet"))?;
-        let result = (|| {
-            let object = self.call(
-                "DOM.resolveNode",
-                json!({"backendNodeId": node, "executionContextId": context,
-                       "objectGroup": LIVE_GROUP}),
-            )?;
-            let object = object["object"]["objectId"]
-                .as_str()
-                .ok_or_else(|| io::Error::new(ErrorKind::NotFound, "the log is gone"))?;
-            // Not as a user's gesture: a read must leave the page as it was.
-            self.call(
-                "Runtime.callFunctionOn",
-                json!({"objectId": object, "functionDeclaration": LIVE_READ,
-                       "arguments": [{"value": full}], "returnByValue": true}),
-            )
-        })();
-        let _ = self.call(
-            "Runtime.releaseObjectGroup",
-            json!({"objectGroup": LIVE_GROUP}),
-        );
-        let value = result?;
-        if value.get("exceptionDetails").is_some() {
-            return Err(io::Error::other("the live read failed"));
-        }
-        let value = &value["result"]["value"];
-        let key = |v: &Value| v.as_u64();
-        Ok(LiveRead {
-            order: value["order"]
-                .as_array()
-                .map(|all| all.iter().filter_map(key).collect())
-                .unwrap_or_default(),
-            fresh: value["fresh"]
-                .as_array()
-                .map(|all| {
-                    all.iter()
-                        .filter_map(|pair| Some((key(&pair[0])?, pair[1].clone())))
-                        .collect()
-                })
-                .unwrap_or_default(),
-            first_shown: key(&value["first"]),
-            interactive: value["interactive"].as_bool().unwrap_or(false),
-        })
+        let context = live_world(&self.world)?;
+        read_live_in(&self.devtools, LIVE_GROUP, context, node, full)
     }
 
     fn appended(&mut self, _tab: TabId) -> io::Result<Vec<i64>> {
-        let Some(context) = self.world else {
+        let Ok(context) = live_world(&self.world) else {
             return Ok(Vec::new());
         };
         let count = self.call(
@@ -933,6 +1029,12 @@ impl Engine for ChromeBackend {
         self.engine.set_screencast_scale(scale)
     }
 
+    fn set_screencast_area(&mut self, _tab: TabId, area: Option<Rect>) -> io::Result<()> {
+        let area =
+            area.and_then(|r| rich_embed::ScreencastArea::around(r.x, r.y, r.width, r.height));
+        self.engine.set_screencast_area(area)
+    }
+
     fn screencast_frame(&mut self, _tab: TabId) -> Option<ScreencastFrame> {
         self.engine.take_screencast()
     }
@@ -973,7 +1075,7 @@ impl Engine for ChromeBackend {
             match event.method.as_str() {
                 "Runtime.bindingCalled" if params["name"] == BINDING => {
                     if let Some(context) = params["executionContextId"].as_i64() {
-                        self.world = Some(context);
+                        *self.world.lock().unwrap_or_else(|e| e.into_inner()) = Some(context);
                     }
                     let event = if params["payload"] == "live" {
                         EngineEvent::Live
@@ -985,7 +1087,7 @@ impl Engine for ChromeBackend {
                     }
                 }
                 "Page.frameNavigated" if params["frame"].get("parentId").is_none() => {
-                    self.world = None;
+                    *self.world.lock().unwrap_or_else(|e| e.into_inner()) = None;
                     let url = params["frame"]["url"].as_str().unwrap_or_default();
                     out.push(EngineEvent::Navigated(crate::clean::clean(url)));
                 }

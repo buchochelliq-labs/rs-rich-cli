@@ -233,6 +233,26 @@ pub enum EngineEvent {
     DownloadDone { guid: String, path: String },
 }
 
+/// What reads a tab's page from a thread of its own ([`Engine::reader`]):
+/// its snapshot, its media's playback and its live logs, as the engine's
+/// own methods of those names read them. A method it cannot serve says
+/// [`io::ErrorKind::Unsupported`], and the tab asks the engine instead.
+pub trait PageReader: Send {
+    /// The page's snapshot, as [`Engine::snapshot`].
+    fn snapshot(&mut self) -> io::Result<PageSnapshot>;
+    /// A media element's playback, as [`Engine::playback`].
+    fn playback(&mut self, _node: NodeId) -> io::Result<Playback> {
+        Err(io::Error::new(io::ErrorKind::Unsupported, "no media here"))
+    }
+    /// A live log's new and changed entries, as [`Engine::read_live`].
+    fn read_live(&mut self, _node: NodeId, _full: bool) -> io::Result<LiveRead> {
+        Err(io::Error::new(
+            io::ErrorKind::Unsupported,
+            "no live logs here",
+        ))
+    }
+}
+
 /// A browser engine behind Noctiluca.
 pub trait Engine: Send {
     /// Lay pages out at `columns` x `rows` cells.
@@ -297,6 +317,22 @@ pub trait Engine: Send {
     /// viewport's size: no more pixels than the regions are drawn in.
     /// Backends that cannot scale ignore it.
     fn set_screencast_scale(&mut self, _tab: TabId, _scale: f64) -> io::Result<()> {
+        Ok(())
+    }
+    /// What reads `tab`'s page from another thread, so that a reading (a
+    /// large page's snapshot takes hundreds of milliseconds in the
+    /// browser, and each media element and live log a round trip) never
+    /// holds up the tab's own thread, which takes video frames meanwhile.
+    /// `None`: the tab reads on its own thread.
+    fn reader(&mut self, _tab: TabId) -> Option<Box<dyn PageReader>> {
+        None
+    }
+    /// Screencast only `area` of the document (`None`: the viewport), when
+    /// one region is all the frames are for: the browser encodes that
+    /// region's pixels rather than the viewport's, and each frame says
+    /// where it was taken as the area's top left. The page sees no change.
+    /// Backends that cannot ignore it.
+    fn set_screencast_area(&mut self, _tab: TabId, _area: Option<Rect>) -> io::Result<()> {
         Ok(())
     }
     /// The newest screencast frame since the last call, with where it was
