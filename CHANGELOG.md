@@ -9,6 +9,36 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Noctiluca on YouTube: measured, and video at twice the frame rate
+
+An audit of speed, video, sound and layout on YouTube, measured in a PTY
+with a release build, with a ranked plan:
+[Noctiluca on YouTube, measured](docs/design/noctiluca-youtube-perf.md).
+The first three fixes:
+
+- **noctiluca:** a page that keeps changing (a player's clock and
+  progress bar, a live counter) is read at most a quarter of the time: a
+  reading the page pinged for waits three times the last reading's cost,
+  and at least a second while a video plays on screen. Readings for an
+  action, a navigation or a load never wait. A test card playing beside a
+  ticking clock: readings 3.7 a second to 0.9, the tab's time reading 36%
+  to 8%.
+- **noctiluca:** `NOCTILUCA_TRACE=FILE` writes the pipeline's timings as
+  JSON lines: each reading (snapshot, AX tree, build), each projection,
+  each video frame and encode, and the painter's frames, bytes and write
+  time each second.
+- **rs-rich-ext:** `frame::plan` no longer sends a graphic that lives in
+  its cells (Kitty's Unicode placeholders) again when it only moved: its
+  cells show it. Scrolling YouTube's search results one row in Kitty sent
+  1.1 MB of pictures; it sends 27 kB.
+- **rs-rich-art:** a live frame (`Picture::from_rgba`, video) goes to
+  Kitty as zlib-compressed RGB (`o=z`, fastest level): 391 kB a frame to
+  100 kB on a test card, 276 kB on a live stream.
+
+Together, video in Kitty at 120x40 draws 23.9 frames a second (12.3
+before), at 200x60 22.6 (9.5), in Sixel 22.9 (12.8), in half blocks 25.8
+(18.5).
+
 ## 0.0.25 cohort — to be published
 
 To be published from `main` by one `release.yml` run, the first on rab

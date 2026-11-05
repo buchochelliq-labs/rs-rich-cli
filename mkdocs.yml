@@ -305,6 +305,7 @@ nav:
       - "Design: the demo loop, where things stand": design/intuituive-status.md
       - "Design: Noctiluca, a terminal web browser": design/browser.md
       - "Design: Noctiluca on real sites, second pass": design/noctiluca-real-sites-2.md
+      - "Design: Noctiluca on YouTube, measured": design/noctiluca-youtube-perf.md
       - "Design: Cornacai, a terminal client for coding agents (#794)": design/cornacai.md
       - "Design: fuzzing": design/fuzzing.md
       - "Design: the threat model": design/threat-model.md

@@ -80,17 +80,17 @@ pub const SETTLE_MIN: Duration = Duration::from_secs(1);
 /// the tab's time however large the page is (a large page's snapshot
 /// costs hundreds of milliseconds). Reading for an action, a navigation
 /// or a load never waits.
-pub const READ_DUTY: u32 = 3;
+pub(crate) const READ_DUTY: u32 = 3;
 /// While a video plays on screen, a reading the page pinged for waits at
 /// least this long after the last: a player's clock and progress bar
 /// change the page several times a second, and the tab takes no frame
 /// while it reads.
-pub const READ_WHILE_PLAYING: Duration = Duration::from_secs(1);
+pub(crate) const READ_WHILE_PLAYING: Duration = Duration::from_secs(1);
 
 /// How long after a reading that cost `cost` a reading the page pinged
 /// for may run: [`DEBOUNCE`], [`READ_DUTY`] times the cost, and
 /// [`READ_WHILE_PLAYING`] while a video plays, whichever is longest.
-pub fn ping_read_gap(cost: Duration, playing: bool) -> Duration {
+pub(crate) fn ping_read_gap(cost: Duration, playing: bool) -> Duration {
     let gap = DEBOUNCE.max(cost * READ_DUTY);
     if playing {
         gap.max(READ_WHILE_PLAYING)

@@ -77,6 +77,15 @@ Sixel or iTerm2 images, name it with `--images` (or `[media] images`).
 where Chrome runs: over SSH, that is the server. A site table with
 `audio = false` keeps that site muted.
 
+**Video is slow, or the page lags.** Run with `NOCTILUCA_TRACE` set to a
+file's path (`NOCTILUCA_TRACE=/tmp/noctiluca.jsonl noctiluca URL`): each
+reading of the page, each video frame and its encode, and once a second
+the frames, bytes and write time sent to the terminal go there as JSON
+lines. Its `paint` lines say what your terminal takes; its `read` lines
+what a reading of the page costs. What the numbers mean, and what was
+measured on YouTube, is in
+[the audit](../../design/noctiluca-youtube-perf.md).
+
 **A video stays on its poster.** Press `p` to play it. Its frames are
 drawn only while it is on screen.
 

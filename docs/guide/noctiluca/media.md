@@ -34,6 +34,10 @@ the files it loaded.
   seek five seconds; `Alt+M` mutes. The status line says
   `media PLAYING 0:03 / 0:05`. Any `<video>` plays the same way, whatever
   the site.
+- **Fewer bytes a frame.** In Kitty graphics a video's frames go
+  zlib-compressed (a film's frame halves, a flat one shrinks fourfold or
+  more), and a picture that only moved as you scroll is not sent again;
+  its cells show it.
 - **Within the terminal's bandwidth.** Moving pictures share a byte budget
   (`[media] bandwidth`, else 4 MB a second here and 256 kB over SSH to
   start, then the rate your terminal is measured taking output at: here
