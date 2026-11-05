@@ -9,6 +9,22 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## 0.0.25 cohort — to be published
+
+To be published from `main` by one `release.yml` run, the first on rab
+(tag `release-0.0.25`): core 0.0.15 / macros 0.0.9 / plugin API 0.0.9 /
+art 0.0.18 / diagram 0.0.8 / mermaid 0.0.11 / lumis 0.0.9 / ext 0.0.22 /
+micro 0.0.11 / record 0.0.13 / interact 0.0.13 / ratatui 0.0.10 /
+intuituive 0.0.10 / embed 0.0.8 / web 0.0.8 / data 0.0.9 /
+marketplace 0.0.4 / acp 0.0.2 / noctiluca 0.0.4 / cornacai 0.0.2 /
+CLI 0.0.25, and `rs-rich` 0.0.13 on PyPI (`python-v0.0.13`, same commit).
+The last release before 0.1.0: Cornacai resumes sessions, signs in and
+finds agents in the marketplace; intuiTUIve finishes #812's stylesheet
+properties and the parity audit's named gaps; Noctiluca draws live gauges,
+native meters and ratings, pinned bars and shelves; the control socket and
+`rich console` work on Windows over named pipes; ten stable crates document
+every public item. See [the release notes](docs/releases/0.0.25.md).
+
 ### Cornacai, phase 4: resume, sign-in, PTY terminals, agents from the marketplace (0.0.25)
 
 - **Sessions reopen.** Cornacai keeps the sessions it opens in

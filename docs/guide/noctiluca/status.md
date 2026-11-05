@@ -3,21 +3,23 @@
 Noctiluca grows in phases, each unlocked by what people use a browser in a
 terminal for. The phases and their tests are in
 [the design note](../../design/browser.md#phases). This page says what the
-0.0.22 and 0.0.23 releases have, and what comes next.
+0.0.22 to 0.0.24 releases have, what 0.0.25 adds, and what comes next.
 
-## Coming in 0.0.25: real sites, second pass (in progress)
+## Coming in 0.0.25 (Noctiluca 0.0.4): real sites, second pass
 
 Planned in
 [Noctiluca on real sites, second pass](../../design/noctiluca-real-sites-2.md)
 for search, shop, speed-test, video and streaming pages; what each change
-does for which site is on [Noctiluca on real sites](real-sites.md#the-second-pass-0025-in-progress).
+does for which site is on [Noctiluca on real sites](real-sites.md#the-second-pass-0025).
 
 | Works | Notes |
 |---|---|
 | Live drawings | A `<canvas>` is drawn and captured again while it changes; an inline SVG is captured again when it changes, and its `<text>` is read as text. Done |
 | Failed navigations | The address bar keeps the address asked for, with a line saying what failed, the error code and the reload key. Done |
-| Meters, progress and ratings as native controls | In progress |
-| Pinned and docked layers, badges over pictures, shelves as carousels | In progress |
+| Meters, progress and ratings as native controls | Drawn with intuiTUIve's bar, dial and rating, read again at every reading. Done |
+| Pinned and docked layers, badges over pictures, shelves as carousels | Top bars pinned, bottom bars docked, paint order, badges in their picture's cells; a sideways shelf pages with `<` and `>`. Done |
+| Prices, icon buttons, hover-only controls, placeholders | Screen-reader twins, icon glyphs, right-edge controls shortened, lazy thumbnails' placeholders. Done |
+| Windows | The control socket over a named pipe. Done |
 
 ### Known limits in 0.0.25
 
@@ -33,10 +35,13 @@ does for which site is on [Noctiluca on real sites](real-sites.md#the-second-pas
   a redirect is where it was sent, not the link's own.
 - **The reload key in the error line** is named as the default keymap's
   (`R`), even when it is rebound.
+- **A shelf pages with `<` and `>` only:** not yet with Shift+wheel or
+  clicks on its `‹ ›`, and a page's own Previous and Next buttons are not
+  folded into the strip (0.1.0 or later).
 
-## Coming in 0.0.24 (Noctiluca 0.0.3)
+## In 0.0.24 (Noctiluca 0.0.3)
 
-Merged for the next release so far (with the rest of 0.0.24's items in
+Published on 2026-11-03 (with the rest of 0.0.24's items in
 [the plan](../../plans/0.0.24.md)):
 
 | Works | Notes |

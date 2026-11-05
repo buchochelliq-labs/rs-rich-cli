@@ -181,9 +181,9 @@ Still open:
 - **YouTube** answers the recording machine with its bot wall, so no video
   is shown playing there.
   From 0.0.25, a page that cannot be opened at all keeps the address
-  you asked for; see [the second pass](#the-second-pass-0025-in-progress).
+  you asked for; see [the second pass](#the-second-pass-0025).
 
-## The second pass: 0.0.25 (in progress)
+## The second pass: 0.0.25
 
 A second look, on 3 November 2026, went after the sites people asked
 about: Google, Ookla's speed test, Amazon, YouTube and Twitch. Its
@@ -205,11 +205,11 @@ pass. What changes, and how far each change has got:
 | Change | Helps | State |
 |---|---|---|
 | **Canvas and SVG drawings are live.** A `<canvas>` is drawn from Chrome's pixels and captured again while it changes; an inline SVG is captured again when its content changes; an SVG's own `<text>` is read as text | A speed test's dial (a canvas dial showed grey boxes; an SVG dial stayed at `0.00`), charts, players' art | Done; checked on fixtures in real Chrome (`gauge-svg.html`, `gauge-canvas.html`) |
-| **Meters and ratings as native controls.** `<meter>`, `<progress>` and `role=progressbar` or `meter` drawn as a bar or intuiTUIve's dial with their label and value; "4.5 out of 5 stars" as intuiTUIve's `rating`, `★★★★½ 4.5`, its count kept apart; a `<label>` of something that is not a control stays text | Speed tests' readouts, uploads, players' buffers, shops' star ratings | In progress; fixtures `meters.html`, `product-grid.html` |
-| **Pinned and docked layers.** A header fixed or stuck to the top stays at the top; a cookie banner or sign-up bar fixed to the bottom is docked over the bottom rows instead of drawn in the page's flow | Search's header (drawn under the first result before), Twitch's cookie and sign-up bars, a shop's header and cookie banner | In progress; fixtures `search-results.html`, `product-grid.html`; Twitch's bars seen live before the change |
-| **Badges over pictures.** A short text box the page puts over a picture is drawn inside the picture's cells | YouTube's durations, Twitch's LIVE and viewer counts, prices on product pictures | In progress; seen live before the change |
+| **Meters and ratings as native controls.** `<meter>`, `<progress>` and `role=progressbar` or `meter` drawn as a bar or intuiTUIve's dial with their label and value; "4.5 out of 5 stars" as intuiTUIve's `rating`, `★★★★½ 4.5`, its count kept apart; a `<label>` of something that is not a control stays text | Speed tests' readouts, uploads, players' buffers, shops' star ratings | Done; fixtures `meters.html`, `product-grid.html`, and the live dial test in real Chrome |
+| **Pinned and docked layers.** A header fixed or stuck to the top stays at the top; a cookie banner or sign-up bar fixed to the bottom is docked over the bottom rows instead of drawn in the page's flow | Search's header (drawn under the first result before), Twitch's cookie and sign-up bars, a shop's header and cookie banner | Done; fixtures `search-results.html`, `product-grid.html`, and a live test of pinned and docked bars in real Chrome; Twitch's bars seen live before the change only |
+| **Badges over pictures.** A short text box the page puts over a picture is drawn inside the picture's cells | YouTube's durations, Twitch's LIVE and viewer counts, prices on product pictures | Done; fixture `overlays.html`; seen live before the change only |
 | **Shelves as carousels.** A box that scrolls sideways over alike items shows the items in its box, as Chrome does, with a strip under it, `‹ 1–3 of 6 ›` (intuiTUIve's carousel); `<` and `>` scroll the page's box a screen's worth sideways, so lazy items load, and the page is read again ([Shelves](reading.md#shelves)) | YouTube's shelves, a shop's "Customers also viewed", Twitch's rows | Done for the keys; checked on `product-grid.html` in real Chrome. Not yet: Shift+wheel and clicks on `‹ ›`, folding the page's own Previous and Next buttons into the strip, and a look at YouTube's and Twitch's rows live |
-| **Prices and buttons read right.** A price split into parts for looks reads as its screen-reader text (`$29.99`, not `$2999`); an icon-only button gets a face from its title or icon; controls at the right edge are shortened, not cut off | Shops, Twitch's and YouTube's top bars | In progress; fixtures, and Twitch's top bar live before the change |
+| **Prices and buttons read right.** A price split into parts for looks reads as its screen-reader text (`$29.99`, not `$2999`); an icon-only button gets a face from its title or icon; controls at the right edge are shortened, not cut off | Shops, Twitch's and YouTube's top bars | Done; fixtures, and Twitch's top bar live before the change only |
 | **A failed navigation keeps its address.** When a page cannot be opened, the address bar keeps the address you asked for (it showed `chrome-error://chromewebdata/`), and a line above Chrome's error text says what could not be opened, the error code, and that Reload (`R`) tries again | Any blocked or unreachable site; YouTube's watch page from a machine it sends to a bot check | Done; checked on the test engine, and live in Chrome on an address the network refused (`ERR_TUNNEL_CONNECTION_FAILED`). YouTube's redirect to its bot check did not happen again on the day, so that path is covered by the test only |
 
 Fixed already with the second look, each with a test: YouTube's embedded
@@ -227,12 +227,14 @@ Still open after the second pass:
   checking machine to its bot check.
 - **Twitch's chat following new messages** was not seen: the channel
   checked had no chat lines.
-- **Smaller items, also in progress for 0.0.25:** paint order (a hidden
-  error panel drawn with the panel over it, Twitch's offline art taking
-  the player's rows), placeholders for thumbnails that have not loaded
-  yet, hover-only buttons such as "More actions" folded out of every
-  card, and two runs of text drawn into one ("16" and "13y ago" read as
-  "1613y ago").
+- **Done for 0.0.25, on fixtures and the test engine:** paint order (a
+  hidden error panel drawn with the panel over it, Twitch's offline art
+  taking the player's rows), placeholders for thumbnails that have not
+  loaded yet, hover-only buttons such as "More actions" folded out of
+  every card, and two runs of text drawn into one ("16" and "13y ago"
+  read as "1613y ago"). None of these was seen again on the live sites.
+- **Moved to 0.1.0 or later:** recording the pictures above again, and a
+  live look at YouTube's and Twitch's rows with the shelves.
 
 ## Recording them again
 

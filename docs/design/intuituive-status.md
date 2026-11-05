@@ -3,7 +3,30 @@
 Status: handoff note, updated when a session ends mid-round. The loop and its
 rules are in [the demo gaps](intuituive-demo-gaps.md).
 
-## Where things stand (2026-11-03, night)
+## Where things stand (2026-11-04)
+
+- **0.0.25 is in release.** Wave 1 merged as #850 (rab v2.0.0, Cornacai
+  phase 4, the rest of Textual parity, named pipes on Windows, the
+  bookkeeping), after #847 (the stylesheet fuzz fix), #848 (the versions)
+  and #849 (Noctiluca on real sites, second pass). The release PR, on
+  `claude/next-priority-items-3c5p8e-wip-release025`, prepares it from
+  `main` with [the release notes](../releases/0.0.25.md): the changelog's
+  cohort heading, the plan's status and what moves to 0.1.0, the "New in"
+  sections, the tapes checked with a release build.
+- **Before the tag:** Noctiluca's real-site checklist walked by hand and one
+  Cornacai run with a real agent, both noted in the release notes; then
+  the maintainer tags with rab, `python3 .github/rab/scripts/release.py
+  tag`, the first release on it.
+- **After the tag:** the publication notes, the 0.0.25 docs' line in
+  `docs-versions.toml`, the spent `api/semver-breaks.toml` entries
+  removed, `RELEASES.toml`, `release_cohort.py` and `pypi-release.yml`
+  retired once rab has published, the marketplace's crate versions, and
+  then 0.1.0's API review ([the plan to 1.0.0](../plans/1.0.0.md)), which
+  takes what 0.0.25 moved on ([the plan](../plans/0.0.25.md#what-shipped-and-what-moves-on)).
+- **Waiting on the maintainer:** Memo's reference pictures; lumis 0.17
+  (its minimum Rust is 1.95); #791 (a residential network).
+
+## Where things stood (2026-11-03, night)
 
 - **0.0.24 is published** (21 crates from `main` at `c2d65880` by one
   release run, `release-0.0.24`, on 2026-11-03, `rs-rich-acp` and
