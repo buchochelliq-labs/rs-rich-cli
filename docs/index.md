@@ -53,7 +53,7 @@ topic and a widget index.
 ## New in 0.0.25
 
 ![Memo, intuiTUIve's elephant, in the cartoon look](assets/intuituive/mascot/memo-cartoon.svg){ .tui-mascot width="128" }
-0.0.25, to be published as one release ([release notes](releases/0.0.25.md)),
+0.0.25, published on 2026-11-05 ([release notes](releases/0.0.25.md)),
 is the last before 0.1.0's API review: it finishes Cornacai's phase 4 and
 intuiTUIve's Textual parity, and takes Noctiluca a second time round real
 sites.

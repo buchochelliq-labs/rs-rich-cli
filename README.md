@@ -55,9 +55,8 @@ console.print_str("[bold red]Hello[/] [green]World[/] — 42");
 
 ## New in 0.0.25
 
-To be published as one release, `release-0.0.25`
-([release notes](docs/releases/0.0.25.md)), the last before 0.1.0's API
-review:
+Published on 2026-11-05 ([release notes](docs/releases/0.0.25.md)), the
+last before 0.1.0's API review:
 
 - **[Cornacai](docs/guide/cornacai.md):** resumes sessions with
   `session/load`, signs in when the agent asks, runs agent terminals on a
@@ -186,9 +185,10 @@ why, is in [docs/ROADMAP.md](docs/ROADMAP.md); the tracking epic is
 ## Releases
 
 Each release has notes in [`docs/releases/`](docs/releases/) (the newest
-published one is [0.0.24](docs/releases/0.0.24.md)), and
+published one is [0.0.25](docs/releases/0.0.25.md)), and
 [`CHANGELOG.md`](CHANGELOG.md) lists every change. What comes next is in the
-[roadmap](docs/ROADMAP.md) and the [0.0.25 plan](docs/plans/0.0.25.md). The
+[roadmap](docs/ROADMAP.md) and the [plan to 1.0.0](docs/plans/1.0.0.md),
+whose stage 3 is 0.1.0. The
 manifest table above describes this checkout; crates.io is the source for
 published versions.
 

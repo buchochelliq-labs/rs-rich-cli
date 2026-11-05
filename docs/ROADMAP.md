@@ -1,9 +1,10 @@
 # Roadmap
 
 What each release delivered, and where this goes next: the
-[plan to 1.0.0](plans/1.0.0.md), after the 0.0.24 cohort (published
-2026-11-03) and with [0.0.25](plans/0.0.25.md), the last release before
-0.1.0, next.
+[plan to 1.0.0](plans/1.0.0.md), after the 0.0.25 cohort (published
+2026-11-05, the last release before 0.1.0) and with 0.1.0, the API review
+of [stage 3](plans/1.0.0.md#stage-3-api-review-and-stability-tooling-010),
+next.
 Ordered by what unblocks people, not by what is most interesting to build.
 
 Two rules constrain everything here:
@@ -216,6 +217,18 @@ and #499). Delivered:
   and `capture` commands;
 - Atkinson dithering, OKLab distance, Sixel/GIF colour modes, alpha backgrounds
   (#498) and `--theme-file` (#499).
+
+## 0.0.25 — the two tracks' last release, and the first on rab (published 2026-11-05)
+
+The [0.0.25 plan](plans/0.0.25.md) finished the two tracks 0.0.24 opened:
+Cornacai's phase 4 (resume, sign-in, PTY agent terminals, agents from the
+marketplace), the rest of #812's stylesheet properties and the parity
+audit's named gaps, Noctiluca's second pass on real sites, the control
+socket and `rich console` on Windows over named pipes, and every public
+item documented in ten stable crates. It was the first release run on rab
+(see the [release notes](releases/0.0.25.md)). What is not ready moves to
+0.1.0 or later, named in
+[the plan](plans/0.0.25.md#what-shipped-and-what-moves-on).
 
 ## 0.0.24 — Cornacai, Textual parity, Noctiluca for scripts and agents (published 2026-11-03)
 
