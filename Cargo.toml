@@ -26,27 +26,29 @@ rust-version = "1.90"
 # External users get the same short names via each crate's `[lib] name`.
 # `default-features = false`: each member asks for `syntax` / `markdown` only
 # if it uses them, so `rs-rich-ext` without its defaults stays syntect-free.
-rich = { package = "rs-rich", path = "crates/rich", version = "0.0.15", default-features = false }
-rich-plugin-api = { package = "rs-rich-plugin-api", path = "crates/rich-plugin-api", version = "0.0.9" }
-rich-macros = { package = "rs-rich-macros", path = "crates/rich-macros", version = "0.0.9" }
-rich-ext = { package = "rs-rich-ext", path = "crates/rich-ext", version = "0.0.22" }
-rich-art = { package = "rs-rich-art", path = "crates/rich-art", version = "0.0.18" }
-rich-diagram = { package = "rs-rich-diagram", path = "crates/rich-diagram", version = "0.0.8" }
-rich-mermaid = { package = "rs-rich-mermaid", path = "crates/rich-mermaid", version = "0.0.11" }
-rich-lumis = { package = "rs-rich-lumis", path = "crates/rich-lumis", version = "0.0.9" }
-rich-record = { package = "rs-rich-record", path = "crates/rich-record", version = "0.0.13" }
-rich-interact = { package = "rs-rich-interact", path = "crates/rich-interact", version = "0.0.13" }
-rich-micro = { package = "rs-rich-micro", path = "crates/rich-micro", version = "0.0.11" }
-rich-data = { package = "rs-rich-data", path = "crates/rich-data", version = "0.0.9" }
-rich-ratatui = { package = "rs-rich-ratatui", path = "crates/rich-ratatui", version = "0.0.10" }
-rich-intuituive = { package = "rs-rich-intuituive", path = "crates/rich-intuituive", version = "0.0.10" }
-rich-web = { package = "rs-rich-web", path = "crates/rich-web", version = "0.0.8" }
-rich-embed = { package = "rs-rich-embed", path = "crates/rich-embed", version = "0.0.8" }
-rich-marketplace = { package = "rs-rich-marketplace", path = "crates/rich-marketplace", version = "0.0.4", default-features = false }
-rich-acp = { package = "rs-rich-acp", path = "crates/rich-acp", version = "0.0.2" }
-# Cargo's default caret requirement treats 0.0.x specially: `version = "0.0.2"`
-# means >=0.0.2,<0.0.3, not >=0.0.2,<0.1.0. Therefore any internal crate bump
-# must also update every direct dependent's workspace requirement.
+rich = { package = "rs-rich", path = "crates/rich", version = "0.1.0", default-features = false }
+rich-plugin-api = { package = "rs-rich-plugin-api", path = "crates/rich-plugin-api", version = "0.1.0" }
+rich-macros = { package = "rs-rich-macros", path = "crates/rich-macros", version = "0.1.0" }
+rich-ext = { package = "rs-rich-ext", path = "crates/rich-ext", version = "0.1.0" }
+rich-art = { package = "rs-rich-art", path = "crates/rich-art", version = "0.1.0" }
+rich-diagram = { package = "rs-rich-diagram", path = "crates/rich-diagram", version = "0.1.0" }
+rich-mermaid = { package = "rs-rich-mermaid", path = "crates/rich-mermaid", version = "0.1.0" }
+rich-lumis = { package = "rs-rich-lumis", path = "crates/rich-lumis", version = "0.1.0" }
+rich-record = { package = "rs-rich-record", path = "crates/rich-record", version = "0.1.0" }
+rich-interact = { package = "rs-rich-interact", path = "crates/rich-interact", version = "0.1.0" }
+rich-micro = { package = "rs-rich-micro", path = "crates/rich-micro", version = "0.1.0" }
+rich-data = { package = "rs-rich-data", path = "crates/rich-data", version = "0.1.0" }
+rich-ratatui = { package = "rs-rich-ratatui", path = "crates/rich-ratatui", version = "0.1.0" }
+rich-intuituive = { package = "rs-rich-intuituive", path = "crates/rich-intuituive", version = "0.1.0" }
+rich-web = { package = "rs-rich-web", path = "crates/rich-web", version = "0.1.0" }
+rich-embed = { package = "rs-rich-embed", path = "crates/rich-embed", version = "0.1.0" }
+rich-marketplace = { package = "rs-rich-marketplace", path = "crates/rich-marketplace", version = "0.1.0", default-features = false }
+rich-acp = { package = "rs-rich-acp", path = "crates/rich-acp", version = "0.1.0" }
+# Cargo's default caret requirement holds each one to its minor: `version =
+# "0.1.0"` means >=0.1.0,<0.2.0, so a 0.1.x patch needs no change here, and
+# the CLI and the Python package pin every 0.x crate to one minor, as the
+# 1.0.0 plan asks. A minor bump (or any bump of a 0.0.x crate, which caret
+# holds to its patch) must also update every direct dependent's requirement.
 
 # Third-party (kept lean for the first slice)
 terminal_size = "0.4"
