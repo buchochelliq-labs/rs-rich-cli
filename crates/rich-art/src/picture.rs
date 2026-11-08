@@ -1288,9 +1288,10 @@ impl Picture {
 // Blocks and Kitty placeholders are single-cell graphemes. Divide before
 // attaching provenance so later segment clipping keeps exact source columns.
 fn tag_cells(line: Vec<Segment>, tag: PictureTag, background: Option<[u8; 3]>) -> Vec<Segment> {
-    let mut meta = Meta::new();
+    let mut row_meta = tag.metadata();
+    row_meta.insert("intuituive.image.column", MetaValue::Int(0));
     if let Some(rgb) = background {
-        meta.insert(
+        row_meta.insert(
             "intuituive.image.background",
             MetaValue::List(
                 rgb.into_iter()
@@ -1299,25 +1300,48 @@ fn tag_cells(line: Vec<Segment>, tag: PictureTag, background: Option<[u8; 3]>) -
             ),
         );
     }
-    let background = Style::from_meta(meta);
     let mut out = Vec::with_capacity(tag.cols);
     let mut column = 0;
-    for segment in line {
-        // BlockArt normally emits one cell per segment. Avoid the general
-        // grapheme splitter on that path; retain it for merged input segments.
-        let cells = rich::cells::cell_len(&segment.text);
-        let pieces = if cells == 1 {
-            vec![vec![segment]]
+    let mut append = |mut segment: Segment, column: usize| {
+        // Keep one final metadata map per cell, in the same insertion order
+        // as style_at + background. Consuming the sampled style avoids cloning
+        // that map through several temporary styles for every source column.
+        let meta: Meta = row_meta
+            .iter()
+            .map(|(key, value)| {
+                let value = if key == "intuituive.image.column" {
+                    MetaValue::Int(column as i64)
+                } else {
+                    value.clone()
+                };
+                (key, value)
+            })
+            .collect();
+        let style = segment.style.take().unwrap_or_default();
+        let meta = if style.meta_ref().is_some() {
+            let mut merged = style.meta();
+            merged.update(&meta);
+            merged
         } else {
-            Segment::divide(&[segment], &(1..=cells).collect::<Vec<_>>())
+            meta
         };
-        for pieces in pieces {
-            let style = tag.style_at(column).combine(&background);
-            for mut segment in pieces {
-                segment.style = Some(segment.style.unwrap_or_default().combine(&style));
-                out.push(segment);
-            }
+        segment.style = Some(style.with_meta(meta));
+        out.push(segment);
+    };
+    for segment in line {
+        // BlockArt normally emits one cell per segment. Avoid allocating
+        // splitter vectors on that path; retain it for merged input segments.
+        let cells = rich::cells::cell_len(&segment.text);
+        if cells == 1 {
+            append(segment, column);
             column += 1;
+        } else {
+            for pieces in Segment::divide(&[segment], &(1..=cells).collect::<Vec<_>>()) {
+                for segment in pieces {
+                    append(segment, column);
+                }
+                column += 1;
+            }
         }
     }
     out
@@ -1539,6 +1563,10 @@ impl PictureTag {
 
     /// The style that carries this tag.
     pub fn style(&self) -> Style {
+        Style::from_meta(self.metadata())
+    }
+
+    fn metadata(&self) -> Meta {
         let mut meta = Meta::new();
         meta.insert(
             Self::META_KEY,
@@ -1557,19 +1585,19 @@ impl PictureTag {
                 MetaValue::Int(ANCHORS.iter().position(|a| *a == self.anchor).unwrap_or(0) as i64),
             ]),
         );
-        Style::from_meta(meta)
+        meta
     }
 
     /// A tag with the exact source column attached. This additive metadata
     /// survives clipping; old `style()` tags remain valid for whole-width runs.
     pub fn style_at(&self, column: usize) -> Style {
-        let mut meta = Meta::new();
+        let mut meta = self.metadata();
         if column < self.cols
             && let Ok(column) = i64::try_from(column)
         {
             meta.insert("intuituive.image.column", MetaValue::Int(column));
         }
-        self.style().combine(&Style::from_meta(meta))
+        Style::from_meta(meta)
     }
 
     /// Exact source column, when present and valid for the style's picture tag.
@@ -2476,6 +2504,48 @@ mod tests {
         assert_eq!(PictureTag::column_of(&tag.style_at(5)), Some(5));
         assert_eq!(PictureTag::column_of(&tag.style_at(8)), None);
         assert_eq!(PictureTag::column_of(&tag.style_at(usize::MAX)), None);
+    }
+
+    #[test]
+    fn tagging_merged_cells_keeps_existing_style_metadata_and_order() {
+        let tag = PictureTag {
+            id: 1,
+            version: 2,
+            cols: 2,
+            rows: 1,
+            row: 0,
+            pixels: Pixels::Iterm,
+            fit: Some(ImageFit::Cover),
+            anchor: ImageAnchor::Right,
+        };
+        let mut meta = Meta::new();
+        meta.insert("before", MetaValue::Tuple(vec![MetaValue::Bool(true)]));
+        meta.insert("intuituive.image.column", MetaValue::Int(99));
+        meta.insert("intuituive.image", MetaValue::None);
+        let original = Style::parse("bold red on blue").unwrap().with_meta(meta);
+        for background in [None, Some([12, 34, 56])] {
+            let tagged = tag_cells(
+                vec![Segment::new("▀▄", Some(original.clone()))],
+                tag,
+                background,
+            );
+            assert_eq!(tagged.len(), 2);
+            for (column, segment) in tagged.iter().enumerate() {
+                let mut background_meta = Meta::new();
+                if let Some(rgb) = background {
+                    background_meta.insert(
+                        "intuituive.image.background",
+                        MetaValue::List(rgb.map(|v| MetaValue::Int(v.into())).to_vec()),
+                    );
+                }
+                let expected = original.combine(
+                    &tag.style_at(column)
+                        .combine(&Style::from_meta(background_meta)),
+                );
+                assert_eq!(segment.style.as_ref(), Some(&expected));
+                assert_eq!(segment.text, if column == 0 { "▀" } else { "▄" });
+            }
+        }
     }
 
     #[test]
