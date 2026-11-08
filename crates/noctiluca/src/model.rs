@@ -1450,8 +1450,11 @@ fn shows_content(dom: &Dom, i: usize) -> bool {
 fn visible_footprint(dom: &Dom, i: usize) -> Option<Rect> {
     dom.descendants(i)
         .into_iter()
-        // PICTURE chooses a descendant IMG; its own box draws no media.
-        .filter(|&d| dom.name[d] != "PICTURE" && shows_content(dom, d))
+        // PICTURE's wrapper alone draws no media, but its CSS background can.
+        .filter(|&d| {
+            shows_content(dom, d)
+                && (dom.name[d] != "PICTURE" || background_picture(dom, d).is_some())
+        })
         .filter_map(|d| dom.rect(d))
         .filter(|rect| !rect.is_empty())
         .fold(None, |bounds, rect| Some(union(bounds, rect)))
@@ -4113,7 +4116,10 @@ mod tests {
         assert_eq!(control.rect, Rect::new(16.0, 36.0, 160.0, 90.0));
         assert_eq!(control.revision, 1);
         assert!(control.from_ax);
-        assert_eq!(page.check(&control.binding(&page)).unwrap().node, 100 + link);
+        assert_eq!(
+            page.check(&control.binding(&page)).unwrap().node,
+            100 + link
+        );
     }
 
     #[test]
