@@ -1214,10 +1214,11 @@ pub struct Pacer {
     rows: usize,
     cell: CellPixels,
     /// Frames sent in the last [`WINDOW`]: when, and their bytes.
-    sent: VecDeque<(Instant, u64)>,
-    /// When it last stepped down: frames sent before are counted against
-    /// the window but not taken as what the next frame may cost.
-    stepped: Option<Instant>,
+    sent: VecDeque<(Instant, u64, Option<u64>)>,
+    /// Reservations are separate from bytes that have actually been sent.
+    pending: VecDeque<(u64, u64)>,
+    /// Current protocol/geometry generation for eligible measurements.
+    generation: u64,
     /// What a frame costs at this protocol, measured; else estimated.
     measured: Option<f64>,
     /// The time the last frame was due at, on the even spacing frames
@@ -1238,7 +1239,8 @@ impl Pacer {
             rows: rows.max(1),
             cell: CellPixels::DEFAULT,
             sent: VecDeque::new(),
-            stepped: None,
+            pending: VecDeque::new(),
+            generation: 0,
             measured: None,
             slot: None,
             last_scheduled: None,
@@ -1251,17 +1253,20 @@ impl Pacer {
         self.pixels
     }
 
-    /// A new size in cells: what a frame costs is estimated again.
+    /// A new size in cells: what a frame costs is estimated again. Cancel
+    /// reservations for frames that will no longer be shown.
     pub fn resize(&mut self, cols: usize, rows: usize) {
         if (cols.max(1), rows.max(1)) != (self.cols, self.rows) {
             self.cols = cols.max(1);
             self.rows = rows.max(1);
             self.measured = None;
+            self.generation = self.generation.wrapping_add(1);
         }
     }
 
     /// Use measured physical cell dimensions for estimates. A change clears
-    /// the previous per-frame measurement but retains the rolling byte window.
+    /// the previous per-frame measurement but retains the rolling byte window
+    /// and reservations. Cancel reservations for superseded frames explicitly.
     ///
     /// ```
     /// use rich_art::graphics::CellPixels;
@@ -1277,10 +1282,7 @@ impl Pacer {
         }
         self.cell = cell;
         self.measured = None;
-        self.stepped = self
-            .sent
-            .back()
-            .map(|(at, _)| *at + Duration::from_nanos(1));
+        self.generation = self.generation.wrapping_add(1);
         true
     }
 
@@ -1336,6 +1338,23 @@ impl Pacer {
     /// waiting a whole frame more. Two are never less than half a frame
     /// apart, and the rate stays at most the ceiling.
     pub fn due(&mut self, now: Instant, budget: &ByteBudget, share: f64) -> bool {
+        self.due_with_replacement(now, budget, share, false)
+    }
+
+    /// Check whether a frame may replace the oldest pending frame. The
+    /// check retains that reservation; cancel it only when committing the
+    /// replacement. With no pending frame this is identical to [`due`](Self::due).
+    pub fn due_replacing_pending(&mut self, now: Instant, budget: &ByteBudget, share: f64) -> bool {
+        self.due_with_replacement(now, budget, share, true)
+    }
+
+    fn due_with_replacement(
+        &mut self,
+        now: Instant,
+        budget: &ByteBudget,
+        share: f64,
+        replace: bool,
+    ) -> bool {
         self.forget(now);
         let per_second = budget.bytes_per_second as f64 * share.clamp(0.0, 1.0);
         if per_second <= 0.0 {
@@ -1353,7 +1372,13 @@ impl Pacer {
                 return false;
             }
         }
-        let used: u64 = self.sent.iter().map(|(_, b)| b).sum();
+        let used = self.recent_bytes().saturating_add(
+            self.pending
+                .iter()
+                .skip(usize::from(replace))
+                .map(|(bytes, _)| *bytes)
+                .fold(0u64, u64::saturating_add),
+        );
         used as f64 + next <= per_second * WINDOW.as_secs_f64()
     }
 
@@ -1365,15 +1390,17 @@ impl Pacer {
         let largest = self
             .sent
             .iter()
-            .filter(|(at, _)| self.stepped.is_none_or(|stepped| *at >= stepped))
-            .map(|(_, b)| *b)
+            .filter(|(_, _, generation)| *generation == Some(self.generation))
+            .map(|(_, b, _)| *b)
             .max()
             .unwrap_or(0) as f64;
         largest.max(self.bytes_per_frame())
     }
 
-    /// Record a frame scheduled now when its byte cost will be observed later.
-    /// Call [`observe_bytes`](Self::observe_bytes) when the painter reports it.
+    /// Reserve the estimated bytes for a scheduled frame until it is observed
+    /// or cancelled. Call [`observe_bytes`](Self::observe_bytes) with
+    /// `measure = true` when the painter reports the oldest current-generation
+    /// frame, or [`cancel_pending`](Self::cancel_pending) when it is superseded.
     ///
     /// ```
     /// use std::time::Instant;
@@ -1381,30 +1408,48 @@ impl Pacer {
     /// let mut pacer = Pacer::new(Pixels::Sixel, 4, 3);
     /// let now = Instant::now();
     /// pacer.schedule(now);
+    /// // Cancel a superseded frame before recording an unrelated old one.
+    /// pacer.cancel_pending();
     /// // A late frame from earlier metrics belongs in the byte window,
     /// // but should not become the estimate for the current metrics.
     /// pacer.observe_bytes(now, 1000, false);
     /// assert_eq!(pacer.recent_bytes(), 1000);
     /// ```
     pub fn schedule(&mut self, now: Instant) {
-        self.mark_slot(now);
-        self.sent.push_back((now, 0));
         self.forget(now);
+        self.mark_slot(now);
+        self.pending
+            .push_back((self.next_frame().ceil() as u64, self.generation));
+    }
+
+    /// Release the oldest unobserved reservation when its frame is superseded.
+    /// Returns whether a reservation was removed. A late write is still
+    /// recorded separately through [`observe_bytes`](Self::observe_bytes).
+    pub fn cancel_pending(&mut self) -> bool {
+        self.pending.pop_front().is_some()
     }
 
     /// Add actually transmitted bytes to the rolling window. Set `measure`
-    /// only if those bytes describe the current protocol and cell metrics.
+    /// only for an observation of the oldest scheduled frame at the current
+    /// protocol and cell metrics; this reconciles its reservation. With
+    /// `measure = false`, reservations are untouched and bytes count only
+    /// toward the window, not the next-frame estimate.
     pub fn observe_bytes(&mut self, now: Instant, bytes: u64, measure: bool) {
         if measure {
+            if let Some(index) = self
+                .pending
+                .iter()
+                .position(|(_, generation)| *generation == self.generation)
+            {
+                self.pending.remove(index);
+            }
             self.measured = Some(match self.measured {
                 Some(before) => before * 0.7 + bytes as f64 * 0.3,
                 None => bytes as f64,
             });
         }
-        self.sent.push_back((now, bytes));
-        if !measure {
-            self.stepped = Some(now + Duration::from_nanos(1));
-        }
+        self.sent
+            .push_back((now, bytes, measure.then_some(self.generation)));
         self.forget(now);
     }
 
@@ -1426,7 +1471,7 @@ impl Pacer {
             Some(before) => before * 0.7 + bytes as f64 * 0.3,
             None => bytes as f64,
         });
-        self.sent.push_back((now, bytes));
+        self.sent.push_back((now, bytes, Some(self.generation)));
         self.forget(now);
     }
 
@@ -1434,7 +1479,7 @@ impl Pacer {
         while self
             .sent
             .front()
-            .is_some_and(|(at, _)| now.duration_since(*at) > WINDOW)
+            .is_some_and(|(at, _, _)| now.duration_since(*at) > WINDOW)
         {
             self.sent.pop_front();
         }
@@ -1450,19 +1495,19 @@ impl Pacer {
             Some(lower) => {
                 self.pixels = lower;
                 self.measured = None;
-                self.stepped = self
-                    .sent
-                    .back()
-                    .map(|(at, _)| *at + Duration::from_nanos(1));
+                self.generation = self.generation.wrapping_add(1);
                 true
             }
             None => false,
         }
     }
 
-    /// The bytes sent in the last two seconds.
+    /// The bytes sent in the last two seconds, excluding pending reservations.
     pub fn recent_bytes(&self) -> u64 {
-        self.sent.iter().map(|(_, b)| b).sum()
+        self.sent
+            .iter()
+            .map(|(_, b, _)| *b)
+            .fold(0u64, u64::saturating_add)
     }
 }
 
@@ -1785,6 +1830,107 @@ mod tests {
         count_picture_bytes(picture.id(), 10);
         count_picture_bytes(picture.id(), 5);
         assert_eq!(picture_bytes(picture.id()), 15);
+    }
+
+    #[cfg(feature = "frames")]
+    #[test]
+    fn replacement_budget_check_keeps_old_reservation_until_committed() {
+        let mut p = Pacer::new(Pixels::Sixel, 1, 1);
+        let budget = ByteBudget::new(1000);
+        let start = Instant::now();
+        p.observe_bytes(start, 1900, false);
+        assert!(p.due(start, &budget, 1.0));
+        p.schedule(start);
+        let next = start + Duration::from_millis(100);
+        assert!(p.due_replacing_pending(next, &budget, 1.0));
+        assert!(
+            !p.due(next, &budget, 1.0),
+            "the check itself must not release the old reservation"
+        );
+        assert!(!p.due_replacing_pending(next, &ByteBudget::new(980), 1.0));
+        assert!(p.cancel_pending());
+        p.schedule(next);
+        p.observe_bytes(next, 64, true);
+        assert_eq!(p.recent_bytes(), 1964);
+        assert!(!p.cancel_pending());
+    }
+
+    #[cfg(feature = "frames")]
+    #[test]
+    fn cancelled_unseen_frame_releases_reservation_for_replacement() {
+        let mut p = Pacer::new(Pixels::Sixel, 1, 1);
+        let budget = ByteBudget::new(1000);
+        let start = Instant::now();
+        p.observe_bytes(start, 1900, false);
+        assert!(p.due(start, &budget, 1.0));
+        p.schedule(start);
+        p.cancel_pending();
+        assert!(p.due(start + Duration::from_millis(100), &budget, 1.0));
+        p.schedule(start + Duration::from_millis(100));
+        p.observe_bytes(start + Duration::from_millis(110), 64, true);
+        assert_eq!(p.recent_bytes(), 1964);
+        assert!(!p.due(start + Duration::from_millis(225), &budget, 1.0));
+    }
+
+    #[cfg(feature = "frames")]
+    #[test]
+    fn pending_frame_reserves_budget_until_observed_or_cancelled() {
+        let mut p = Pacer::new(Pixels::Sixel, 1, 1);
+        let budget = ByteBudget::new(1000);
+        let start = Instant::now();
+        p.observe_bytes(start, 1900, false);
+        assert!(p.due(start, &budget, 1.0));
+        p.schedule(start);
+        assert!(!p.due(start + Duration::from_millis(100), &budget, 1.0));
+        p.observe_bytes(start + Duration::from_millis(101), 64, true);
+        assert_eq!(p.recent_bytes(), 1964);
+        assert!(!p.due(start + Duration::from_millis(200), &budget, 1.0));
+    }
+
+    #[cfg(feature = "frames")]
+    #[test]
+    fn late_old_observation_does_not_reconcile_current_reservation() {
+        let mut p = Pacer::new(Pixels::Sixel, 1, 1);
+        let start = Instant::now();
+        p.schedule(start);
+        p.set_cell_pixels(CellPixels::new(12, 24));
+        assert!(p.cancel_pending());
+        p.schedule(start + Duration::from_millis(125));
+        p.observe_bytes(start + Duration::from_millis(126), 100, false);
+        assert!(
+            p.cancel_pending(),
+            "stale bytes must not consume the new reservation"
+        );
+        assert!(!p.cancel_pending());
+        assert_eq!(p.recent_bytes(), 100);
+    }
+
+    #[cfg(feature = "frames")]
+    #[test]
+    fn new_generation_at_the_same_instant_keeps_its_outlier() {
+        let mut p = Pacer::new(Pixels::Sixel, 1, 1);
+        let start = Instant::now();
+        p.observe_bytes(start, 100, true);
+        p.set_cell_pixels(CellPixels::new(12, 24));
+        p.observe_bytes(start, 10_000, true);
+        p.observe_bytes(start, 1_000, true);
+        assert!(!p.due(start, &ByteBudget::new(10_000), 1.0));
+    }
+
+    #[cfg(feature = "frames")]
+    #[test]
+    fn stale_bytes_do_not_remove_current_geometry_outliers() {
+        let mut p = Pacer::new(Pixels::Sixel, 1, 1);
+        p.set_cell_pixels(CellPixels::new(12, 24));
+        let start = Instant::now();
+        let budget = ByteBudget::new(10_000);
+        p.observe_bytes(start, 10_000, true);
+        p.observe_bytes(start, 1_000, true);
+        assert_eq!(p.bytes_per_frame(), 7_300.0);
+        assert!(!p.due(start, &budget, 1.0));
+        p.observe_bytes(start, 1, false);
+        assert!(!p.due(start, &budget, 1.0));
+        assert_eq!(p.recent_bytes(), 11_001);
     }
 
     #[cfg(feature = "frames")]

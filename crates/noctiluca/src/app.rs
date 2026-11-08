@@ -366,7 +366,7 @@ fn step_motion(b: Browser, motion: &mut pictures::Motion) {
     let page = b.page.get_untracked();
     let images = b.images.get_untracked();
     let next = match page {
-        Some(page) if images != Images::None && b.view.get_untracked() != View::Reader => {
+        Some(page) if images != Images::None && b.view.get_untracked() == View::Projection => {
             let height = usize::from(b.viewport.get_untracked().1);
             b.layout.with_untracked(|l| {
                 // The first row in view; "the end" is a scroll past it.
@@ -384,7 +384,10 @@ fn step_motion(b: Browser, motion: &mut pictures::Motion) {
                 )
             })
         }
-        _ => HashMap::new(),
+        _ => {
+            motion.hide();
+            HashMap::new()
+        }
     };
     b.pacing
         .with_untracked(|p| p.borrow_mut().others = motion.moving_count());
