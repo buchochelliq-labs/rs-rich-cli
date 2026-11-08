@@ -122,3 +122,160 @@ fn keyed_chat_edits_replace_body_and_preserve_identity() {
         ])
     );
 }
+
+#[test]
+fn source_pane_reflow_keeps_real_browser_draft_focus_and_action_target() {
+    use noctiluca::{
+        app::{Options, app},
+        bookmarks::Bookmarks,
+        config::{Config, Images, View},
+    };
+    let Some(engine) = browser("stream-with-log.html?quiet") else {
+        return;
+    };
+    evaluate(&engine, "window.beforeAppNavigation = true");
+    let devtools = engine.devtools().clone();
+    let eval = |expression: &str| {
+        let r = devtools
+            .call(
+                "Runtime.evaluate",
+                json!({"expression":expression,"returnByValue":true}),
+                Duration::from_secs(10),
+            )
+            .unwrap();
+        assert!(r.get("exceptionDetails").is_none(), "{r}");
+        r["result"]["value"].clone()
+    };
+    let url = engine.state(TabId(0)).url;
+    let mut d = app(
+        Box::new(engine),
+        Options {
+            config: Config::default(),
+            bookmarks: Bookmarks::default(),
+            url: Some(url),
+            view: Some(View::Projection),
+            images: Some(Images::None),
+            tunnel: None,
+            control: None,
+        },
+    )
+    .driver(160, 50);
+    fn wait(d: &mut rich_intuituive::Driver, ok: impl Fn(&rich_intuituive::Driver) -> bool) {
+        let until = Instant::now() + Duration::from_secs(15);
+        loop {
+            d.settle();
+            if ok(d) {
+                break;
+            }
+            assert!(Instant::now() < until, "{}", d.screen().plain().join("\n"));
+            std::thread::sleep(Duration::from_millis(20));
+        }
+    }
+    wait(&mut d, |_| {
+        eval("window.beforeAppNavigation !== true") == json!(true)
+    });
+    wait(&mut d, |d| {
+        d.screen().plain().join("\n").contains("Lanternfish")
+    });
+    eval(
+        "window.savedInput=document.querySelector('#message');savedInput.value='draftseed';savedInput.dispatchEvent(new Event('input',{bubbles:true}));true",
+    );
+    wait(&mut d, |d| d.find_text("draftseed").is_some());
+    let (x, y) = d.find_text("draftseed").unwrap();
+    d.click(x, y);
+    wait(&mut d, |d| d.focused_name().is_some_and(|n| n != "page"));
+    d.press("end");
+    d.type_text(" 海の光");
+    let focus = d.focused();
+    for (w, h) in [(80, 24), (120, 40), (160, 50), (40, 50)] {
+        d.resize(w, h);
+        d.settle();
+        let expected_width = u32::from(w.max(80)) * 8;
+        wait(&mut d, |_| eval("innerWidth") == json!(expected_width));
+        assert_eq!(
+            eval(
+                "document.querySelector('video').getBoundingClientRect().width > 0 && document.querySelector('video').videoWidth > 0"
+            ),
+            json!(true)
+        );
+        assert_eq!(d.screen().area().width, w);
+        eval(
+            "mediaQualityChat.append('adaptive-new','passive update');mediaQualityChat.edit('adaptive-new','edited update');true",
+        );
+        wait(&mut d, |d| {
+            d.screen().plain().join("\n").contains("draftseed 海の光")
+        });
+        assert_eq!(d.focused(), focus, "editor focus changed at {w}");
+        assert_eq!(
+            eval("savedInput===document.querySelector('#message')"),
+            json!(true)
+        );
+    }
+    d.press("enter");
+    wait(&mut d, |_| {
+        eval("savedInput.value") == json!("draftseed 海の光")
+    });
+    d.press("esc");
+    d.assert_focused("page");
+    d.press("end");
+    wait(&mut d, |d| d.find_text("[Send]").is_some());
+    let (x, y) = d.find_text("[Send]").unwrap();
+    d.click(x + 2, y);
+    wait(&mut d, |_| {
+        eval("document.querySelector('#log').textContent.includes('draftseed 海の光')")
+            == json!(true)
+    });
+    assert_eq!(eval("savedInput.value"), json!(""));
+}
+
+#[test]
+fn gauge_updates_and_fixed_action_survive_all_projection_widths() {
+    use noctiluca::{
+        engine::PageAction,
+        layout::{Marks, control_at, project},
+        model::{Revisions, build},
+    };
+    for fixture in ["gauge-canvas.html?quiet", "gauge-svg.html?quiet"] {
+        let Some(mut engine) = browser(fixture) else {
+            return;
+        };
+        evaluate(
+            &engine,
+            "window.probeHits=0;const b=document.createElement('button');b.textContent='Fixed probe';b.style='position:fixed;bottom:0;left:0;width:160px;height:24px;z-index:999';b.onclick=()=>++window.probeHits;document.body.append(b);true",
+        );
+        let mut revisions = Revisions::new();
+        let mut original = None;
+        for (w, h) in [(40, 24), (80, 24), (120, 40), (160, 50)] {
+            engine.resize(w.max(80), h).unwrap();
+            for (shown, semantic) in [(123.45, 67.8), (234.56, 89.1)] {
+                evaluate(&engine, &format!("setGauge({shown},{semantic});true"));
+                let p = build(&engine.snapshot(TabId(0)).unwrap(), &mut revisions);
+                assert!(
+                    p.indicators.iter().any(|i| i.value == Some(semantic)),
+                    "{fixture}: {:?}",
+                    p.indicators
+                );
+                let projection = project(&p, w, (8., 18.), &Marks::default());
+                assert!(projection.lines.iter().all(|l| l.width() <= usize::from(w)));
+                let c = p.find("button", "Fixed probe")[0];
+                assert_eq!(*original.get_or_insert(c.node), c.node);
+                let index = p.controls.iter().position(|v| v.node == c.node).unwrap();
+                let docked = projection
+                    .docked
+                    .as_ref()
+                    .expect("fixed bottom action is docked");
+                assert!(
+                    docked
+                        .lines
+                        .iter()
+                        .any(|l| (0..l.width()).any(|x| control_at(l, x) == Some(index)))
+                );
+                assert_eq!(p.check(&c.binding(&p)).unwrap().node, c.node);
+            }
+            engine
+                .act(TabId(0), &PageAction::Click(original.unwrap()))
+                .unwrap();
+        }
+        assert_eq!(evaluate(&engine, "window.probeHits"), json!(4));
+    }
+}

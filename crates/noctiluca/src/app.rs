@@ -1293,7 +1293,12 @@ fn activate(b: Browser, index: usize, cx: &mut Ctx) {
     }
     let node = control.node;
     let title = markup(&crate::tab::describe(&control));
-    cx.modal(Size::Percent(70), Size::Fixed(3 + 2), move || {
+    let height = if control.role.is_text() {
+        Size::Auto
+    } else {
+        Size::Fixed(3 + 2)
+    };
+    cx.modal(Size::Percent(70), height, move || {
         web_widget(b, vec![node])
             .on_key("esc", |cx| cx.pop())
             .panel(&title)
@@ -1990,9 +1995,30 @@ fn apply_site(b: Browser, url: &str) {
     {
         b.view.set(view);
     }
-    let (columns, rows) = b.viewport.get_untracked();
-    let width = site.as_ref().and_then(|s| s.width).unwrap_or(columns);
-    b.send(Command::Resize(width, rows.saturating_sub(CHROME_ROWS)));
+}
+
+/// Source CSS layout and terminal layout are separate. Narrow source flex
+/// layouts can collapse a video to zero pixels before projection can reflow it.
+/// Only the adapted projection requests a wider source; pixel/faithful views
+/// retain their real viewport, and no physical cell metric is changed.
+fn source_viewport(b: Browser) -> (u16, u16) {
+    let (columns, rows) = b.viewport.get();
+    let view = b.view.get();
+    let reflow = view == View::Projection
+        && !b.faithful.get()
+        && b.adapt.get().on(crate::adapt::Rule::SnapGrids);
+    let configured = b.page.with(|page| {
+        page.as_ref()
+            .and_then(|page| b.config.with(|c| c.site(&page.url).and_then(|s| s.width)))
+    });
+    let columns = if reflow {
+        configured.unwrap_or(columns).max(80)
+    } else if view == View::Pixels {
+        columns
+    } else {
+        configured.unwrap_or(columns)
+    };
+    (columns, rows.saturating_sub(CHROME_ROWS))
 }
 
 fn reconcile_view_media(
@@ -3205,13 +3231,15 @@ pub fn app(engine: Box<dyn Engine>, options: Options) -> App {
             b,
         ))));
         every(MOTION, move |_| step_motion(b, &mut motion.borrow_mut()));
-        // Chrome lays the page out at the terminal's size.
+        // One source-size policy for terminal, view, adaptation and site changes.
         watch(
-            move || b.viewport.get(),
+            move || source_viewport(b),
             move |(columns, rows), _| {
-                b.send(Command::Resize(columns, rows.saturating_sub(CHROME_ROWS)));
+                b.send(Command::Resize(columns, rows));
             },
         );
+        let (columns, rows) = source_viewport(b);
+        b.send(Command::Resize(columns, rows));
         b.send(Command::Open(start.clone()));
         b.start.set(start_page);
         // The tab hears which video regions the view shows, so only those

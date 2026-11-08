@@ -649,7 +649,8 @@ pub struct Region {
     pub collapsible: bool,
 }
 
-/// A grid, or a flex row that wraps: its items' boxes in order.
+/// A source grid, wrapping flex row, or two named video/log sections in
+/// a flex container: its direct items' boxes in source order.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Grid {
     pub node: NodeId,
@@ -1539,7 +1540,7 @@ fn captioned(dom: &Dom, i: usize, alt: &str) -> bool {
             return dom
                 .descendants(parent)
                 .into_iter()
-                .filter(|&d| dom.name[d] == "FIGCAPTION")
+                .filter(|&d| dom.name[d] == "FIGCAPTION" && dom.shows(d))
                 .any(|d| {
                     let text: String = dom
                         .descendants(d)
@@ -1991,11 +1992,53 @@ impl Walker<'_> {
                 });
             }
         }
-        // Grids, and flex rows that wrap: their items, for snapping.
+        // Reflow an actual source container, never nearby independent boxes.
+        // A nonwrapping flex row qualifies only for two named source sections,
+        // one containing video and the other a live log. This establishes layout
+        // containment, not a shared playback/chat state or application meaning.
         let display = dom.style(i, 0);
+        let paired_sections = if laid_out && matches!(display, "flex" | "inline-flex") {
+            let panes: Vec<_> = dom.children[i]
+                .iter()
+                .copied()
+                .filter(|&c| {
+                    dom.is_element(c) && dom.shows(c) && dom.rect(c).is_some_and(|r| !r.is_empty())
+                })
+                .collect();
+            let named_section = |c| {
+                (dom.name[c] == "SECTION" || dom.attr(c, "role") == Some("region"))
+                    && ["aria-label", "aria-labelledby"]
+                        .iter()
+                        .any(|a| dom.attr(c, a).is_some_and(|v| !v.trim().is_empty()))
+                    && !self.label(c).is_empty()
+            };
+            let contains = |c, video| {
+                dom.descendants(c).into_iter().any(|d| {
+                    if video {
+                        dom.name[d] == "VIDEO"
+                    } else {
+                        dom.attr(d, "role") == Some("log")
+                    }
+                })
+            };
+            panes.len() == 2
+                && panes.iter().all(|&c| named_section(c))
+                && ((contains(panes[0], true)
+                    && !contains(panes[0], false)
+                    && contains(panes[1], false)
+                    && !contains(panes[1], true))
+                    || (contains(panes[1], true)
+                        && !contains(panes[1], false)
+                        && contains(panes[0], false)
+                        && !contains(panes[0], true)))
+        } else {
+            false
+        };
+        // Grids, wrapping flex rows, and the explicit two-pane source layout.
         if laid_out
             && (matches!(display, "grid" | "inline-grid")
-                || (matches!(display, "flex" | "inline-flex") && dom.style(i, 11) == "wrap"))
+                || (matches!(display, "flex" | "inline-flex") && dom.style(i, 11) == "wrap")
+                || paired_sections)
         {
             let items: Vec<Rect> = dom.children[i]
                 .iter()

@@ -1671,7 +1671,30 @@ fn project_part(
     // A grid snaps first, on Chrome's own places.
     if adapt.on(Rule::SnapGrids) {
         for grid in &page.grids {
-            snap_grid(grid, &mut items, columns, ch, &snap, |item| {
+            // Named source panes need room for controls and log labels; their
+            // state remains independently keyed by the original browser nodes.
+            let inside = |outer: &crate::engine::Rect, inner: &crate::engine::Rect| {
+                inner.x >= outer.x
+                    && inner.y >= outer.y
+                    && inner.right() <= outer.right() + 0.5
+                    && inner.bottom() <= outer.bottom() + 0.5
+            };
+            let paired = grid.items.len() == 2
+                && grid.items.iter().any(|r| {
+                    page.media
+                        .iter()
+                        .any(|m| m.kind == MediaKind::Video && inside(r, &m.rect))
+                })
+                && grid
+                    .items
+                    .iter()
+                    .any(|r| page.logs.iter().any(|l| inside(r, &l.rect)));
+            let minimum = if paired {
+                32
+            } else {
+                crate::adapt::MIN_GRID_CELLS
+            };
+            snap_grid(grid, &mut items, columns, ch, &snap, minimum, |item| {
                 (
                     &mut item.top,
                     &mut item.bottom,
@@ -2304,6 +2327,7 @@ fn snap_grid<T>(
     columns: usize,
     ch: f64,
     snap: &dyn Fn(f64, f64) -> (usize, usize),
+    minimum: usize,
     parts: impl Fn(&mut T) -> (&mut f64, &mut f64, &mut usize, &mut usize, f64),
 ) {
     let (g0, g1) = snap(grid.rect.x, grid.rect.right());
@@ -2320,10 +2344,9 @@ fn snap_grid<T>(
     if count < 2 || width < 2 || columns == 0 {
         return;
     }
-    let min = crate::adapt::MIN_GRID_CELLS;
     let fit = rich_intuituive::layout::adaptive_columns(
         width.min(u16::MAX as usize) as u16,
-        min as u16,
+        minimum as u16,
         1,
         count,
     );

@@ -1,4 +1,5 @@
 //! Container driven grid policy and the real retained Driver path.
+use intuituive::button;
 use intuituive::layout::adaptive_columns;
 use intuituive::prelude::*;
 use intuituive::widgets::hsplit;
@@ -76,4 +77,79 @@ fn forty_column_split_inside_wide_terminal_uses_container() {
     d.settle();
     assert_eq!(d.rect_of("cards").unwrap().width, 40);
     assert!(d.rect_of("card1").unwrap().y > d.rect_of("card0").unwrap().y);
+}
+
+#[test]
+fn resizing_retains_focus_draft_and_pointer_action_in_both_themes() {
+    use intuituive::Theme;
+    use std::cell::Cell;
+    use std::rc::Rc;
+    for theme in [Theme::light(), Theme::dark()] {
+        let calls = Rc::new(Cell::new(0));
+        let hit = calls.clone();
+        let mut d = App::new(move || {
+            grid(
+                [],
+                [
+                    input(signal(String::new())).name("draft"),
+                    button("Apply 海の光", move |_| hit.set(hit.get() + 1)).name("apply"),
+                    button("Disabled", |_| panic!("disabled action reached"))
+                        .disabled_when(|| true)
+                        .name("disabled"),
+                ],
+            )
+            .adaptive_columns(25, 3)
+            .rows([Size::Auto])
+            .gap(1)
+        })
+        .theme(theme)
+        .driver(120, 40);
+        d.settle();
+        d.click_on("draft");
+        d.type_text("persistent draft");
+        let id = d.focused();
+        for (w, h) in [(40, 24), (80, 24), (160, 50), (120, 40)] {
+            d.resize(w, h);
+            d.settle();
+            assert_eq!(d.focused(), id);
+            d.assert_focused("draft");
+            assert!(d.screen().plain().join("\n").contains("persistent draft"));
+            let r = d.rect_of("apply").unwrap();
+            d.click(r.x + 1, r.y);
+            assert!(calls.get() > 0);
+            d.press("enter");
+            d.click_on("disabled");
+            d.click_on("draft");
+            assert_eq!(d.focused(), id);
+        }
+        assert_eq!(calls.get(), 8);
+    }
+}
+
+#[test]
+fn adaptive_tracks_override_css_and_respect_padding_spans_and_hidden_children() {
+    let mut d = App::new(|| {
+        grid(
+            [Size::Fixed(1); 4],
+            [
+                label("wide").span(2, 1).name("wide"),
+                label("hidden").shown_when(|| false),
+                label("last").name("last"),
+            ],
+        )
+        .adaptive_columns(20, 4)
+        .rows([Size::Auto])
+        .gap(1)
+        .padding(1, 2)
+        .name("grid")
+    })
+    .stylesheet("#grid { grid-columns: 1 1 1 1; }")
+    .driver(45, 10);
+    d.settle();
+    let wide = d.rect_of("wide").unwrap();
+    let last = d.rect_of("last").unwrap();
+    assert_eq!(wide.width, 41);
+    assert_eq!(wide.x, 2);
+    assert!(last.y > wide.y);
+    assert!(!d.screen().plain().join("\n").contains("hidden"));
 }

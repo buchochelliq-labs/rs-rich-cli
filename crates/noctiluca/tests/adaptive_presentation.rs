@@ -6,6 +6,9 @@ use noctiluca::model::{Page, Revisions, build};
 use noctiluca::testing::PageBuilder;
 
 fn heading_page() -> Page {
+    build(&heading_snapshot(), &mut Revisions::new())
+}
+fn heading_snapshot() -> noctiluca::engine::PageSnapshot {
     let mut p = PageBuilder::new("https://fixture.example/headings", "Headings", 1280., 900.);
     for (i, name) in ["H1", "H2", "H3"].iter().enumerate() {
         let r = Rect::new(0., i as f64 * 54., 320., 36.);
@@ -18,7 +21,7 @@ fn heading_page() -> Page {
         );
         p.text(h, ["Title", "Brand", "Price"][i], r);
     }
-    build(&p.snapshot(), &mut Revisions::new())
+    p.snapshot()
 }
 #[test]
 fn neutral_headings_inherit_surface_foreground_in_both_views() {
@@ -89,5 +92,442 @@ fn figure_caption_must_retain_distinct_alt_meaning() {
             ..Marks::default()
         };
         assert!(!project(&p, 80, (8., 18.), &off).lines.is_empty());
+    }
+}
+
+fn session_snapshot(related: bool) -> noctiluca::engine::PageSnapshot {
+    session_options(related, false, true)
+}
+fn session_options(
+    related: bool,
+    third: bool,
+    named_group: bool,
+) -> noctiluca::engine::PageSnapshot {
+    let mut p = PageBuilder::new(
+        "https://fixture.example/session.html",
+        "Session",
+        1280.,
+        900.,
+    );
+    let attrs = if related && named_group {
+        vec![("role", "group"), ("aria-label", "Live session")]
+    } else {
+        vec![]
+    };
+    let group = p.element(
+        p.body(),
+        "DIV",
+        &attrs,
+        &[("display", "flex")],
+        Some(Rect::new(0., 0., 1280., 180.)),
+    );
+    let stage = p.element(
+        group,
+        "SECTION",
+        &if related {
+            vec![("aria-label", "Stage")]
+        } else {
+            vec![]
+        },
+        &[],
+        Some(Rect::new(0., 0., 640., 180.)),
+    );
+    p.element(
+        stage,
+        "VIDEO",
+        &[("aria-label", "Live video"), ("controls", "")],
+        &[],
+        Some(Rect::new(0., 0., 640., 144.)),
+    );
+    let chat = p.element(
+        group,
+        "SECTION",
+        &if related {
+            vec![("aria-label", "Chat")]
+        } else {
+            vec![]
+        },
+        &[],
+        Some(Rect::new(648., 0., 632., 180.)),
+    );
+    let log = p.element(
+        chat,
+        "DIV",
+        &[("role", "log"), ("aria-label", "Messages")],
+        &[],
+        Some(Rect::new(648., 0., 632., 108.)),
+    );
+    for i in 0..6 {
+        let r = Rect::new(648., i as f64 * 18., 632., 18.);
+        let e = p.element(log, "DIV", &[], &[], Some(r));
+        p.text(e, &format!("message {i}"), r);
+    }
+    p.element(
+        chat,
+        "INPUT",
+        &[("aria-label", "Draft"), ("value", "")],
+        &[],
+        Some(Rect::new(648., 126., 300., 18.)),
+    );
+    let send = p.element(
+        chat,
+        "BUTTON",
+        &[],
+        &[],
+        Some(Rect::new(960., 126., 120., 18.)),
+    );
+    p.text(send, "Send", Rect::new(960., 126., 120., 18.));
+    if third {
+        let r = Rect::new(1000., 0., 100., 18.);
+        let x = p.element(
+            group,
+            "SECTION",
+            &[("aria-label", "Unrelated")],
+            &[],
+            Some(r),
+        );
+        p.text(x, "Other", r);
+    }
+    let r = Rect::new(0., 216., 1280., 18.);
+    let outside = p.element(p.body(), "P", &[], &[], Some(r));
+    p.text(outside, "Unrelated outside region", r);
+    p.snapshot()
+}
+#[test]
+fn explicit_session_group_stacks_without_grouping_unrelated_neighbors() {
+    use noctiluca::adapt::Rule;
+    for related in [false, true] {
+        let p = build(&session_snapshot(related), &mut Revisions::new());
+        assert_eq!(p.grids.len(), usize::from(related));
+        for w in [40, 80, 120, 160] {
+            let projection = project(&p, w, (8., 18.), &Marks::default());
+            assert_eq!(projection.logs.len(), 1);
+            let video = &projection.regions[0];
+            let log = &projection.logs[0];
+            if related && w == 40 {
+                assert!(log.1 >= video.row + video.rows, "{projection:#?}");
+            }
+            let outside = projection
+                .lines
+                .iter()
+                .position(|l| l.plain().contains("Unrelated outside"))
+                .unwrap();
+            assert!(outside >= log.1 + log.2);
+        }
+        if related {
+            let m = Marks {
+                adapt: Adapt::default().with(Rule::SnapGrids, false),
+                ..Marks::default()
+            };
+            let raw = project(&p, 40, (8., 18.), &m);
+            let mut without = p.clone();
+            without.grids.clear();
+            assert_eq!(raw, project(&without, 40, (8., 18.), &m));
+        }
+    }
+}
+
+#[test]
+fn source_named_sections_qualify_without_named_parent_but_third_child_does_not() {
+    for (named, third, expected) in [(false, false, 1), (true, false, 1), (false, true, 0)] {
+        let p = build(&session_options(true, third, named), &mut Revisions::new());
+        assert_eq!(p.grids.len(), expected);
+    }
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/snapshots/stream-with-log.json");
+    let p = build(
+        &noctiluca::testing::snapshot_file(&root).unwrap(),
+        &mut Revisions::new(),
+    );
+    assert!(
+        p.grids.iter().any(|g| g.items.len() == 2),
+        "original unnamed .page must qualify"
+    );
+}
+
+fn wait(d: &mut rich_intuituive::Driver, ok: impl Fn(&rich_intuituive::Driver) -> bool) {
+    let until = std::time::Instant::now() + std::time::Duration::from_secs(10);
+    loop {
+        d.settle();
+        if ok(d) {
+            return;
+        }
+        assert!(
+            std::time::Instant::now() < until,
+            "{}",
+            d.screen().plain().join("\n")
+        );
+        std::thread::sleep(std::time::Duration::from_millis(10));
+    }
+}
+#[test]
+fn heading_cells_keep_theme_foreground_and_reader_original_alt_route() {
+    use noctiluca::{
+        app::{Options, app},
+        bookmarks::Bookmarks,
+        config::{Config, Images, View},
+        testing::FakeEngine,
+    };
+    use rich_intuituive::Theme;
+    for (theme, fg) in [(Theme::light(), "black"), (Theme::dark(), "white")] {
+        for transparent in [false, true] {
+            for view in [View::Reader, View::Projection] {
+                let engine = FakeEngine::from_dir(
+                    &std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/snapshots"),
+                )
+                .unwrap();
+                engine
+                    .state
+                    .lock()
+                    .unwrap()
+                    .pages
+                    .insert("headings".into(), heading_snapshot());
+                let config = Config {
+                    transparent,
+                    ..Config::default()
+                };
+                let mut d = app(
+                    Box::new(engine),
+                    Options {
+                        config,
+                        bookmarks: Bookmarks::default(),
+                        url: Some("headings.html".into()),
+                        view: Some(view),
+                        images: Some(Images::None),
+                        tunnel: None,
+                        control: None,
+                    },
+                )
+                .theme(theme.clone())
+                .driver(80, 24);
+                wait(&mut d, |d| d.find_text("Price").is_some());
+                for name in ["Title", "Brand", "Price"] {
+                    let (x, y) = d.find_text(name).unwrap();
+                    let cell = d.screen().cell(x, y);
+                    let style = d.screen().style(cell.style).unwrap();
+                    assert_eq!(style.bold(), Some(true));
+                    // Native default fg is deliberately unspecified. An owned
+                    // surface theme may supply a color; it must not force bright white.
+                    assert!(
+                        style.color().is_none_or(|c| c.name != "bright_white"),
+                        "{fg} {view:?} {name}: {style:?}"
+                    );
+                }
+            }
+        }
+    }
+}
+
+#[test]
+fn equivalent_caption_keeps_reader_alt_with_loaded_and_missing_pixels() {
+    use noctiluca::layout::Piece;
+    let alt = "海の光 blue boat";
+    let original = figure(alt, alt);
+    for loaded in [false, true] {
+        let mut p = original.clone();
+        if loaded {
+            p.media[0].picture = Some(rich_intuituive::Picture::new(
+                image::DynamicImage::new_rgba8(40, 20),
+            ));
+        }
+        for width in [40, 80, 120, 160] {
+            let lines = project(&p, width, (8., 18.), &Marks::default()).lines;
+            assert!(!lines.iter().any(|l| l.plain().contains("Image:")));
+            let text = reader(&p, width, &Marks::default())
+                .into_iter()
+                .filter_map(|p| match p {
+                    Piece::Text(l) => Some(
+                        l.into_iter()
+                            .map(|l| l.plain())
+                            .collect::<Vec<_>>()
+                            .join(" "),
+                    ),
+                    _ => None,
+                })
+                .collect::<Vec<_>>()
+                .join(" ");
+            assert!(text.contains(&format!("image: {alt}")), "{text}");
+            assert_eq!(p.media[0].alt, alt);
+        }
+    }
+}
+
+#[test]
+fn keyed_log_scrollback_survives_reflow_append_edit_and_reorder() {
+    use noctiluca::{
+        layout::{LogScroll, log_lines, scroll_log},
+        model::{Entry, Run},
+    };
+    let mut p = build(&session_snapshot(true), &mut Revisions::new());
+    p.logs[0].entries = (1..=30)
+        .map(|key| Entry {
+            key,
+            runs: vec![Run::plain(format!("message {key}"))],
+        })
+        .collect();
+    let held = scroll_log(&p.logs[0], LogScroll::Follow, -8);
+    let mut marks = Marks::default();
+    marks.logs.insert(p.logs[0].node, held);
+    for width in [80, 120, 160, 40, 80] {
+        let projection = project(&p, width, (8., 18.), &marks);
+        assert_eq!(marks.logs[&p.logs[0].node], held);
+        assert_eq!(projection.logs[0].0, p.logs[0].node);
+        let lines = log_lines(&p.logs[0], usize::from(width), 4, &p, &marks);
+        assert!(lines.last().unwrap().plain().contains("22"));
+        p.logs[0].entries.push(Entry {
+            key: 100 + u64::from(width),
+            runs: vec![Run::plain("appended")],
+        });
+        p.logs[0].entries[0].runs = vec![Run::plain("edited earlier")];
+        p.logs[0].entries.swap(0, 1);
+    }
+    let resume = scroll_log(&p.logs[0], held, 1000);
+    assert_eq!(resume, LogScroll::Follow);
+    marks.logs.insert(p.logs[0].node, resume);
+    assert!(
+        log_lines(&p.logs[0], 40, 4, &p, &marks)
+            .last()
+            .unwrap()
+            .plain()
+            .contains("appended")
+    );
+}
+
+#[test]
+fn product_grid_keeps_images_controls_and_keys_together_at_all_widths() {
+    use noctiluca::layout::control_at;
+    let root =
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/snapshots/product-grid.json");
+    let p = build(
+        &noctiluca::testing::snapshot_file(&root).unwrap(),
+        &mut Revisions::new(),
+    );
+    let mut surviving = std::collections::HashSet::new();
+    for width in [40, 80, 120, 160, 40] {
+        let projection = project(&p, width, (8., 18.), &Marks::default());
+        assert!(!projection.regions.is_empty());
+        for region in &projection.regions {
+            assert!(region.column + region.cols <= usize::from(width));
+            assert!(region.row + region.rows <= projection.lines.len());
+        }
+        for (i, c) in p
+            .controls
+            .iter()
+            .enumerate()
+            .filter(|(_, c)| c.role == noctiluca::model::Role::Link)
+        {
+            let hits: Vec<_> = projection
+                .lines
+                .iter()
+                .enumerate()
+                .flat_map(|(y, l)| {
+                    (0..l.width())
+                        .filter_map(move |x| (control_at(l, x) == Some(i)).then_some((x, y)))
+                })
+                .collect();
+            if hits.is_empty() {
+                continue;
+            }
+            assert!(hits.iter().all(|(x, _)| *x < usize::from(width)));
+            assert_eq!(p.check(&c.binding(&p)).unwrap().node, c.node);
+            for (_, y) in hits {
+                assert_eq!(projection.rows.get(&projection.keys[y]), Some(&y));
+                surviving.insert(projection.keys[y]);
+            }
+        }
+    }
+    assert!(!surviving.is_empty());
+}
+
+#[test]
+fn hidden_caption_does_not_replace_a_visible_alt_caption() {
+    let mut p = PageBuilder::new("https://fixture.example/hidden", "Hidden", 640., 400.);
+    let f = p.element(
+        p.body(),
+        "FIGURE",
+        &[],
+        &[],
+        Some(Rect::new(0., 0., 400., 250.)),
+    );
+    p.image(
+        f,
+        "photo.png",
+        "Original alt",
+        Rect::new(0., 0., 400., 180.),
+    );
+    let c = p.element(
+        f,
+        "FIGCAPTION",
+        &[("hidden", "")],
+        &[("display", "none")],
+        None,
+    );
+    p.text(c, "Original alt", Rect::default());
+    let page = build(&p.snapshot(), &mut Revisions::new());
+    assert!(!page.media[0].captioned);
+}
+
+#[test]
+fn adapted_source_width_floor_tracks_views_and_adaptation_without_changing_terminal() {
+    use noctiluca::{
+        app::{Options, app},
+        bookmarks::Bookmarks,
+        config::{Config, Images, View},
+        testing::FakeEngine,
+    };
+    for (adapt, adapted) in [
+        (Adapt::none(), false),
+        (
+            Adapt::default().with(noctiluca::adapt::Rule::SnapGrids, false),
+            false,
+        ),
+        (Adapt::default(), true),
+    ] {
+        let engine = FakeEngine::from_dir(
+            &std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/snapshots"),
+        )
+        .unwrap();
+        let state = engine.state.clone();
+        let config = Config {
+            adapt,
+            ..Config::default()
+        };
+        let mut d = app(
+            Box::new(engine),
+            Options {
+                config,
+                bookmarks: Bookmarks::default(),
+                url: Some("stream-with-log.html".into()),
+                view: Some(View::Projection),
+                images: Some(Images::Kitty),
+                tunnel: None,
+                control: None,
+            },
+        )
+        .driver(40, 50);
+        wait(&mut d, |d| d.find_text("Lanternfish").is_some());
+        let width = || state.lock().unwrap().viewport_width;
+        wait(&mut d, |_| width() == if adapted { 640. } else { 320. });
+        assert_eq!(d.screen().area().width, 40);
+        if adapted {
+            for (keys, expected) in [
+                ("a", 320.),
+                ("a", 640.),
+                ("r", 320.),
+                ("r", 640.),
+                ("alt+x", 320.),
+                ("alt+x", 640.),
+            ] {
+                d.press(keys);
+                wait(&mut d, |_| width() == expected);
+            }
+        }
+        for w in [80, 120, 160, 40] {
+            d.resize(w, 50);
+            wait(&mut d, |_| {
+                width() == f64::from(if adapted { w.max(80) } else { w }) * 8.
+            });
+            assert_eq!(d.screen().area().width, w);
+        }
     }
 }
