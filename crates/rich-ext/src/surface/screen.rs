@@ -10,6 +10,7 @@
 
 use std::collections::HashMap;
 
+use rich::protocol::region_of;
 use rich::{ColorSystem, Segment, Style};
 
 use crate::frame::{Frame, FxBuild, Rgb, StyleId, StyleRemap, StyleTable};
@@ -723,7 +724,7 @@ impl Screen {
                 || segment
                     .style
                     .as_ref()
-                    .is_none_or(|s| s.meta_ref().is_none())
+                    .is_none_or(|s| region_of(s).is_none())
                     && !segment.text.contains('\n')
         });
         if !direct {
@@ -788,7 +789,7 @@ impl Screen {
         }
         let lines = &lines[..lines.len().min(rect.height as usize)];
         // What only the Frame path writes: a line break inside a run, or a
-        // style with metadata (region tags).
+        // style with a recognised region tag. Ordinary metadata stays intact.
         let mut checked = None;
         let framed = lines.iter().flat_map(AsRef::as_ref).any(|run| {
             run.text.contains('\n')
@@ -796,7 +797,7 @@ impl Screen {
                     checked = Some(run.style);
                     self.styles
                         .get(run.style)
-                        .is_some_and(|s| s.meta_ref().is_some())
+                        .is_some_and(|s| region_of(s).is_some())
                 }
         });
         if framed {
