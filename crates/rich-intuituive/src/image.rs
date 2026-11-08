@@ -1039,10 +1039,16 @@ mod tests {
     #[test]
     fn managed_cleanup_counts_logical_bytes_and_waits_for_write_confirmation() {
         let source = tracked_source();
-        let first = Picture::from_rgba(4, 4, vec![255; 64]).unwrap().bound(false);
+        let first = Picture::from_rgba(4, 4, vec![255; 64])
+            .unwrap()
+            .bound(false);
         let id = first.id();
         let old = kitty_placements(&source, &first);
-        assert_eq!(picture_bytes(id), 0, "placement/encoding is side-effect free");
+        assert_eq!(
+            picture_bytes(id),
+            0,
+            "placement/encoding is side-effect free"
+        );
         let upload = old[0].graphic.draw(0);
         assert_eq!(picture_bytes(id), upload.len() as u64);
         let second = first.next_rgba(4, 4, vec![60; 64]).unwrap();
@@ -1050,16 +1056,26 @@ mod tests {
         let next_upload = next[0].graphic.draw(0);
         let cleanup = source.reconcile(&next);
         assert!(cleanup.contains("a=d"));
-        assert_eq!(picture_bytes(id), (upload.len() + next_upload.len() + cleanup.len()) as u64);
+        assert_eq!(
+            picture_bytes(id),
+            (upload.len() + next_upload.len() + cleanup.len()) as u64
+        );
         assert_eq!(source.uploaded.lock().unwrap().len(), 1);
         assert_eq!(source.retired.lock().unwrap().len(), 1);
         assert!(!old[0].graphic.can_reuse_data());
         assert!(source.reconcile(&next).is_empty());
-        assert_eq!(source.retired.lock().unwrap().len(), 1, "unconfirmed write must retain the reservation");
+        assert_eq!(
+            source.retired.lock().unwrap().len(),
+            1,
+            "unconfirmed write must retain the reservation"
+        );
         source.output_written();
         assert!(source.retired.lock().unwrap().is_empty());
         let finish = source.release(&[]);
-        assert_eq!(picture_bytes(id), (upload.len() + next_upload.len() + cleanup.len() + finish.len()) as u64);
+        assert_eq!(
+            picture_bytes(id),
+            (upload.len() + next_upload.len() + cleanup.len() + finish.len()) as u64
+        );
         assert_eq!(source.retired.lock().unwrap().len(), 1);
         source.output_written();
         assert!(source.retired.lock().unwrap().is_empty());

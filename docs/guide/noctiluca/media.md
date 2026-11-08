@@ -171,6 +171,9 @@ Kitty image placement requires Unicode placeholders as well as the graphics prot
 WezTerm defaults to iTerm2 inline images; forcing Kitty requires placeholder support.
 Multiplexers may block or alter graphics transport, so use half blocks when
 passthrough is unavailable. A forced mode cannot add a missing terminal feature.
+Ghostty 1.4 supports native Kitty animation; older or unknown Ghostty versions
+use software frame stepping. A byte budget falls back only through formats
+known to be supported by the selected terminal.
 
 If pictures come out as half blocks in a terminal that can do better,
 name its protocol. A site's table can turn pictures off there with

@@ -183,6 +183,23 @@ cover.get(), view)` draw an image in memory (a cover embedded in a song).
   app's source a Sixel or iTerm2 view is plain half blocks, so the
   frame stays exact in any terminal.
 
+- **Independent fitted views:** construct an `ImagePresentation` from the
+  terminal feature facts and supported `PixelFormats`, then use
+  `presentation.picture(&picture)` and `presentation.graphics()` for pictures
+  that can appear in multiple fitted sizes or versions at once. This opts into
+  distinct Kitty resources while retaining the logical picture ID. Keep the bound
+  picture alive while using prebuilt lines. The legacy `Picture` lines and
+  encode/prepare APIs retain their original ID pairing; callers using them
+  directly should avoid simultaneous different fitted views of the same ID.
+  Bindings are bounded, and unavailable Kitty resources fall back to cells.
+
+  A manual `Driver` loop must call `driver.output_written()` after each returned
+  frame output has been successfully consumed in order. For `finish()`, which
+  consumes the driver, retain the shared placement source and call its
+  `output_written()` after successfully writing the returned cleanup bytes.
+  These acknowledgements retire reservations after deletion is written; do not
+  acknowledge failed writes.
+
 - **A whole frame as tiles:** `tiles_of(|| tiles, Pixels::Kitty)` draws
   the tiles of rs-rich-art's `tiles::Tiler`, which fits each frame (a
   browser's screencast, an emulator's screen) to its cells and cuts it

@@ -3425,7 +3425,10 @@ mod tests {
                 ..FrameMeta::default()
             },
         };
-        state.lock().unwrap().frames.push(make_frame(120 * crate::cdp::CELL.0, 36 * crate::cdp::CELL.1));
+        state.lock().unwrap().frames.push(make_frame(
+            120 * crate::cdp::CELL.0,
+            36 * crate::cdp::CELL.1,
+        ));
         let (taken, receive) = mpsc::channel();
         let (resume, gate) = mpsc::channel();
         let engine = Gated {
@@ -3484,7 +3487,11 @@ mod tests {
             0,
             "old-width producer frame was squeezed into new coordinates"
         );
-        state.lock().unwrap().frames.push(make_frame(40 * crate::cdp::CELL.0, 20 * crate::cdp::CELL.1));
+        state
+            .lock()
+            .unwrap()
+            .frames
+            .push(make_frame(40 * crate::cdp::CELL.0, 20 * crate::cdp::CELL.1));
         let deadline = Instant::now() + Duration::from_secs(2);
         while b.screen_stats.get_untracked().frames == 0 {
             driver.update(Duration::ZERO);
