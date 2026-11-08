@@ -194,6 +194,14 @@ cover.get(), view)` draw an image in memory (a cover embedded in a song).
   Logical IDs prefer the representable 24-bit Kitty range and wrap to free IDs;
   bindings are bounded, and unavailable Kitty resources fall back to cells.
 
+  Bound native lines carry compact checked provenance, including exact source
+  columns, so cropping, moving and adjacent copies retain their picture identity
+  and background policy through `Screen` writes and blits. Read it with
+  `PictureTag::of`, `column_of`, `background_of` and `binding_of`; its metadata
+  representation is private. Values outside the compact range use legacy
+  metadata. Public `PictureTag::style()` / `style_at()` and unbound picture lines
+  keep their existing representation, and unrelated styles and metadata survive.
+
   A manual `Driver` loop must call `driver.output_written()` after each returned
   frame output has been successfully consumed in order. Use
   `driver.finish_output()` for final cleanup: its `write_to(&mut writer)` retains

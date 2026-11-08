@@ -45,24 +45,25 @@ fn scene(picture: &Picture, pixels: Pixels, hide: impl Fn(usize, usize) -> bool)
 
 #[test]
 fn public_picture_partial_cover_keeps_every_surviving_rectangle() {
-    let picture = picture();
-    for pixels in [Pixels::Iterm, Pixels::Sixel, Pixels::Kitty] {
-        for side in [false, true] {
-            let hidden = |x, y| y == 1 && if side { x < 4 } else { x >= 4 };
-            let frame = scene(&picture, pixels, hidden);
-            let placements = image_graphics().placements(&frame);
-            let mut cells = [[false; 8]; 4];
-            for p in placements {
-                for (y, row) in cells.iter_mut().enumerate().skip(p.row).take(p.rows) {
-                    for (x, covered) in row.iter_mut().enumerate().skip(p.column).take(p.cols) {
-                        assert!(!hidden(x, y), "graphic covers dialog at {x},{y}");
-                        *covered = true;
+    for picture in [picture(), picture().bound(false)] {
+        for pixels in [Pixels::Iterm, Pixels::Sixel, Pixels::Kitty] {
+            for side in [false, true] {
+                let hidden = |x, y| y == 1 && if side { x < 4 } else { x >= 4 };
+                let frame = scene(&picture, pixels, hidden);
+                let placements = image_graphics().placements(&frame);
+                let mut cells = [[false; 8]; 4];
+                for p in placements {
+                    for (y, row) in cells.iter_mut().enumerate().skip(p.row).take(p.rows) {
+                        for (x, covered) in row.iter_mut().enumerate().skip(p.column).take(p.cols) {
+                            assert!(!hidden(x, y), "graphic covers dialog at {x},{y}");
+                            *covered = true;
+                        }
                     }
                 }
-            }
-            for (y, row) in cells.iter().enumerate() {
-                for (x, covered) in row.iter().enumerate() {
-                    assert_eq!(*covered, !hidden(x, y), "missing {pixels:?} at {x},{y}");
+                for (y, row) in cells.iter().enumerate() {
+                    for (x, covered) in row.iter().enumerate() {
+                        assert_eq!(*covered, !hidden(x, y), "missing {pixels:?} at {x},{y}");
+                    }
                 }
             }
         }
@@ -89,73 +90,75 @@ fn public_kitty_movement_retains_uploaded_data() {
 
 #[test]
 fn holes_metrics_offsets_and_cells_have_safe_distinct_placements() {
-    let picture = picture();
-    let source = image_graphics();
-    for pixels in [Pixels::Cells, Pixels::Sixel, Pixels::Iterm, Pixels::Kitty] {
-        let frame = scene(&picture, pixels, |x, y| {
-            (2..6).contains(&x) && (1..3).contains(&y)
-        });
-        let mut previous_key = None;
-        for metrics in [(8, 16), (10, 20), (12, 24)] {
-            let placements = source.placements_with_metrics(&frame, Some(metrics));
-            if pixels == Pixels::Cells {
-                assert!(placements.is_empty());
-                continue;
+    for picture in [picture(), picture().bound(false)] {
+        let source = image_graphics();
+        for pixels in [Pixels::Cells, Pixels::Sixel, Pixels::Iterm, Pixels::Kitty] {
+            let frame = scene(&picture, pixels, |x, y| {
+                (2..6).contains(&x) && (1..3).contains(&y)
+            });
+            let mut previous_key = None;
+            for metrics in [(8, 16), (10, 20), (12, 24)] {
+                let placements = source.placements_with_metrics(&frame, Some(metrics));
+                if pixels == Pixels::Cells {
+                    assert!(placements.is_empty());
+                    continue;
+                }
+                assert_eq!(placements.len(), 4);
+                assert_eq!(
+                    placements.iter().map(|p| p.cols * p.rows).sum::<usize>(),
+                    24
+                );
+                let keys: Vec<_> = placements.iter().map(|p| p.graphic.key()).collect();
+                assert_ne!(previous_key.as_ref(), Some(&keys));
+                assert_eq!(
+                    keys,
+                    source
+                        .placements_with_metrics(&frame, Some(metrics))
+                        .iter()
+                        .map(|p| p.graphic.key())
+                        .collect::<Vec<_>>()
+                );
+                if pixels == Pixels::Kitty {
+                    assert!(keys.iter().all(|k| *k == keys[0]));
+                } else {
+                    assert_ne!(keys[1], keys[2]);
+                }
+                previous_key = Some(keys);
             }
-            assert_eq!(placements.len(), 4);
-            assert_eq!(
-                placements.iter().map(|p| p.cols * p.rows).sum::<usize>(),
-                24
-            );
-            let keys: Vec<_> = placements.iter().map(|p| p.graphic.key()).collect();
-            assert_ne!(previous_key.as_ref(), Some(&keys));
-            assert_eq!(
-                keys,
-                source
-                    .placements_with_metrics(&frame, Some(metrics))
-                    .iter()
-                    .map(|p| p.graphic.key())
-                    .collect::<Vec<_>>()
-            );
-            if pixels == Pixels::Kitty {
-                assert!(keys.iter().all(|k| *k == keys[0]));
-            } else {
-                assert_ne!(keys[1], keys[2]);
-            }
-            previous_key = Some(keys);
         }
     }
 }
 
 #[test]
 fn checkerboard_fragment_budget_preserves_cells_without_native_overlay() {
-    let picture = picture();
-    let console = rich::Console::builder().width(32).build();
-    let lines = picture.lines(
-        &console,
-        ImageView::new()
-            .fit(ImageFit::Stretch)
-            .pixels(Pixels::Iterm),
-        32,
-        8,
-    );
-    let mut segments = Vec::new();
-    for (y, line) in lines.iter().enumerate() {
-        for (x, cell) in Segment::divide(line, &(1..=32).collect::<Vec<_>>())
-            .into_iter()
-            .enumerate()
-        {
-            if (x + y) % 2 == 0 {
-                segments.extend(cell);
-            } else {
-                segments.push(Segment::new("D", None));
+    for picture in [picture(), picture().bound(false)] {
+        let console = rich::Console::builder().width(32).build();
+        let lines = picture.lines(
+            &console,
+            ImageView::new()
+                .fit(ImageFit::Stretch)
+                .pixels(Pixels::Iterm),
+            32,
+            8,
+        );
+        let mut segments = Vec::new();
+        for (y, line) in lines.iter().enumerate() {
+            for (x, cell) in Segment::divide(line, &(1..=32).collect::<Vec<_>>())
+                .into_iter()
+                .enumerate()
+            {
+                if (x + y) % 2 == 0 {
+                    segments.extend(cell);
+                } else {
+                    segments.push(Segment::new("D", None));
+                }
             }
+            segments.push(Segment::line());
         }
-        segments.push(Segment::line());
+        let frame = Frame::from_segments(&segments);
+        assert!(image_graphics().placements(&frame).is_empty());
+        assert_eq!(frame.height(), 8);
     }
-    let frame = Frame::from_segments(&segments);
-    assert!(image_graphics().placements(&frame).is_empty());
-    assert_eq!(frame.height(), 8);
 }
 
 #[test]
@@ -250,119 +253,121 @@ fn legacy_tags_only_accept_whole_width_and_missing_pictures_fall_back() {
 
 #[test]
 fn background_provenance_changes_native_graphic_identity() {
-    let picture = picture();
-    let console = rich::Console::builder().width(8).build();
-    let source = image_graphics();
-    let placed = |background| {
-        let lines = picture.lines(
-            &console,
-            ImageView::new()
-                .fit(ImageFit::Stretch)
-                .pixels(Pixels::Iterm)
-                .background(background),
-            8,
-            1,
-        );
-        source.placements(&Frame::from_segments(&lines[0]))
-    };
-    let first = placed([1, 2, 3]);
-    let other = placed([4, 5, 6]);
-    assert_ne!(first[0].graphic.key(), other[0].graphic.key());
-    assert!(first[0].graphic.draw(0).contains("48;2;1;2;3m"));
+    for picture in [picture(), picture().bound(false)] {
+        let console = rich::Console::builder().width(8).build();
+        let source = image_graphics();
+        let placed = |background| {
+            let lines = picture.lines(
+                &console,
+                ImageView::new()
+                    .fit(ImageFit::Stretch)
+                    .pixels(Pixels::Iterm)
+                    .background(background),
+                8,
+                1,
+            );
+            source.placements(&Frame::from_segments(&lines[0]))
+        };
+        let first = placed([1, 2, 3]);
+        let other = placed([4, 5, 6]);
+        assert_ne!(first[0].graphic.key(), other[0].graphic.key());
+        assert!(first[0].graphic.draw(0).contains("48;2;1;2;3m"));
+    }
 }
 
 #[test]
 fn adjacent_same_view_instances_survive_screen_line_coalescing() {
     use rich_ext::surface::{Rect, Screen};
-    let picture = picture();
-    let console = rich::Console::builder()
-        .width(12)
-        .color_system(Some(rich::color::ColorSystem::Truecolor))
-        .build();
-    for (cols, rows) in [(1, 1), (4, 2)] {
-        for pixels in [Pixels::Kitty, Pixels::Iterm, Pixels::Sixel] {
-            let source = image_graphics();
-            let lines = picture.lines(
-                &console,
-                ImageView::new().fit(ImageFit::Stretch).pixels(pixels),
-                cols,
-                rows,
-            );
-            let repeated: Vec<_> = lines
-                .iter()
-                .map(|line| (0..3).flat_map(|_| line.clone()).collect())
-                .collect();
-            let mut screen = Screen::new(cols * 3, rows);
-            screen.write_lines(screen.area(), &repeated);
-            let from_screen = |screen: &Screen| {
-                let mut segments = Vec::new();
-                for line in screen.lines() {
-                    segments.extend(line);
-                    segments.push(Segment::line());
+    for picture in [picture(), picture().bound(false)] {
+        let console = rich::Console::builder()
+            .width(12)
+            .color_system(Some(rich::color::ColorSystem::Truecolor))
+            .build();
+        for (cols, rows) in [(1, 1), (4, 2)] {
+            for pixels in [Pixels::Kitty, Pixels::Iterm, Pixels::Sixel] {
+                let source = image_graphics();
+                let lines = picture.lines(
+                    &console,
+                    ImageView::new().fit(ImageFit::Stretch).pixels(pixels),
+                    cols,
+                    rows,
+                );
+                let repeated: Vec<_> = lines
+                    .iter()
+                    .map(|line| (0..3).flat_map(|_| line.clone()).collect())
+                    .collect();
+                let mut screen = Screen::new(cols * 3, rows);
+                screen.write_lines(screen.area(), &repeated);
+                let from_screen = |screen: &Screen| {
+                    let mut segments = Vec::new();
+                    for line in screen.lines() {
+                        segments.extend(line);
+                        segments.push(Segment::line());
+                    }
+                    Frame::from_segments(&segments)
+                };
+                let frame = from_screen(&screen);
+
+                if pixels == Pixels::Kitty {
+                    assert_eq!(
+                        frame.row(0).iter().filter(|run| run.cells() > 0).count(),
+                        1,
+                        "exercise the actual coalesced run"
+                    );
+                    assert_eq!(frame.row(0)[0].cells(), usize::from(cols) * 3);
                 }
-                Frame::from_segments(&segments)
-            };
-            let frame = from_screen(&screen);
+                let placements = source.placements(&frame);
+                assert_eq!(placements.len(), 3, "{pixels:?} {cols}x{rows}");
+                for (index, p) in placements.iter().enumerate() {
+                    assert_eq!(
+                        (p.column, p.cols, p.rows),
+                        (
+                            index * usize::from(cols),
+                            usize::from(cols),
+                            usize::from(rows)
+                        )
+                    );
+                    assert_eq!(p.graphic.key(), placements[0].graphic.key());
+                }
+                let initial = plan(&[], &placements, &[]);
+                assert_eq!(
+                    initial.draw.len(),
+                    if pixels == Pixels::Kitty { 1 } else { 3 }
+                );
 
-            if pixels == Pixels::Kitty {
-                assert_eq!(
-                    frame.row(0).iter().filter(|run| run.cells() > 0).count(),
-                    1,
-                    "exercise the actual coalesced run"
-                );
-                assert_eq!(frame.row(0)[0].cells(), usize::from(cols) * 3);
-            }
-            let placements = source.placements(&frame);
-            assert_eq!(placements.len(), 3, "{pixels:?} {cols}x{rows}");
-            for (index, p) in placements.iter().enumerate() {
-                assert_eq!(
-                    (p.column, p.cols, p.rows),
-                    (
-                        index * usize::from(cols),
-                        usize::from(cols),
-                        usize::from(rows)
-                    )
-                );
-                assert_eq!(p.graphic.key(), placements[0].graphic.key());
-            }
-            let initial = plan(&[], &placements, &[]);
-            assert_eq!(
-                initial.draw.len(),
-                if pixels == Pixels::Kitty { 1 } else { 3 }
-            );
-
-            if pixels == Pixels::Kitty {
-                assert_eq!(
-                    initial
-                        .draw
-                        .iter()
-                        .map(|p| p.graphic.draw(0).matches("a=T,").count())
-                        .sum::<usize>(),
-                    1
-                );
-            }
-            // Cover a copy boundary. The surviving suffix and following copy
-            // again share a coalesced Kitty run, with a source-column restart.
-            screen.write_lines(
-                Rect::new(cols - 1, 0, 2, 1),
-                &[vec![Segment::new("DD", None)]],
-            );
-            let covered = source.placements(&from_screen(&screen));
-            assert_eq!(
-                covered.iter().map(|p| p.cols * p.rows).sum::<usize>(),
-                usize::from(cols * 3 * rows) - 2
-            );
-            for p in &covered {
-                if p.row == 0 {
-                    assert!(
-                        p.column + p.cols <= usize::from(cols - 1)
-                            || p.column >= usize::from(cols + 1)
+                if pixels == Pixels::Kitty {
+                    assert_eq!(
+                        initial
+                            .draw
+                            .iter()
+                            .map(|p| p.graphic.draw(0).matches("a=T,").count())
+                            .sum::<usize>(),
+                        1
                     );
                 }
-            }
+                // Cover a copy boundary. The surviving suffix and following copy
+                // again share a coalesced Kitty run, with a source-column restart.
+                screen.write_lines(
+                    Rect::new(cols - 1, 0, 2, 1),
+                    &[vec![Segment::new("DD", None)]],
+                );
+                let covered = source.placements(&from_screen(&screen));
+                assert_eq!(
+                    covered.iter().map(|p| p.cols * p.rows).sum::<usize>(),
+                    usize::from(cols * 3 * rows) - 2
+                );
+                for p in &covered {
+                    if p.row == 0 {
+                        assert!(
+                            p.column + p.cols <= usize::from(cols - 1)
+                                || p.column >= usize::from(cols + 1)
+                        );
+                    }
+                }
 
-            if pixels == Pixels::Kitty {
-                assert!(plan(&placements, &covered, &[]).draw.is_empty());
+                if pixels == Pixels::Kitty {
+                    assert!(plan(&placements, &covered, &[]).draw.is_empty());
+                }
             }
         }
     }
@@ -371,34 +376,35 @@ fn adjacent_same_view_instances_survive_screen_line_coalescing() {
 #[test]
 fn coalesced_overlay_copies_respect_frame_fragment_budget() {
     use rich_ext::surface::Screen;
-    let picture = picture();
-    let console = rich::Console::builder()
-        .width(129)
-        .color_system(Some(rich::color::ColorSystem::Truecolor))
-        .build();
-    for pixels in [Pixels::Iterm, Pixels::Sixel] {
-        let line = picture
-            .lines(
-                &console,
-                ImageView::new().fit(ImageFit::Stretch).pixels(pixels),
-                1,
-                1,
-            )
-            .remove(0);
-        for count in [128u16, 129] {
-            let mut screen = Screen::new(count, 1);
-            screen.write_lines(
-                screen.area(),
-                &[(0..count).flat_map(|_| line.clone()).collect()],
-            );
-            let frame = Frame::from_segments(&screen.lines()[0]);
-            let placements = image_graphics().placements(&frame);
-            assert_eq!(
-                placements.len(),
-                if count == 128 { 128 } else { 0 },
-                "{pixels:?} count={count}"
-            );
-            assert_eq!(frame.row(0)[0].cells(), usize::from(count));
+    for picture in [picture(), picture().bound(false)] {
+        let console = rich::Console::builder()
+            .width(129)
+            .color_system(Some(rich::color::ColorSystem::Truecolor))
+            .build();
+        for pixels in [Pixels::Iterm, Pixels::Sixel] {
+            let line = picture
+                .lines(
+                    &console,
+                    ImageView::new().fit(ImageFit::Stretch).pixels(pixels),
+                    1,
+                    1,
+                )
+                .remove(0);
+            for count in [128u16, 129] {
+                let mut screen = Screen::new(count, 1);
+                screen.write_lines(
+                    screen.area(),
+                    &[(0..count).flat_map(|_| line.clone()).collect()],
+                );
+                let frame = Frame::from_segments(&screen.lines()[0]);
+                let placements = image_graphics().placements(&frame);
+                assert_eq!(
+                    placements.len(),
+                    if count == 128 { 128 } else { 0 },
+                    "{pixels:?} count={count}"
+                );
+                assert_eq!(frame.row(0)[0].cells(), usize::from(count));
+            }
         }
     }
 }
@@ -954,4 +960,78 @@ fn final_output_flushes_a_buffered_writer_before_returning() {
         &expected,
         "cleanup remains buffered after success"
     );
+}
+
+#[test]
+fn compact_and_legacy_provenance_survive_two_dimensional_viewport_blits_and_moves() {
+    use rich_ext::surface::{Rect, Screen};
+    let original = picture();
+    let console = rich::Console::builder()
+        .width(20)
+        .color_system(Some(rich::color::ColorSystem::Truecolor))
+        .build();
+    for pixels in [Pixels::Iterm, Pixels::Sixel, Pixels::Kitty] {
+        for (crop_cols, crop_rows) in [(1, 1), (5, 3)] {
+            let mut reference = None;
+            for picture in [original.clone(), original.bound(false)] {
+                let lines = picture.lines(
+                    &console,
+                    ImageView::new()
+                        .fit(ImageFit::Stretch)
+                        .pixels(pixels)
+                        .background([11, 22, 33]),
+                    8,
+                    4,
+                );
+                let mut offscreen = Screen::new(12, 6);
+                offscreen.write_lines(Rect::new(2, 1, 8, 4), &lines);
+                let mut screen = Screen::new(13, 5);
+                // Source starts at picture column2,row1, translated from the offscreen buffer.
+                screen.blit(&offscreen, Rect::new(4, 2, crop_cols, crop_rows), 1, 1);
+                screen.blit(
+                    &offscreen,
+                    Rect::new(4, 2, crop_cols, crop_rows),
+                    1 + crop_cols,
+                    1,
+                );
+                // Reuse at a second origin with the right/bottom clipped by the screen.
+                screen.blit(&offscreen, Rect::new(4, 2, crop_cols, crop_rows), 11, 4);
+                let mut segments = Vec::new();
+                for line in screen.lines() {
+                    segments.extend(line);
+                    segments.push(Segment::line());
+                }
+                let placements = image_graphics().placements(&Frame::from_segments(&segments));
+                let geometry = placements
+                    .iter()
+                    .map(|p| (p.column, p.row, p.cols, p.rows))
+                    .collect::<Vec<_>>();
+                assert_eq!(
+                    geometry,
+                    [
+                        (1, 1, crop_cols as usize, crop_rows as usize),
+                        (
+                            (1 + crop_cols) as usize,
+                            1,
+                            crop_cols as usize,
+                            crop_rows as usize
+                        ),
+                        (11, 4, crop_cols.min(2) as usize, 1)
+                    ],
+                    "{pixels:?}"
+                );
+                let raster = placements
+                    .iter()
+                    .map(|p| p.graphic.draw(0))
+                    .collect::<Vec<_>>();
+                if let Some((expected_geometry, expected_raster)) = &reference {
+                    assert_eq!(&geometry, expected_geometry);
+                    if pixels != Pixels::Kitty {
+                        assert_eq!(&raster, expected_raster);
+                    }
+                }
+                reference = Some((geometry, raster));
+            }
+        }
+    }
 }

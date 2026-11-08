@@ -26,7 +26,8 @@ fn native_provenance_keeps_exact_cells_with_bounded_construction_allocations() {
     let plain_allocations = AllocStats::now().unwrap().since(&before).allocations;
     let before = AllocStats::now().unwrap();
     let tagged = picture.lines(&console, view.pixels(Pixels::Iterm), 80, 24);
-    let tagged_allocations = AllocStats::now().unwrap().since(&before).allocations;
+    let tagged_cost = AllocStats::now().unwrap().since(&before);
+    let tagged_allocations = tagged_cost.allocations;
     eprintln!("provenance allocations: plain={plain_allocations}, tagged={tagged_allocations}");
     let cells = 80 * 24;
     // Provenance owns its metadata; constructing intermediate styles must not
@@ -63,6 +64,24 @@ fn native_provenance_keeps_exact_cells_with_bounded_construction_allocations() {
                 )),
             );
             assert_eq!(*style, expected);
+        }
+    }
+    let before = AllocStats::now().unwrap();
+    let compact = picture
+        .bound(false)
+        .lines(&console, view.pixels(Pixels::Iterm), 80, 24);
+    let compact_cost = AllocStats::now().unwrap().since(&before);
+    eprintln!("bound compact cost: legacy={tagged_cost:?}, compact={compact_cost:?}");
+    assert!(compact_cost.allocations < tagged_cost.allocations);
+    assert!(compact_cost.live_bytes < tagged_cost.live_bytes);
+    for (row, line) in compact.iter().enumerate() {
+        for (column, cell) in line.iter().enumerate() {
+            let style = cell.style.as_ref().unwrap();
+            assert_eq!(PictureTag::column_of(style), Some(column));
+            assert_eq!(PictureTag::of(style).unwrap().row, row);
+            assert_eq!(PictureTag::binding_of(style), Some(false));
+            assert_eq!(PictureTag::background_of(style), Some([11, 22, 33]));
+            assert_eq!(cell.text, tagged[row][column].text);
         }
     }
 }

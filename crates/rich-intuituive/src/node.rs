@@ -2774,7 +2774,6 @@ impl Node {
     /// pointer hit testing and text exposed to accessibility. Use on a
     /// full-size dynamic wrapper around a smaller controlled layer. Handlers
     /// on the wrapper still receive events bubbling from its children.
-    #[must_use]
     pub fn children_cover_only(mut self) -> Node {
         self.children_cover_only = true;
         self

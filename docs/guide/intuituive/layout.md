@@ -411,3 +411,9 @@ host, `children_cover_only()` makes its visible children determine the covered
 and interactive region. Put it on each such wrapper; keep the popup itself
 inset to its intended bounds. Nested controlled scopes restore focus at each
 depth when their owner closes them.
+
+Pointer input also stays in the active scope: holes and overlapping sibling
+nodes cannot dispatch to outside content. Opening a scope cancels an outside
+drag or pointer capture; a capture started inside can still receive its release
+outside the popup. Maximizing a pane considers scopes in that pane and its
+ancestors, so a hidden sibling popup cannot take its focus or keyboard input.

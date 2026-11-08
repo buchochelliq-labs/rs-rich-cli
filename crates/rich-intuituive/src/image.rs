@@ -584,8 +584,13 @@ fn kitty_spans(text: &str, tag: &PictureTag, cells: usize) -> Option<Vec<std::op
         let span = spans.last_mut()?;
         if span.end < tag.cols && DIACRITICS.get(span.end) == Some(&column) {
             span.end += 1;
-        } else if column == DIACRITICS[0] {
-            spans.push(0..1);
+        } else if let Some(column) = DIACRITICS.iter().position(|&candidate| candidate == column)
+            && column < span.end
+        {
+            // Composed adjacent copies can both start inside a cropped view.
+            // Equal/backward restarts retain exact per-cell provenance; forward
+            // jumps remain malformed rather than inventing missing source cells.
+            spans.push(column..column + 1);
         } else {
             return None;
         }

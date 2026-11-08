@@ -792,10 +792,17 @@ impl Picture {
                     let cells = crate::kitty::placeholder_row(row, cols).unwrap_or_default();
                     // Placeholder diacritics already carry exact row/column
                     // provenance. Keep a single style/segment for the whole row.
-                    let mut style = Style::new()
-                        .with_color(colour.clone())
-                        .combine(&tag(row).style());
-                    if let Some(native) = self.bound {
+                    let provenance = self.bound.and_then(|native| {
+                        CompactTag::new(tag(row), None, view.background, native)
+                    });
+                    let mut style = Style::new().with_color(colour.clone()).combine(
+                        &provenance
+                            .map(|tag| Style::from_meta(tag.metadata()))
+                            .unwrap_or_else(|| tag(row).style()),
+                    );
+                    if provenance.is_none()
+                        && let Some(native) = self.bound
+                    {
                         let mut meta = Meta::new();
                         meta.insert("intuituive.image.bound", MetaValue::Int(i64::from(native)));
                         style = style.combine(&Style::from_meta(meta));
@@ -807,7 +814,7 @@ impl Picture {
         lines
             .into_iter()
             .enumerate()
-            .map(|(row, line)| tag_cells(line, tag(row), view.background))
+            .map(|(row, line)| tag_cells(line, tag(row), view.background, self.bound))
             .collect()
     }
 
@@ -1287,7 +1294,13 @@ impl Picture {
 
 // Blocks and Kitty placeholders are single-cell graphemes. Divide before
 // attaching provenance so later segment clipping keeps exact source columns.
-fn tag_cells(line: Vec<Segment>, tag: PictureTag, background: Option<[u8; 3]>) -> Vec<Segment> {
+fn tag_cells(
+    line: Vec<Segment>,
+    tag: PictureTag,
+    background: Option<[u8; 3]>,
+    bound: Option<bool>,
+) -> Vec<Segment> {
+    let compact = bound.and_then(|native| CompactTag::new(tag, Some(0), background, native));
     let mut row_meta = tag.metadata();
     row_meta.insert("intuituive.image.column", MetaValue::Int(0));
     if let Some(rgb) = background {
@@ -1300,23 +1313,30 @@ fn tag_cells(line: Vec<Segment>, tag: PictureTag, background: Option<[u8; 3]>) -
             ),
         );
     }
+    if let Some(native) = bound {
+        row_meta.insert("intuituive.image.bound", MetaValue::Int(i64::from(native)));
+    }
     let mut out = Vec::with_capacity(tag.cols);
     let mut column = 0;
     let mut append = |mut segment: Segment, column: usize| {
         // Keep one final metadata map per cell, in the same insertion order
         // as style_at + background. Consuming the sampled style avoids cloning
         // that map through several temporary styles for every source column.
-        let meta: Meta = row_meta
-            .iter()
-            .map(|(key, value)| {
-                let value = if key == "intuituive.image.column" {
-                    MetaValue::Int(column as i64)
-                } else {
-                    value.clone()
-                };
-                (key, value)
-            })
-            .collect();
+        let meta: Meta = if let Some(compact) = compact.filter(|_| column < tag.cols) {
+            compact.at(column).metadata()
+        } else {
+            row_meta
+                .iter()
+                .map(|(key, value)| {
+                    let value = if key == "intuituive.image.column" {
+                        MetaValue::Int(column as i64)
+                    } else {
+                        value.clone()
+                    };
+                    (key, value)
+                })
+                .collect()
+        };
         let style = segment.style.take().unwrap_or_default();
         let meta = if style.meta_ref().is_some() {
             let mut merged = style.meta();
@@ -1519,6 +1539,150 @@ const ANCHORS: [ImageAnchor; 9] = [
     ImageAnchor::BottomRight,
 ];
 
+// Opt-in bound handles carry exact provenance in three bit-pattern words.
+// No origin inference is involved: Screen/Frame clipping copies each source column.
+// Legacy public styles and out-of-domain geometry keep the original representation.
+#[derive(Clone, Copy)]
+struct CompactTag {
+    identity: u64,
+    geometry: u64,
+    flags: u64,
+}
+
+impl CompactTag {
+    const KEY: &'static str = "intuituive.image.compact";
+    const VERSION: u64 = 1 << 38;
+    const COLUMN: u64 = 1 << 10;
+    const BACKGROUND: u64 = 1 << 11;
+
+    fn new(
+        tag: PictureTag,
+        column: Option<usize>,
+        background: Option<[u8; 3]>,
+        native: bool,
+    ) -> Option<Self> {
+        let cols = u16::try_from(tag.cols).ok()?;
+        let rows = u16::try_from(tag.rows).ok()?;
+        let row = u16::try_from(tag.row).ok()?;
+        if cols == 0 || rows == 0 || row >= rows || column.is_some_and(|column| column >= tag.cols)
+        {
+            return None;
+        }
+        if tag.pixels == Pixels::Cells {
+            return None;
+        }
+        let fit = tag.fit.map_or(Some(0), |fit| {
+            FITS.iter()
+                .position(|candidate| *candidate == fit)
+                .map(|at| at + 1)
+        })?;
+        let anchor = ANCHORS.iter().position(|anchor| *anchor == tag.anchor)?;
+        let mut flags = Self::VERSION
+            | tag.pixels.code() as u64
+            | (fit as u64) << 3
+            | (anchor as u64) << 6
+            | ((if native { 2 } else { 1 }) << 12);
+        if column.is_some() {
+            flags |= Self::COLUMN;
+        }
+        if let Some([r, g, b]) = background {
+            flags |=
+                Self::BACKGROUND | ((u64::from(r) << 16 | u64::from(g) << 8 | u64::from(b)) << 14);
+        }
+        Some(Self {
+            identity: u64::from(tag.id) << 32 | u64::from(tag.version),
+            geometry: u64::from(cols) << 48
+                | u64::from(rows) << 32
+                | u64::from(row) << 16
+                | column.unwrap_or(0) as u64,
+            flags,
+        })
+    }
+
+    fn at(self, column: usize) -> Self {
+        Self {
+            geometry: (self.geometry & !0xffff) | column as u64,
+            ..self
+        }
+    }
+
+    fn metadata(self) -> Meta {
+        let mut meta = Meta::new();
+        meta.insert(
+            Self::KEY,
+            MetaValue::Tuple(
+                [self.identity, self.geometry, self.flags]
+                    .into_iter()
+                    .map(|word| MetaValue::Int(i64::from_ne_bytes(word.to_ne_bytes())))
+                    .collect(),
+            ),
+        );
+        meta
+    }
+
+    fn of(style: &Style) -> Option<Self> {
+        let MetaValue::Tuple(words) = style.meta_ref()?.get(Self::KEY)? else {
+            return None;
+        };
+        if words.len() != 3 {
+            return None;
+        }
+        let word = |at| match words.get(at)? {
+            MetaValue::Int(value) => Some(u64::from_ne_bytes(value.to_ne_bytes())),
+            _ => None,
+        };
+        let compact = Self {
+            identity: word(0)?,
+            geometry: word(1)?,
+            flags: word(2)?,
+        };
+        let flags = compact.flags;
+        // Exact version, reserved bits, supported protocol/enums and canonical absence.
+        if flags >> 38 != 1
+            || Pixels::from_code((flags & 7) as i64).is_none()
+            || (flags >> 3 & 7) > FITS.len() as u64
+            || (flags >> 6 & 15) >= ANCHORS.len() as u64
+            || !matches!(flags >> 12 & 3, 1 | 2)
+            || flags & Self::BACKGROUND == 0 && flags >> 14 & 0xffffff != 0
+        {
+            return None;
+        }
+        let tag = compact.tag();
+        let column = compact.geometry & 0xffff;
+        if tag.cols == 0
+            || tag.rows == 0
+            || tag.row >= tag.rows
+            || flags & Self::COLUMN != 0 && column >= tag.cols as u64
+            || flags & Self::COLUMN == 0 && column != 0
+        {
+            return None;
+        }
+        Some(compact)
+    }
+
+    fn tag(self) -> PictureTag {
+        PictureTag {
+            id: (self.identity >> 32) as u32,
+            version: self.identity as u32,
+            cols: (self.geometry >> 48) as usize,
+            rows: (self.geometry >> 32 & 0xffff) as usize,
+            row: (self.geometry >> 16 & 0xffff) as usize,
+            pixels: Pixels::from_code((self.flags & 7) as i64).expect("checked compact protocol"),
+            fit: (self.flags >> 3 & 7)
+                .checked_sub(1)
+                .and_then(|at| FITS.get(at as usize).copied()),
+            anchor: ANCHORS[(self.flags >> 6 & 15) as usize],
+        }
+    }
+
+    fn background(self) -> Option<[u8; 3]> {
+        (self.flags & Self::BACKGROUND != 0).then(|| {
+            let rgb = self.flags >> 14;
+            [(rgb >> 16) as u8, (rgb >> 8) as u8, rgb as u8]
+        })
+    }
+}
+
 impl PictureTag {
     /// The meta key: `[id, cols, rows, row, protocol, version, fit,
     /// anchor]`.
@@ -1526,6 +1690,11 @@ impl PictureTag {
 
     /// The tag a cell's style carries, if any.
     pub fn of(style: &Style) -> Option<PictureTag> {
+        // A valid compact carrier is authoritative; malformed private metadata
+        // cannot mask a valid public legacy tag.
+        if let Some(compact) = CompactTag::of(style) {
+            return Some(compact.tag());
+        }
         let MetaValue::List(items) = style.meta_ref()?.get(Self::META_KEY)? else {
             return None;
         };
@@ -1554,6 +1723,9 @@ impl PictureTag {
     /// Bound-handle permission carried by these cells. `None` is the legacy
     /// logical-ID path; the public tag literal is unchanged.
     pub fn binding_of(style: &Style) -> Option<bool> {
+        if let Some(compact) = CompactTag::of(style) {
+            return Some(compact.flags >> 12 & 3 == 2);
+        }
         match style.meta_ref()?.get("intuituive.image.bound")? {
             MetaValue::Int(0) => Some(false),
             MetaValue::Int(1) => Some(true),
@@ -1602,6 +1774,10 @@ impl PictureTag {
 
     /// Exact source column, when present and valid for the style's picture tag.
     pub fn column_of(style: &Style) -> Option<usize> {
+        if let Some(compact) = CompactTag::of(style) {
+            return (compact.flags & CompactTag::COLUMN != 0)
+                .then_some((compact.geometry & 0xffff) as usize);
+        }
         let tag = Self::of(style)?;
         let MetaValue::Int(column) = style.meta_ref()?.get("intuituive.image.column")? else {
             return None;
@@ -1614,6 +1790,9 @@ impl PictureTag {
     /// terminal default, as in [`ImageView::background`]. This provenance is
     /// separate from the half-block fallback's sampled foreground/background.
     pub fn background_of(style: &Style) -> Option<[u8; 3]> {
+        if let Some(compact) = CompactTag::of(style) {
+            return compact.background();
+        }
         let MetaValue::List(rgb) = style.meta_ref()?.get("intuituive.image.background")? else {
             return None;
         };
@@ -2488,6 +2667,240 @@ mod tests {
     }
 
     #[test]
+    fn compact_provenance_round_trips_checked_boundaries_and_rejects_malformed_words() {
+        let tag = PictureTag {
+            id: u32::MAX,
+            version: u32::MAX,
+            cols: u16::MAX as usize,
+            rows: u16::MAX as usize,
+            row: u16::MAX as usize - 1,
+            pixels: Pixels::Iterm,
+            fit: Some(ImageFit::Native),
+            anchor: ImageAnchor::BottomRight,
+        };
+        for pixels in [Pixels::Iterm, Pixels::Sixel, Pixels::Kitty] {
+            for fit in [
+                None,
+                Some(ImageFit::Contain),
+                Some(ImageFit::Cover),
+                Some(ImageFit::Stretch),
+                Some(ImageFit::Native),
+            ] {
+                for anchor in ANCHORS {
+                    for background in [None, Some([0, 255, 128])] {
+                        for native in [false, true] {
+                            for column in [None, Some(0), Some(tag.cols - 1)] {
+                                let tag = PictureTag {
+                                    pixels,
+                                    fit,
+                                    anchor,
+                                    ..tag
+                                };
+                                let compact =
+                                    CompactTag::new(tag, column, background, native).unwrap();
+                                let style = Style::from_meta(compact.metadata());
+                                assert_eq!(PictureTag::of(&style), Some(tag));
+                                assert_eq!(PictureTag::column_of(&style), column);
+                                assert_eq!(PictureTag::binding_of(&style), Some(native));
+                                assert_eq!(PictureTag::background_of(&style), background);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        for invalid in [
+            PictureTag { cols: 0, ..tag },
+            PictureTag { rows: 0, ..tag },
+            PictureTag {
+                row: tag.rows,
+                ..tag
+            },
+            PictureTag {
+                cols: tag.cols + 1,
+                ..tag
+            },
+            PictureTag {
+                rows: tag.rows + 1,
+                ..tag
+            },
+            PictureTag {
+                pixels: Pixels::Cells,
+                ..tag
+            },
+        ] {
+            assert!(CompactTag::new(invalid, Some(0), None, false).is_none());
+        }
+        assert!(CompactTag::new(tag, Some(tag.cols), None, false).is_none());
+        let valid = CompactTag::new(tag, Some(0), None, false).unwrap();
+        for flags in [
+            valid.flags | 1 << 63,
+            valid.flags & !(255 << 38),
+            (valid.flags & !(255 << 38)) | 2 << 38,
+            valid.flags & !7,
+            (valid.flags & !7) | 4,
+            (valid.flags & !(7 << 3)) | 5 << 3,
+            (valid.flags & !(15 << 6)) | 9 << 6,
+            valid.flags & !(3 << 12),
+            valid.flags | 3 << 12,
+            valid.flags | 1 << 14,
+        ] {
+            assert!(
+                PictureTag::of(&Style::from_meta(CompactTag { flags, ..valid }.metadata()))
+                    .is_none(),
+                "flags={flags:x}"
+            );
+        }
+        for geometry in [
+            0,
+            valid.geometry & 0xffff_ffff,
+            valid.geometry & 0xffff_0000_ffff_ffff,
+            (valid.geometry & !0xffff_0000) | (tag.rows as u64) << 16,
+            valid.geometry | tag.cols as u64,
+        ] {
+            assert!(
+                PictureTag::of(&Style::from_meta(
+                    CompactTag { geometry, ..valid }.metadata()
+                ))
+                .is_none(),
+                "geometry={geometry:x}"
+            );
+        }
+        let absent_column = CompactTag {
+            flags: valid.flags & !CompactTag::COLUMN,
+            ..valid.at(1)
+        };
+        assert!(PictureTag::of(&Style::from_meta(absent_column.metadata())).is_none());
+        for words in [
+            vec![],
+            vec![MetaValue::Int(1); 2],
+            vec![MetaValue::Bool(true); 3],
+            vec![MetaValue::Int(1); 4],
+        ] {
+            let style = Style::from_meta(
+                [(CompactTag::KEY, MetaValue::Tuple(words))]
+                    .into_iter()
+                    .collect(),
+            );
+            assert!(PictureTag::of(&style).is_none());
+        }
+    }
+
+    #[test]
+    fn compact_provenance_preserves_style_metadata_precedence_and_checked_legacy_fallback() {
+        let tag = PictureTag {
+            id: 23,
+            version: 7,
+            cols: 2,
+            rows: 1,
+            row: 0,
+            pixels: Pixels::Iterm,
+            fit: Some(ImageFit::Cover),
+            anchor: ImageAnchor::Left,
+        };
+        let original = Style::parse("bold italic red on blue link https://example.test")
+            .unwrap()
+            .combine(&tag.style_at(1))
+            .with_meta({
+                let mut meta = tag.style_at(1).meta();
+                meta.insert(
+                    "user",
+                    MetaValue::Tuple(vec![MetaValue::Bool(true), MetaValue::Int(-3)]),
+                );
+                meta
+            });
+        let cells = tag_cells(
+            vec![Segment::new("▀▄", Some(original.clone()))],
+            tag,
+            Some([12, 34, 56]),
+            Some(true),
+        );
+        for (column, cell) in cells.iter().enumerate() {
+            let style = cell.style.as_ref().unwrap();
+            assert_eq!(style.clone().with_meta(original.meta()), original);
+            assert_eq!(
+                style.meta_ref().unwrap().get("user"),
+                original.meta_ref().unwrap().get("user")
+            );
+            assert_eq!(PictureTag::of(style), Some(tag));
+            assert_eq!(PictureTag::column_of(style), Some(column));
+            assert_eq!(PictureTag::background_of(style), Some([12, 34, 56]));
+            assert_eq!(PictureTag::binding_of(style), Some(true));
+        }
+        let mut legacy = tag.style_at(1).meta();
+        legacy.insert(
+            CompactTag::KEY,
+            MetaValue::Tuple(vec![MetaValue::Int(0); 3]),
+        );
+        assert_eq!(PictureTag::of(&Style::from_meta(legacy)), Some(tag));
+        let outside = PictureTag {
+            cols: u16::MAX as usize + 1,
+            ..tag
+        };
+        let fallback = tag_cells(vec![Segment::new("X", None)], outside, None, Some(false));
+        let style = fallback[0].style.as_ref().unwrap();
+        assert!(style.meta_ref().unwrap().get(CompactTag::KEY).is_none());
+        assert_eq!(PictureTag::of(style), Some(outside));
+        assert_eq!(PictureTag::column_of(style), Some(0));
+        assert_eq!(PictureTag::binding_of(style), Some(false));
+        assert!(matches!(
+            tag.style().meta_ref().unwrap().get(PictureTag::META_KEY),
+            Some(MetaValue::List(_))
+        ));
+    }
+
+    #[test]
+    fn bound_native_lines_use_compact_exact_provenance_and_legacy_lines_stay_public() {
+        let picture = Picture::new(solid(200));
+        let console = rich::Console::builder()
+            .force_terminal(true)
+            .color_system(Some(rich::color::ColorSystem::Truecolor))
+            .build();
+        let view = ImageView {
+            pixels: Pixels::Iterm,
+            background: Some([1, 2, 3]),
+            ..ImageView::default()
+        };
+        let bound = picture.bound(false);
+        let lines = bound.lines(&console, view, 4, 3);
+        for (row, line) in lines.iter().enumerate() {
+            for (column, segment) in line.iter().enumerate() {
+                let style = segment.style.as_ref().unwrap();
+                let tag = PictureTag::of(style).unwrap();
+                assert_eq!(
+                    (tag.id, tag.version, tag.row, tag.cols, tag.rows),
+                    (picture.id(), picture.version(), row, 4, 3)
+                );
+                assert_eq!(PictureTag::column_of(style), Some(column));
+                assert_eq!(PictureTag::background_of(style), Some([1, 2, 3]));
+                assert_eq!(PictureTag::binding_of(style), Some(false));
+                let meta = style.meta_ref().unwrap();
+                assert_eq!(
+                    meta.len(),
+                    1,
+                    "bound metadata still has nested per-property maps"
+                );
+                assert!(meta.iter().any(|(_, value)| matches!(value, MetaValue::Tuple(words) if words.len() == 3 && words.iter().all(|word| matches!(word, MetaValue::Int(_))))));
+            }
+        }
+        let unbound = picture.lines(&console, view, 4, 3);
+        assert!(matches!(
+            unbound[0][0]
+                .style
+                .as_ref()
+                .unwrap()
+                .meta_ref()
+                .unwrap()
+                .get(PictureTag::META_KEY),
+            Some(MetaValue::List(_))
+        ));
+        assert_eq!(
+            PictureTag::binding_of(unbound[0][0].style.as_ref().unwrap()),
+            None
+        );
+    }
+
+    #[test]
     fn source_column_metadata_is_additive_and_validated() {
         let tag = PictureTag {
             id: 1,
@@ -2528,6 +2941,7 @@ mod tests {
                 vec![Segment::new("▀▄", Some(original.clone()))],
                 tag,
                 background,
+                None,
             );
             assert_eq!(tagged.len(), 2);
             for (column, segment) in tagged.iter().enumerate() {
