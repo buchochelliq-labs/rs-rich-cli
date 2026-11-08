@@ -7338,8 +7338,8 @@ impl FinishOutput {
         }
     }
 
-    /// Write the remaining bytes. On failure this value retains its resources
-    /// and remembers any partial progress, so the same sink can be retried.
+    /// Write the remaining bytes and flush the sink. On failure this value
+    /// retains its resources and remembers partial progress for a retry.
     pub fn write_to(&mut self, writer: &mut impl std::io::Write) -> std::io::Result<()> {
         while self.written < self.output.len() {
             match writer.write(&self.output.as_bytes()[self.written..]) {
@@ -7349,6 +7349,7 @@ impl FinishOutput {
                 Err(e) => return Err(e),
             }
         }
+        writer.flush()?;
         self.output_written();
         Ok(())
     }

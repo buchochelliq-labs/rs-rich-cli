@@ -893,13 +893,65 @@ fn final_output_retains_resources_until_successful_write() {
     assert_eq!(acknowledgements.load(Ordering::SeqCst), 1);
     assert!(weak_source.upgrade().is_some());
     assert!(weak_resource.upgrade().is_some());
-    let mut rest = Vec::new();
+    struct FlushOnce {
+        bytes: Vec<u8>,
+        fail: bool,
+    }
+    impl std::io::Write for FlushOnce {
+        fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
+            self.bytes.extend_from_slice(bytes);
+            Ok(bytes.len())
+        }
+        fn flush(&mut self) -> std::io::Result<()> {
+            if std::mem::take(&mut self.fail) {
+                return Err(std::io::ErrorKind::BrokenPipe.into());
+            }
+            Ok(())
+        }
+    }
+    let mut rest = FlushOnce {
+        bytes: Vec::new(),
+        fail: true,
+    };
+    assert!(
+        output.write_to(&mut rest).is_err(),
+        "failed flush must not acknowledge buffered output"
+    );
+    assert_eq!(acknowledgements.load(Ordering::SeqCst), 1);
+    assert!(weak_source.upgrade().is_some());
+    assert!(weak_resource.upgrade().is_some());
     output.write_to(&mut rest).unwrap();
-    partial.0.extend_from_slice(&rest);
+    partial.0.extend_from_slice(&rest.bytes);
     assert_eq!(partial.0, expected);
     assert!(weak_source.upgrade().is_none());
     assert!(weak_resource.upgrade().is_none());
     output.write_to(&mut rest).unwrap();
     assert_eq!(partial.0, expected);
     assert_eq!(acknowledgements.load(Ordering::SeqCst), 2);
+}
+
+#[test]
+fn final_output_flushes_a_buffered_writer_before_returning() {
+    let policy = bound_policy();
+    let picture = policy.picture(&picture());
+    let app = intuituive::App::new(move || {
+        let picture = picture.clone();
+        intuituive::picture_of(
+            move || Some(picture.clone()),
+            ImageView::new().pixels(Pixels::Kitty),
+        )
+    })
+    .graphics(policy.graphics());
+    let mut driver = app.driver(2, 2);
+    driver.render().unwrap();
+    driver.output_written();
+    let mut output = driver.finish_output();
+    let expected = output.as_str().as_bytes().to_vec();
+    let mut writer = std::io::BufWriter::with_capacity(expected.len() + 32, Vec::new());
+    output.write_to(&mut writer).unwrap();
+    assert_eq!(
+        writer.get_ref(),
+        &expected,
+        "cleanup remains buffered after success"
+    );
 }
