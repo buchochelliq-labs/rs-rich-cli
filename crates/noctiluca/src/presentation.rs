@@ -2,13 +2,14 @@
 //! playback, decoded pixels and fixed-box log contents.
 use crate::config::View;
 use crate::layout::{self, Line, LogSlot, Marks, Part, Projection, Region, Span};
-use crate::model::{Log, Media, Page};
+use crate::model::{Log, Media, Page, SourcePage};
 use std::rc::Rc;
 use std::sync::Arc;
 
 #[derive(Default)]
 pub(crate) struct Presentation {
     previous: Option<(Arc<Page>, View, u16, Marks)>,
+    source: Option<SourcePage>,
     projection: Rc<Projection>,
     slots: Vec<LogSlot>,
 }
@@ -150,6 +151,18 @@ impl Presentation {
         width: u16,
         marks: &Marks,
     ) -> Rc<Projection> {
+        self.update_pair(page, None, view, width, marks)
+    }
+    pub fn update_source(&mut self, source: &SourcePage, view: View, width: u16, marks: &Marks) -> Rc<Projection> {
+        self.update_pair(source.page(), Some(source), view, width, marks)
+    }
+    fn update_pair(&mut self, page: &Arc<Page>, source: Option<&SourcePage>, view: View, width: u16, marks: &Marks) -> Rc<Projection> {
+        let same_source = match (&self.source, source) {
+            (Some(old), Some(new)) => old.same_relations(new),
+            (None, None) => true,
+            _ => false,
+        };
+        self.source = source.cloned();
         if let Some((old, old_view, old_width, old_marks)) = &self.previous {
             let mut outer_marks = marks.clone();
             outer_marks.logs = old_marks.logs.clone();
@@ -168,7 +181,7 @@ impl Presentation {
                 && changed
                     .iter()
                     .all(|node| self.slots.iter().any(|s| s.node == *node));
-            if same && (changed.is_empty() || patch_logs) && { same_dependencies(old, page, true) }
+            if same_source && same && (changed.is_empty() || patch_logs) && { same_dependencies(old, page, true) }
             {
                 let playback_changed = old.media.iter().zip(&page.media).any(|(a, b)| {
                     a.playback.is_some_and(|p| p.playing())

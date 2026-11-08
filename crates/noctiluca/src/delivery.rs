@@ -1,10 +1,17 @@
 //! Lossless semantic updates and replaceable frames share one ordered
 //! mailbox. Only one lightweight proxy marker is outstanding.
 use crate::tab::Update;
+use crate::model::SourcePage;
+
+pub(crate) struct Envelope {
+    pub update: Update,
+    pub source: Option<SourcePage>,
+}
+
 use std::collections::VecDeque;
 #[derive(Default)]
 pub(crate) struct Mailbox {
-    pub queue: VecDeque<(u64, Update)>,
+    pub queue: VecDeque<(u64, Envelope)>,
     document: u64,
     pub high_water: usize,
     pub retained_high_water: usize,
@@ -12,31 +19,39 @@ pub(crate) struct Mailbox {
 }
 impl Mailbox {
     pub fn push(&mut self, update: Update) {
+        self.push_source(update, None);
+    }
+    pub fn push_source(&mut self, update: Update, source: Option<SourcePage>) {
+        assert!(source.as_ref().is_none_or(|s| matches!(&update, Update::Page(p) if std::sync::Arc::ptr_eq(p, s.page()))));
         if let Update::Page(p) = &update {
             self.document = p.document;
         }
         if let Some(key) = key_of(&update) {
             let before = self.queue.len();
-            self.queue.retain(|(_, old)| key_of(old) != Some(key));
+            self.queue.retain(|(_, old)| key_of(&old.update) != Some(key));
             self.replaced += before - self.queue.len();
         }
-        self.queue.push_back((self.document, update));
+        self.queue.push_back((self.document, Envelope { update, source }));
         self.high_water = self.high_water.max(self.queue.len());
-        let retained = self.queue.iter().map(|(_, u)| bytes(u)).sum();
+        let retained = self.queue.iter().map(|(_, u)| bytes(&u.update)).sum();
         self.retained_high_water = self.retained_high_water.max(retained);
     }
     pub fn trace(&self) -> Trace {
         Trace {
             waiting: self.queue.len(),
             high_water: self.high_water,
-            retained: self.queue.iter().map(|(_, u)| bytes(u)).sum(),
+            retained: self.queue.iter().map(|(_, u)| bytes(&u.update)).sum(),
             retained_high_water: self.retained_high_water,
             replaced: self.replaced,
         }
     }
 
-    pub fn pop(&mut self) -> Option<(u64, Update)> {
+    pub fn pop_envelope(&mut self) -> Option<(u64, Envelope)> {
         self.queue.pop_front()
+    }
+    #[cfg(test)]
+    pub fn pop(&mut self) -> Option<(u64, Update)> {
+        self.pop_envelope().map(|(document, event)| (document, event.update))
     }
 }
 pub(crate) struct Trace {

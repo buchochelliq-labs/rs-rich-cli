@@ -15,6 +15,33 @@ impl SourcePage {
         &self.page
     }
 
+    /// Tab-only derivation: passive updates preserve every source block;
+    /// a synthetic error notice may prefix them. No source can be paired
+    /// with another document or different source block contents.
+    pub(crate) fn republish(mut self, page: Arc<Page>) -> Self {
+        assert_eq!(self.page.document, page.document);
+        let prefix = page.blocks.len().checked_sub(self.page.blocks.len()).expect("source blocks removed");
+        assert_eq!(self.page.blocks, page.blocks[prefix..]);
+        if prefix != 0 {
+            let relations = Arc::make_mut(&mut self.relations);
+            for piece in &mut relations.blocks { piece.block += prefix; }
+            for piece in &mut relations.runs {
+                match &mut piece.location {
+                    RunLocation::Block { block, .. } | RunLocation::Cell { block, .. } | RunLocation::Caption { block } => *block += prefix,
+                }
+            }
+            for figure in &mut relations.figures {
+                for block in &mut figure.blocks { *block += prefix; }
+            }
+        }
+        self.page = page;
+        self
+    }
+
+    pub(crate) fn reuse_relations(&mut self, previous: &Self) {
+        if self.same_relations(previous) { self.relations = previous.relations.clone(); }
+    }
+
     pub(crate) fn same_relations(&self, other: &Self) -> bool {
         Arc::ptr_eq(&self.relations, &other.relations) || self.relations == other.relations
     }
@@ -47,6 +74,7 @@ pub(crate) struct RunPiece {
     pub bytes: Range<usize>,
 }
 impl RunPiece {
+    #[cfg(test)]
     pub(crate) fn text<'a>(&self, page: &'a Page) -> &'a str {
         let text = match self.location {
             RunLocation::Block { block, run } => &page.blocks[block].runs[run].text,
@@ -115,7 +143,7 @@ impl Extraction {
             node,
             parent: usize::try_from(dom.parent[i]).ok().filter(|&p| p < i),
             rect: dom.rect(i),
-            ordinary: !matches!(dom.style(i, 9), "absolute" | "fixed" | "sticky") && !dom.concealed[i],
+            ordinary: !matches!(dom.style(i, 14), "absolute" | "fixed" | "sticky") && !dom.concealed[i],
         }).collect();
         let blocks = page.blocks.iter().enumerate().filter_map(|(block, b)| {
             Some(BlockPiece { node: *by_node.get(&b.node)?, block })

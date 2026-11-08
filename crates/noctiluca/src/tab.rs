@@ -59,7 +59,7 @@ use crate::engine::{
 };
 use crate::model::{
     Binding, Block, BlockKind, Control, Entry, Media, MediaKind, Page, Revisions, Role, Run,
-    build_with, live_runs,
+    SourcePage, build_source_with, build_with, live_runs,
 };
 use crate::video::{Frames, Region, VideoFrame};
 use rich_intuituive::Picture;
@@ -316,6 +316,12 @@ impl Tab {
     /// thread with each [`Update`]. The thread ends, dropping the engine,
     /// when every [`Tab`] is dropped or [`stop_all`] is called.
     pub fn spawn(engine: Box<dyn Engine>, update: impl Fn(Update) + Send + 'static) -> Tab {
+        Self::spawn_with_source(engine, move |event, _| update(event))
+    }
+
+    /// Run the same worker, retaining source relationships. Every Page update
+    /// carries Some whose page is the exact same Arc; other updates carry None.
+    pub fn spawn_with_source(engine: Box<dyn Engine>, update: impl Fn(Update, Option<SourcePage>) + Send + 'static) -> Tab {
         let (commands, receive) = mpsc::channel();
         let stop = Arc::new(AtomicBool::new(false));
         let (ended, done) = mpsc::channel::<()>();
@@ -330,7 +336,7 @@ impl Tab {
         thread::spawn(move || {
             // Dropped last, after the engine, even when the thread panics.
             let _ended = ended;
-            run(engine, receive, &stop, &update);
+            run_with_source(engine, receive, &stop, &|event| update(event, None), Some(&update));
         });
         Tab {
             commands,
@@ -427,6 +433,8 @@ fn action(control: &Control, intent: &Intent) -> PageAction {
 struct Worker<'a> {
     engine: Box<dyn Engine>,
     update: &'a dyn Fn(Update),
+    source_update: Option<&'a dyn Fn(Update, Option<SourcePage>)>,
+    source: Option<SourcePage>,
     revisions: Revisions,
     page: Option<Arc<Page>>,
     state: PageState,
@@ -564,6 +572,30 @@ impl Worker<'_> {
         }
     }
 
+    /// Every Page leaves through this helper, with the exact immutable pair.
+    fn publish(&mut self, page: Arc<Page>, source: Option<SourcePage>) -> Arc<Page> {
+        let mut source = source.or_else(|| self.source.clone()).map(|s| s.republish(page.clone()));
+        if let (Some(next), Some(previous)) = (&mut source, &self.source) {
+            next.reuse_relations(previous);
+        }
+        let same_source = match (&self.source, &source) {
+            (Some(old), Some(new)) => old.same_relations(new),
+            (None, None) => true,
+            _ => false,
+        };
+        let changed = self.page.as_deref() != Some(page.as_ref()) || !same_source;
+        self.page = Some(page.clone());
+        self.source = source.clone();
+        if changed {
+            if let Some(update) = self.source_update {
+                update(Update::Page(page.clone()), source);
+            } else {
+                (self.update)(Update::Page(page.clone()));
+            }
+        }
+        page
+    }
+
     /// Read the page and publish it; `None` if the engine refused (a
     /// navigation swapping the page's process, say).
     fn read(&mut self) -> Option<Arc<Page>> {
@@ -577,7 +609,11 @@ impl Worker<'_> {
         if let Ok(boxes) = self.engine.appended(TabId(0)) {
             self.appended = boxes.into_iter().collect();
         }
-        let mut page = build_with(&snapshot, &mut self.revisions, &self.appended);
+        let source = self.source_update.map(|_| build_source_with(&snapshot, &mut self.revisions, &self.appended));
+        let mut page = match &source {
+            Some(source) => source.page().as_ref().clone(),
+            None => build_with(&snapshot, &mut self.revisions, &self.appended),
+        };
         self.dress_error(&mut page);
         if self.page.as_ref().map(|p| p.document) != Some(page.document) {
             self.live.clear();
@@ -621,11 +657,7 @@ impl Worker<'_> {
             // A step with no move: settled.
             _ => None,
         };
-        let page = Arc::new(page);
-        if self.page.as_deref() != Some(&*page) {
-            (self.update)(Update::Page(page.clone()));
-        }
-        self.page = Some(page.clone());
+        let page = self.publish(Arc::new(page), source);
         self.dirty = None;
         self.stills_pending = true;
         Some(page)
@@ -824,9 +856,7 @@ impl Worker<'_> {
         }
         self.dress_inline(&mut next);
         if next != *page {
-            let next = Arc::new(next);
-            self.page = Some(next.clone());
-            (self.update)(Update::Page(next));
+            self.publish(Arc::new(next), None);
         }
     }
 
@@ -911,9 +941,7 @@ impl Worker<'_> {
         let mut next = (*page).clone();
         self.probe(&mut next);
         if next != *page {
-            let next = Arc::new(next);
-            self.page = Some(next.clone());
-            (self.update)(Update::Page(next));
+            self.publish(Arc::new(next), None);
         }
     }
 
@@ -974,9 +1002,7 @@ impl Worker<'_> {
             }
         }
         if any {
-            let page = Arc::new(page);
-            self.page = Some(page.clone());
-            (self.update)(Update::Page(page));
+            self.publish(Arc::new(page), None);
         }
     }
 
@@ -1079,9 +1105,7 @@ impl Worker<'_> {
         }
         self.dress_inline(&mut next);
         if next != *page {
-            let next = Arc::new(next);
-            self.page = Some(next.clone());
-            (self.update)(Update::Page(next));
+            self.publish(Arc::new(next), None);
         }
     }
 
@@ -1654,11 +1678,17 @@ fn key_of(media: &Media) -> StillKey {
     )
 }
 
-fn run(
+#[cfg(test)]
+fn run(engine: Box<dyn Engine>, commands: Receiver<(u64, Command)>, stop: &AtomicBool, update: &dyn Fn(Update)) {
+    run_with_source(engine, commands, stop, update, None);
+}
+
+fn run_with_source(
     mut engine: Box<dyn Engine>,
     commands: Receiver<(u64, Command)>,
     stop: &AtomicBool,
     update: &dyn Fn(Update),
+    source_update: Option<&dyn Fn(Update, Option<SourcePage>)>,
 ) {
     let (decode, decoded) = decoder();
     // The optional worker owns actual inline decoding. These channels keep
@@ -1670,6 +1700,8 @@ fn run(
     let mut worker = Worker {
         engine,
         update,
+        source_update,
+        source: None,
         revisions: Revisions::new(),
         page: None,
         state: PageState::default(),
@@ -1836,7 +1868,7 @@ mod tests {
                 Ok(Playback { paused: false, time: self.0.lock().unwrap().time, ready: 4, ..Default::default() })
             }
             fn read_live(&mut self, _: TabId, _: NodeId, _: bool) -> io::Result<LiveRead> {
-                Ok(LiveRead { order: vec![7], fresh: vec![(7, serde_json::json!([{"text": self.0.lock().unwrap().text}]))], first_shown: Some(7), interactive: false })
+                Ok(LiveRead { order: vec![7], fresh: vec![(7, serde_json::json!([{"t": self.0.lock().unwrap().text}]))], first_shown: Some(7), interactive: false })
             }
         }
         let mut builder = PageBuilder::new("https://example.test/a", "source", 400.0, 400.0);
@@ -2056,6 +2088,8 @@ mod tests {
             let mut worker = Worker {
                 engine: Box::new(engine),
                 update: &update,
+        source_update: None,
+        source: None,
                 revisions: Revisions::new(),
                 page: Some(Arc::new(page)),
                 state: PageState::default(),
@@ -2394,6 +2428,8 @@ mod tests {
         let mut worker = Worker {
             engine,
             update: &update,
+        source_update: None,
+        source: None,
             revisions: Revisions::new(),
             page: None,
             state: PageState::default(),
@@ -2484,6 +2520,8 @@ mod tests {
             let mut worker = Worker {
                 engine,
                 update: &update,
+        source_update: None,
+        source: None,
                 revisions: Revisions::new(),
                 page: None,
                 state: PageState::default(),
@@ -2608,6 +2646,8 @@ mod tests {
         let mut worker = Worker {
             engine,
             update: &update,
+        source_update: None,
+        source: None,
             revisions: Revisions::new(),
             page: None,
             state: PageState::default(),
@@ -2850,6 +2890,8 @@ mod tests {
         let mut worker = Worker {
             engine,
             update: &update,
+        source_update: None,
+        source: None,
             revisions: Revisions::new(),
             page: None,
             state: PageState::default(),

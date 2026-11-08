@@ -5110,6 +5110,42 @@ mod update_measurements {
         driver.settle();
         (driver, b, page, proxy)
     }
+    #[test]
+    fn source_pair_is_atomic_and_external_legacy_replacement_cannot_reuse_it() {
+        let (mut driver, b, _, proxy) = setup();
+        let mut builder = crate::testing::PageBuilder::new("https://example.test/source", "source", 400.0, 400.0);
+        let left = builder.element(builder.body(), "DIV", &[], &[], None);
+        let right = builder.element(builder.body(), "DIV", &[], &[], None);
+        let text = builder.text(left, "Source words", Rect::new(0.0, 0.0, 100.0, 18.0));
+        let mut snapshot = builder.snapshot();
+        let first = crate::model::build_source(&snapshot, &mut Revisions::new());
+        let offer = |source: crate::model::SourcePage| {
+            proxy.run_with(move |cx| apply_pair(b, Update::Page(source.page().clone()), Some(source), cx));
+        };
+        offer(first.clone());
+        driver.settle();
+        TEST_LAYOUTS.with(|n| n.set(0));
+        snapshot.dom["documents"][0]["nodes"]["parentIndex"][text] = serde_json::json!(right);
+        let changed = crate::model::build_source(&snapshot, &mut Revisions::new());
+        assert_eq!(first.page(), changed.page());
+        offer(changed.clone());
+        driver.settle();
+        assert_eq!(TEST_LAYOUTS.with(|n| n.get()), 1, "source-only change has one layout, no transient legacy pair");
+        proxy.run_with(move |_| {
+            let page = b.page.get_untracked().unwrap();
+            b.source.with_untracked(|s| assert!(Arc::ptr_eq(s.as_ref().unwrap().page(), &page)));
+        });
+        TEST_LAYOUTS.with(|n| n.set(0));
+        // Public callers can replace the legacy signal directly.
+        proxy.run_with(move |_| { b.page.replace(Some(Arc::new(Page { document: 900, ..Default::default() }))); });
+        driver.settle();
+        assert_eq!(TEST_LAYOUTS.with(|n| n.get()), 1);
+        proxy.run_with(move |cx| apply(b, Update::Page(first.page().clone()), cx));
+        driver.settle();
+        proxy.run_with(move |_| assert!(b.source.with_untracked(Option::is_none)));
+        driver.settle();
+    }
+
     fn put(driver: &mut Driver, proxy: &Proxy, b: Browser, page: Page) -> usize {
         TEST_LAYOUTS.with(|n| n.set(0));
         proxy.run_with(move |cx| apply(b, Update::Page(Arc::new(page)), cx));
