@@ -1864,7 +1864,7 @@ mod tests {
         for (columns, rows) in [
             (usize::MAX..usize::MAX, 0..1),
             (0..0, 0..1),
-            (4..2, 0..1),
+            (std::ops::Range { start: 4, end: 2 }, 0..1),
             (0..1, 4..5),
         ] {
             assert!(

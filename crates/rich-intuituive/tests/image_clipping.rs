@@ -353,3 +353,41 @@ fn driver_four_moves_count_actual_protocol_work() {
         }
     }
 }
+
+#[test]
+fn frame_fragment_overflow_keeps_kitty_uploads_and_overlay_fallbacks() {
+    let picture = picture();
+    let source = image_graphics();
+    let console = rich::Console::builder()
+        .width(1)
+        .color_system(Some(rich::color::ColorSystem::Truecolor))
+        .build();
+    let view = ImageView::new().fit(ImageFit::Stretch);
+    let overlay = picture.lines(&console, view.pixels(Pixels::Iterm), 1, 1);
+    let kitty = picture.lines(&console, view.pixels(Pixels::Kitty), 1, 1);
+    let mut segments = Vec::new();
+    for _ in 0..129 {
+        segments.extend(overlay[0].clone());
+    }
+    segments.extend(kitty[0].clone());
+    let frame = Frame::from_segments(&segments);
+    let placements = source.placements(&frame);
+    assert_eq!(placements.len(), 1);
+    assert!(placements[0].graphic.in_cells());
+    assert_eq!(placements[0].column, 129);
+}
+
+#[test]
+fn releasing_kitty_data_invalidates_previous_retention_proof() {
+    let picture = picture();
+    let source = image_graphics();
+    let frame = scene(&picture, Pixels::Kitty, |_, _| false);
+    let previous = source.placements(&frame);
+    assert!(source.release(&[]).contains("a=d"));
+    let next = source.placements(&frame);
+    assert_eq!(
+        plan(&previous, &next, &[]).draw.len(),
+        1,
+        "released data must be uploaded again even with old placements held"
+    );
+}

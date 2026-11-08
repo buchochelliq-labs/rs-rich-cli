@@ -3331,6 +3331,7 @@ dependencies = [
  "rs-rich-interact",
  "rs-rich-micro",
  "rs-rich-ratatui",
+ "rs-rich-record",
  "tracing",
  "tracing-subscriber",
  "vt100",

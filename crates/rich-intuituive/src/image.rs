@@ -431,7 +431,7 @@ struct ImageGraphics {
     /// The Kitty pictures uploaded, to free.
     uploaded: Mutex<Vec<u32>>,
     /// Weak identities of Kitty graphics, including graphics evicted from the cache.
-    owners: Mutex<Vec<(u32, std::sync::Weak<dyn Graphic>)>>,
+    owners: Mutex<Vec<(u32, std::sync::Weak<PixelGraphic>)>>,
 }
 
 #[derive(Clone)]
@@ -639,7 +639,7 @@ impl PlacementSource for ImageGraphics {
         let kept: std::collections::HashSet<u32> = owners
             .iter()
             .filter_map(|(id, graphic)| {
-                let graphic = graphic.upgrade()?;
+                let graphic: Arc<dyn Graphic> = graphic.upgrade()?;
                 retained
                     .iter()
                     .any(|p| Arc::ptr_eq(&p.graphic, &graphic))
@@ -651,6 +651,18 @@ impl PlacementSource for ImageGraphics {
             .copied()
             .filter(|id| !kept.contains(id))
             .collect();
+        // A caller may still hold previous placements after release. They no
+        // longer prove that data is present; invalidate their reuse eligibility,
+        // including graphics already evicted from the strong encoding cache.
+        for (id, weak) in owners.iter() {
+            if released.contains(id)
+                && let Some(graphic) = weak.upgrade()
+            {
+                graphic
+                    .reusable
+                    .store(false, std::sync::atomic::Ordering::Relaxed);
+            }
+        }
         uploaded.retain(|id| kept.contains(id));
         owners.retain(|(id, weak)| kept.contains(id) && weak.strong_count() > 0);
         made.retain(|(id, _, _, _, pixels, ..), _| {
@@ -733,8 +745,7 @@ impl ImageGraphics {
         if tag.pixels == Pixels::Kitty {
             let mut owners = self.owners.lock().unwrap_or_else(|e| e.into_inner());
             owners.retain(|(_, weak)| weak.strong_count() > 0);
-            let erased: Arc<dyn Graphic> = graphic.clone();
-            owners.push((tag.id, Arc::downgrade(&erased)));
+            owners.push((tag.id, Arc::downgrade(&graphic)));
         }
         // Bound live-picture crop history as well as old versions. Clearing the
         // encoding cache does not release retained Kitty resources: owners track
@@ -828,6 +839,45 @@ mod tests {
             segments.push(Segment::line());
         }
         source.placements(&Frame::from_segments(&segments))
+    }
+
+    #[test]
+    fn encoded_cache_byte_budget_evicts_before_entry_budget() {
+        let source = tracked_source();
+        let picture = Picture::from_rgba(4, 4, vec![255; 64]).unwrap();
+        for cols in 64..74 {
+            let tag = PictureTag {
+                id: picture.id(),
+                version: picture.version(),
+                cols,
+                rows: 64,
+                row: 0,
+                pixels: Pixels::Kitty,
+                fit: Some(ImageFit::Stretch),
+                anchor: ImageAnchor::Center,
+            };
+            let graphic = source
+                .graphic(
+                    &tag,
+                    0..cols,
+                    0..64,
+                    rich_art::graphics::CellPixels::DEFAULT,
+                    None,
+                )
+                .unwrap();
+            assert!(graphic.escape.len() > 2 * 1024 * 1024);
+            let made = source.made.lock().unwrap();
+            assert!(
+                made.values()
+                    .map(|graphic| graphic.escape.len())
+                    .sum::<usize>()
+                    <= 16 * 1024 * 1024
+            );
+        }
+        assert!(
+            source.made.lock().unwrap().len() < 10,
+            "byte budget must evict before 128 entries"
+        );
     }
 
     #[test]
