@@ -20,7 +20,7 @@
 <h1>Speed test</h1>
 <a class="go" href="#start">GO</a>
 <div class="test">
-  <svg id="dial" width="300" height="240" viewBox="0 0 300 240" class="gauge">
+  <svg id="dial" role="meter" aria-label="Download" aria-valuemin="0" aria-valuemax="500" aria-valuenow="0" width="300" height="240" viewBox="0 0 300 240" class="gauge">
     <path d="M 45 200 A 120 120 0 1 1 255 200" fill="none" stroke="#2a2c45" stroke-width="18"/>
     <path id="arc" d="M 45 200 A 120 120 0 1 1 255 200" fill="none" stroke="#1de0fa"
           stroke-width="18" stroke-dasharray="0 1000"/>
@@ -45,16 +45,22 @@
   const arc = document.getElementById('arc');
   const length = arc.getTotalLength();
   const needle = document.getElementById('needle');
-  let step = 0;
-  const timer = setInterval(() => {
-    step += 1;
-    const mbps = Math.min(step * 11.7, 287.4);
+  window.setGauge = (mbps, semantic) => {
     const share = mbps / 500;
     arc.setAttribute('stroke-dasharray', `${(share * length).toFixed(1)} 1000`);
     needle.setAttribute('transform', `rotate(${-135 + share * 270} 150 140)`);
     const text = mbps.toFixed(2);
     document.getElementById('dial-value').textContent = text;
     document.getElementById('value').textContent = text;
-    if (mbps >= 287.4) clearInterval(timer);
-  }, 300);
+    document.getElementById('dial').setAttribute('aria-valuenow', semantic.toFixed(1));
+    document.getElementById('dial').setAttribute('aria-valuetext', semantic.toFixed(1) + ' Mbps');
+  };
+  let step = 0;
+  if (!location.search.includes('quiet')) {
+    const timer = setInterval(() => {
+      const mbps = Math.min(++step * 11.7, 287.4);
+      window.setGauge(mbps, mbps);
+      if (mbps >= 287.4) clearInterval(timer);
+    }, 300);
+  }
 </script>
