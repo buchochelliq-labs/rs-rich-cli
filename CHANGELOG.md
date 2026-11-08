@@ -9,6 +9,18 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Noctiluca and shared media presentation
+
+- Projection, media pacing and capture handling use measured terminal geometry,
+  feature-aware graphics fallbacks and document/viewport scoped frames. Adaptive
+  layouts retain readable video and chat at narrow widths.
+- The optional intuiTUIve image integration offers `ImagePresentation` for
+  independent fitted and versioned Kitty resources. Manual Driver loops use
+  `output_written()` after successful frame writes and `finish_output()` to retain
+  final cleanup resources across failed or partial writes. Existing low-level
+  picture and `Driver::finish()` APIs remain available; see the image guide for
+  their lifetime and simultaneous-fit limits.
+
 ### Releases: rab v2.0.1
 
 - **PyPI publishes again from `release.yml`.** 0.0.25's run uploaded the

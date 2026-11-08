@@ -191,7 +191,8 @@ cover.get(), view)` draw an image in memory (a cover embedded in a song).
   picture alive while using prebuilt lines. The legacy `Picture` lines and
   encode/prepare APIs retain their original ID pairing; callers using them
   directly should avoid simultaneous different fitted views of the same ID.
-  Bindings are bounded, and unavailable Kitty resources fall back to cells.
+  Logical IDs prefer the representable 24-bit Kitty range and wrap to free IDs;
+  bindings are bounded, and unavailable Kitty resources fall back to cells.
 
   A manual `Driver` loop must call `driver.output_written()` after each returned
   frame output has been successfully consumed in order. Use

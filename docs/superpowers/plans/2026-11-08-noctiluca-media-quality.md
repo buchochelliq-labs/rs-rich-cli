@@ -101,6 +101,8 @@
 
 ### Task 6: Cross-terminal acceptance and completion
 
+**Progress, 2026-11-08:** Tasks 1–5 were implemented and reviewed; the boxes below remain open until all listed acceptance conditions are met. Task 6 has focused and public-consumer coverage and bounded native observations. Source-specific evidence, remaining unverified terminal combinations, and current check failures are recorded in the [handoff](../../design/noctiluca-media-quality-status.md). Matched release timing and final reviews remain open.
+
 **Files:** concise results in `docs/design/noctiluca-media-quality-status.md`; updated relevant guides/gallery; native recordings as normal project artifacts with provenance. Avoid committing bulk timing logs.
 
 **Interfaces:** Consume A/B/C and the fixed scripted interaction sequence. Each matrix row records terminal/OS/version, transport, protocol, metrics, source SHA and pass/fail/unverified/unsupported; results must not infer one terminal's behavior from another.
