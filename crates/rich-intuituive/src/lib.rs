@@ -204,8 +204,8 @@ pub use rich_interact::dates;
 pub use actions::{Action, action_overlay};
 pub use app::DEFAULT_MODE;
 pub use app::{
-    Anchor, App, Ctx, Driver, Easing, FrameStats, Handoff, Holds, ModalOptions, Placement,
-    StatsHandle, Theme, Timer, after, every, fixed_step, held_keys, plain_key, rate,
+    Anchor, App, Ctx, Driver, Easing, FinishOutput, FrameStats, Handoff, Holds, ModalOptions,
+    Placement, StatsHandle, Theme, Timer, after, every, fixed_step, held_keys, plain_key, rate,
 };
 #[cfg(feature = "art")]
 pub use big_text::big_text;

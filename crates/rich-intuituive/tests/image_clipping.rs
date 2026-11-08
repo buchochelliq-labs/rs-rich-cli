@@ -806,3 +806,100 @@ fn bound_prebuilt_lines_and_held_placements_survive_eviction_and_release() {
         "a fresh source cannot upgrade the expired weak picture"
     );
 }
+
+#[test]
+fn final_output_retains_resources_until_successful_write() {
+    use std::sync::{
+        Arc,
+        atomic::{AtomicUsize, Ordering},
+    };
+    struct CountingSource {
+        inner: Arc<dyn rich_ext::frame::graphics::PlacementSource>,
+        acknowledgements: Arc<AtomicUsize>,
+    }
+    impl rich_ext::frame::graphics::PlacementSource for CountingSource {
+        fn placements(&self, frame: &Frame) -> Vec<rich_ext::frame::graphics::Placement> {
+            self.inner.placements(frame)
+        }
+        fn placements_with_metrics(
+            &self,
+            frame: &Frame,
+            cell: Option<(u16, u16)>,
+        ) -> Vec<rich_ext::frame::graphics::Placement> {
+            self.inner.placements_with_metrics(frame, cell)
+        }
+        fn reconcile(&self, retained: &[rich_ext::frame::graphics::Placement]) -> String {
+            self.inner.reconcile(retained)
+        }
+        fn release(&self, retained: &[rich_ext::frame::graphics::Placement]) -> String {
+            self.inner.release(retained)
+        }
+        fn output_written(&self) {
+            self.acknowledgements.fetch_add(1, Ordering::SeqCst);
+            self.inner.output_written();
+        }
+    }
+    let policy = bound_policy();
+    let acknowledgements = Arc::new(AtomicUsize::new(0));
+    let source = Arc::new(CountingSource {
+        inner: policy.graphics(),
+        acknowledgements: acknowledgements.clone(),
+    });
+    let weak_source = Arc::downgrade(&source);
+    let picture = policy.picture(&picture());
+    let view = ImageView::new()
+        .pixels(Pixels::Kitty)
+        .fit(ImageFit::Stretch);
+    let resource = picture.kitty_resource(view, 2, 2, true).unwrap();
+    let weak_resource = Arc::downgrade(&resource);
+    drop(resource);
+    let app = intuituive::App::new(move || {
+        let picture = picture.clone();
+        intuituive::picture_of(move || Some(picture.clone()), view)
+    })
+    .graphics(source.clone());
+    drop(source);
+    let mut driver = app.driver(2, 2);
+    driver.set_cell_pixels(Some((8, 16)));
+    assert!(driver.render().unwrap().contains("a=T"));
+    driver.output_written();
+    assert_eq!(acknowledgements.load(Ordering::SeqCst), 1);
+    let mut output = driver.finish_output();
+    assert!(
+        weak_source.upgrade().is_some(),
+        "cleanup output lost its owner"
+    );
+    assert!(
+        weak_resource.upgrade().is_some(),
+        "cleanup output lost its reservation"
+    );
+    let expected = output.as_str().as_bytes().to_vec();
+    struct Partial(Vec<u8>);
+    impl std::io::Write for Partial {
+        fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
+            if !self.0.is_empty() {
+                return Err(std::io::ErrorKind::BrokenPipe.into());
+            }
+            let n = bytes.len().min(5);
+            self.0.extend_from_slice(&bytes[..n]);
+            Ok(n)
+        }
+        fn flush(&mut self) -> std::io::Result<()> {
+            Ok(())
+        }
+    }
+    let mut partial = Partial(Vec::new());
+    assert!(output.write_to(&mut partial).is_err());
+    assert_eq!(acknowledgements.load(Ordering::SeqCst), 1);
+    assert!(weak_source.upgrade().is_some());
+    assert!(weak_resource.upgrade().is_some());
+    let mut rest = Vec::new();
+    output.write_to(&mut rest).unwrap();
+    partial.0.extend_from_slice(&rest);
+    assert_eq!(partial.0, expected);
+    assert!(weak_source.upgrade().is_none());
+    assert!(weak_resource.upgrade().is_none());
+    output.write_to(&mut rest).unwrap();
+    assert_eq!(partial.0, expected);
+    assert_eq!(acknowledgements.load(Ordering::SeqCst), 2);
+}

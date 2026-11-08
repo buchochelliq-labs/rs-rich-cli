@@ -194,11 +194,12 @@ cover.get(), view)` draw an image in memory (a cover embedded in a song).
   Bindings are bounded, and unavailable Kitty resources fall back to cells.
 
   A manual `Driver` loop must call `driver.output_written()` after each returned
-  frame output has been successfully consumed in order. For `finish()`, which
-  consumes the driver, retain the shared placement source and call its
-  `output_written()` after successfully writing the returned cleanup bytes.
-  These acknowledgements retire reservations after deletion is written; do not
-  acknowledge failed writes.
+  frame output has been successfully consumed in order. Use
+  `driver.finish_output()` for final cleanup: its `write_to(&mut writer)` retains
+  reservations across a failed or partial write and resumes on retry. For a
+  sink with its own write operation, write `as_str()` in order and call the
+  token's `output_written()` only after success. The legacy `finish()` returns
+  a string; it cannot retain reservations while those bytes are pending.
 
 - **A whole frame as tiles:** `tiles_of(|| tiles, Pixels::Kitty)` draws
   the tiles of rs-rich-art's `tiles::Tiler`, which fits each frame (a

@@ -4075,11 +4075,9 @@ impl App {
             driver.take_printed()
         };
         let rows = driver.printed_rows(&printed);
-        let graphics = driver.app.graphics.clone();
-        if put(backend, linear, &driver.finish()).is_ok()
-            && let Some(source) = graphics
-        {
-            source.output_written();
+        let mut output = driver.finish_output();
+        if put(backend, linear, output.as_str()).is_ok() {
+            output.output_written();
         }
         let mut printed = Vec::new();
         if write_printed {
@@ -7315,6 +7313,47 @@ pub struct Driver {
     damage_log: std::collections::VecDeque<(u64, Vec<Rect>)>,
 }
 
+/// Final terminal output and the graphics resources it retires. Keep this
+/// value until the output has been written successfully, in order.
+#[must_use]
+pub struct FinishOutput {
+    output: String,
+    written: usize,
+    graphics: Option<std::sync::Arc<dyn rich_ext::frame::graphics::PlacementSource>>,
+}
+
+impl FinishOutput {
+    /// The complete output, for a sink that writes it atomically. Do not mix
+    /// this with partial `write_to` attempts.
+    pub fn as_str(&self) -> &str {
+        &self.output
+    }
+
+    /// Confirm that all of `as_str()` was successfully written in order.
+    /// Call this only after success, never for queued or failed output.
+    pub fn output_written(&mut self) {
+        self.written = self.output.len();
+        if let Some(source) = self.graphics.take() {
+            source.output_written();
+        }
+    }
+
+    /// Write the remaining bytes. On failure this value retains its resources
+    /// and remembers any partial progress, so the same sink can be retried.
+    pub fn write_to(&mut self, writer: &mut impl std::io::Write) -> std::io::Result<()> {
+        while self.written < self.output.len() {
+            match writer.write(&self.output.as_bytes()[self.written..]) {
+                Ok(0) => return Err(std::io::ErrorKind::WriteZero.into()),
+                Ok(n) => self.written += n,
+                Err(e) if e.kind() == std::io::ErrorKind::Interrupted => continue,
+                Err(e) => return Err(e),
+            }
+        }
+        self.output_written();
+        Ok(())
+    }
+}
+
 /// How many frames' damage a [`Driver`] keeps for
 /// [`damage_since`](Driver::damage_since).
 const DAMAGE_FRAMES: usize = 64;
@@ -8808,6 +8847,17 @@ impl Driver {
     pub fn output_written(&self) {
         if let Some(source) = &self.app.graphics {
             source.output_written();
+        }
+    }
+
+    /// Finish while retaining graphics reservations until the final output is
+    /// successfully written. Prefer this for manual loops using bound pictures.
+    pub fn finish_output(self) -> FinishOutput {
+        let graphics = self.app.graphics.clone();
+        FinishOutput {
+            output: self.finish(),
+            written: 0,
+            graphics,
         }
     }
 
