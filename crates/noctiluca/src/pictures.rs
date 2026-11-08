@@ -385,11 +385,10 @@ impl Motion {
                 // Retain the displayed frame's reservation until the new
                 // frame has actually been admitted as its replacement.
                 if moving.pacer.due_replacing_pending(now, &budget, share) {
-                    if moving.pacer.cancel_pending() {
-                        // A late write from that frame must not reconcile the
-                        // replacement's reservation or teach its estimate.
-                        moving.stale_bytes = true;
-                    }
+                    // Motion and the graphics painter run on the same app
+                    // thread: the counter was read above, and an unpainted
+                    // frame cannot be drawn after this replacement.
+                    moving.pacer.cancel_pending();
                     if moving.pacer.pixels() == Pixels::Cells {
                         moving.pacer.sent(now, None);
                     } else {
@@ -640,6 +639,83 @@ mod tests {
             motion.playing.get_mut(&7).unwrap().pacer.cancel_pending(),
             "the frozen frame remains eligible to paint"
         );
+    }
+
+    #[test]
+    fn driver_paints_replacement_synchronously_and_pacer_learns_each_actual_cost() {
+        use rich_intuituive::{App, image_graphics, picture_of, signal};
+        let animation = gif();
+        let id = animation.id();
+        let page = page_with(animation);
+        let mut motion = Motion::new(ByteBudget::new(10_000_000));
+        let start = Instant::now();
+        let initial = motion.step(&page, &[REGION], 0..10, Pixels::Sixel, false, start)[&7]
+            .picture
+            .clone();
+        let handle = std::rc::Rc::new(std::cell::Cell::new(None));
+        let stored = handle.clone();
+        let app = App::new(move || {
+            let shown = signal(Some(initial.clone()));
+            stored.set(Some(shown));
+            picture_of(move || shown.get(), view(Pixels::Sixel)).fixed(4)
+        })
+        .graphics(image_graphics());
+        let mut driver = app.driver(10, 4);
+        let shown = handle.get().unwrap();
+        let mut prior_cost = None;
+        for cycle in 0..2u64 {
+            let base = cycle * 250;
+            let a = motion.step(
+                &page,
+                &[REGION],
+                0..10,
+                Pixels::Sixel,
+                false,
+                start + Duration::from_millis(base + 125),
+            )[&7]
+                .picture
+                .clone();
+            shown.set(Some(a.clone()));
+            // A is superseded before any Driver render can paint it.
+            let b = motion.step(
+                &page,
+                &[REGION],
+                0..10,
+                Pixels::Sixel,
+                false,
+                start + Duration::from_millis(base + 250),
+            )[&7]
+                .picture
+                .clone();
+            assert_ne!(a.version(), b.version());
+            shown.set(Some(b));
+            let before = picture_bytes(id);
+            driver.update(Duration::from_millis(base + 250));
+            let output = driver.render().unwrap_or_default();
+            assert!(
+                output.contains("\x1bP"),
+                "the replacement must actually be painted"
+            );
+            let actual = picture_bytes(id) - before + (REGION.cols * REGION.rows) as u64 * UNDERLAY;
+            assert!(actual > (REGION.cols * REGION.rows) as u64 * UNDERLAY);
+            motion.step(
+                &page,
+                &[REGION],
+                0..10,
+                Pixels::Sixel,
+                false,
+                start + Duration::from_millis(base + 260),
+            );
+            let pacer = &mut motion.playing.get_mut(&7).unwrap().pacer;
+            let expected =
+                prior_cost.map_or(actual as f64, |old: f64| old * 0.7 + actual as f64 * 0.3);
+            assert!((pacer.bytes_per_frame() - expected).abs() < 0.001);
+            assert!(
+                !pacer.cancel_pending(),
+                "the painted replacement must reconcile its reservation"
+            );
+            prior_cost = Some(expected);
+        }
     }
 
     #[test]
