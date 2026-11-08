@@ -1773,6 +1773,22 @@ fn run(
         } else if worker.stills_pending {
             worker.capture_stills();
         }
+        // Legacy engines cannot lend a concurrent reader. Preserve their
+        // existing resource behavior, but only after text is published and
+        // with one bounded fetch per turn. Chrome uses its independent CDP
+        // reader and never takes this path.
+        if let Some(((document, src), reply)) = worker
+            .inline_loader
+            .as_ref()
+            .and_then(|l| l.take_resource_request())
+        {
+            let current = worker.page.as_ref().is_some_and(|p| p.document == document)
+                && worker.inline_asked.contains(&src);
+            let bytes = current
+                .then(|| worker.engine.resource(TabId(0), &src).ok())
+                .flatten();
+            let _ = reply.send(bytes);
+        }
     }
 }
 

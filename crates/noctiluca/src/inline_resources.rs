@@ -1,11 +1,12 @@
-//! One bounded optional-resource worker; neither a slow browser cache
-//! read nor decoding holds the engine's command/event loop.
+//! Bounded optional decoding with concurrent readers when available.
+//! Legacy engines fetch on their owner only after useful text is published.
 use crate::engine::ResourceReader;
 use rich_intuituive::Picture;
 use std::collections::{HashSet, VecDeque};
 use std::sync::{Arc, Condvar, Mutex, mpsc};
 
 type Request = (u64, String);
+type LegacyRequest = (Request, mpsc::SyncSender<Option<Vec<u8>>>);
 #[derive(Default)]
 struct Queue {
     waiting: VecDeque<Request>,
@@ -14,6 +15,7 @@ struct Queue {
 pub(crate) struct InlineResources {
     queue: Arc<(Mutex<Queue>, Condvar)>,
     done: mpsc::Receiver<(Request, Picture)>,
+    legacy: mpsc::Receiver<LegacyRequest>,
 }
 impl InlineResources {
     pub fn spawn(mut resource: Option<ResourceReader>) -> Self {
@@ -21,6 +23,7 @@ impl InlineResources {
         // One executing read/decode and one completion, independent of
         // document churn. Pending requests hold URLs, never image bytes.
         let (send, done) = mpsc::sync_channel(1);
+        let (request_legacy, legacy) = mpsc::sync_channel(1);
         let shared = queue.clone();
         std::thread::spawn(move || {
             loop {
@@ -45,7 +48,19 @@ impl InlineResources {
                 let bytes = if let Some(data) = request.1.strip_prefix("data:") {
                     crate::tab::data_bytes(data)
                 } else {
-                    resource.as_mut().and_then(|read| read(&request.1).ok())
+                    match resource.as_mut() {
+                        Some(read) => read(&request.1).ok(),
+                        None => {
+                            // Old Engine implementations keep their resource support.
+                            // The owner services at most one request after publishing
+                            // useful text; decoding remains on this bounded worker.
+                            let (send, reply) = mpsc::sync_channel(1);
+                            if request_legacy.send((request.clone(), send)).is_err() {
+                                return;
+                            }
+                            reply.recv().ok().flatten()
+                        }
+                    }
                 };
                 let Some(bytes) = bytes.filter(|b| b.len() <= 16 << 20) else {
                     continue;
@@ -87,7 +102,11 @@ impl InlineResources {
                 }
             }
         });
-        Self { queue, done }
+        Self {
+            queue,
+            done,
+            legacy,
+        }
     }
     pub fn retain(&self, document: u64, sources: &HashSet<String>) {
         self.queue
@@ -117,6 +136,9 @@ impl InlineResources {
         }
         self.queue.1.notify_one();
         true
+    }
+    pub fn take_resource_request(&self) -> Option<LegacyRequest> {
+        self.legacy.try_recv().ok()
     }
     pub fn take(&self) -> Option<(Request, Picture)> {
         self.done.try_recv().ok()

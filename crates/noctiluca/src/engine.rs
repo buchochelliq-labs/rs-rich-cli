@@ -277,10 +277,11 @@ pub trait Engine: Send {
         ))
     }
     /// Optional concurrent cache access for inline pictures. Engines may
-    /// return an independent reader; the default leaves optional external
-    /// pictures as alt text, keeping the engine available for navigation.
-    /// Data URLs do not require this capability. Existing `resource`
-    /// implementations still serve explicit media reads unchanged.
+    /// return an independent reader, keeping command processing available
+    /// during slow optional reads. The default preserves `resource` support:
+    /// the engine owner fetches at most one queued inline resource per turn,
+    /// after publishing useful text. Such a fetch can still block that owner.
+    /// Data URLs do not require this capability.
     fn optional_resources(&mut self) -> Option<ResourceReader> {
         None
     }

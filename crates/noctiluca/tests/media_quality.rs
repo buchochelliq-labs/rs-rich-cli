@@ -290,3 +290,166 @@ fn slow_optional_inline_load_allows_text_and_navigation_before_completion() {
     release.send(()).unwrap();
     assert!(navigated, "navigation waited for optional resource");
 }
+
+// Deliberately implements only the original resource API. No optional_resources override.
+struct LegacyEngine {
+    inner: noctiluca::testing::FakeEngine,
+    entered: std::sync::mpsc::SyncSender<()>,
+    release: Option<std::sync::mpsc::Receiver<()>>,
+}
+impl noctiluca::engine::Engine for LegacyEngine {
+    fn resize(&mut self, c: u16, r: u16) -> std::io::Result<()> {
+        self.inner.resize(c, r)
+    }
+    fn open(&mut self, t: noctiluca::engine::TabId, u: &str) -> std::io::Result<()> {
+        self.inner.open(t, u)
+    }
+    fn history(
+        &mut self,
+        t: noctiluca::engine::TabId,
+        h: noctiluca::engine::HistoryStep,
+    ) -> std::io::Result<()> {
+        self.inner.history(t, h)
+    }
+    fn state(&self, t: noctiluca::engine::TabId) -> rich_embed::PageState {
+        self.inner.state(t)
+    }
+    fn snapshot(
+        &mut self,
+        t: noctiluca::engine::TabId,
+    ) -> std::io::Result<noctiluca::engine::PageSnapshot> {
+        self.inner.snapshot(t)
+    }
+    fn capture(
+        &mut self,
+        t: noctiluca::engine::TabId,
+        r: noctiluca::engine::Rect,
+        f: noctiluca::engine::Format,
+    ) -> std::io::Result<noctiluca::engine::Frame> {
+        self.inner.capture(t, r, f)
+    }
+    fn act(
+        &mut self,
+        t: noctiluca::engine::TabId,
+        a: &noctiluca::engine::PageAction,
+    ) -> std::io::Result<()> {
+        self.inner.act(t, a)
+    }
+    fn events(&mut self) -> Vec<noctiluca::engine::EngineEvent> {
+        self.inner.events()
+    }
+    fn resource(&mut self, t: noctiluca::engine::TabId, url: &str) -> std::io::Result<Vec<u8>> {
+        assert_eq!(url, "https://legacy.example/emote.png");
+        if let Some(release) = self.release.take() {
+            self.entered.send(()).unwrap();
+            release
+                .recv_timeout(std::time::Duration::from_secs(5))
+                .unwrap();
+        }
+        self.inner.resource(t, url)
+    }
+}
+
+#[test]
+fn legacy_resource_only_engine_keeps_inline_pictures_after_publishing_text() {
+    use noctiluca::{
+        app::{Options, app},
+        bookmarks::Bookmarks,
+        config::{Config, Images, View},
+        engine::Rect,
+        testing::{FakeEngine, PageBuilder},
+    };
+    use std::{
+        sync::mpsc,
+        time::{Duration, Instant},
+    };
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/snapshots");
+    let engine = FakeEngine::from_dir(&root).unwrap();
+    let mut page = PageBuilder::new("https://legacy.example/legacy.html", "Legacy", 800.0, 600.0);
+    let log = page.element(
+        page.body(),
+        "DIV",
+        &[("role", "log")],
+        &[],
+        Some(Rect::new(0.0, 0.0, 400.0, 90.0)),
+    );
+    let entry = page.element(log, "DIV", &[], &[], Some(Rect::new(0.0, 0.0, 400.0, 20.0)));
+    page.text(
+        entry,
+        "Legacy useful text ",
+        Rect::new(0.0, 0.0, 160.0, 18.0),
+    );
+    page.image(
+        entry,
+        "https://legacy.example/emote.png",
+        "emote",
+        Rect::new(160.0, 0.0, 18.0, 18.0),
+    );
+    let mut bytes = std::io::Cursor::new(Vec::new());
+    image::DynamicImage::ImageRgba8(image::RgbaImage::from_pixel(
+        18,
+        18,
+        image::Rgba([210, 33, 88, 255]),
+    ))
+    .write_to(&mut bytes, image::ImageFormat::Png)
+    .unwrap();
+    {
+        let mut state = engine.state.lock().unwrap();
+        state.pages.insert("legacy".into(), page.snapshot());
+        state.resources.insert(
+            "https://legacy.example/emote.png".into(),
+            bytes.into_inner(),
+        );
+    }
+    let (entered, started) = mpsc::sync_channel(1);
+    let (release, gate) = mpsc::sync_channel(1);
+    let options = Options {
+        config: Config::default(),
+        bookmarks: Bookmarks::default(),
+        url: Some("legacy.html".into()),
+        view: Some(View::Projection),
+        images: Some(Images::Kitty),
+        tunnel: None,
+        control: None,
+    };
+    let mut d = app(
+        Box::new(LegacyEngine {
+            inner: engine,
+            entered,
+            release: Some(gate),
+        }),
+        options,
+    )
+    .driver(100, 30);
+    started
+        .recv_timeout(Duration::from_secs(2))
+        .expect("legacy URI was not fetched");
+    d.settle();
+    assert!(
+        d.screen().plain().join("\n").contains("Legacy useful text"),
+        "text was held behind legacy resource"
+    );
+    release.send(()).unwrap();
+    let until = Instant::now() + Duration::from_secs(2);
+    loop {
+        d.settle();
+        let shown = d
+            .screen()
+            .lines()
+            .into_iter()
+            .flatten()
+            .filter_map(|s| s.style.as_ref().and_then(rich_art::picture::PictureTag::of))
+            .any(|tag| {
+                rich_intuituive::Picture::find(tag.id, tag.version)
+                    .is_some_and(|p| p.image().to_rgba8().get_pixel(0, 0).0 == [210, 33, 88, 255])
+            });
+        if shown {
+            break;
+        }
+        assert!(
+            Instant::now() < until,
+            "legacy inline pixels never reached rendered body"
+        );
+        std::thread::yield_now();
+    }
+}
