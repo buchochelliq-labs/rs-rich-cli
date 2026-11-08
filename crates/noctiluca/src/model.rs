@@ -4083,6 +4083,40 @@ mod tests {
     }
 
     #[test]
+    fn boxless_link_retains_picture_background_and_source_binding() {
+        let mut f = Fake::new();
+        let link = f.node(0, 1, "A", None, &[("href", "/story")], None);
+        let picture = f.el(link, "PICTURE", &[], "block");
+        *f.bounds.last_mut().unwrap() = vec![16.0, 36.0, 160.0, 90.0];
+        let background = f.s("url(/photo.png)");
+        f.styles.last_mut().unwrap().push(background);
+        let url = f.s("https://example.test/news/");
+        let mut snapshot = PageSnapshot {
+            dom: f.snapshot(),
+            ax: json!({"nodes": [{"backendDOMNodeId": 100 + link,
+                "role": {"value": "link"}, "name": {"value": "Read the original story"}}]}),
+        };
+        snapshot.dom["documents"][0]["documentURL"] = json!(url);
+        let page = build(&snapshot, &mut Revisions::new());
+        assert_eq!(page.media.len(), 1);
+        assert_eq!(page.media[0].node, 100 + picture);
+        assert_eq!(page.media[0].kind, MediaKind::Image);
+        assert_eq!(page.media[0].src, "https://example.test/photo.png");
+        assert_eq!(page.media[0].rect, Rect::new(16.0, 36.0, 160.0, 90.0));
+        assert!(page.media[0].in_label);
+        assert_eq!(page.controls.len(), 1);
+        let control = &page.controls[0];
+        assert_eq!(control.node, 100 + link);
+        assert_eq!(control.role, Role::Link);
+        assert_eq!(control.name, "Read the original story");
+        assert_eq!(control.href.as_deref(), Some("https://example.test/story"));
+        assert_eq!(control.rect, Rect::new(16.0, 36.0, 160.0, 90.0));
+        assert_eq!(control.revision, 1);
+        assert!(control.from_ax);
+        assert_eq!(page.check(&control.binding(&page)).unwrap().node, 100 + link);
+    }
+
+    #[test]
     fn boxless_link_without_visible_content_emits_no_action_or_content() {
         for visibility in [
             "no-layout",
