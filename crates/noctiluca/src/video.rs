@@ -33,7 +33,9 @@
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
 
-use rich_art::picture::{ByteBudget, Pacer, Picture, Pixels, over_ssh};
+use rich_art::picture::{
+    ByteBudget, Pacer, Picture, PictureEncoding, PixelFormats, Pixels, over_ssh,
+};
 use rich_embed::ScreencastFrame;
 
 use crate::engine::{NodeId, Rect};
@@ -257,6 +259,7 @@ impl Frames {
 /// - When the share allows fewer than the budget's floor of frames a
 ///   second, the region steps down: Kitty, iTerm2, Sixel, then cells.
 pub struct Pacing {
+    formats: PixelFormats,
     pub budget: ByteBudget,
     /// The protocol a new region starts at.
     pub start: Pixels,
@@ -286,7 +289,13 @@ pub type ByteCounter = fn(u32) -> u64;
 impl Pacing {
     /// Pacing within `budget`, starting regions at `start`.
     pub fn new(budget: ByteBudget, start: Pixels) -> Pacing {
+        Self::with_formats(budget, start, PixelFormats::all())
+    }
+
+    /// Pace only representations supported by this terminal.
+    pub fn with_formats(budget: ByteBudget, start: Pixels, formats: PixelFormats) -> Pacing {
         Pacing {
+            formats,
             budget,
             start,
             others: 0,
@@ -342,7 +351,7 @@ impl Pacing {
         let rgba = frame.pixels.to_rgba();
         if !self.regions.contains_key(&frame.node) {
             let picture = Picture::from_rgba(w, h, rgba.clone())?;
-            let pacer = Pacer::new(self.start, cols, rows);
+            let pacer = Pacer::with_formats(self.start, cols, rows, self.formats);
             self.regions.insert(
                 frame.node,
                 Paced {
@@ -488,6 +497,35 @@ impl Encoder {
     /// An encoder whose thread hands each job, encoded, to `done`. The
     /// thread ends when the encoder is dropped.
     pub fn spawn(done: impl Fn(Job) + Send + 'static) -> Encoder {
+        Self::spawn_with_context(PictureEncoding::new(Default::default()), done)
+    }
+
+    /// Prepare with the same immutable encoding permissions as the painter.
+    /// Each job's measured cell dimensions replace the context's default metrics.
+    pub fn spawn_with_context(
+        context: PictureEncoding,
+        done: impl Fn(Job) + Send + 'static,
+    ) -> Encoder {
+        Self::spawn_encoding(context, None, done)
+    }
+
+    /// Prepare bound resources with exactly the presentation used by first paint.
+    pub fn spawn_with_presentation(
+        presentation: rich_intuituive::ImagePresentation,
+        done: impl Fn(Job) + Send + 'static,
+    ) -> Encoder {
+        Self::spawn_encoding(
+            presentation.encoding(Default::default()),
+            Some(presentation),
+            done,
+        )
+    }
+
+    fn spawn_encoding(
+        context: PictureEncoding,
+        presentation: Option<rich_intuituive::ImagePresentation>,
+        done: impl Fn(Job) + Send + 'static,
+    ) -> Encoder {
         let queue = std::sync::Arc::new((
             std::sync::Mutex::new(Queue::default()),
             std::sync::Condvar::new(),
@@ -495,7 +533,7 @@ impl Encoder {
         let shared = queue.clone();
         std::thread::spawn(move || {
             loop {
-                let (job, metrics) = {
+                let (mut job, metrics) = {
                     let (lock, ready) = &*shared;
                     let mut queue = lock.lock().unwrap_or_else(|e| e.into_inner());
                     while queue.waiting.is_empty() && !queue.closed {
@@ -506,6 +544,9 @@ impl Encoder {
                     }
                     queue.waiting.remove(0)
                 };
+                if let Some(presentation) = presentation {
+                    job.picture = presentation.picture(&job.picture);
+                }
                 let tracing = crate::diagnostics::enabled();
                 if tracing {
                     eprintln!(
@@ -517,11 +558,14 @@ impl Encoder {
                     .filter(|&(w, h)| w > 0 && h > 0)
                     .map(|(w, h)| rich_art::graphics::CellPixels::new(w.into(), h.into()))
                     .unwrap_or_default();
-                job.picture.prepare_with_metrics(
+                job.picture.prepare_with_context(
                     crate::pictures::view(job.pixels),
                     job.cols,
                     job.rows,
-                    cell,
+                    PictureEncoding {
+                        cell_pixels: cell,
+                        ..context
+                    },
                 );
                 if tracing {
                     eprintln!("RICH_MEDIA {{\"stage\":\"encoder_done\"}}");

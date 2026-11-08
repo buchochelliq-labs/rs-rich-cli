@@ -122,6 +122,19 @@ pub trait PlacementSource: Send + Sync {
         None
     }
 
+    /// Release retired per-frame resources after planning the current placements.
+    /// Append these commands to the same ordered output as that frame. Legacy
+    /// sources need no per-frame cleanup and keep the default no-op behavior.
+    fn reconcile(&self, retained: &[Placement]) -> String {
+        let _ = retained;
+        String::new()
+    }
+
+    /// Confirm successful writing of all output returned before this call.
+    /// Sources may now release ID reservations for emitted deletions. A failed
+    /// or merely queued write must not call this; manual painters own this step.
+    fn output_written(&self) {}
+
     /// The escape that releases what the terminal holds for graphics this
     /// source placed, once the view closes, except those in `retained` (still
     /// on screen). Kitty images are deleted by id here.

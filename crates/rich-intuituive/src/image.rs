@@ -35,14 +35,102 @@ use std::sync::{Arc, Mutex};
 
 use rich::Style;
 use rich::segment::Segment;
-pub use rich_art::picture::{ImageView, Picture, Pixels, picture_bytes};
+pub use rich_art::picture::{
+    ImageView, Picture, PictureEncoding, PixelFormats, Pixels, picture_bytes,
+};
 use rich_art::picture::{PictureTag, count_picture_bytes};
 pub use rich_art::{ImageAnchor, ImageFit, ImageMode};
+pub use rich_ext::capabilities::KittyFeatures;
 use rich_ext::frame::{Frame, Graphic, Placement, PlacementSource};
 
 use crate::node::{Node, leaf};
 use crate::reactive::{Signal, signal, watch};
 use crate::task::spawn;
+
+/// One terminal's immutable image policy, shared by first paint and workers.
+/// Use explicit constructors for known capabilities; protocol names alone do
+/// not establish Kitty placeholder or native-animation support.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ImagePresentation {
+    pixels: Pixels,
+    kitty: KittyFeatures,
+    formats: PixelFormats,
+}
+
+impl ImagePresentation {
+    pub fn detect() -> Self {
+        Self::from_environment(&rich_ext::capabilities::SystemEnvironment)
+    }
+
+    pub fn from_environment(env: &dyn rich_ext::capabilities::Environment) -> Self {
+        use rich_ext::capabilities::{Capabilities, Graphics};
+        let report = Capabilities::detect(env);
+        let features = Capabilities::graphics_features(env);
+        let pixels = match report.graphics.value {
+            Graphics::None => Pixels::Cells,
+            Graphics::Kitty => Pixels::Kitty,
+            Graphics::Iterm => Pixels::Iterm,
+            Graphics::Sixel => Pixels::Sixel,
+        };
+        let mut formats = PixelFormats::cells();
+        if features.unicode_placeholders.value {
+            formats = formats.with(Pixels::Kitty);
+        }
+        if features.iterm.value {
+            formats = formats.with(Pixels::Iterm);
+        }
+        if features.sixel.value {
+            formats = formats.with(Pixels::Sixel);
+        }
+        Self::new(pixels, features.kitty_features(), formats)
+    }
+
+    pub fn new(pixels: Pixels, kitty: KittyFeatures, formats: PixelFormats) -> Self {
+        let pixels = if formats.contains(pixels)
+            && (pixels != Pixels::Kitty || kitty.unicode_placeholders)
+        {
+            pixels
+        } else {
+            Pixels::Cells
+        };
+        Self {
+            pixels,
+            kitty,
+            formats,
+        }
+    }
+    pub fn pixels(self) -> Pixels {
+        self.pixels
+    }
+    pub fn kitty_features(self) -> KittyFeatures {
+        self.kitty
+    }
+    pub fn formats(self) -> PixelFormats {
+        self.formats
+    }
+    /// Explicitly select a codec. Kitty still requires independent placeholder evidence.
+    #[must_use]
+    pub fn with_pixels(self, pixels: Pixels) -> Self {
+        Self::new(pixels, self.kitty, self.formats.with(pixels))
+    }
+    #[must_use]
+    pub fn with_native_kitty_animation(mut self, allowed: bool) -> Self {
+        self.kitty.native_animation = allowed;
+        self
+    }
+    pub fn encoding(self, cell: rich_art::graphics::CellPixels) -> PictureEncoding {
+        PictureEncoding::new(cell).native_kitty_animation(self.kitty.native_animation)
+    }
+    /// Bind a logical picture to independent fitted/versioned resources. Use
+    /// the returned handle with stock `picture_of`, `tiles_of` or `Picture::lines`.
+    pub fn picture(self, picture: &Picture) -> Picture {
+        picture.bound(self.kitty.native_animation)
+    }
+
+    pub fn graphics(self) -> Arc<dyn PlacementSource> {
+        graphics_with_animation(self.kitty.native_animation)
+    }
+}
 
 /// What an image node has to draw.
 #[derive(Clone, Default, PartialEq)]
@@ -401,7 +489,13 @@ fn note(text: &str, style: &str) -> Vec<Vec<Segment>> {
 /// # .unwrap();
 /// ```
 pub fn image_graphics() -> Arc<dyn PlacementSource> {
+    graphics_with_animation(true)
+}
+
+fn graphics_with_animation(native_animation: bool) -> Arc<dyn PlacementSource> {
     Arc::new(ImageGraphics {
+        native_animation,
+        retired: Mutex::new(Vec::new()),
         made: Mutex::new(HashMap::new()),
         uploaded: Mutex::new(Vec::new()),
         owners: Mutex::new(Vec::new()),
@@ -421,15 +515,17 @@ type GraphicKey = (
     Option<ImageFit>,
     ImageAnchor,
     rich_art::graphics::CellPixels,
-    (usize, usize, Option<[u8; 3]>),
+    (usize, usize, Option<[u8; 3]>, Option<bool>),
 );
 
 /// [`image_graphics`]'s source.
 struct ImageGraphics {
+    native_animation: bool,
+    retired: Mutex<Vec<Arc<rich_art::picture::KittyResource>>>,
     /// The graphics made, by picture, size and protocol.
     made: Mutex<HashMap<GraphicKey, Arc<PixelGraphic>>>,
     /// The Kitty pictures uploaded, to free.
-    uploaded: Mutex<Vec<u32>>,
+    uploaded: Mutex<Vec<(Arc<rich_art::picture::KittyResource>, bool)>>,
     /// Weak identities of Kitty graphics, including graphics evicted from the cache.
     owners: Mutex<Vec<(u32, std::sync::Weak<PixelGraphic>)>>,
 }
@@ -442,17 +538,19 @@ struct ImageRect {
     cols: usize,
     rows: usize,
     tag: PictureTag,
+    bound: Option<bool>,
     known: bool,
     background: Option<[u8; 3]>,
 }
 
 impl ImageRect {
-    fn instance(&self) -> (PictureTag, Option<[u8; 3]>, i128, i128) {
+    fn instance(&self) -> (PictureTag, Option<[u8; 3]>, Option<bool>, i128, i128) {
         let mut tag = self.tag;
         tag.row = 0;
         (
             tag,
             self.background,
+            self.bound,
             self.column as i128 - self.x as i128,
             self.row as i128 - self.tag.row as i128,
         )
@@ -528,9 +626,11 @@ impl PlacementSource for ImageGraphics {
                 let tag = style.and_then(PictureTag::of);
                 if let Some(tag) = tag.filter(|t| t.cols > 0 && t.rows > t.row) {
                     let background = style.and_then(PictureTag::background_of);
+                    let bound = style.and_then(PictureTag::binding_of);
                     let mut append = |column, x, cols, known| {
                         if let Some(last) = spans.last_mut()
                             && last.tag == tag
+                            && last.bound == bound
                             && last.known == known
                             && last.background == background
                             && last.column + last.cols == column
@@ -545,6 +645,7 @@ impl PlacementSource for ImageGraphics {
                                 cols,
                                 rows: 1,
                                 tag,
+                                bound,
                                 known,
                                 background,
                             });
@@ -626,11 +727,19 @@ impl PlacementSource for ImageGraphics {
             } else {
                 (rect.x, rect.cols, tag.row, rect.rows)
             };
-            if let Some(graphic) =
-                self.graphic(tag, x..x + cols, first..first + rows, cell, rect.background)
-            {
+            if let Some(graphic) = self.graphic(
+                tag,
+                x..x + cols,
+                first..first + rows,
+                cell,
+                rect.background,
+                rect.bound,
+            ) {
                 if tag.pixels == Pixels::Kitty {
-                    kitty.entry(tag.id).or_default().push(graphic.clone());
+                    kitty
+                        .entry(graphic.resource.as_ref().unwrap().id())
+                        .or_default()
+                        .push(graphic.clone());
                 }
                 out.push(Placement {
                     row: rect.row,
@@ -657,7 +766,24 @@ impl PlacementSource for ImageGraphics {
         out
     }
 
+    fn reconcile(&self, retained: &[Placement]) -> String {
+        self.release_images(retained, true)
+    }
+
+    fn output_written(&self) {
+        self.retired
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clear();
+    }
+
     fn release(&self, retained: &[Placement]) -> String {
+        self.release_images(retained, false)
+    }
+}
+
+impl ImageGraphics {
+    fn release_images(&self, retained: &[Placement], managed_only: bool) -> String {
         let mut made = self.made.lock().unwrap_or_else(|e| e.into_inner());
         let mut uploaded = self.uploaded.lock().unwrap_or_else(|e| e.into_inner());
         let mut owners = self.owners.lock().unwrap_or_else(|e| e.into_inner());
@@ -673,8 +799,8 @@ impl PlacementSource for ImageGraphics {
             .collect();
         let released: Vec<_> = uploaded
             .iter()
-            .copied()
-            .filter(|id| !kept.contains(id))
+            .filter(|(r, bound)| (!managed_only || *bound) && !kept.contains(&r.id()))
+            .map(|(r, _)| r.id())
             .collect();
         // A caller may still hold previous placements after release. They no
         // longer prove that data is present; invalidate their reuse eligibility,
@@ -688,10 +814,21 @@ impl PlacementSource for ImageGraphics {
                     .store(false, std::sync::atomic::Ordering::Relaxed);
             }
         }
-        uploaded.retain(|id| kept.contains(id));
-        owners.retain(|(id, weak)| kept.contains(id) && weak.strong_count() > 0);
-        made.retain(|(id, _, _, _, pixels, ..), _| {
-            *pixels != Pixels::Kitty || !released.contains(id)
+        let mut retired = self.retired.lock().unwrap_or_else(|e| e.into_inner());
+        uploaded.retain(|(resource, _)| {
+            if released.contains(&resource.id()) {
+                retired.push(resource.clone());
+                false
+            } else {
+                true
+            }
+        });
+        owners.retain(|(id, weak)| !released.contains(id) && weak.strong_count() > 0);
+        made.retain(|_, graphic| {
+            !graphic
+                .resource
+                .as_ref()
+                .is_some_and(|r| released.contains(&r.id()))
         });
         released.into_iter().map(Picture::release).collect()
     }
@@ -707,6 +844,7 @@ impl ImageGraphics {
         rows: std::ops::Range<usize>,
         cell: rich_art::graphics::CellPixels,
         background: Option<[u8; 3]>,
+        bound: Option<bool>,
     ) -> Option<Arc<PixelGraphic>> {
         let (x, cols, first, shown) = (columns.start, columns.len(), rows.start, rows.len());
         let key = (
@@ -720,15 +858,35 @@ impl ImageGraphics {
             tag.fit,
             tag.anchor,
             cell,
-            (x, cols, background),
+            (x, cols, background, bound),
         );
         let mut made = self.made.lock().unwrap_or_else(|e| e.into_inner());
         if let Some(graphic) = made.get(&key) {
             return Some(graphic.clone());
         }
         let picture = tag.picture()?;
-        let mut escape =
-            picture.encode_tag_rect_with_metrics(tag, x..x + cols, first..first + shown, cell)?;
+        let picture = bound.map_or_else(|| picture.clone(), |native| picture.bound(native));
+        let resource = if tag.pixels == Pixels::Kitty {
+            Some(picture.kitty_resource(
+                ImageView {
+                    fit: tag.fit,
+                    anchor: tag.anchor,
+                    pixels: tag.pixels,
+                    ..ImageView::new()
+                },
+                tag.cols,
+                tag.rows,
+                true,
+            )?)
+        } else {
+            None
+        };
+        let mut escape = picture.encode_tag_rect_with_context(
+            tag,
+            x..x + cols,
+            first..first + shown,
+            PictureEncoding::new(cell).native_kitty_animation(self.native_animation),
+        )?;
         if tag.pixels != Pixels::Kitty {
             // Only accepted, encoded rectangles lose their fallback. Clearing
             // before native alpha blending prevents sampled half-block colors
@@ -750,8 +908,9 @@ impl ImageGraphics {
         }
         if tag.pixels == Pixels::Kitty {
             let mut uploaded = self.uploaded.lock().unwrap_or_else(|e| e.into_inner());
-            if !uploaded.contains(&tag.id) {
-                uploaded.push(tag.id);
+            let resource = resource.as_ref().unwrap();
+            if !uploaded.iter().any(|(r, _)| r.id() == resource.id()) {
+                uploaded.push((resource.clone(), bound.is_some()));
             }
         }
         let graphic = Arc::new(PixelGraphic {
@@ -762,6 +921,7 @@ impl ImageGraphics {
                 hasher.finish()
             },
             escape,
+            resource,
             in_cells: tag.pixels == Pixels::Kitty,
             id: tag.id,
             reusable: std::sync::atomic::AtomicBool::new(true),
@@ -770,7 +930,10 @@ impl ImageGraphics {
         if tag.pixels == Pixels::Kitty {
             let mut owners = self.owners.lock().unwrap_or_else(|e| e.into_inner());
             owners.retain(|(_, weak)| weak.strong_count() > 0);
-            owners.push((tag.id, Arc::downgrade(&graphic)));
+            owners.push((
+                graphic.resource.as_ref().unwrap().id(),
+                Arc::downgrade(&graphic),
+            ));
         }
         // Bound live-picture crop history as well as old versions. Clearing the
         // encoding cache does not release retained Kitty resources: owners track
@@ -796,6 +959,7 @@ impl ImageGraphics {
 /// A picture drawn by a protocol: its escape, made once.
 #[derive(Debug)]
 struct PixelGraphic {
+    resource: Option<Arc<rich_art::picture::KittyResource>>,
     key: u64,
     escape: String,
     in_cells: bool,
@@ -847,6 +1011,8 @@ mod tests {
 
     fn tracked_source() -> ImageGraphics {
         ImageGraphics {
+            native_animation: true,
+            retired: Mutex::new(Vec::new()),
             made: Mutex::new(HashMap::new()),
             uploaded: Mutex::new(Vec::new()),
             owners: Mutex::new(Vec::new()),

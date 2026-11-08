@@ -25,9 +25,9 @@
 //!   rs-rich-art's; frames come from whoever has them (a browser's
 //!   screencast, an emulator).
 
-use std::collections::BTreeMap;
 #[cfg(feature = "frames")]
 use std::collections::VecDeque;
+use std::collections::{BTreeMap, BTreeSet};
 use std::sync::{Arc, Mutex, Weak};
 use std::time::{Duration, Instant};
 
@@ -121,7 +121,7 @@ impl Pixels {
         }
     }
 
-    fn code(self) -> i64 {
+    const fn code(self) -> i64 {
         match self {
             Pixels::Cells => 0,
             Pixels::Kitty => 1,
@@ -137,6 +137,63 @@ impl Pixels {
             3 => Pixels::Iterm,
             _ => return None,
         })
+    }
+}
+
+/// Representations a terminal can display. Cells are always supported.
+/// Explicit low-level callers may retain the historical ladder with [`Self::all`].
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct PixelFormats(u8);
+
+impl PixelFormats {
+    /// Only ordinary cells.
+    pub const fn cells() -> Self {
+        Self(1)
+    }
+    /// Every explicit codec, preserving the historical fallback ladder.
+    pub const fn all() -> Self {
+        Self(15)
+    }
+    #[must_use]
+    /// Add a supported codec.
+    pub const fn with(self, pixels: Pixels) -> Self {
+        Self(self.0 | (1 << pixels.code()))
+    }
+    /// Whether this representation is supported.
+    pub const fn contains(self, pixels: Pixels) -> bool {
+        self.0 & (1 << pixels.code()) != 0
+    }
+
+    fn supported(self, mut pixels: Pixels) -> Pixels {
+        while !self.contains(pixels) {
+            pixels = pixels.lower().unwrap_or(Pixels::Cells);
+        }
+        pixels
+    }
+}
+
+/// Immutable permissions for one encoding; legacy codecs allow native animation.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct PictureEncoding {
+    /// Physical cell dimensions used to fit the raster.
+    pub cell_pixels: CellPixels,
+    /// Whether native Kitty animation commands are supported.
+    pub native_kitty_animation: bool,
+}
+
+impl PictureEncoding {
+    /// Legacy explicit-codec permissions at these metrics.
+    pub const fn new(cell_pixels: CellPixels) -> Self {
+        Self {
+            cell_pixels,
+            native_kitty_animation: true,
+        }
+    }
+    #[must_use]
+    /// Select native animation support independently of static Kitty images.
+    pub const fn native_kitty_animation(mut self, allowed: bool) -> Self {
+        self.native_kitty_animation = allowed;
+        self
     }
 }
 
@@ -229,10 +286,13 @@ impl ImageView {
 #[derive(Clone)]
 pub struct Picture {
     shown: Arc<Shown>,
+    bound: Option<bool>,
 }
 
 /// One frame of a picture.
 struct Shown {
+    family: Arc<Family>,
+    bindings: Mutex<Vec<(BindingKey, Arc<KittyResource>)>>,
     id: u32,
     version: u32,
     image: Arc<DynamicImage>,
@@ -255,12 +315,14 @@ type Encoding = (
     usize,
     Option<ImageFit>,
     ImageAnchor,
-    CellPixels,
+    PictureEncoding,
+    u32,
 );
 
 impl PartialEq for Picture {
     fn eq(&self, other: &Self) -> bool {
-        (self.shown.id, self.shown.version) == (other.shown.id, other.shown.version)
+        (self.shown.id, self.shown.version, self.bound)
+            == (other.shown.id, other.shown.version, other.bound)
     }
 }
 
@@ -281,23 +343,72 @@ impl std::fmt::Debug for Picture {
 /// Every picture's frames, by id and version, for [`Picture::find`]
 /// (weakly: a frame nothing holds goes).
 static PICTURES: Mutex<BTreeMap<(u32, u32), Weak<Shown>>> = Mutex::new(BTreeMap::new());
-static NEXT_PICTURE: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(1);
-/// The bytes of escapes drawn for each picture id so far.
+/// The bytes of escapes drawn for each logical picture id so far.
 static DRAWN: Mutex<BTreeMap<u32, u64>> = Mutex::new(BTreeMap::new());
 
-/// A new picture id: 1 to 2^24 - 1, as Kitty's colour-coded ids take.
-fn new_id() -> u32 {
-    NEXT_PICTURE
-        .fetch_add(1, std::sync::atomic::Ordering::SeqCst)
-        .wrapping_sub(1)
-        % 0x00ff_fffe
-        + 1
+#[derive(Default)]
+struct Namespace {
+    next: u32,
+    live: BTreeSet<u32>,
 }
+impl Namespace {
+    fn allocate(&mut self, first: u32, last: u32) -> Option<u32> {
+        let start = self.next.clamp(first, last);
+        let mut id = start;
+        loop {
+            if self.live.insert(id) {
+                self.next = if id == last { first } else { id + 1 };
+                return Some(id);
+            }
+            id = if id == last { first } else { id + 1 };
+            if id == start {
+                return None;
+            }
+        }
+    }
+}
+static IDS: Mutex<Namespace> = Mutex::new(Namespace {
+    next: 1,
+    live: BTreeSet::new(),
+});
+
+/// A reservation in the shared Kitty/logical ID namespace. Holding this small
+/// lease keeps an ID from being reused; it holds no decoded pixels. Terminal
+/// owners must keep it until their delete command has been written successfully.
+#[derive(Debug)]
+pub struct KittyResource {
+    id: u32,
+}
+impl KittyResource {
+    /// The actual terminal resource ID (which may differ from [`Picture::id`]).
+    pub fn id(&self) -> u32 {
+        self.id
+    }
+}
+impl Drop for KittyResource {
+    fn drop(&mut self) {
+        IDS.lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .live
+            .remove(&self.id);
+    }
+}
+fn reserve(first: u32, last: u32) -> Option<Arc<KittyResource>> {
+    IDS.lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .allocate(first, last)
+        .map(|id| Arc::new(KittyResource { id }))
+}
+struct Family {
+    id: Arc<KittyResource>,
+    next_version: std::sync::atomic::AtomicU32,
+}
+type BindingKey = (usize, usize, Option<ImageFit>, ImageAnchor, bool);
 
 impl Picture {
     /// `image`, under a new id.
     pub fn new(image: DynamicImage) -> Picture {
-        Picture::make(new_id(), 0, Arc::new(image), None, false)
+        Picture::make(Self::family(), 0, Arc::new(image), None, false)
     }
 
     /// The image in `bytes` (any format the `image` crate reads here),
@@ -344,7 +455,7 @@ impl Picture {
     pub fn from_rgba(width: u32, height: u32, rgba: Vec<u8>) -> Option<Picture> {
         let image = RgbaImage::from_raw(width, height, rgba)?;
         Some(Picture::make(
-            new_id(),
+            Self::family(),
             0,
             Arc::new(DynamicImage::ImageRgba8(image)),
             None,
@@ -360,7 +471,7 @@ impl Picture {
         let first = DynamicImage::ImageRgba8(frames.first()?.image.clone());
         let animation = (frames.len() > 1).then(|| frames.into());
         Some(Picture::make(
-            new_id(),
+            Self::family(),
             0,
             Arc::new(first),
             animation,
@@ -368,14 +479,24 @@ impl Picture {
         ))
     }
 
+    fn family() -> Arc<Family> {
+        Arc::new(Family {
+            id: reserve(1, u32::MAX).expect("picture ID namespace exhausted"),
+            next_version: std::sync::atomic::AtomicU32::new(1),
+        })
+    }
+
     fn make(
-        id: u32,
+        family: Arc<Family>,
         version: u32,
         image: Arc<DynamicImage>,
         animation: Option<Arc<[AnimationFrame]>>,
         raw: bool,
     ) -> Picture {
+        let id = family.id.id();
         let shown = Arc::new(Shown {
+            family,
+            bindings: Mutex::new(Vec::new()),
             id,
             version,
             image,
@@ -386,27 +507,37 @@ impl Picture {
         let mut pictures = PICTURES.lock().unwrap_or_else(|e| e.into_inner());
         pictures.retain(|_, weak| weak.strong_count() > 0);
         pictures.insert((id, version), Arc::downgrade(&shown));
-        Picture { shown }
+        Picture { shown, bound: None }
     }
 
     /// The next frame of this picture: `image` under the same id, so a
     /// terminal that holds pictures (Kitty) replaces this one with it.
     #[must_use]
     pub fn next(&self, image: DynamicImage) -> Picture {
-        Picture::make(self.id(), self.bumped(), Arc::new(image), None, false)
+        Picture::make(
+            self.shown.family.clone(),
+            self.bumped(),
+            Arc::new(image),
+            None,
+            false,
+        )
+        .with_binding(self.bound)
     }
 
     /// The next frame as raw RGBA pixels (see [`from_rgba`](Self::from_rgba)).
     /// `None` when the pixels are not `width * height * 4` bytes.
     pub fn next_rgba(&self, width: u32, height: u32, rgba: Vec<u8>) -> Option<Picture> {
         let image = RgbaImage::from_raw(width, height, rgba)?;
-        Some(Picture::make(
-            self.id(),
-            self.bumped(),
-            Arc::new(DynamicImage::ImageRgba8(image)),
-            None,
-            true,
-        ))
+        Some(
+            Picture::make(
+                self.shown.family.clone(),
+                self.bumped(),
+                Arc::new(DynamicImage::ImageRgba8(image)),
+                None,
+                true,
+            )
+            .with_binding(self.bound),
+        )
     }
 
     /// This picture standing still on the frame it shows, under the same
@@ -414,16 +545,85 @@ impl Picture {
     #[must_use]
     pub fn still(&self) -> Picture {
         Picture::make(
-            self.id(),
+            self.shown.family.clone(),
             self.bumped(),
             self.shown.image.clone(),
             None,
             self.shown.raw,
         )
+        .with_binding(self.bound)
     }
 
     fn bumped(&self) -> u32 {
-        self.shown.version.wrapping_add(1)
+        // Branching from an old frame still allocates a unique live lookup key.
+        loop {
+            let version = self
+                .shown
+                .family
+                .next_version
+                .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            if !PICTURES
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .get(&(self.id(), version))
+                .is_some_and(|w| w.strong_count() > 0)
+            {
+                return version;
+            }
+        }
+    }
+
+    fn with_binding(mut self, bound: Option<bool>) -> Self {
+        self.bound = bound;
+        self
+    }
+
+    /// Opt into independent terminal resources for each live version and fitted
+    /// view. The logical ID and byte counter stay unchanged. Native animation is
+    /// an immutable permission for this handle. Keep this handle alive while its
+    /// prebuilt lines are in use; at most 128 fitted bindings are kept per frame.
+    #[must_use]
+    pub fn bound(&self, native_animation: bool) -> Self {
+        self.clone().with_binding(Some(native_animation))
+    }
+
+    /// Reserve the resource used by this handle's lines and encoding. Legacy
+    /// handles return their logical ID. Indexed consoles can use only IDs16–255;
+    /// an unavailable ID/fit capacity returns `None` before placeholders are made.
+    pub fn kitty_resource(
+        &self,
+        view: ImageView,
+        cols: usize,
+        rows: usize,
+        truecolor: bool,
+    ) -> Option<Arc<KittyResource>> {
+        if cols == 0 || rows == 0 {
+            return None;
+        }
+        let Some(native) = self.bound else {
+            crate::kitty::id_color(self.id(), truecolor)?;
+            return Some(self.shown.family.id.clone());
+        };
+        let key = (cols, rows, view.fit, view.anchor, native);
+        let mut bindings = self
+            .shown
+            .bindings
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+        if let Some((_, resource)) = bindings.iter().find(|(k, _)| *k == key) {
+            crate::kitty::id_color(resource.id(), truecolor)?;
+            return Some(resource.clone());
+        }
+        if bindings.len() >= 128 {
+            return None;
+        }
+        let resource = if truecolor {
+            reserve(1, 0x00ff_ffff)
+        } else {
+            reserve(16, 255)
+        }?;
+        bindings.push((key, resource.clone()));
+        Some(resource)
     }
 
     /// The frame `version` of picture `id`, while something holds it.
@@ -432,7 +632,7 @@ impl Picture {
         pictures
             .get(&(id, version))
             .and_then(Weak::upgrade)
-            .map(|shown| Picture { shown })
+            .map(|shown| Picture { shown, bound: None })
     }
 
     /// The id terminal graphics know it by, the same for every frame.
@@ -578,7 +778,10 @@ impl Picture {
         };
         if pixels == Pixels::Kitty {
             let truecolor = console.color_system() == Some(rich::color::ColorSystem::Truecolor);
-            let Some(colour) = crate::kitty::id_color(self.id(), truecolor) else {
+            let Some(resource) = self.kitty_resource(view, cols, rows, truecolor) else {
+                return lines;
+            };
+            let Some(colour) = crate::kitty::id_color(resource.id(), truecolor) else {
                 return lines;
             };
             return (0..rows)
@@ -586,9 +789,14 @@ impl Picture {
                     let cells = crate::kitty::placeholder_row(row, cols).unwrap_or_default();
                     // Placeholder diacritics already carry exact row/column
                     // provenance. Keep a single style/segment for the whole row.
-                    let style = Style::new()
+                    let mut style = Style::new()
                         .with_color(colour.clone())
                         .combine(&tag(row).style());
+                    if let Some(native) = self.bound {
+                        let mut meta = Meta::new();
+                        meta.insert("intuituive.image.bound", MetaValue::Int(i64::from(native)));
+                        style = style.combine(&Style::from_meta(meta));
+                    }
                     vec![Segment::new(cells, Some(style))]
                 })
                 .collect();
@@ -612,7 +820,7 @@ impl Picture {
             rows,
             None,
             ImageAnchor::Center,
-            CellPixels::DEFAULT,
+            PictureEncoding::new(CellPixels::DEFAULT),
         )
     }
 
@@ -652,7 +860,18 @@ impl Picture {
         rows: std::ops::Range<usize>,
         cell: CellPixels,
     ) -> Option<String> {
-        let cell = CellPixels::new(cell.width, cell.height);
+        self.encode_tag_rect_with_context(tag, columns, rows, PictureEncoding::new(cell))
+    }
+
+    /// Encode a tagged rectangle with explicit native-animation permission.
+    pub fn encode_tag_rect_with_context(
+        &self,
+        tag: &PictureTag,
+        columns: std::ops::Range<usize>,
+        rows: std::ops::Range<usize>,
+        context: PictureEncoding,
+    ) -> Option<String> {
+        let cell = CellPixels::new(context.cell_pixels.width, context.cell_pixels.height);
         if !raster_fits(tag.cols, tag.rows, cell) {
             return None;
         }
@@ -664,7 +883,8 @@ impl Picture {
         if tag.pixels == Pixels::Kitty
             || (columns.start == 0 && rows.start == 0 && right == tag.cols && bottom == tag.rows)
         {
-            return self.encode_fitted(tag.pixels, tag.cols, tag.rows, tag.fit, tag.anchor, cell);
+            return self
+                .encode_fitted(tag.pixels, tag.cols, tag.rows, tag.fit, tag.anchor, context);
         }
         if tag.pixels == Pixels::Cells {
             return None;
@@ -725,7 +945,18 @@ impl Picture {
         rows: usize,
         cell: CellPixels,
     ) -> bool {
-        self.encode_fitted(view.pixels, cols, rows, view.fit, view.anchor, cell)
+        self.prepare_with_context(view, cols, rows, PictureEncoding::new(cell))
+    }
+
+    /// Prepare with the same immutable permissions as the presentation source.
+    pub fn prepare_with_context(
+        &self,
+        view: ImageView,
+        cols: usize,
+        rows: usize,
+        context: PictureEncoding,
+    ) -> bool {
+        self.encode_fitted(view.pixels, cols, rows, view.fit, view.anchor, context)
             .is_some()
     }
 
@@ -738,8 +969,31 @@ impl Picture {
         rows: usize,
         cell: CellPixels,
     ) -> bool {
-        let cell = CellPixels::new(cell.width, cell.height);
-        let key = (view.pixels, cols, rows, view.fit, view.anchor, cell);
+        self.is_prepared_with_context(view, cols, rows, PictureEncoding::new(cell))
+    }
+
+    /// Whether preparation matches both geometry and permissions.
+    pub fn is_prepared_with_context(
+        &self,
+        view: ImageView,
+        cols: usize,
+        rows: usize,
+        mut context: PictureEncoding,
+    ) -> bool {
+        context.cell_pixels =
+            CellPixels::new(context.cell_pixels.width, context.cell_pixels.height);
+        if let Some(native) = self.bound {
+            context.native_kitty_animation = native;
+        }
+        let id = if view.pixels == Pixels::Kitty {
+            let Some(resource) = self.kitty_resource(view, cols, rows, true) else {
+                return false;
+            };
+            resource.id()
+        } else {
+            self.id()
+        };
+        let key = (view.pixels, cols, rows, view.fit, view.anchor, context, id);
         self.shown
             .encoded
             .lock()
@@ -755,19 +1009,42 @@ impl Picture {
         rows: usize,
         fit: Option<ImageFit>,
         anchor: ImageAnchor,
-        cell: CellPixels,
+        context: PictureEncoding,
     ) -> Option<String> {
-        let cell = CellPixels::new(cell.width, cell.height);
+        let cell = CellPixels::new(context.cell_pixels.width, context.cell_pixels.height);
+        let context = PictureEncoding {
+            cell_pixels: cell,
+            native_kitty_animation: self.bound.unwrap_or(context.native_kitty_animation),
+        };
         if !raster_fits(cols, rows, cell) {
             return None;
         }
-        let key = (pixels, cols, rows, fit, anchor, cell);
+        let resource = if pixels == Pixels::Kitty {
+            self.kitty_resource(
+                ImageView {
+                    fit,
+                    anchor,
+                    pixels,
+                    ..ImageView::new()
+                },
+                cols,
+                rows,
+                true,
+            )
+        } else {
+            None
+        };
+        if pixels == Pixels::Kitty && resource.is_none() {
+            return None;
+        }
+        let id = resource.as_ref().map_or(self.id(), |r| r.id());
+        let key = (pixels, cols, rows, fit, anchor, context, id);
         if let Some((made, escape)) = &*self.shown.encoded.lock().unwrap_or_else(|e| e.into_inner())
             && *made == key
         {
             return Some(escape.clone());
         }
-        let escape = self.encode_new(pixels, cols, rows, fit, anchor, cell)?;
+        let escape = self.encode_new(pixels, cols, rows, fit, anchor, context)?;
         *self.shown.encoded.lock().unwrap_or_else(|e| e.into_inner()) = Some((key, escape.clone()));
         Some(escape)
     }
@@ -779,10 +1056,10 @@ impl Picture {
         rows: usize,
         fit: Option<ImageFit>,
         anchor: ImageAnchor,
-        cell: CellPixels,
+        context: PictureEncoding,
     ) -> Option<String> {
         let measured = media_trace_enabled().then(std::time::Instant::now);
-        let result = self.encode_new_inner(pixels, cols, rows, fit, anchor, cell);
+        let result = self.encode_new_inner(pixels, cols, rows, fit, anchor, context);
         if let Some(start) = measured {
             let pictures = PICTURES.lock().unwrap_or_else(|e| e.into_inner());
             let mut decoded = 0usize;
@@ -823,12 +1100,29 @@ impl Picture {
         rows: usize,
         fit: Option<ImageFit>,
         anchor: ImageAnchor,
-        cell: CellPixels,
+        context: PictureEncoding,
     ) -> Option<String> {
+        let cell = context.cell_pixels;
+        let resource = if pixels == Pixels::Kitty {
+            Some(self.kitty_resource(
+                ImageView {
+                    fit,
+                    anchor,
+                    pixels,
+                    ..ImageView::new()
+                },
+                cols,
+                rows,
+                true,
+            )?)
+        } else {
+            None
+        };
+        let id = resource.as_ref().map_or(self.id(), |r| r.id());
         let fitted = |image: &DynamicImage| self.fitted(image, cols, rows, fit, anchor, cell);
         match pixels {
             Pixels::Cells => None,
-            Pixels::Kitty if self.shown.animation.is_some() => {
+            Pixels::Kitty if context.native_kitty_animation && self.shown.animation.is_some() => {
                 let frames: Vec<_> = self
                     .frames()?
                     .iter()
@@ -837,7 +1131,7 @@ impl Picture {
                         delay: frame.delay,
                     })
                     .collect();
-                crate::kitty::transmit_animation(self.id(), &frames, cols, rows)
+                crate::kitty::transmit_animation(id, &frames, cols, rows)
             }
             Pixels::Kitty => {
                 let fitted = fitted(&self.shown.image);
@@ -847,7 +1141,7 @@ impl Picture {
                     if fitted.pixels().all(|p| p[3] == 255) {
                         let rgb = DynamicImage::ImageRgba8(fitted).into_rgb8();
                         return Some(crate::kitty::transmit_rgb(
-                            self.id(),
+                            id,
                             rgb.as_raw(),
                             width,
                             height,
@@ -856,7 +1150,7 @@ impl Picture {
                         ));
                     }
                     return Some(crate::kitty::transmit_rgba(
-                        self.id(),
+                        id,
                         fitted.as_raw(),
                         width,
                         height,
@@ -865,7 +1159,7 @@ impl Picture {
                     ));
                 }
                 let png = encode_png(&fitted)?;
-                Some(crate::kitty::transmit(self.id(), &png, cols, rows))
+                Some(crate::kitty::transmit(id, &png, cols, rows))
             }
             Pixels::Sixel => {
                 let image = DynamicImage::ImageRgba8(fitted(&self.shown.image));
@@ -918,7 +1212,14 @@ impl Picture {
             return None;
         }
         if pixels == Pixels::Kitty || (first == 0 && shown >= rows) {
-            return self.encode_fitted(pixels, cols, rows, None, ImageAnchor::Center, cell);
+            return self.encode_fitted(
+                pixels,
+                cols,
+                rows,
+                None,
+                ImageAnchor::Center,
+                PictureEncoding::new(cell),
+            );
         }
         let whole = fit_to_cells(&self.shown.image, cols, rows, cell);
         self.encode_part(&whole, pixels, cols, first, shown, cell)
@@ -1223,6 +1524,16 @@ impl PictureTag {
         })
     }
 
+    /// Bound-handle permission carried by these cells. `None` is the legacy
+    /// logical-ID path; the public tag literal is unchanged.
+    pub fn binding_of(style: &Style) -> Option<bool> {
+        match style.meta_ref()?.get("intuituive.image.bound")? {
+            MetaValue::Int(0) => Some(false),
+            MetaValue::Int(1) => Some(true),
+            _ => None,
+        }
+    }
+
     /// The style that carries this tag.
     pub fn style(&self) -> Style {
         let mut meta = Meta::new();
@@ -1378,6 +1689,7 @@ const WINDOW: Duration = Duration::from_secs(2);
 #[derive(Clone, Debug)]
 pub struct Pacer {
     pixels: Pixels,
+    formats: PixelFormats,
     cols: usize,
     rows: usize,
     cell: CellPixels,
@@ -1401,8 +1713,14 @@ pub struct Pacer {
 impl Pacer {
     /// A picture of `cols` x `rows` cells starting at `pixels`.
     pub fn new(pixels: Pixels, cols: usize, rows: usize) -> Pacer {
+        Self::with_formats(pixels, cols, rows, PixelFormats::all())
+    }
+
+    /// Pace only supported representations, skipping unavailable intermediate codecs.
+    pub fn with_formats(pixels: Pixels, cols: usize, rows: usize, formats: PixelFormats) -> Pacer {
         Pacer {
-            pixels,
+            pixels: formats.supported(pixels),
+            formats,
             cols: cols.max(1),
             rows: rows.max(1),
             cell: CellPixels::DEFAULT,
@@ -1659,7 +1977,11 @@ impl Pacer {
         if self.fps(budget, share) >= budget.min_fps {
             return false;
         }
-        match self.pixels.lower() {
+        match self
+            .pixels
+            .lower()
+            .map(|lower| self.formats.supported(lower))
+        {
             Some(lower) => {
                 self.pixels = lower;
                 self.measured = None;
@@ -1727,6 +2049,109 @@ mod tests {
             }
             assert!(command.status().unwrap().success(), "forced={forced:?}");
         }
+    }
+
+    #[cfg(feature = "frames")]
+    #[test]
+    fn restricted_fallback_skips_unavailable_formats() {
+        let mut pacer = Pacer::with_formats(
+            Pixels::Kitty,
+            40,
+            10,
+            PixelFormats::cells().with(Pixels::Kitty),
+        );
+        let budget = ByteBudget::new(60_000);
+        while pacer.settle(&budget, 1.0) {}
+        assert_eq!(
+            pacer.pixels(),
+            Pixels::Cells,
+            "Kitty-only terminal cannot render an intermediate codec"
+        );
+    }
+
+    #[test]
+    fn prepared_encoding_permissions_never_alias() {
+        let picture = Picture::animated(vec![
+            AnimationFrame {
+                image: RgbaImage::from_pixel(2, 2, image::Rgba([255, 0, 0, 255])),
+                delay: Duration::from_millis(50),
+            },
+            AnimationFrame {
+                image: RgbaImage::from_pixel(2, 2, image::Rgba([0, 0, 255, 255])),
+                delay: Duration::from_millis(50),
+            },
+        ])
+        .unwrap();
+        let view = ImageView::new().pixels(Pixels::Kitty);
+        let native = PictureEncoding::new(CellPixels::new(10, 20));
+        let restricted = native.native_kitty_animation(false);
+        for context in [native, restricted, native, restricted] {
+            assert!(picture.prepare_with_context(view, 2, 2, context));
+            assert!(picture.is_prepared_with_context(view, 2, 2, context));
+            assert!(!picture.is_prepared_with_context(
+                view,
+                2,
+                2,
+                context.native_kitty_animation(!context.native_kitty_animation)
+            ));
+            let tag = PictureTag {
+                id: picture.id(),
+                version: picture.version(),
+                cols: 2,
+                rows: 2,
+                row: 0,
+                pixels: Pixels::Kitty,
+                fit: None,
+                anchor: view.anchor,
+            };
+            let out = picture
+                .encode_tag_rect_with_context(&tag, 0..2, 0..2, context)
+                .unwrap();
+            assert_eq!(out.contains("a=f"), context.native_kitty_animation);
+            assert_eq!(out.contains("a=a"), context.native_kitty_animation);
+        }
+        assert!(
+            picture.encode(Pixels::Kitty, 2, 2).unwrap().contains("a=f"),
+            "legacy default remains native"
+        );
+    }
+
+    #[cfg(feature = "frames")]
+    #[test]
+    fn restricted_downgrade_keeps_spending_and_pending_reservations() {
+        let mut p = Pacer::with_formats(
+            Pixels::Kitty,
+            40,
+            10,
+            PixelFormats::cells().with(Pixels::Kitty),
+        );
+        let now = Instant::now();
+        p.observe_bytes(now, 100_000, false);
+        p.schedule(now);
+        assert!(p.settle(&ByteBudget::new(60_000), 1.0));
+        assert_eq!(p.pixels(), Pixels::Cells);
+        assert_eq!(p.recent_bytes(), 100_000);
+        assert!(p.cancel_pending());
+        assert!(!p.cancel_pending());
+        let mut legacy = Pacer::new(Pixels::Kitty, 40, 10);
+        while legacy.settle(&ByteBudget::new(60_000), 1.0) {}
+        assert_eq!(legacy.pixels(), Pixels::Sixel);
+    }
+
+    #[test]
+    fn branches_keep_distinct_weak_lookup_versions() {
+        let original = Picture::new(solid(10));
+        let a = original.next(solid(20));
+        let b = original.next(solid(30));
+        assert_ne!(a.version(), b.version());
+        assert_eq!(
+            Picture::find(a.id(), a.version()).unwrap().image(),
+            a.image()
+        );
+        assert_eq!(
+            Picture::find(b.id(), b.version()).unwrap().image(),
+            b.image()
+        );
     }
 
     #[test]
@@ -2028,7 +2453,8 @@ mod tests {
                 2,
                 Some(ImageFit::Cover),
                 ImageAnchor::Center,
-                CellPixels::DEFAULT
+                PictureEncoding::new(CellPixels::DEFAULT),
+                picture.id()
             )
         );
         // The painter's call for the whole picture in those cells is it.

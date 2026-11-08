@@ -201,26 +201,38 @@ pub fn frame(b: Browser, frame: &rich_embed::ScreencastFrame) {
 /// The view: the tiles, in Kitty graphics; a click and the wheel go to
 /// the page.
 pub fn view(b: Browser) -> Node {
-    tiles_of(move || b.screen_tiles.get(), Pixels::Kitty)
-        .on_mouse(move |_, mouse| match mouse.kind {
-            MouseKind::Down(Button::Left) => {
-                let (x, y) = mouse.precise();
-                let (x, y) = point(x, y);
-                b.send(Command::Point { x, y });
-                true
-            }
-            MouseKind::ScrollDown => {
-                b.send(Command::Wheel(3.0 * CELL.1 as f64));
-                true
-            }
-            MouseKind::ScrollUp => {
-                b.send(Command::Wheel(-3.0 * CELL.1 as f64));
-                true
-            }
-            _ => false,
-        })
-        .flex(1)
-        .name("pixels")
+    tiles_of(
+        move || {
+            b.screen_tiles
+                .get()
+                .into_iter()
+                .map(|mut tile| {
+                    tile.picture = b.presentation.picture(&tile.picture);
+                    tile
+                })
+                .collect()
+        },
+        Pixels::Kitty,
+    )
+    .on_mouse(move |_, mouse| match mouse.kind {
+        MouseKind::Down(Button::Left) => {
+            let (x, y) = mouse.precise();
+            let (x, y) = point(x, y);
+            b.send(Command::Point { x, y });
+            true
+        }
+        MouseKind::ScrollDown => {
+            b.send(Command::Wheel(3.0 * CELL.1 as f64));
+            true
+        }
+        MouseKind::ScrollUp => {
+            b.send(Command::Wheel(-3.0 * CELL.1 as f64));
+            true
+        }
+        _ => false,
+    })
+    .flex(1)
+    .name("pixels")
 }
 
 /// The state the browser keeps for the view.

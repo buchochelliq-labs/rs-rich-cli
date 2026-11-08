@@ -551,3 +551,110 @@ fn releasing_kitty_data_invalidates_previous_retention_proof() {
         "released data must be uploaded again even with old placements held"
     );
 }
+
+#[test]
+fn restricted_kitty_first_paint_is_static() {
+    use rich_art::graphics::AnimationFrame;
+    let picture = Picture::animated(vec![
+        AnimationFrame {
+            image: RgbaImage::from_pixel(8, 8, Rgba([255, 0, 0, 255])),
+            delay: std::time::Duration::from_millis(50),
+        },
+        AnimationFrame {
+            image: RgbaImage::from_pixel(8, 8, Rgba([0, 0, 255, 255])),
+            delay: std::time::Duration::from_millis(50),
+        },
+    ])
+    .unwrap();
+    let source = intuituive::ImagePresentation::new(
+        Pixels::Kitty,
+        intuituive::KittyFeatures {
+            unicode_placeholders: true,
+            native_animation: false,
+        },
+        intuituive::PixelFormats::cells().with(Pixels::Kitty),
+    )
+    .graphics();
+    let placements = source.placements(&scene(&picture, Pixels::Kitty, |_, _| false));
+    let output = placements
+        .iter()
+        .map(|p| p.graphic.draw(p.frame))
+        .collect::<String>();
+    assert!(
+        output.contains("a=T"),
+        "a real static upload must be emitted"
+    );
+    assert!(
+        !output.contains("a=f") && !output.contains("a=a"),
+        "unsupported native animation on first paint: {output}"
+    );
+}
+
+#[test]
+fn concurrent_fitted_and_versioned_views_have_matching_distinct_upload_ids() {
+    let presentation = intuituive::ImagePresentation::new(
+        Pixels::Kitty,
+        intuituive::KittyFeatures {
+            unicode_placeholders: true,
+            native_animation: true,
+        },
+        intuituive::PixelFormats::cells().with(Pixels::Kitty),
+    );
+    let original = presentation.picture(&picture());
+    let next = original.next(DynamicImage::ImageRgba8(RgbaImage::from_pixel(
+        64,
+        64,
+        Rgba([0, 0, 255, 255]),
+    )));
+    let console = rich::Console::builder()
+        .width(8)
+        .color_system(Some(rich::ColorSystem::Truecolor))
+        .build();
+    let source = presentation.graphics();
+    let mut segments = Vec::new();
+    let mut placeholders = Vec::new();
+    for (p, fit) in [
+        (&original, ImageFit::Cover),
+        (&original, ImageFit::Contain),
+        (&next, ImageFit::Cover),
+    ] {
+        let lines = p.lines(
+            &console,
+            ImageView::new().pixels(Pixels::Kitty).fit(fit),
+            8,
+            4,
+        );
+        placeholders.push(lines[0][0].style.as_ref().unwrap().color().cloned());
+        for line in lines {
+            segments.extend(line);
+            segments.push(Segment::line());
+        }
+    }
+    let placements = source.placements(&Frame::from_segments(&segments));
+    assert_eq!(placements.len(), 3);
+    let uploads: Vec<_> = placements
+        .iter()
+        .map(|p| {
+            let out = p.graphic.draw(0);
+            out.split("i=")
+                .nth(1)
+                .unwrap()
+                .split(',')
+                .next()
+                .unwrap()
+                .parse::<u32>()
+                .unwrap()
+        })
+        .collect();
+    assert_ne!(
+        uploads[0], uploads[1],
+        "different fits must not overwrite each other"
+    );
+    assert_ne!(
+        uploads[0], uploads[2],
+        "simultaneous versions must not overwrite each other"
+    );
+    for (id, color) in uploads.into_iter().zip(placeholders) {
+        assert_eq!(color, rich_art::kitty::id_color(id, true));
+    }
+}

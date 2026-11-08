@@ -396,7 +396,11 @@ impl<W: Write> Surface<W> {
         let Drawing { damage, cursor, .. } = drawing;
         let out = self.frame(damage, cursor);
         self.writer.write_all(out.as_bytes())?;
-        self.writer.flush()
+        self.writer.flush()?;
+        if let Some(source) = &self.graphics {
+            source.output_written();
+        }
+        Ok(())
     }
 
     /// The bytes for one frame.
@@ -510,6 +514,7 @@ impl<W: Write> Surface<W> {
             );
             out.push_str(&placement.graphic.draw(placement.frame));
         }
+        out.push_str(&source.reconcile(&next));
         self.placements = next;
         out
     }
@@ -537,6 +542,9 @@ impl<W: Write> Surface<W> {
         }
         self.writer.write_all(out.as_bytes())?;
         self.writer.flush()?;
+        if let Some(source) = &self.graphics {
+            source.output_written();
+        }
         // Only now: a failed write leaves `finish` (and `Drop`) to try again.
         self.finished = true;
         Ok(())

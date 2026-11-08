@@ -13,12 +13,14 @@ use std::sync::mpsc;
 use std::time::{Duration, Instant};
 
 use rich_embed::PageState;
+#[cfg(test)]
+use rich_intuituive::image_graphics;
 use rich_intuituive::interact::keymap::{Keymap, try_keys};
 use rich_intuituive::interact::{Key, KeyCode, MouseKind};
 use rich_intuituive::prelude::*;
 use rich_intuituive::{
-    Action, ImageView, Picture, Pixels, button_of, image_graphics, picture_bytes, picture_of,
-    scroll_virtual_with, slider, spawn_stream,
+    Action, ImageView, Picture, Pixels, button_of, picture_bytes, picture_of, scroll_virtual_with,
+    slider, spawn_stream,
 };
 
 use crate::actions::{self, ACTIONS, keys_label};
@@ -77,6 +79,7 @@ pub struct Options {
 /// handler and sent with the tab's updates.
 #[derive(Clone, Copy)]
 pub struct Browser {
+    pub(crate) presentation: rich_intuituive::ImagePresentation,
     pub page: Signal<Option<Arc<Page>>>,
     pub state: Signal<PageState>,
     pub view: Signal<View>,
@@ -2269,7 +2272,7 @@ fn piece_keys(page: &Page, pieces: &[Piece], images: Images) -> Vec<PieceKey> {
 /// drawn with: a moving picture's live frame, else its decoded picture.
 fn shown_picture(b: Browser, node: NodeId) -> Option<(Picture, Pixels)> {
     if let Some(live) = b.live.with(|l| l.get(&node).cloned()) {
-        return Some((live.picture, live.pixels));
+        return Some((b.presentation.picture(&live.picture), live.pixels));
     }
     let (picture, video) = b.page.with(|p| {
         let media = p.as_ref()?.media.iter().find(|m| m.node == node)?;
@@ -2283,9 +2286,9 @@ fn shown_picture(b: Browser, node: NodeId) -> Option<(Picture, Pixels)> {
     // drawn into them (cells over a Sixel or iTerm2 picture would be
     // covered); in cells, the mark is cells ([`play_marks`]).
     if video && pixels != Pixels::Cells {
-        return Some((marked(&picture), pixels));
+        return Some((b.presentation.picture(&marked(&picture)), pixels));
     }
-    Some((picture, pixels))
+    Some((b.presentation.picture(&picture), pixels))
 }
 
 thread_local! {
@@ -2708,7 +2711,7 @@ fn strip_view(b: Browser, docked: bool) -> Node {
             l.pinned.as_deref()
         }
     }
-    let cells = Rc::new(pictures::Cells::default());
+    let cells = Rc::new(pictures::Cells::with_presentation(b.presentation));
     let rows = move || {
         b.layout
             .with(|l| strip(l, docked).map_or(0, |s| s.lines.len()))
@@ -2751,7 +2754,7 @@ fn strip_view(b: Browser, docked: bool) -> Node {
 
 fn projection_view(b: Browser) -> Node {
     // The pictures' cells, made once per frame and size, shared by rows.
-    let cells = Rc::new(pictures::Cells::default());
+    let cells = Rc::new(pictures::Cells::with_presentation(b.presentation));
     // One item per row of the shared layout, built only near the view and
     // keyed by the row's node, so the row in view stays when the page
     // grows above it.
@@ -2944,11 +2947,22 @@ impl OutputRate {
 /// the protocol the user asked for, else character art over SSH, else
 /// what the terminal speaks. [`step_motion`] replaces the budget with
 /// [`byte_budget`]'s on its first look.
-fn video_pacing(config: &Config, images: Images) -> Pacing {
+fn video_pacing(
+    config: &Config,
+    images: Images,
+    presentation: rich_intuituive::ImagePresentation,
+) -> Pacing {
     let mut budget = rich_art::picture::ByteBudget::guess();
     budget.max_fps = (config.fps as f64).clamp(1.0, crate::video::MAX_FPS as f64);
     let asked = (images != Images::Auto).then(|| pictures::pixels(images));
-    Pacing::new(budget, Pacing::start_for(asked, Pixels::detect()))
+    Pacing::with_formats(
+        budget,
+        Pacing::start_for(
+            asked.map(|p| presentation.with_pixels(p).pixels()),
+            presentation.pixels(),
+        ),
+        presentation.formats(),
+    )
 }
 
 /// How often the app looks at `--ssh`'s tunnel.
@@ -3029,6 +3043,20 @@ impl TunnelWatch {
 
 /// The browser app over `engine`.
 pub fn app(engine: Box<dyn Engine>, options: Options) -> App {
+    app_with_presentation(
+        engine,
+        options,
+        rich_intuituive::ImagePresentation::detect(),
+    )
+}
+
+/// Construct with explicit independent terminal features, useful for embedded
+/// clients and deterministic tests without changing the process environment.
+pub fn app_with_presentation(
+    engine: Box<dyn Engine>,
+    options: Options,
+    media_presentation: rich_intuituive::ImagePresentation,
+) -> App {
     let Options {
         config,
         bookmarks,
@@ -3045,6 +3073,11 @@ pub fn app(engine: Box<dyn Engine>, options: Options) -> App {
     let first_view = view.unwrap_or(config.view);
     let images = images.unwrap_or(config.images);
     let configured_adapt = config.adapt;
+    let media_presentation = if images == Images::Auto {
+        media_presentation
+    } else {
+        media_presentation.with_pixels(pictures::pixels(images))
+    };
     let app = App::new(move || {
         let (keymap, warnings) = actions::keymap(config.preset, &config.keys);
         let mut warnings = [config.warnings.clone(), warnings].concat();
@@ -3117,11 +3150,11 @@ pub fn app(engine: Box<dyn Engine>, options: Options) -> App {
                 None => Vec::new(),
             })
         });
-        let pacing = video_pacing(&config, images);
+        let pacing = video_pacing(&config, images, media_presentation);
         let prepared = Arc::new(std::sync::Mutex::new(std::collections::VecDeque::<Job>::new()));
         let completions = prepared.clone();
         let (wake_prepared, ready) = mpsc::sync_channel(1);
-        let encoder = Encoder::spawn(move |job| {
+        let encoder = Encoder::spawn_with_presentation(media_presentation, move |job| {
             let trace = {
                 let mut q = completions.lock().unwrap();
                 q.retain(|old| old.node != job.node);
@@ -3134,6 +3167,7 @@ pub fn app(engine: Box<dyn Engine>, options: Options) -> App {
             }
         });
         let b = Browser {
+            presentation: media_presentation,
             page,
             state: signal(PageState::default()),
             view,
@@ -3161,7 +3195,7 @@ pub fn app(engine: Box<dyn Engine>, options: Options) -> App {
             adapt,
             faithful,
             logs,
-            pixels: memo(move || pictures::pixels(images_signal.get())),
+            pixels: memo(move || { let images = images_signal.get(); if images == Images::Auto { media_presentation.pixels() } else { media_presentation.with_pixels(pictures::pixels(images)).pixels() } }),
             frozen: signal(false),
             live: signal(Rc::new(HashMap::new())),
             tab: signal(tab),
@@ -3227,9 +3261,7 @@ pub fn app(engine: Box<dyn Engine>, options: Options) -> App {
         spawn_stream(move |stream| forward_updates(b, receive, updates, stream.proxy().clone()));
         spawn_stream(move |stream| forward_prepared(b, ready, prepared, stream.proxy().clone()));
         // Moving pictures in view step within the byte budget.
-        let motion = Rc::new(std::cell::RefCell::new(pictures::Motion::new(byte_budget(
-            b,
-        ))));
+        let motion = Rc::new(std::cell::RefCell::new(pictures::Motion::with_presentation(byte_budget(b), media_presentation)));
         every(MOTION, move |_| step_motion(b, &mut motion.borrow_mut()));
         // One source-size policy for terminal, view, adaptation and site changes.
         watch(
@@ -3320,7 +3352,7 @@ pub fn app(engine: Box<dyn Engine>, options: Options) -> App {
                 false
             })
     })
-    .graphics(image_graphics());
+    .graphics(media_presentation.graphics());
     let stats = app.stats_handle();
     OUTPUT.with(|o| o.borrow_mut().stats = Some(stats));
     app

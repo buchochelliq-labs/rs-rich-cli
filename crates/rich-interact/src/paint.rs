@@ -277,6 +277,9 @@ impl Painter {
                 out.push_str(&placement.graphic.draw(placement.frame));
             }
         }
+        if let Some(source) = &self.graphics {
+            out.push_str(&source.reconcile(frame.placements()));
+        }
         // The caret, or the cursor hidden.
         let cursor = view.cursor.filter(|(row, _)| *row < height.max(1));
         match cursor {
@@ -300,6 +303,14 @@ impl Painter {
         self.height = height;
         self.previous = Some(frame);
         out
+    }
+
+    /// Confirm successful ordered writing of the returned paint/finish output.
+    /// Manual clients using sources with resource leases call this after writing.
+    pub fn output_written(&self) {
+        if let Some(source) = &self.graphics {
+            source.output_written();
+        }
     }
 
     /// Leave the region: below it, so later output follows, or cleared

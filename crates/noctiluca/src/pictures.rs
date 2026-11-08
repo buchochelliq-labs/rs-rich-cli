@@ -23,7 +23,7 @@ use std::rc::Rc;
 use std::time::Instant;
 
 use rich::segment::Segment;
-use rich_art::picture::{ByteBudget, Pacer, Player, picture_bytes};
+use rich_art::picture::{ByteBudget, Pacer, PixelFormats, Player, picture_bytes};
 use rich_intuituive::{ImageFit, ImageView, Picture, Pixels};
 
 use crate::config::Images;
@@ -60,6 +60,7 @@ pub struct Live {
 /// the rows that show them.
 #[derive(Default)]
 pub struct Cells {
+    presentation: Option<rich_intuituive::ImagePresentation>,
     made: RefCell<HashMap<CellsKey, Rc<Vec<Vec<Segment>>>>>,
 }
 
@@ -75,6 +76,14 @@ type CellsKey = (
 );
 
 impl Cells {
+    /// Share the app's independent fitted-resource and encoding policy.
+    pub fn with_presentation(presentation: rich_intuituive::ImagePresentation) -> Self {
+        Self {
+            presentation: Some(presentation),
+            ..Self::default()
+        }
+    }
+
     /// `picture`'s cells at `cols` x `rows` through `pixels`.
     pub fn of(
         &self,
@@ -120,6 +129,8 @@ impl Cells {
             .filter(|&(w, h)| w > 0 && h > 0)
             .map(|(w, h)| rich_art::graphics::CellPixels::new(w.into(), h.into()))
             .unwrap_or_default();
+        let bound = self.presentation.map(|policy| policy.picture(picture));
+        let picture = bound.as_ref().unwrap_or(picture);
         let lines =
             Rc::new(picture.lines_with_metrics(console, view, cols as u16, rows as u16, cell));
         let mut made = self.made.borrow_mut();
@@ -222,6 +233,8 @@ pub fn on_backdrop(line: Vec<Segment>, width: usize, backdrop: &str) -> Vec<Segm
 /// in view, on a terminal that cannot play animations itself.
 pub struct Motion {
     budget: ByteBudget,
+    native_animation: bool,
+    formats: PixelFormats,
     /// Other moving pictures sharing the budget (videos playing).
     others: usize,
     /// How many animations stepped at the last look.
@@ -254,11 +267,25 @@ impl Motion {
     pub fn new(budget: ByteBudget) -> Motion {
         Motion {
             budget,
+            native_animation: true,
+            formats: PixelFormats::all(),
             others: 0,
             moving: 0,
             playing: HashMap::new(),
             stills: HashMap::new(),
             cell: rich_art::graphics::CellPixels::DEFAULT,
+        }
+    }
+
+    /// Software fallback and supported formats from the same policy as first paint.
+    pub fn with_presentation(
+        budget: ByteBudget,
+        presentation: rich_intuituive::ImagePresentation,
+    ) -> Self {
+        Self {
+            native_animation: presentation.kitty_features().native_animation,
+            formats: presentation.formats(),
+            ..Self::new(budget)
         }
     }
 
@@ -322,7 +349,7 @@ impl Motion {
             })
             .collect();
         // Kitty plays animations itself: only the others share the bytes.
-        self.moving = if pixels == Pixels::Kitty || frozen {
+        self.moving = if (pixels == Pixels::Kitty && self.native_animation) || frozen {
             0
         } else {
             in_view.len()
@@ -337,7 +364,7 @@ impl Motion {
                 continue;
             };
             seen.push(media.node);
-            if pixels == Pixels::Kitty {
+            if pixels == Pixels::Kitty && self.native_animation {
                 // Kitty plays it; frozen, the still frame stands in.
                 let picture = if frozen {
                     self.still(media.node, &animation)
@@ -423,7 +450,7 @@ impl Motion {
     ) -> &mut Moving {
         let stale = self.playing.get(&node).is_none_or(|m| m.of != *animation);
         if stale && let Some(player) = Player::new(animation, now) {
-            let mut pacer = Pacer::new(pixels, region.cols, region.rows);
+            let mut pacer = Pacer::with_formats(pixels, region.cols, region.rows, self.formats);
             pacer.set_cell_pixels(cell);
             self.playing.insert(
                 node,
@@ -966,6 +993,35 @@ mod tests {
             motion.playing[&7].pacer.bytes_per_frame() as u64,
             Pacer::estimate_with_metrics(Pixels::Sixel, REGION.cols, REGION.rows, cell)
         );
+    }
+
+    #[test]
+    fn restricted_kitty_uses_software_frames() {
+        let animation = gif();
+        let page = page_with(animation.clone());
+        let presentation = rich_intuituive::ImagePresentation::new(
+            Pixels::Kitty,
+            rich_intuituive::KittyFeatures {
+                unicode_placeholders: true,
+                native_animation: false,
+            },
+            PixelFormats::cells().with(Pixels::Kitty),
+        );
+        let mut motion = Motion::with_presentation(ByteBudget::new(10_000_000), presentation);
+        let now = Instant::now();
+        let first = motion.step(&page, &[REGION], 0..10, Pixels::Kitty, false, now);
+        let next = motion.step(
+            &page,
+            &[REGION],
+            0..10,
+            Pixels::Kitty,
+            false,
+            now + Duration::from_millis(150),
+        );
+        assert!(!first[&7].picture.is_animated());
+        assert_eq!(first[&7].picture.id(), animation.id());
+        assert_ne!(first[&7].picture.image(), next[&7].picture.image());
+        assert_eq!(motion.moving, 1);
     }
 
     #[test]

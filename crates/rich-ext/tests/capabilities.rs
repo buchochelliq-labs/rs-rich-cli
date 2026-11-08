@@ -571,3 +571,57 @@ fn graphics_detection_respects_ghostty_and_unknown_multiplexer_transport() {
         Graphics::Kitty
     );
 }
+
+#[test]
+fn graphics_features_separate_ghostty_versions_and_protocol_assertions() {
+    for (version, animation) in [
+        ("1.3.1", false),
+        ("1.4.0", true),
+        ("1.5.0", true),
+        ("", false),
+        ("1.4.0-dev", false),
+        ("invalid", false),
+    ] {
+        let e = tty(&[
+            ("TERM_PROGRAM", "ghostty"),
+            ("TERM_PROGRAM_VERSION", version),
+        ]);
+        let f = Capabilities::graphics_features(&e);
+        assert!(f.unicode_placeholders.value);
+        assert_eq!(f.native_animation.value, animation, "{version}");
+        assert!(!f.iterm.value && !f.sixel.value);
+        assert_eq!(f.native_animation.origin, env("TERM_PROGRAM_VERSION"));
+    }
+    let forced = tty(&[("RICH_GRAPHICS", "kitty")]);
+    let f = Capabilities::graphics_features(&forced);
+    assert!(!f.unicode_placeholders.value && !f.native_animation.value);
+    let f = Capabilities::graphics_features(
+        &forced
+            .var("RICH_KITTY_PLACEHOLDERS", "1")
+            .var("RICH_KITTY_ANIMATION", "1"),
+    );
+    assert!(f.unicode_placeholders.value && f.native_animation.value);
+    assert_eq!(f.native_animation.origin, env("RICH_KITTY_ANIMATION"));
+    let f = Capabilities::graphics_features(&tty(&[("TERM", "xterm-kitty")]));
+    assert!(f.unicode_placeholders.value && f.native_animation.value);
+    assert!(!f.iterm.value && !f.sixel.value);
+    for transport in ["TMUX", "STY"] {
+        let e = tty(&[
+            ("TERM_PROGRAM", "ghostty"),
+            ("TERM_PROGRAM_VERSION", "1.4.0"),
+            (transport, "yes"),
+        ]);
+        assert_eq!(Capabilities::detect(&e).graphics.value, Graphics::None);
+        assert!(
+            !Capabilities::graphics_features(&e)
+                .unicode_placeholders
+                .value
+        );
+    }
+    assert_eq!(
+        Capabilities::graphics_features(&tty(&[("RICH_KITTY_ANIMATION", "maybe")]))
+            .warnings
+            .len(),
+        1
+    );
+}

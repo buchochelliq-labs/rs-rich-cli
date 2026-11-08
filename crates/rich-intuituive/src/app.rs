@@ -4024,6 +4024,7 @@ impl App {
                     last_frame = Some(now);
                     let started = crate::clock::Instant::now();
                     put(backend, linear, &out)?;
+                    driver.output_written();
                     let took = started.elapsed();
                     driver.app.stats.update(|stats| {
                         stats.write += took;
@@ -4074,7 +4075,12 @@ impl App {
             driver.take_printed()
         };
         let rows = driver.printed_rows(&printed);
-        let _ = put(backend, linear, &driver.finish());
+        let graphics = driver.app.graphics.clone();
+        if put(backend, linear, &driver.finish()).is_ok()
+            && let Some(source) = graphics
+        {
+            source.output_written();
+        }
         let mut printed = Vec::new();
         if write_printed {
             let text: String = rows.iter().map(|row| format!("{row}\x1b[0m\r\n")).collect();
@@ -7243,6 +7249,7 @@ fn draw_graphics(
         out.push_str(&painter.move_to(placement.column as u16, placement.row as u16));
         out.push_str(&placement.graphic.draw(placement.frame));
     }
+    out.push_str(&source.reconcile(&next));
     *placements = next;
     out
 }
@@ -8793,6 +8800,15 @@ impl Driver {
             .shifted
             .saturating_add(rows.len().min(u16::MAX as usize) as u16);
         out
+    }
+
+    /// Confirm that all previously returned frame output was written successfully
+    /// in order. Manual drivers using bound image resources must call this after
+    /// each successful write, never when bytes are queued or a write fails.
+    pub fn output_written(&self) {
+        if let Some(source) = &self.app.graphics {
+            source.output_written();
+        }
     }
 
     /// Stop: the bytes that show the last change and leave the terminal
