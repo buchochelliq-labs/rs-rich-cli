@@ -3965,6 +3965,165 @@ mod tests {
     }
 
     #[test]
+    fn boxless_link_retains_visible_descendants_and_source_binding() {
+        let mut f = Fake::new();
+        let link = f.node(0, 1, "A", None, &[("href", "/story")], None);
+        let wrapper = f.node(link, 1, "DIV", None, &[], None);
+        let image = f.el(
+            wrapper,
+            "IMG",
+            &[("src", "/photo.png"), ("alt", "Scene")],
+            "block",
+        );
+        *f.bounds.last_mut().unwrap() = vec![16.0, 36.0, 160.0, 90.0];
+        let text = f.text(wrapper, "Read the story");
+        *f.bounds.last_mut().unwrap() = vec![16.0, 144.0, 160.0, 18.0];
+        let hidden = f.text(wrapper, "Hidden extra words");
+        let hidden_style = f.s("hidden");
+        f.styles.last_mut().unwrap()[1] = hidden_style;
+        *f.bounds.last_mut().unwrap() = vec![500.0, 500.0, 160.0, 18.0];
+        let url = f.s("https://example.test/news/");
+        let mut snapshot = PageSnapshot {
+            dom: f.snapshot(),
+            ax: json!({"nodes": [{"backendDOMNodeId": 100 + link,
+                "role": {"value": "link"}, "name": {"value": "Read the full original story"}}]}),
+        };
+        snapshot.dom["documents"][0]["documentURL"] = json!(url);
+        let mut revisions = Revisions::new();
+        let page = build(&snapshot, &mut revisions);
+        assert_eq!(page.media.len(), 1);
+        assert_eq!(page.media[0].node, 100 + image);
+        assert_eq!(page.media[0].src, "https://example.test/photo.png");
+        assert!(page.media[0].in_label);
+        assert_eq!(page.controls.len(), 1);
+        let control = &page.controls[0];
+        assert_eq!(control.node, 100 + link);
+        assert_eq!(control.role, Role::Link);
+        assert_eq!(control.name, "Read the full original story");
+        assert_eq!(control.href.as_deref(), Some("https://example.test/story"));
+        assert_eq!(control.rect, Rect::new(16.0, 36.0, 160.0, 126.0));
+        assert_eq!(control.revision, 1);
+        assert!(control.from_ax);
+        let binding = control.binding(&page);
+        assert_eq!(page.check(&binding).unwrap().node, 100 + link);
+        let runs: Vec<_> = page.blocks.iter().flat_map(|b| &b.runs).collect();
+        assert_eq!(runs.len(), 1);
+        assert_eq!(runs[0].text, "Read the story");
+        assert_eq!(runs[0].control, Some(0));
+        let marks = crate::layout::Marks {
+            hints: HashMap::from([(0, "a".into())]),
+            ..Default::default()
+        };
+        for columns in [40, 80, 120] {
+            let projection = crate::layout::project(&page, columns, (8.0, 18.0), &marks);
+            let spans: Vec<_> = projection.lines.iter().flat_map(|l| &l.spans).collect();
+            assert!(
+                spans
+                    .iter()
+                    .any(|s| s.control == Some(0) && s.text.contains("Read"))
+            );
+            assert!(
+                spans
+                    .iter()
+                    .any(|s| s.control == Some(0) && s.text.contains("[a]"))
+            );
+        }
+        // A geometry-only change keeps the source action's revision.
+        let text_layout = f.layout.iter().position(|&n| n == text).unwrap();
+        snapshot.dom["documents"][0]["layout"]["bounds"][text_layout][1] = json!(180.0);
+        let moved = build(&snapshot, &mut revisions);
+        assert_eq!(moved.check(&binding).unwrap().revision, 1);
+        // A new destination invalidates the old action, on the same source node.
+        let destination = f.s("/other");
+        snapshot.dom["strings"] = json!(f.strings);
+        snapshot.dom["documents"][0]["nodes"]["attributes"][link as usize][1] = json!(destination);
+        let changed = build(&snapshot, &mut revisions);
+        assert_eq!(changed.controls[0].node, 100 + link);
+        assert_eq!(changed.controls[0].revision, 2);
+        assert!(changed.check(&binding).is_err());
+        assert!(page.blocks.iter().all(|b| b.node != 100 + hidden));
+    }
+
+    #[test]
+    fn boxless_link_without_visible_content_emits_no_action_or_content() {
+        for visibility in ["no-layout", "hidden", "transparent", "empty-wrapper"] {
+            let mut f = Fake::new();
+            let link = f.node(0, 1, "A", None, &[("href", "/story")], None);
+            let wrapper = f.el(link, "DIV", &[], "block");
+            if visibility != "empty-wrapper" {
+                let display = (visibility != "no-layout").then_some("inline");
+                f.node(wrapper, 1, "IMG", None, &[("src", "/photo.png")], display);
+                f.node(wrapper, 3, "#text", Some("Not visible"), &[], display);
+                if matches!(visibility, "hidden" | "transparent") {
+                    let (offset, value) = if visibility == "hidden" {
+                        (1, "hidden")
+                    } else {
+                        (8, "0")
+                    };
+                    let style = f.s(value);
+                    for styles in &mut f.styles[1..] {
+                        styles[offset] = style;
+                    }
+                }
+            }
+            let page = f.page(Value::Null);
+            assert!(page.controls.is_empty(), "{visibility}");
+            assert!(page.media.is_empty(), "{visibility}");
+            assert!(page.blocks.is_empty(), "{visibility}");
+        }
+    }
+
+    #[test]
+    fn image_source_ignores_empty_selected_urls_and_preserves_real_selections() {
+        const TINY: &str =
+            "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7";
+        for (selected, declared, expected) in [
+            (
+                Some(""),
+                Some("../photo.png"),
+                "https://example.test/photo.png",
+            ),
+            (
+                Some(" \t\n"),
+                Some("../photo.png"),
+                "https://example.test/photo.png",
+            ),
+            (None, Some("../photo.png"), "https://example.test/photo.png"),
+            (
+                Some("https://images.test/responsive.png"),
+                Some("../photo.png"),
+                "https://images.test/responsive.png",
+            ),
+            (Some(TINY), Some("../photo.png"), TINY),
+            (Some(""), Some(""), ""),
+            (Some(" \t"), Some(" \t"), ""),
+            (None, None, ""),
+        ] {
+            let mut f = Fake::new();
+            let attrs: Vec<_> = declared.map(|src| ("src", src)).into_iter().collect();
+            let image = f.el(0, "IMG", &attrs, "block");
+            let url = f.s("https://example.test/news/");
+            let selected = selected.map(|src| f.s(src));
+            let mut snapshot = PageSnapshot {
+                dom: f.snapshot(),
+                ax: Value::Null,
+            };
+            snapshot.dom["documents"][0]["documentURL"] = json!(url);
+            if let Some(selected) = selected {
+                snapshot.dom["documents"][0]["nodes"]["currentSourceURL"] =
+                    json!({"index": [image], "value": [selected]});
+            }
+            let page = build(&snapshot, &mut Revisions::new());
+            assert_eq!(page.media.len(), 1);
+            assert_eq!(
+                page.media[0].src, expected,
+                "selected={selected:?}, declared={declared:?}"
+            );
+            assert_eq!(page.media[0].pending, expected.is_empty());
+        }
+    }
+
+    #[test]
     fn headings_paragraphs_and_hidden_text() {
         let mut f = Fake::new();
         f.s("about:x");
