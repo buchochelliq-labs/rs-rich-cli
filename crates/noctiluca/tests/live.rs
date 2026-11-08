@@ -468,6 +468,96 @@ fn visually_hidden_hints_are_not_read() {
 }
 
 #[test]
+fn a_playing_video_partly_outside_the_applied_viewport_keeps_delivering_changed_pixels() {
+    use noctiluca::engine::{Engine, TabId};
+    use noctiluca::model::MediaKind;
+    use std::collections::HashSet;
+    use std::hash::{Hash, Hasher};
+    let Some(binary) = chrome() else { return };
+    // A 40x24 adapted projection uses an 80x19 source viewport. The fixture's
+    // video is taller than that viewport, while remaining visible in the TUI.
+    let mut backend = ChromeBackend::start(ChromeOptions {
+        binary: Some(binary),
+        columns: 80,
+        rows: 19,
+        ..ChromeOptions::default()
+    })
+    .unwrap();
+    let metrics = backend.metrics(TabId(0)).unwrap();
+    let devtools = backend.devtools().clone();
+    let cast = devtools.listen(&["Page.screencastFrame"]);
+    let (send, updates) = mpsc::channel();
+    let tab = Tab::spawn(Box::new(backend), move |update| {
+        let _ = send.send(update);
+    });
+    let url = std::env::var("NOCTILUCA_FIXTURE_HTTP")
+        .map(|base| format!("{base}/stream-with-log.html"))
+        .unwrap_or_else(|_| fixture("stream-with-log.html"));
+    tab.send(Command::Open(url));
+    let hash = |bytes: &[u8]| {
+        let mut hash = std::collections::hash_map::DefaultHasher::new();
+        bytes.hash(&mut hash);
+        hash.finish()
+    };
+    let mut node = None;
+    let mut source = None;
+    let mut frames = HashSet::new();
+    let mut casts = HashSet::new();
+    let mut cast_count = 0;
+    let mut cast_meta = None;
+    let mut clocks = HashSet::new();
+    let deadline = Instant::now() + Duration::from_secs(6);
+    while Instant::now() < deadline {
+        match updates.recv_timeout(Duration::from_millis(10)) {
+            Ok(Update::Page(page)) => {
+                if let Some(video) = page.media.iter().find(|m| m.kind == MediaKind::Video) {
+                    source = Some(video.rect);
+                    if let Some(playback) = video.playback {
+                        clocks.insert((playback.time * 100.0) as u64);
+                    }
+                    if node != Some(video.node) {
+                        node = Some(video.node);
+                        tab.send(Command::Regions {
+                            on_screen: vec![video.node],
+                            intervals: Vec::new(),
+                            scale: 1.0,
+                        });
+                    }
+                }
+            }
+            Ok(Update::Frame(frame)) if Some(frame.node) == node => {
+                frames.insert(hash(&frame.pixels.rgb));
+            }
+            _ => {}
+        }
+        while let Ok(event) = cast.try_recv() {
+            cast_count += 1;
+            cast_meta.get_or_insert(event.params["metadata"].clone());
+            if let Some(data) = event.params["data"].as_str() {
+                casts.insert(hash(data.as_bytes()));
+            }
+        }
+    }
+    let source = source.expect("fixture video model");
+    eprintln!(
+        "partial-video: viewport={metrics:?} source={source:?} raw_casts={cast_count} distinct_casts={} delivered_pixel_hashes={} clock_samples={} metadata={cast_meta:?}",
+        casts.len(),
+        frames.len(),
+        clocks.len()
+    );
+    assert!(source.y < metrics.viewport_height && source.bottom() > metrics.viewport_height);
+    assert!(
+        cast_count > 3 && casts.len() > 1,
+        "Chrome did not supply changing frames"
+    );
+    assert!(clocks.len() > 1, "source playback did not advance");
+    assert!(
+        frames.len() > 1,
+        "partly visible video never delivered changed pixels"
+    );
+}
+
+#[test]
 fn an_empty_slot_takes_one_row() {
     let Some(binary) = chrome() else { return };
     let mut live = Live::start(binary);

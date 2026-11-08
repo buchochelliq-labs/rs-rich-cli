@@ -33,6 +33,9 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   The additive default `Engine::capture_model` preserves legacy engine callers;
   Chrome guards model-owned screenshots before and after document/applied-viewport
   changes, while standalone `capture` retains its prior behavior.
+  Playing video partly outside Chrome's viewport uses the same guarded whole-region
+  fallback as other missing regions, so a continuous screencast cannot leave a
+  narrow adapted view displaying a frozen partial video.
 
 - Projection, media pacing and capture handling use measured terminal geometry,
   feature-aware graphics fallbacks and document/viewport scoped frames. Adaptive

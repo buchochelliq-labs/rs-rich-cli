@@ -1339,22 +1339,10 @@ impl Worker<'_> {
             self.shown_time.remove(&video.node);
             self.deliver(video, now);
         }
-        if frame.is_some() && !quiet {
-            // The frame came; regions out of it wait for the quiet spell
-            // before a capture, unless Chrome's view is far from them.
-            let view = self
-                .metrics
-                .map(|m| (m.scroll_y, m.scroll_y + m.viewport_height));
-            let missing: Vec<Region> = missing
-                .into_iter()
-                .filter(|r| {
-                    view.is_some_and(|(top, bottom)| r.rect.bottom() < top || r.rect.y > bottom)
-                })
-                .collect();
-            self.capture_regions(&missing, now);
-        } else {
-            self.capture_regions(&missing, now);
-        }
+        // A fresh viewport frame can still hold only part of a region the
+        // adapted view shows. Capture that whole region through the model's
+        // guarded path; waiting for a quiet screencast would starve it forever.
+        self.capture_regions(&missing, now);
     }
 
     /// How long the tab may wait for a command before it looks at its
@@ -1825,6 +1813,196 @@ fn run(
 mod tests {
     use super::*;
     use crate::testing::FakeEngine;
+
+    #[test]
+    fn video_captures_due_whole_regions_missing_from_fresh_or_quiet_screencasts() {
+        use crate::{engine::Playback, testing::PageBuilder};
+        use rich_embed::{FrameMeta, Pixels, ScreencastFrame};
+        use std::cell::RefCell;
+
+        for (name, rect, fresh, visible, capture) in [
+            (
+                "contained",
+                Rect::new(10.0, 10.0, 20.0, 20.0),
+                true,
+                true,
+                false,
+            ),
+            (
+                "below edge",
+                Rect::new(10.0, 90.0, 20.0, 20.0),
+                true,
+                true,
+                true,
+            ),
+            (
+                "above edge",
+                Rect::new(10.0, -10.0, 20.0, 20.0),
+                true,
+                true,
+                true,
+            ),
+            (
+                "right edge",
+                Rect::new(90.0, 10.0, 20.0, 20.0),
+                true,
+                true,
+                true,
+            ),
+            (
+                "left edge",
+                Rect::new(-10.0, 10.0, 20.0, 20.0),
+                true,
+                true,
+                true,
+            ),
+            (
+                "below viewport",
+                Rect::new(10.0, 150.0, 20.0, 20.0),
+                true,
+                true,
+                true,
+            ),
+            (
+                "right of viewport",
+                Rect::new(150.0, 10.0, 20.0, 20.0),
+                true,
+                true,
+                true,
+            ),
+            (
+                "quiet",
+                Rect::new(10.0, 10.0, 20.0, 20.0),
+                false,
+                true,
+                true,
+            ),
+            (
+                "not presented",
+                Rect::new(10.0, 90.0, 20.0, 20.0),
+                true,
+                false,
+                false,
+            ),
+        ] {
+            let dir = std::env::temp_dir().join(format!("tab-video-{}", std::process::id()));
+            std::fs::create_dir_all(&dir).unwrap();
+            let engine = FakeEngine::from_dir(&dir).unwrap();
+            let state = engine.state.clone();
+            let mut source = PageBuilder::new("https://example.test", "Video", 200.0, 200.0);
+            source.element(
+                source.body(),
+                "VIDEO",
+                &[("src", "movie.webm")],
+                &[],
+                Some(rect),
+            );
+            let mut page = crate::model::build(&source.snapshot(), &mut Revisions::new());
+            assert_eq!(page.media.len(), 1, "{name}");
+            let node = page.media[0].node;
+            page.media[0].playback = Some(Playback {
+                ready: 4,
+                ..Playback::default()
+            });
+            let frame = ScreencastFrame {
+                pixels: Pixels::new(100, 100, vec![7; 100 * 100 * 3]).unwrap(),
+                meta: FrameMeta {
+                    page_scale: 1.0,
+                    device_width: 100.0,
+                    device_height: 100.0,
+                    ..FrameMeta::default()
+                },
+            };
+            {
+                let mut state = state.lock().unwrap();
+                state.screencast = true;
+                if fresh {
+                    state.frames.push(frame.clone());
+                }
+            }
+            let delivered = RefCell::new(Vec::new());
+            let update = |update| {
+                if let Update::Frame(frame) = update {
+                    delivered.borrow_mut().push(frame);
+                }
+            };
+            let (decode, _jobs) = mpsc::channel();
+            let (_done, decoded) = mpsc::channel();
+            let (decode_inline, _inline_jobs) = mpsc::channel();
+            let (_inline_done, decoded_inline) = mpsc::channel();
+            let mut worker = Worker {
+                engine: Box::new(engine),
+                update: &update,
+                revisions: Revisions::new(),
+                page: Some(Arc::new(page)),
+                state: PageState::default(),
+                dirty: None,
+                stills: HashMap::new(),
+                pictures: HashMap::new(),
+                decode,
+                decoded,
+                inline: HashMap::new(),
+                inline_asked: HashSet::new(),
+                inline_loader: None,
+                decode_inline,
+                decoded_inline,
+                metrics: Some(Metrics {
+                    scroll_y: 0.0,
+                    viewport_height: 100.0,
+                    content_height: 200.0,
+                }),
+                frames: Frames::default(),
+                on_screen: if visible {
+                    HashSet::from([node])
+                } else {
+                    HashSet::new()
+                },
+                intervals: HashMap::new(),
+                last_frame: Some(Instant::now() - QUIET),
+                starved: false,
+                scale: 1.0,
+                scale_given: 1.0,
+                shown_time: HashMap::new(),
+                live: HashMap::new(),
+                appended: HashSet::new(),
+                settle: None,
+                stills_pending: false,
+                pixels: false,
+                pixels_cast: false,
+                screen_at: None,
+                latest: HashMap::new(),
+                drawn: HashMap::new(),
+                stale: HashSet::new(),
+                canvases: HashMap::new(),
+                asked: None,
+            };
+            worker.frames.on = true;
+            worker.video();
+            assert_eq!(
+                state.lock().unwrap().captures,
+                if capture { vec![rect] } else { vec![] },
+                "{name}"
+            );
+            assert_eq!(delivered.borrow().len(), usize::from(visible), "{name}");
+            if visible {
+                let frames = delivered.borrow();
+                let pixels = &frames[0].pixels;
+                assert_eq!((pixels.width, pixels.height), (20, 20), "{name}");
+                let expected = if capture { [30, 90, 220] } else { [7; 3] };
+                assert!(pixels.rgb.chunks_exact(3).all(|p| p == expected), "{name}");
+            }
+            // A fresh cast before the next slot cannot duplicate either path.
+            worker.intervals.insert(node, Duration::from_secs(60));
+            state.lock().unwrap().frames.push(frame);
+            worker.video();
+            assert_eq!(
+                state.lock().unwrap().captures.len(),
+                usize::from(capture),
+                "{name}"
+            );
+            assert_eq!(delivered.borrow().len(), usize::from(visible), "{name}");
+        }
+    }
 
     #[test]
     fn model_media_capture_waits_for_navigation_and_refused_snapshot_retry() {
