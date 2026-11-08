@@ -4822,6 +4822,23 @@ mod tests {
     }
 
     #[test]
+    fn source_interactive_log_retains_control_and_media_ancestry() {
+        let mut f = Fake::new();
+        let log = f.el(0, "DIV", &[("role", "log")], "block");
+        let entry = f.el(log, "DIV", &[], "block");
+        let link = f.el(entry, "A", &[("href", "/guarded")], "inline");
+        let image = f.el(link, "IMG", &[("src", "/a.png")], "block");
+        let sibling = f.el(log, "DIV", &[], "block");
+        f.text(sibling, "another entry");
+        let source = build_source(&PageSnapshot { dom: f.snapshot(), ax: Value::Null }, &mut Revisions::new());
+        assert_eq!(source.page().controls.len(), 1);
+        assert_eq!(source.relations.media_controls, [Some(0)]);
+        let index = |node| source.relations.nodes.iter().position(|n| n.node == node).expect("interactive log source remains available");
+        assert!(source.relations.contains(index(100 + link), index(100 + image)));
+        assert!(source.relations.contains(index(100 + log), index(100 + link)));
+    }
+
+    #[test]
     fn source_fixed_log_contents_do_not_change_outer_memberships() {
         let mut f = Fake::new();
         let log = f.el(0, "DIV", &[("role", "log")], "block");
