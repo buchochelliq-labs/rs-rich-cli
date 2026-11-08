@@ -49,6 +49,8 @@ const MAX_OPTIONS: usize = 500;
 
 /// Where `overflow-x` is in [`SNAPSHOT_STYLES`](crate::cdp::SNAPSHOT_STYLES).
 const SNAPSHOT_OVERFLOW_X: usize = 15;
+/// Optional appended fact; older snapshots have no clip-margin proof.
+const SNAPSHOT_OVERFLOW_CLIP_MARGIN: usize = 16;
 
 /// A run of text with one style.
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -1318,8 +1320,9 @@ fn veils(dom: &Dom, i: usize) -> bool {
 }
 
 /// Reject only a whole source box outside a known clipped axis. Snapshot
-/// bounds already include scrolling. The outer border box is conservative:
-/// it may retain clipped border/padding pixels, but never trims visible ones.
+/// bounds already include scrolling. The outer border box is conservative
+/// for hidden overflow, or clip overflow with a captured zero clip margin.
+/// Missing/unknown or nonzero margins cannot prove that border-box edge.
 /// Containing blocks and transforms are not captured, so stop at a nonstatic
 /// positioned chain rather than guessing whether it escapes an older clip.
 /// Explicit veils keep their existing semantic-twin/name-only policy.
@@ -1343,6 +1346,14 @@ fn overflow_clipped(dom: &Dom, i: usize) -> bool {
             return false;
         }
         let display = dom.style(parent, 0);
+        let clips = |axis| match dom.style(parent, axis) {
+            "hidden" => true,
+            "clip" => matches!(
+                dom.style(parent, SNAPSHOT_OVERFLOW_CLIP_MARGIN).trim(),
+                "0px" | "border-box 0px" | "padding-box 0px" | "content-box 0px"
+            ),
+            _ => false,
+        };
         if dom.is_element(parent)
             && !veils(dom, parent)
             && !matches!(dom.name[parent].as_str(), "HTML" | "BODY")
@@ -1357,10 +1368,8 @@ fn overflow_clipped(dom: &Dom, i: usize) -> bool {
                     | "inline-grid"
             )
             && let Some(clip) = dom.rect(parent).filter(|&r| valid(r))
-            && ((matches!(dom.style(parent, SNAPSHOT_OVERFLOW_X), "hidden" | "clip")
-                && (rect.x >= clip.right() || rect.right() <= clip.x))
-                || (matches!(dom.style(parent, 10), "hidden" | "clip")
-                    && (rect.y >= clip.bottom() || rect.bottom() <= clip.y)))
+            && ((clips(SNAPSHOT_OVERFLOW_X) && (rect.x >= clip.right() || rect.right() <= clip.x))
+                || (clips(10) && (rect.y >= clip.bottom() || rect.bottom() <= clip.y)))
         {
             return true;
         }

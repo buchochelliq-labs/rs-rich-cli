@@ -56,6 +56,7 @@ pub const SNAPSHOT_STYLES: &[&str] = &[
     "clip-path",
     "position",
     "overflow-x",
+    "overflow-clip-margin",
 ];
 
 /// The script of the isolated world. It reports only that something
