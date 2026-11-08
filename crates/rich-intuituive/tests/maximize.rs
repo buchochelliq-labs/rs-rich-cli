@@ -105,6 +105,61 @@ fn signals_written_while_maximized_redraw_hidden_panes_after_restore() {
 }
 
 #[test]
+fn delayed_outside_autofocus_keeps_focus_and_keys_inside_a_maximized_pane() {
+    use std::{cell::Cell, rc::Rc};
+
+    let actions = Rc::new(Cell::new((0, 0)));
+    let seen = actions.clone();
+    let app = App::new(move || {
+        let inside = actions.clone();
+        let outside = actions.clone();
+        let show_outside = signal(false);
+        row([
+            column([label("inside")
+                .name("inside")
+                .focusable()
+                .on_key("x", move |_| {
+                    let (a, b) = inside.get();
+                    inside.set((a + 1, b));
+                })])
+            .maximizable(),
+            label("outside")
+                .name("outside")
+                .focusable()
+                .autofocus()
+                .shown_when(move || show_outside.get())
+                .on_key("x", move |_| {
+                    let (a, b) = outside.get();
+                    outside.set((a, b + 1));
+                }),
+        ])
+        .on_key("s", move |_| show_outside.set(true))
+    })
+    .maximize_key("ctrl+m");
+    let mut driver = app.driver(30, 3);
+    driver.settle();
+    driver.assert_focused("inside");
+    driver.press("ctrl+m");
+    driver.assert_focused("inside");
+    driver.press("s x");
+    assert!(
+        !driver
+            .screen()
+            .plain()
+            .iter()
+            .any(|line| line.contains("outside"))
+    );
+    assert_eq!(seen.get(), (1, 0), "keys escaped the maximized pane");
+    driver.assert_focused("inside");
+
+    // Restoring removes the boundary, so delayed autofocus can take over.
+    driver.press("esc");
+    driver.assert_focused("outside");
+    driver.press("x");
+    assert_eq!(seen.get(), (1, 1));
+}
+
+#[test]
 fn clicks_reach_only_the_maximized_pane() {
     let hits = std::rc::Rc::new(std::cell::Cell::new(0u32));
     let seen = hits.clone();

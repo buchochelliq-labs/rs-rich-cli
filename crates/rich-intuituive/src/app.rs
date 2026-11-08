@@ -6048,7 +6048,8 @@ impl App {
     /// [hidden](crate::Node::access_hidden) from assistive technology.
     fn autofocused(&self) -> Option<NodeId> {
         let mut chosen = None;
-        let allowed = self.controlled_scope().map(|_| self.focusable());
+        let allowed = (self.top().maximized.is_some() || self.controlled_scope().is_some())
+            .then(|| self.focusable());
         self.top().root.walk_accessible(&mut |node, _| {
             if node.autofocus && chosen.is_none() && !node.disabled() {
                 let target = node.focus_target().unwrap_or(node.id);
