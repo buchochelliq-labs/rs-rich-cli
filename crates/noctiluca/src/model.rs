@@ -1425,21 +1425,36 @@ fn fully_opaque_color(css: &str) -> bool {
 /// Whether anything in node `i` shows that is not visually hidden: text,
 /// or a picture or other media.
 fn shows_anything(dom: &Dom, i: usize) -> bool {
-    dom.descendants(i).into_iter().any(|d| {
-        dom.layout[d].is_some()
-            && dom.shows(d)
-            && !dom.concealed[d]
-            && match dom.kind[d] {
-                3 => dom.text[d].as_deref().is_some_and(|t| !t.trim().is_empty()),
-                1 => {
-                    matches!(
-                        dom.name[d].as_str(),
-                        "IMG" | "SVG" | "VIDEO" | "CANVAS" | "PICTURE"
-                    ) || background_picture(dom, d).is_some()
-                }
-                _ => false,
+    dom.descendants(i)
+        .into_iter()
+        .any(|d| shows_content(dom, d))
+}
+
+fn shows_content(dom: &Dom, i: usize) -> bool {
+    dom.shows(i)
+        && !dom.concealed[i]
+        && match dom.kind[i] {
+            3 => dom.text[i].as_deref().is_some_and(|t| !t.trim().is_empty()),
+            1 => {
+                matches!(
+                    dom.name[i].as_str(),
+                    "IMG" | "SVG" | "VIDEO" | "CANVAS" | "PICTURE"
+                ) || background_picture(dom, i).is_some()
             }
-    })
+            _ => false,
+        }
+}
+
+/// A boxless link's footprint comes from its visible content, never an
+/// empty wrapper's box or the hidden words of its accessible name.
+fn visible_footprint(dom: &Dom, i: usize) -> Option<Rect> {
+    dom.descendants(i)
+        .into_iter()
+        // PICTURE chooses a descendant IMG; its own box draws no media.
+        .filter(|&d| dom.name[d] != "PICTURE" && shows_content(dom, d))
+        .filter_map(|d| dom.rect(d))
+        .filter(|rect| !rect.is_empty())
+        .fold(None, |bounds, rect| Some(union(bounds, rect)))
 }
 
 /// Whether a computed `clip` (`rect(top, right, bottom, left)`) has no
@@ -1976,11 +1991,20 @@ impl Walker<'_> {
                 self.page.controls[index].hover_only = true;
                 return;
             }
-            if !laid_out || !dom.shows(i) && role != Role::Link || dom.concealed[i] {
+            let footprint = (!laid_out && role == Role::Link)
+                .then(|| visible_footprint(dom, i))
+                .flatten();
+            if !laid_out && footprint.is_none()
+                || !dom.shows(i) && role != Role::Link
+                || dom.concealed[i]
+            {
                 return;
             }
             let index = self.control(i, role.clone());
             if role == Role::Link {
+                if let Some(rect) = footprint {
+                    self.page.controls[index].rect = rect;
+                }
                 let inner = Context {
                     control: Some(index),
                     name_only: !shows_anything(dom, i),
@@ -2241,7 +2265,8 @@ impl Walker<'_> {
             .source
             .get(&i)
             .map(String::as_str)
-            .or_else(|| dom.attr(i, "src"))
+            .filter(|s| !s.trim().is_empty())
+            .or_else(|| dom.attr(i, "src").filter(|s| !s.trim().is_empty()))
             .map(str::to_string)
             .or_else(|| background_picture(dom, i))
             .map(|s| clean(&crate::url::resolve(&dom.url, &s)))
@@ -4042,15 +4067,43 @@ mod tests {
         assert_eq!(changed.controls[0].revision, 2);
         assert!(changed.check(&binding).is_err());
         assert!(page.blocks.iter().all(|b| b.node != 100 + hidden));
+        // An image-only link still exposes the original guarded action.
+        snapshot.dom["documents"][0]["layout"]["styles"][text_layout][1] = json!(hidden_style);
+        let image_only = build(&snapshot, &mut revisions);
+        assert_eq!(image_only.media.len(), 1);
+        let control = &image_only.controls[0];
+        assert_eq!(control.rect, Rect::new(16.0, 36.0, 160.0, 90.0));
+        assert_eq!(
+            image_only
+                .check(&control.binding(&image_only))
+                .unwrap()
+                .node,
+            100 + link
+        );
     }
 
     #[test]
     fn boxless_link_without_visible_content_emits_no_action_or_content() {
-        for visibility in ["no-layout", "hidden", "transparent", "empty-wrapper"] {
+        for visibility in [
+            "no-layout",
+            "hidden",
+            "transparent",
+            "empty-wrapper",
+            "empty-picture",
+        ] {
             let mut f = Fake::new();
             let link = f.node(0, 1, "A", None, &[("href", "/story")], None);
-            let wrapper = f.el(link, "DIV", &[], "block");
-            if visibility != "empty-wrapper" {
+            let wrapper = f.el(
+                link,
+                if visibility == "empty-picture" {
+                    "PICTURE"
+                } else {
+                    "DIV"
+                },
+                &[],
+                "block",
+            );
+            if !visibility.starts_with("empty-") {
                 let display = (visibility != "no-layout").then_some("inline");
                 f.node(wrapper, 1, "IMG", None, &[("src", "/photo.png")], display);
                 f.node(wrapper, 3, "#text", Some("Not visible"), &[], display);
@@ -4120,6 +4173,32 @@ mod tests {
                 "selected={selected:?}, declared={declared:?}"
             );
             assert_eq!(page.media[0].pending, expected.is_empty());
+        }
+    }
+
+    #[test]
+    fn small_image_without_a_source_stays_absent_without_a_reservation() {
+        for source in [None, Some(""), Some(" \t\n")] {
+            let mut f = Fake::new();
+            let attrs: Vec<_> = source.map(|src| ("src", src)).into_iter().collect();
+            let image = f.el(0, "IMG", &attrs, "inline");
+            *f.bounds.last_mut().unwrap() = vec![16.0, 36.0, 1.0, 1.0];
+            f.text(0, "Adjacent content");
+            let url = f.s("https://example.test/news/");
+            let selected = source.map(|src| f.s(src));
+            let mut snapshot = PageSnapshot {
+                dom: f.snapshot(),
+                ax: Value::Null,
+            };
+            snapshot.dom["documents"][0]["documentURL"] = json!(url);
+            if let Some(selected) = selected {
+                snapshot.dom["documents"][0]["nodes"]["currentSourceURL"] =
+                    json!({"index": [image], "value": [selected]});
+            }
+            let page = build(&snapshot, &mut Revisions::new());
+            assert_eq!(page.media.len(), 1);
+            assert_eq!(page.media[0].src, "");
+            assert!(!page.media[0].pending);
         }
     }
 
