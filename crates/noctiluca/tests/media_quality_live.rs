@@ -39,6 +39,23 @@ fn browser(page: &str) -> Option<ChromeBackend> {
     Some(engine)
 }
 
+// A resize is applied asynchronously; only capture once the source scope
+// confirms the requested viewport is active.
+fn snapshot_ready(engine: &mut ChromeBackend) -> noctiluca::engine::PageSnapshot {
+    let deadline = Instant::now() + Duration::from_secs(10);
+    loop {
+        match engine.snapshot(TabId(0)) {
+            Ok(snapshot) => return snapshot,
+            Err(error)
+                if error.kind() == std::io::ErrorKind::WouldBlock && Instant::now() < deadline =>
+            {
+                std::thread::sleep(Duration::from_millis(10));
+            }
+            Err(error) => panic!("snapshot failed: {error}"),
+        }
+    }
+}
+
 fn evaluate(engine: &ChromeBackend, expression: &str) -> Value {
     let result = engine
         .devtools()
@@ -249,7 +266,7 @@ fn gauge_updates_and_fixed_action_survive_all_projection_widths() {
             engine.resize(w.max(80), h).unwrap();
             for (shown, semantic) in [(123.45, 67.8), (234.56, 89.1)] {
                 evaluate(&engine, &format!("setGauge({shown},{semantic});true"));
-                let p = build(&engine.snapshot(TabId(0)).unwrap(), &mut revisions);
+                let p = build(&snapshot_ready(&mut engine), &mut revisions);
                 assert!(
                     p.indicators.iter().any(|i| i.value == Some(semantic)),
                     "{fixture}: {:?}",
@@ -294,7 +311,7 @@ fn narrow_original_chat_is_readable_and_send_is_reachable_after_scrolling() {
         return;
     };
     engine.resize(80, 20).unwrap();
-    let snapshot = engine.snapshot(TabId(0)).unwrap();
+    let snapshot = snapshot_ready(&mut engine);
     if let Ok(path) = std::env::var("NOCTILUCA_CAPTURE_SNAPSHOT") {
         std::fs::write(
             path,
