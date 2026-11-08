@@ -2855,6 +2855,7 @@ fn source_foreground(b: Browser, nodes: Vec<NodeId>, bounds: (u16, u16, u16, u16
                                         node,
                                         full_width,
                                         (CELL.0 as f64, CELL.1 as f64),
+                                        &b.hint_marks(),
                                     )
                                 })
                                 .unwrap_or_default()

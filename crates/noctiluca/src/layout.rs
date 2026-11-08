@@ -1071,12 +1071,13 @@ pub(crate) fn project_foreground(
     node: NodeId,
     columns: u16,
     cell: (f64, f64),
+    marks: &Marks,
 ) -> Projection {
     project_part(
         page,
         columns,
         cell,
-        &Marks::default(),
+        marks,
         Part::Foreground(node),
         &mut Vec::new(),
     )

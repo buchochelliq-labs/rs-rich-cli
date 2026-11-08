@@ -3616,8 +3616,8 @@ fn stack(dom: &Dom, ax: &Ax<'_>, page: &mut Page) {
             .min_by(|a, b| area(&a.1).total_cmp(&area(&b.1)))
             .map(|(m, _, _)| *m);
     }
-    // Preserve only ordinary blocks actually above and intersecting a fixed
-    // surface. They remain in the underlay; this bounded association allows
+    // Preserve ordinary blocks above a fixed surface that can overlap it
+    // horizontally while scrolling. They remain in the underlay; this bounded association allows
     // their visible cells and hit targets to be painted in source order.
     let mut foreground = Vec::new();
     for block in &page.blocks {
@@ -3629,22 +3629,11 @@ fn stack(dom: &Dom, ax: &Ax<'_>, page: &mut Page) {
             continue;
         }
         let rect = block.rect;
-        let owner = page
-            .overlays
-            .iter()
-            .enumerate()
-            .filter(|(_, overlay)| {
-                let surface = page.layers[overlay.layer].rect;
-                paint > overlay.paint_order
-                    && rect.x < surface.right()
-                    && surface.x < rect.right()
-                    && rect.y < surface.bottom()
-                    && surface.y < rect.bottom()
-            })
-            .max_by_key(|(_, overlay)| overlay.paint_order)
-            .map(|(index, _)| index);
-        if let Some(owner) = owner {
-            foreground.push((owner, paint, block.node));
+        for (owner, overlay) in page.overlays.iter().enumerate() {
+            let surface = page.layers[overlay.layer].rect;
+            if paint > overlay.paint_order && rect.x < surface.right() && surface.x < rect.right() {
+                foreground.push((owner, paint, block.node));
+            }
         }
     }
     foreground.sort_by_key(|(_, paint, _)| *paint);

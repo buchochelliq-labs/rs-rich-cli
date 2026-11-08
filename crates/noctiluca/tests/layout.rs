@@ -1001,6 +1001,15 @@ fn source_dialog_layer(modal: bool, higher: bool) {
         );
         p.paint(over, 200);
         p.text(over, "Above", Rect::new(700.0, 180.0, 50.0, 18.0));
+        let incoming = p.element(
+            body,
+            "BUTTON",
+            &[],
+            &[],
+            Some(Rect::new(700.0, 900.0, 70.0, 30.0)),
+        );
+        p.paint(incoming, 201);
+        p.text(incoming, "Incoming", Rect::new(700.0, 900.0, 65.0, 18.0));
         for i in 0..35 {
             let y = 740.0 + f64::from(i) * 30.0;
             let row = p.element(body, "P", &[], &[], Some(Rect::new(0.0, y, 140.0, 18.0)));
@@ -1013,6 +1022,19 @@ fn source_dialog_layer(modal: bool, higher: bool) {
     }
     let model = build(&p.snapshot(), &mut Revisions::new());
     let higher_node = higher.then(|| model.find("button", "Above")[0].node);
+    let incoming_node = higher.then(|| model.find("button", "Incoming")[0].node);
+    let higher_hint = higher_node.map(|node| {
+        let controls = model
+            .controls
+            .iter()
+            .filter(|control| !control.disabled && !control.hover_only)
+            .collect::<Vec<_>>();
+        let index = controls
+            .iter()
+            .position(|control| control.node == node)
+            .unwrap();
+        noctiluca::layout::hint_labels(controls.len())[index].clone()
+    });
     let lower_node = model.find("button", "Underlying action")[0].node;
     assert!(
         !model.overlays[0].foreground.contains(&lower_node),
@@ -1115,6 +1137,36 @@ fn source_dialog_layer(modal: bool, higher: bool) {
         let (x, y) = driver
             .find_text("Above")
             .expect("higher-painted source control hidden by popup");
+        let hint = higher_hint.as_ref().unwrap();
+        driver.press("f");
+        driver.settle();
+        let (hint_x, hint_y) = driver
+            .find_text(&format!("[{hint}]"))
+            .expect("foreground hint is not visible");
+        assert_eq!(hint_y, y);
+        assert!(
+            hint_x.abs_diff(x) <= 1,
+            "hint appeared away from its source control"
+        );
+        driver.type_text(hint);
+        let deadline = Instant::now() + Duration::from_secs(5);
+        loop {
+            driver.settle();
+            if state
+                .lock()
+                .unwrap()
+                .actions
+                .iter()
+                .any(|a| matches!(a, PageAction::Click(node) if *node == target))
+            {
+                break;
+            }
+            assert!(
+                Instant::now() < deadline,
+                "foreground hint did not activate its source control"
+            );
+            std::thread::sleep(Duration::from_millis(10));
+        }
         let copies = driver
             .accessibility()
             .iter()
@@ -1124,14 +1176,23 @@ fn source_dialog_layer(modal: bool, higher: bool) {
             copies <= 1,
             "foreground duplicated accessibility entries: {copies}"
         );
-        driver.click(x, y);
-        let deadline = Instant::now() + Duration::from_secs(5);
-        while !state
+        let previous = state
             .lock()
             .unwrap()
             .actions
             .iter()
-            .any(|a| matches!(a, PageAction::Click(node) if *node == target))
+            .filter(|a| matches!(a, PageAction::Click(node) if *node == target))
+            .count();
+        driver.click(x, y);
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while state
+            .lock()
+            .unwrap()
+            .actions
+            .iter()
+            .filter(|a| matches!(a, PageAction::Click(node) if *node == target))
+            .count()
+            <= previous
         {
             driver.settle();
             assert!(
@@ -1175,6 +1236,34 @@ fn source_dialog_layer(modal: bool, higher: bool) {
             assert!(
                 Instant::now() < deadline,
                 "scrolled foreground hit did not reach source"
+            );
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        driver.press("home");
+        driver.settle();
+        assert!(driver.find_text("Incoming").is_none());
+        for _ in 0..35 {
+            driver.press("j");
+        }
+        driver.settle();
+        let (incoming_x, incoming_y) = driver.find_text("Incoming").expect("higher-painted offscreen control was hidden after scrolling into popup without a source update");
+        let incoming = incoming_node.unwrap();
+        driver.click(incoming_x, incoming_y);
+        let deadline = Instant::now() + Duration::from_secs(5);
+        loop {
+            driver.settle();
+            if state
+                .lock()
+                .unwrap()
+                .actions
+                .iter()
+                .any(|a| matches!(a, PageAction::Click(node) if *node == incoming))
+            {
+                break;
+            }
+            assert!(
+                Instant::now() < deadline,
+                "incoming higher-painted control was not clickable"
             );
             std::thread::sleep(Duration::from_millis(10));
         }
