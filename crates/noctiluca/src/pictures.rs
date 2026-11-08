@@ -161,6 +161,10 @@ pub fn splice(
 }
 
 /// Splice picture cells using measured physical cell dimensions.
+#[allow(
+    clippy::too_many_arguments,
+    reason = "Additive metrics API preserves the public splice signature and caller compatibility"
+)]
 pub fn splice_with_metrics(
     console: &rich::Console,
     cells: &Cells,

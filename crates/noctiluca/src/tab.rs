@@ -627,6 +627,7 @@ impl Worker<'_> {
         }
         self.page = Some(page.clone());
         self.dirty = None;
+        self.stills_pending = true;
         Some(page)
     }
 
@@ -1001,7 +1002,7 @@ impl Worker<'_> {
             rect.height.min(4000.0),
         );
         self.engine
-            .capture(TabId(0), region, Format::Png)
+            .capture_model(TabId(0), region, Format::Png)
             .ok()
             .map(|frame| frame.bytes)
     }
@@ -1395,7 +1396,7 @@ impl Worker<'_> {
             rect.width.min(4000.0),
             rect.height.min(4000.0),
         );
-        let frame = self.engine.capture(TabId(0), region, format).ok()?;
+        let frame = self.engine.capture_model(TabId(0), region, format).ok()?;
         let image = image::load_from_memory(&frame.bytes).ok()?.to_rgb8();
         rich_embed::Pixels::new(image.width(), image.height(), image.into_raw())
     }
@@ -1763,10 +1764,6 @@ fn run(
             probed = Instant::now();
             worker.follow_playback();
         }
-        if !worker.pixels {
-            worker.video();
-            worker.poll_canvases();
-        }
         let due = worker
             .dirty
             .is_some_and(|since| since.elapsed() >= DEBOUNCE)
@@ -1778,7 +1775,6 @@ fn run(
             if worker.read().is_some() {
                 read_now = false;
                 live_due = false;
-                worker.capture_stills();
             } else {
                 worker.dirty.get_or_insert_with(Instant::now);
             }
@@ -1786,12 +1782,21 @@ fn run(
             // The isolated world debounced it already: read the logs now.
             live_due = false;
             worker.read_live();
-        } else if worker.stills_pending {
-            worker.capture_stills();
         }
         // Events can arrive during the synchronous model read too. Backends
         // also guard the final frame take atomically against their model scope.
         worker.poll_events(&mut read_now, &mut live_due);
+        // Never capture old-model media while a known invalidation or refused
+        // snapshot waits. The backend also checks ownership during each capture.
+        if !read_now && worker.dirty.is_none() && worker.page.is_some() {
+            if !worker.pixels {
+                worker.video();
+                worker.poll_canvases();
+            }
+            if worker.stills_pending {
+                worker.capture_stills();
+            }
+        }
         // A sole fresh frame belongs to the model published for its document.
         // Keep it in the engine while an initial/navigation snapshot is refused.
         if worker.pixels && !read_now && worker.page.is_some() {
@@ -1820,6 +1825,126 @@ fn run(
 mod tests {
     use super::*;
     use crate::testing::FakeEngine;
+
+    #[test]
+    fn model_media_capture_waits_for_navigation_and_refused_snapshot_retry() {
+        use crate::{
+            engine::{Frame, HistoryStep, PageSnapshot},
+            testing::PageBuilder,
+        };
+        use std::{io, sync::Arc};
+        for refused in [false, true] {
+            let current = Arc::new(AtomicBool::new(false));
+            let published = Arc::new(std::sync::atomic::AtomicU64::new(0));
+            let mut pages = Vec::new();
+            let mut nodes = Vec::new();
+            for host in ["a", "b"] {
+                let mut p =
+                    PageBuilder::new(&format!("https://{host}.test"), "Capture", 800.0, 640.0);
+                let canvas = p.element(
+                    p.body(),
+                    "CANVAS",
+                    &[],
+                    &[],
+                    Some(Rect::new(0.0, 0.0, 100.0, 100.0)),
+                );
+                nodes.push(canvas as i64 + 1);
+                pages.push(p.snapshot());
+            }
+            struct Source {
+                current: Arc<AtomicBool>,
+                published: Arc<std::sync::atomic::AtomicU64>,
+                pages: Vec<PageSnapshot>,
+                event: bool,
+                refuse: bool,
+                bytes: Vec<u8>,
+            }
+            impl Engine for Source {
+                fn resize(&mut self, _: u16, _: u16) -> io::Result<()> {
+                    Ok(())
+                }
+                fn open(&mut self, _: TabId, _: &str) -> io::Result<()> {
+                    Ok(())
+                }
+                fn history(&mut self, _: TabId, _: HistoryStep) -> io::Result<()> {
+                    Ok(())
+                }
+                fn state(&self, _: TabId) -> PageState {
+                    PageState::default()
+                }
+                fn snapshot(&mut self, _: TabId) -> io::Result<PageSnapshot> {
+                    let b = self.current.load(Ordering::SeqCst);
+                    if b && std::mem::take(&mut self.refuse) {
+                        return Err(io::Error::other("renderer swapping"));
+                    }
+                    Ok(self.pages[usize::from(b)].clone())
+                }
+                fn capture(&mut self, _: TabId, _: Rect, format: Format) -> io::Result<Frame> {
+                    if self.current.load(Ordering::SeqCst) {
+                        assert_eq!(
+                            self.published.load(Ordering::SeqCst),
+                            2,
+                            "B pixels captured under old model A"
+                        );
+                    }
+                    Ok(Frame {
+                        format,
+                        bytes: self.bytes.clone(),
+                    })
+                }
+                fn act(&mut self, _: TabId, _: &PageAction) -> io::Result<()> {
+                    Ok(())
+                }
+                fn events(&mut self) -> Vec<EngineEvent> {
+                    if self.current.load(Ordering::SeqCst) && !self.event {
+                        self.event = true;
+                        vec![EngineEvent::Navigated("https://b.test".into())]
+                    } else {
+                        Vec::new()
+                    }
+                }
+            }
+            let mut bytes = std::io::Cursor::new(Vec::new());
+            image::DynamicImage::new_rgb8(1, 1)
+                .write_to(&mut bytes, image::ImageFormat::Png)
+                .unwrap();
+            let source = Source {
+                current: current.clone(),
+                published: published.clone(),
+                pages,
+                event: false,
+                refuse: refused,
+                bytes: bytes.into_inner(),
+            };
+            let (send, receive) = mpsc::channel();
+            send.send((
+                1,
+                Command::Regions {
+                    on_screen: nodes,
+                    intervals: Vec::new(),
+                    scale: 1.0,
+                },
+            ))
+            .unwrap();
+            let stop = AtomicBool::new(false);
+            run(Box::new(source), receive, &stop, &|update| match update {
+                Update::Page(page) => {
+                    if page.url == "https://a.test" {
+                        published.store(1, Ordering::SeqCst);
+                        current.store(true, Ordering::SeqCst);
+                    } else if page.url == "https://b.test" {
+                        published.store(2, Ordering::SeqCst);
+                    }
+                }
+                Update::Frame(_) => {
+                    assert_eq!(published.load(Ordering::SeqCst), 2);
+                    stop.store(true, Ordering::SeqCst);
+                }
+                _ => {}
+            });
+            assert_eq!(published.load(Ordering::SeqCst), 2);
+        }
+    }
 
     /// A producer with a sole fresh B frame, including one refused model read.
     /// No Update callbacks are fabricated: the actual run loop emits all of them.

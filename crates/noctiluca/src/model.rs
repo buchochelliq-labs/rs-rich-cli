@@ -236,7 +236,7 @@ pub struct SourceOverlay {
     pub dialog: bool,
     pub modal: bool,
     pub name: String,
-    /// Fixed layer background when it is fully opaque.
+    /// Source surface background when it is proven fully opaque.
     pub background: Option<String>,
     /// Chrome paint order for compositing sibling dialogs.
     pub paint_order: i64,
@@ -1389,17 +1389,37 @@ fn opaque(css: &str) -> bool {
 /// Whether a computed colour is fully opaque, for occlusion rather than
 /// merely checking whether it paints anything.
 fn fully_opaque_color(css: &str) -> bool {
-    if !opaque(css) {
+    let css = css.trim();
+    let Some(inner) = css
+        .strip_prefix("rgb(")
+        .or_else(|| css.strip_prefix("rgba("))
+        .and_then(|value| value.strip_suffix(')'))
+    else {
+        // Unknown computed syntax is not positive evidence of occlusion.
+        return false;
+    };
+    let parts: Vec<_> = inner
+        .split([',', ' ', '/'])
+        .filter(|part| !part.is_empty())
+        .collect();
+    if !(3..=4).contains(&parts.len())
+        || parts[..3].iter().any(|part| {
+            part.trim_end_matches('%')
+                .parse::<f64>()
+                .ok()
+                .is_none_or(|value| !value.is_finite())
+        })
+    {
         return false;
     }
-    match css.strip_prefix("rgba(").and_then(|c| c.strip_suffix(')')) {
-        Some(inner) => inner
-            .rsplit([',', '/'])
-            .next()
-            .and_then(|a| a.trim().parse::<f64>().ok())
-            .is_some_and(|alpha| alpha >= 1.0),
-        None => true,
-    }
+    parts.get(3).is_none_or(|alpha| {
+        let scale = if alpha.ends_with('%') { 100.0 } else { 1.0 };
+        alpha
+            .trim_end_matches('%')
+            .parse::<f64>()
+            .ok()
+            .is_some_and(|value| value.is_finite() && value >= scale)
+    })
 }
 
 /// Whether anything in node `i` shows that is not visually hidden: text,
@@ -3331,12 +3351,38 @@ fn stack(dom: &Dom, ax: &Ax<'_>, page: &mut Page) {
     let n = dom.parent.len();
     let parent = |i: usize| usize::try_from(dom.parent[i]).ok().filter(|&p| p < i);
     let shell = shell_bars(dom);
+    // Source semantics establish a surface independently of fixed/opaque boxes.
+    // The inherited fixed root still includes the container around a nested dialog.
+    let declared: Vec<_> = (0..n)
+        .filter(|&i| {
+            if !dom.is_element(i)
+                || dom.concealed[i]
+                || !dom.shows(i)
+                || !dom
+                    .rect(i)
+                    .is_some_and(|rect| rect.width > 0.0 && rect.height > 0.0)
+            {
+                return false;
+            }
+            let role = dom.attr(i, "role").unwrap_or_default();
+            role.split_whitespace().any(|role| {
+                role.eq_ignore_ascii_case("dialog") || role.eq_ignore_ascii_case("alertdialog")
+            }) || ax
+                .get(dom.backend[i])
+                .and_then(|node| node["role"]["value"].as_str())
+                .is_some_and(|role| matches!(role, "dialog" | "alertdialog"))
+                || dom.name[i] == "DIALOG" && dom.attr(i, "open").is_some()
+        })
+        .collect();
+    let semantic: HashSet<_> = declared.iter().copied().collect();
     let mut root: Vec<Option<usize>> = vec![None; n];
     for i in 0..n {
         root[i] = parent(i).and_then(|p| root[p]).or_else(|| {
             (dom.is_element(i)
                 && dom.layout[i].is_some()
-                && (matches!(dom.style(i, 14), "fixed" | "sticky") || shell.contains(&i)))
+                && (matches!(dom.style(i, 14), "fixed" | "sticky")
+                    || shell.contains(&i)
+                    || semantic.contains(&i)))
             .then_some(i)
         });
     }
@@ -3358,6 +3404,8 @@ fn stack(dom: &Dom, ax: &Ax<'_>, page: &mut Page) {
             let rect = dom.rect(r).unwrap_or_default();
             let top = if fixed_at(r) {
                 rect.y - dom.scroll_y
+            } else if semantic.contains(&r) {
+                rect.y
             } else {
                 static_top(dom, r, rect)
             };
@@ -3378,7 +3426,7 @@ fn stack(dom: &Dom, ax: &Ax<'_>, page: &mut Page) {
         let fixed = fixed_at(r);
         let place = if fixed && view > 0.0 && (top >= view || top + rect.height <= 0.0) {
             Place::Off
-        } else if rect.height > quarter {
+        } else if (!fixed && semantic.contains(&r)) || rect.height > quarter {
             Place::Flow
         } else if top <= pinned_to + TOUCH {
             pinned_to = pinned_to.max(top + rect.height);
@@ -3406,29 +3454,13 @@ fn stack(dom: &Dom, ax: &Ax<'_>, page: &mut Page) {
     // Keep the fixed root as the composited surface, including descendants
     // around a nested dialog, and avoid duplicate surfaces for one root.
     let mut dialog_roots = HashSet::new();
-    for i in 0..n {
-        if !dom.is_element(i) || dom.concealed[i] || !dom.shows(i) {
-            continue;
-        }
-        let role = dom.attr(i, "role").unwrap_or_default();
+    for i in declared {
         let ax_node = ax.get(dom.backend[i]);
-        let ax_role = ax_node
-            .and_then(|n| n["role"]["value"].as_str())
-            .unwrap_or_default();
-        let declared = role
-            .split_whitespace()
-            .any(|r| r.eq_ignore_ascii_case("dialog") || r.eq_ignore_ascii_case("alertdialog"))
-            || matches!(ax_role, "dialog" | "alertdialog")
-            || (dom.name[i] == "DIALOG" && dom.attr(i, "open").is_some());
         let Some(r) = root[i] else { continue };
         let Some(&layer) = layer_of.get(&r) else {
             continue;
         };
-        if !declared
-            || !fixed_at(r)
-            || page.layers[layer].place == Place::Off
-            || !dialog_roots.insert(r)
-        {
+        if page.layers[layer].place == Place::Off || !dialog_roots.insert(r) {
             continue;
         }
         let modal = dom

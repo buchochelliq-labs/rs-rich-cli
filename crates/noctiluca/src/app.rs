@@ -116,6 +116,7 @@ pub struct Browser {
     /// Encodes the frames the pacing lets through, off the thread that
     /// draws.
     encoder: Signal<Rc<Encoder>>,
+    prepared: Signal<Arc<std::sync::Mutex<Prepared>>>,
     /// The regions on screen and the pacing's intervals, as last told to
     /// the tab.
     regions_sent: Signal<RegionsSent>,
@@ -328,10 +329,15 @@ pub(crate) fn lay_out_with_logs(
             // the source rectangle. Restore the configured rules on close.
             let mut underlay = marks.clone();
             if !page.overlays.is_empty() {
-                underlay.adapt = crate::adapt::Adapt::none().with(
-                    crate::adapt::Rule::Shelves,
-                    marks.adapt.on(crate::adapt::Rule::Shelves),
-                );
+                underlay.adapt = crate::adapt::Adapt::none()
+                    .with(
+                        crate::adapt::Rule::Shelves,
+                        marks.adapt.on(crate::adapt::Rule::Shelves),
+                    )
+                    .with(
+                        crate::adapt::Rule::PageColors,
+                        marks.adapt.on(crate::adapt::Rule::PageColors),
+                    );
             }
             layout::project_with_logs(
                 page,
@@ -934,18 +940,17 @@ fn video_frame(b: Browser, frame: &VideoFrame) {
         // Pixels are encoded on the encoder's thread first, in the cells
         // the region is drawn in, so the painter finds the escape made.
         Some(picture) => {
-            b.encoder.with_untracked(|e| {
-                e.encode_with_metrics(
-                    Job {
-                        node: frame.node,
-                        picture,
-                        pixels,
-                        cols,
-                        rows,
-                    },
-                    metrics,
-                )
-            });
+            let job = Job {
+                node: frame.node,
+                picture,
+                pixels,
+                cols,
+                rows,
+            };
+            b.prepared
+                .with_untracked(|queue| queue.lock().unwrap().admit(&job));
+            b.encoder
+                .with_untracked(|encoder| encoder.encode_with_metrics(job, metrics));
         }
         None => {}
     }
@@ -2092,6 +2097,7 @@ fn apply(b: Browser, update: Update, cx: &mut Ctx) {
             let new_document =
                 b.page.with_untracked(|p| p.as_ref().map(|p| p.document)) != Some(page.document);
             let nodes = page.media.iter().map(|media| media.node).collect();
+            prune_media_work(b, new_document, &nodes);
             let mut videos = (*b.videos.get_untracked()).clone();
             let mut live = (*b.live.get_untracked()).clone();
             b.pacing.with_untracked(|p| {
@@ -2220,20 +2226,77 @@ fn forward_updates(
     }
 }
 
+#[derive(Default)]
+struct Prepared {
+    waiting: std::collections::VecDeque<Job>,
+    admitted: HashMap<NodeId, (u32, Option<u32>)>,
+}
+
+impl Prepared {
+    fn admit(&mut self, job: &Job) {
+        let id = job.picture.id();
+        let entry = self.admitted.entry(job.node).or_insert((id, None));
+        if entry.0 != id {
+            *entry = (id, None);
+            self.waiting.retain(|old| old.node != job.node);
+        }
+    }
+
+    fn complete(&mut self, job: Job) -> bool {
+        let Some((id, completed)) = self.admitted.get_mut(&job.node) else {
+            return false;
+        };
+        if *id != job.picture.id()
+            || completed.is_some_and(|version| version > job.picture.version())
+        {
+            return false;
+        }
+        // An executing frame can finish while a newer one waits. Requiring the
+        // latest requested version here would starve a codec slower than offers.
+        *completed = Some(job.picture.version());
+        self.waiting.retain(|old| old.node != job.node);
+        self.waiting.push_back(job);
+        true
+    }
+
+    fn retain(&mut self, nodes: &std::collections::HashSet<NodeId>) {
+        self.admitted.retain(|node, _| nodes.contains(node));
+        self.waiting.retain(|job| nodes.contains(&job.node));
+    }
+}
+
+fn prune_media_work(b: Browser, clear: bool, nodes: &std::collections::HashSet<NodeId>) {
+    b.encoder.with_untracked(|encoder| {
+        if clear {
+            encoder.clear_waiting();
+        } else {
+            encoder.retain_waiting(nodes);
+        }
+    });
+    b.prepared.with_untracked(|queue| {
+        let mut queue = queue.lock().unwrap();
+        if clear {
+            *queue = Prepared::default();
+        } else {
+            queue.retain(nodes);
+        }
+    });
+}
+
 // Prepared pictures retain their original identity; show_frame rejects a
 // completion invalidated by navigation, a view change or a newer picture.
 fn forward_prepared(
     b: Browser,
     ready: mpsc::Receiver<()>,
-    prepared: Arc<std::sync::Mutex<std::collections::VecDeque<Job>>>,
+    prepared: Arc<std::sync::Mutex<Prepared>>,
     proxy: rich_intuituive::Proxy,
 ) {
     while ready.recv().is_ok() {
-        while !prepared.lock().unwrap().is_empty() {
+        while !prepared.lock().unwrap().waiting.is_empty() {
             let inbox = prepared.clone();
             let (done, wait) = mpsc::sync_channel(1);
             if !proxy.run_with(move |_| {
-                let next = inbox.lock().unwrap().pop_front();
+                let next = inbox.lock().unwrap().waiting.pop_front();
                 if let Some(job) = next {
                     show_frame(
                         b,
@@ -2903,6 +2966,54 @@ fn source_foreground(b: Browser, nodes: Vec<NodeId>, bounds: (u16, u16, u16, u16
     .children_cover_only()
 }
 
+// Adapted text uses the terminal's foreground/surface pair. Faithful text
+// and the source surface share exactly the same documented colour transform.
+fn popup_fill(adapt: Adapt, source: &str, background: crate::adapt::Background) -> String {
+    if adapt.on(crate::adapt::Rule::PageColors) {
+        String::new()
+    } else {
+        crate::adapt::page_backdrop(Some(source), true, background).unwrap_or_default()
+    }
+}
+
+fn source_position(b: Browser) -> f64 {
+    let scroll = b.scroll.get() as usize;
+    if scroll == 0 {
+        0.0
+    } else {
+        b.layout.with(|layout| layout.y_of(scroll))
+    }
+}
+
+fn document_surface(
+    layer: &crate::model::Layer,
+    source_y: f64,
+    rows: u16,
+) -> Option<(u16, u16, u64)> {
+    let at = ((layer.top - source_y) / f64::from(CELL.1)).round() as i64;
+    let full_height = (layer.rect.height / f64::from(CELL.1)).ceil().max(1.0) as i64;
+    if at >= i64::from(rows) || at + full_height <= 0 {
+        return None;
+    }
+    let skip = at.min(0).unsigned_abs();
+    let height = (full_height - skip as i64).min(i64::from(rows) - at.max(0)) as u16;
+    Some((at.max(0) as u16, height, skip))
+}
+
+fn visible_source_dialog(b: Browser) -> bool {
+    let rows = b.viewport.get().1.saturating_sub(CHROME_ROWS).max(1);
+    let source_y = source_position(b);
+    b.page.with(|page| {
+        page.as_ref().is_some_and(|page| {
+            page.dialogs().any(|dialog| {
+                page.layers.get(dialog.layer).is_some_and(|layer| {
+                    layer.fixed || document_surface(layer, source_y, rows).is_some()
+                })
+            })
+        })
+    })
+}
+
 fn source_dialogs(b: Browser) -> Node {
     type Spec = (
         NodeId,
@@ -2915,11 +3026,13 @@ fn source_dialogs(b: Browser) -> Node {
         String,
         Option<String>,
         Vec<NodeId>,
+        u64,
     );
     keyed(
         move || {
             let (columns, height) = b.viewport.get();
             let rows = height.saturating_sub(CHROME_ROWS).max(1);
+            let source_y = source_position(b);
             b.page.with(|page| {
                 page.as_ref()
                     .map(|page| {
@@ -2932,10 +3045,10 @@ fn source_dialogs(b: Browser) -> Node {
                                 let width = ((layer.rect.width / f64::from(CELL.0)).ceil().max(1.0)
                                     as u16)
                                     .min(columns.max(1));
-                                let height = ((layer.rect.height / f64::from(CELL.1))
-                                    .ceil()
-                                    .max(1.0) as u16)
-                                    .min(rows);
+                                let mut height =
+                                    ((layer.rect.height / f64::from(CELL.1)).ceil().max(1.0)
+                                        as u16)
+                                        .min(rows);
                                 let left = ((layer.rect.x / f64::from(CELL.0)).round().max(0.0)
                                     as u16)
                                     .min(columns.saturating_sub(width));
@@ -2950,7 +3063,14 @@ fn source_dialogs(b: Browser) -> Node {
                                 } else {
                                     (layer.top / f64::from(CELL.1)).round().max(0.0) as u16
                                 };
-                                let top = desired_top.min(rows.saturating_sub(height));
+                                let (top, skip) = if layer.fixed {
+                                    (desired_top.min(rows.saturating_sub(height)), 0)
+                                } else {
+                                    let (top, visible_height, skip) =
+                                        document_surface(layer, source_y, rows)?;
+                                    height = visible_height;
+                                    (top, skip)
+                                };
                                 Some((
                                     dialog.node,
                                     left,
@@ -2962,6 +3082,7 @@ fn source_dialogs(b: Browser) -> Node {
                                     dialog.name.clone(),
                                     dialog.background.clone(),
                                     dialog.foreground.clone(),
+                                    skip,
                                 ))
                             })
                             .collect::<Vec<Spec>>()
@@ -2982,6 +3103,7 @@ fn source_dialogs(b: Browser) -> Node {
                     name,
                     background,
                     foreground,
+                    skip,
                 )| {
                     let width = b
                         .viewport
@@ -3008,7 +3130,7 @@ fn source_dialogs(b: Browser) -> Node {
                                 .unwrap_or_default()
                         })
                     });
-                    let offset = signal(0u64);
+                    let offset = signal(skip);
                     let cells = Rc::new(pictures::Cells::with_presentation(b.presentation));
                     let rows = scroll_virtual_with(
                         move || projection.with(|p| p.lines.len()),
@@ -3161,8 +3283,12 @@ fn source_dialogs(b: Browser) -> Node {
                     );
                     let mut children = Vec::new();
                     if let Some(background) = background {
-                        let colour = background.replace(' ', "");
-                        children.push(fill(" ", &format!("on {colour}")).on_click(|_| {}));
+                        let style = popup_fill(
+                            b.effective_adapt(),
+                            &background,
+                            crate::adapt::background(),
+                        );
+                        children.push(fill(" ", &style).on_click(|_| {}));
                     }
                     children.push(rows);
                     let popup = layers(children)
@@ -3593,15 +3719,14 @@ pub fn app_with_presentation(
             })
         });
         let pacing = video_pacing(&config, images, media_presentation);
-        let prepared = Arc::new(std::sync::Mutex::new(std::collections::VecDeque::<Job>::new()));
+        let prepared = Arc::new(std::sync::Mutex::new(Prepared::default()));
         let completions = prepared.clone();
         let (wake_prepared, ready) = mpsc::sync_channel(1);
         let encoder = Encoder::spawn_with_presentation(media_presentation, move |job| {
             let trace = {
                 let mut q = completions.lock().unwrap();
-                q.retain(|old| old.node != job.node);
-                q.push_back(job);
-                crate::diagnostics::enabled().then(|| (q.len(), q.iter().map(|job| job.picture.image().as_bytes().len()).sum::<usize>()))
+                if !q.complete(job) { return; }
+                crate::diagnostics::enabled().then(|| (q.waiting.len(), q.waiting.iter().map(|job| job.picture.image().as_bytes().len()).sum::<usize>()))
             };
             let _ = wake_prepared.try_send(());
             if let Some((waiting, bytes)) = trace {
@@ -3646,6 +3771,7 @@ pub fn app_with_presentation(
             videos: signal(Rc::new(HashMap::new())),
             pacing: signal(Rc::new(RefCell::new(pacing))),
             encoder: signal(Rc::new(encoder)),
+            prepared: signal(prepared.clone()),
             regions_sent: signal((Vec::new(), Vec::new(), 1.0)),
             start: signal(false),
             tunnel: signal(None),
@@ -3668,6 +3794,7 @@ pub fn app_with_presentation(
         watch(
             move || b.view.get() == View::Projection,
             move |projection, _| {
+                if !projection { prune_media_work(b, true, &Default::default()); }
                 let mut videos = (*b.videos.get_untracked()).clone();
                 let mut live = (*b.live.get_untracked()).clone();
                 b.pacing.with_untracked(|p| {
@@ -3784,7 +3911,7 @@ pub fn app_with_presentation(
                 if key.code == KeyCode::Escape
                     && !key.modifiers.ctrl && !key.modifiers.alt
                     && b.view.with_untracked(|v| *v == View::Projection)
-                    && b.page.with_untracked(|p| p.as_ref().is_some_and(|page| page.dialogs().next().is_some()))
+                    && visible_source_dialog(b)
                 {
                     b.send(Command::Key(key));
                     return true;
@@ -3806,6 +3933,439 @@ pub fn app_with_presentation(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn popup_underlay_retains_shelf_strip_after_image_decode() {
+        let snapshot = crate::testing::snapshot_file(
+            &std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("tests/snapshots/product-grid.json"),
+        )
+        .unwrap();
+        let page = crate::model::build(&snapshot, &mut crate::model::Revisions::new());
+        let projection = lay_out(&page, View::Projection, 100, &Marks::default());
+        assert!(
+            projection
+                .lines
+                .iter()
+                .any(|line| line.plain().contains("1–3 of 6")),
+            "overlays={:?}, shelves={}, lines={:?}",
+            page.overlays,
+            page.shelves.len(),
+            projection
+                .lines
+                .iter()
+                .map(|line| line.plain())
+                .collect::<Vec<_>>()
+        );
+        let engine = crate::testing::FakeEngine::from_dir(
+            &std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/snapshots"),
+        )
+        .unwrap();
+        let mut driver = app(
+            Box::new(engine),
+            Options {
+                config: Config::default(),
+                bookmarks: Bookmarks::default(),
+                url: Some("product-grid.html".into()),
+                view: Some(View::Projection),
+                images: Some(Images::Ansi),
+                tunnel: None,
+                control: None,
+            },
+        )
+        .driver(100, 60);
+        let deadline = Instant::now() + Duration::from_secs(2);
+        let b = TEST_BROWSER.with(|slot| slot.get().unwrap());
+        while b.page.get_untracked().is_none() {
+            driver.settle();
+            assert!(Instant::now() < deadline);
+            std::thread::sleep(Duration::from_millis(2));
+        }
+        let projected = b.layout.get_untracked();
+        let stripe = projected
+            .lines
+            .iter()
+            .position(|line| line.plain().contains("1–3 of 6"));
+        assert!(
+            stripe.is_some(),
+            "active={:?}, layout={:?}",
+            b.adapt.get_untracked(),
+            projected
+                .lines
+                .iter()
+                .map(|line| line.plain())
+                .collect::<Vec<_>>()
+        );
+        driver.settle();
+        assert!(
+            driver.find_text("1–3 of 6").is_some(),
+            "stripe={stripe:?}, overlays={:?}, rows={:?}",
+            b.page.get_untracked().unwrap().overlays,
+            driver.screen().plain()
+        );
+    }
+
+    #[test]
+    fn prepared_results_are_bounded_by_current_region_incarnations() {
+        let job = |node| Job {
+            node,
+            picture: Picture::from_rgba(1, 1, vec![255; 4]).unwrap(),
+            pixels: Pixels::Iterm,
+            cols: 1,
+            rows: 1,
+        };
+        let mut queue = Prepared::default();
+        let mut held = None;
+        for node in 1..=64 {
+            let current = job(node);
+            queue.admit(&current);
+            assert!(queue.complete(current));
+            queue.retain(&std::collections::HashSet::from([node]));
+            assert_eq!(queue.waiting.len(), 1);
+            assert_eq!(queue.admitted.len(), 1);
+            held = queue.waiting.pop_front();
+        }
+        queue.retain(&Default::default());
+        assert!(
+            !queue.complete(held.unwrap()),
+            "removed region repopulated prepared work"
+        );
+        let old = job(7);
+        queue.admit(&old);
+        let new = Job {
+            picture: old.picture.next_rgba(1, 1, vec![0; 4]).unwrap(),
+            ..job(7)
+        };
+        queue.admit(&new);
+        assert!(
+            queue.complete(old.clone()),
+            "executing current-incarnation frame was starved by newer waiting work"
+        );
+        assert!(queue.complete(new));
+        assert!(
+            !queue.complete(old),
+            "older completion replaced a newer prepared result"
+        );
+        assert_eq!(queue.waiting.len(), 1);
+        queue = Prepared::default();
+        assert!(queue.waiting.is_empty());
+        assert!(queue.admitted.is_empty());
+    }
+
+    #[test]
+    fn slow_executing_encode_progresses_while_continuous_same_region_offers_coalesce() {
+        let prepared = Arc::new(std::sync::Mutex::new(Prepared::default()));
+        let completed = prepared.clone();
+        let (entered, started) = mpsc::channel();
+        let (release, resume) = mpsc::channel();
+        let (sent, received) = mpsc::channel();
+        let first = std::cell::Cell::new(true);
+        let encoder = Encoder::spawn(move |job| {
+            if first.replace(false) {
+                entered.send(()).unwrap();
+                resume.recv().unwrap();
+            }
+            let version = job.picture.version();
+            let accepted = completed.lock().unwrap().complete(job);
+            sent.send((version, accepted)).unwrap();
+        });
+        let mut picture = Picture::from_rgba(1, 1, vec![255; 4]).unwrap();
+        let job = |picture| Job {
+            node: 7,
+            picture,
+            pixels: Pixels::Cells,
+            cols: 1,
+            rows: 1,
+        };
+        let initial = job(picture.clone());
+        prepared.lock().unwrap().admit(&initial);
+        encoder.encode(initial);
+        started.recv_timeout(Duration::from_secs(3)).unwrap();
+        for value in 1..=60 {
+            picture = picture.next_rgba(1, 1, vec![value; 4]).unwrap();
+            let next = job(picture.clone());
+            prepared.lock().unwrap().admit(&next);
+            encoder.encode(next);
+        }
+        release.send(()).unwrap();
+        assert_eq!(
+            received.recv_timeout(Duration::from_secs(3)).unwrap(),
+            (0, true),
+            "executing current-incarnation frame was starved"
+        );
+        assert_eq!(
+            received.recv_timeout(Duration::from_secs(3)).unwrap(),
+            (60, true)
+        );
+        assert!(
+            received.recv_timeout(Duration::from_millis(50)).is_err(),
+            "more than newest waiting encode survived"
+        );
+        let prepared = prepared.lock().unwrap();
+        assert_eq!(prepared.waiting.len(), 1);
+        assert_eq!(prepared.waiting[0].picture.version(), 60);
+    }
+
+    #[test]
+    fn document_churn_prunes_encoder_waiting_work_before_fresh_media() {
+        let engine = crate::testing::FakeEngine::from_dir(
+            &std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/snapshots"),
+        )
+        .unwrap();
+        let app = app(
+            Box::new(engine),
+            Options {
+                config: Config::default(),
+                bookmarks: Bookmarks::default(),
+                url: Some("reader.html".into()),
+                view: Some(View::Projection),
+                images: Some(Images::None),
+                tunnel: None,
+                control: None,
+            },
+        );
+        let proxy = app.proxy();
+        let mut driver = app.driver(80, 24);
+        driver.settle();
+        let b = TEST_BROWSER.with(|slot| slot.get().unwrap());
+        let (entered, ready) = mpsc::channel();
+        let (release, held) = mpsc::channel();
+        let (completed, results) = mpsc::channel();
+        let first = std::cell::Cell::new(true);
+        let encoder = Rc::new(Encoder::spawn(move |job| {
+            if first.replace(false) {
+                entered.send(()).unwrap();
+                held.recv().unwrap();
+            }
+            completed.send(job.node).unwrap();
+        }));
+        b.encoder.update(|value| *value = encoder.clone());
+        let job = |node| Job {
+            node,
+            picture: Picture::from_rgba(1, 1, vec![255; 4]).unwrap(),
+            pixels: Pixels::Cells,
+            cols: 1,
+            rows: 1,
+        };
+        encoder.encode(job(0));
+        ready.recv_timeout(Duration::from_secs(3)).unwrap();
+        for document in 1..=64 {
+            encoder.encode(job(document as i64));
+            proxy.run_with(move |cx| {
+                apply(
+                    b,
+                    Update::Page(Arc::new(Page {
+                        document,
+                        ..Page::default()
+                    })),
+                    cx,
+                )
+            });
+            driver.settle();
+        }
+        encoder.encode(job(999));
+        encoder.encode(job(999));
+        release.send(()).unwrap();
+        assert_eq!(results.recv_timeout(Duration::from_secs(3)).unwrap(), 0);
+        assert_eq!(
+            results.recv_timeout(Duration::from_secs(3)).unwrap(),
+            999,
+            "historical regions delayed fresh media"
+        );
+        assert!(
+            results.recv_timeout(Duration::from_millis(50)).is_err(),
+            "superseded waiting frame survived"
+        );
+        let ready = job(77);
+        b.prepared.with_untracked(|queue| {
+            let mut queue = queue.lock().unwrap();
+            queue.admit(&ready);
+            assert!(queue.complete(ready));
+        });
+        b.view.set(View::Reader);
+        driver.settle();
+        b.prepared.with_untracked(|queue| {
+            let queue = queue.lock().unwrap();
+            assert!(queue.waiting.is_empty());
+            assert!(queue.admitted.is_empty());
+        });
+    }
+
+    #[test]
+    fn document_dialog_scrolls_with_the_page_and_hidden_dialog_stays_absent() {
+        use crate::{
+            engine::Rect,
+            testing::{FakeEngine, PageBuilder},
+        };
+        let mut p = PageBuilder::new(
+            "https://example.test/dialog-scroll.html",
+            "Scroll",
+            960.0,
+            3000.0,
+        );
+        p.view(0.0, 720.0);
+        for row in 0..100 {
+            let rect = Rect::new(0.0, f64::from(row) * 24.0, 200.0, 18.0);
+            let node = p.element(p.body(), "P", &[], &[], Some(rect));
+            p.text(node, &format!("Underlay row {row}"), rect);
+        }
+        let dialog = p.element(
+            p.body(),
+            "DIV",
+            &[("role", "dialog")],
+            &[("position", "absolute")],
+            Some(Rect::new(400.0, 360.0, 300.0, 180.0)),
+        );
+        p.text(
+            dialog,
+            "Document popup",
+            Rect::new(408.0, 378.0, 180.0, 18.0),
+        );
+        let hidden = p.element(
+            p.body(),
+            "DIALOG",
+            &[("open", "")],
+            &[("visibility", "hidden")],
+            Some(Rect::new(400.0, 400.0, 300.0, 180.0)),
+        );
+        p.text(hidden, "Hidden popup", Rect::new(408.0, 418.0, 180.0, 18.0));
+        let engine = FakeEngine::from_dir(
+            &std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/snapshots"),
+        )
+        .unwrap();
+        engine
+            .state
+            .lock()
+            .unwrap()
+            .pages
+            .insert("dialog-scroll".into(), p.snapshot());
+        let state = engine.state.clone();
+        let app = app(
+            Box::new(engine),
+            Options {
+                config: Config::default(),
+                bookmarks: Bookmarks::default(),
+                url: Some("dialog-scroll.html".into()),
+                view: Some(View::Projection),
+                images: Some(Images::None),
+                tunnel: None,
+                control: None,
+            },
+        );
+        let mut driver = app.driver(120, 40);
+        let deadline = Instant::now() + Duration::from_secs(3);
+        let first = loop {
+            driver.settle();
+            if let Some((_, row)) = driver.find_text("Document popup") {
+                break row;
+            }
+            assert!(Instant::now() < deadline, "popup never appeared");
+            std::thread::sleep(Duration::from_millis(2));
+        };
+        assert!(driver.find_text("Hidden popup").is_none());
+        let b = TEST_BROWSER.with(|slot| slot.get().unwrap());
+        b.scroll.set(10);
+        driver.settle();
+        let second = driver.find_text("Document popup").unwrap().1;
+        assert!(
+            second < first,
+            "document popup stayed fixed: {first} -> {second}"
+        );
+        b.scroll.set(65);
+        driver.settle();
+        assert!(
+            driver.find_text("Document popup").is_none(),
+            "offscreen popup was pinned into view"
+        );
+        driver.press("esc");
+        std::thread::sleep(Duration::from_millis(50));
+        driver.settle();
+        assert!(
+            !state
+                .lock()
+                .unwrap()
+                .actions
+                .iter()
+                .any(|action| matches!(action, crate::engine::PageAction::Key(_))),
+            "offscreen dialog intercepted owner Escape"
+        );
+        b.scroll.set(0);
+        driver.settle();
+        assert_eq!(driver.find_text("Document popup").unwrap().1, first);
+    }
+
+    #[test]
+    fn popup_fill_uses_the_same_foreground_background_policy() {
+        use crate::adapt::{Background, Rule};
+        for terminal in [Background::Dark, Background::Light] {
+            for source in ["rgb(255, 255, 255)", "rgb(17, 17, 17)"] {
+                let faithful = popup_fill(Adapt::none(), source, terminal);
+                assert_eq!(
+                    faithful,
+                    format!("on {}", crate::adapt::raw_color(source, terminal).unwrap())
+                );
+                assert_eq!(popup_fill(Adapt::default(), source, terminal), "");
+                assert_eq!(
+                    popup_fill(Adapt::none().with(Rule::PageColors, true), source, terminal),
+                    ""
+                );
+            }
+            assert_eq!(popup_fill(Adapt::none(), "rgba(0, 0, 0, 0)", terminal), "");
+        }
+    }
+
+    #[test]
+    fn popup_preserves_the_underlay_foreground_policy() {
+        use crate::{
+            engine::Rect,
+            model::{Revisions, build},
+            testing::PageBuilder,
+        };
+        let mut p = PageBuilder::new("https://example.test/", "Colours", 800.0, 640.0);
+        let body = p.body();
+        let text = p.element(
+            body,
+            "P",
+            &[],
+            &[("color", "rgb(17, 17, 17)")],
+            Some(Rect::new(0.0, 0.0, 200.0, 20.0)),
+        );
+        p.text(text, "Source foreground", Rect::new(0.0, 0.0, 200.0, 20.0));
+        let dialog = p.element(
+            body,
+            "DIV",
+            &[("role", "dialog")],
+            &[
+                ("position", "fixed"),
+                ("background-color", "rgb(255, 255, 255)"),
+            ],
+            Some(Rect::new(300.0, 100.0, 300.0, 300.0)),
+        );
+        p.text(dialog, "Popup", Rect::new(310.0, 120.0, 100.0, 20.0));
+        let visible = build(&p.snapshot(), &mut Revisions::new());
+        p.set_style(dialog, "opacity", "0");
+        let closed = build(&p.snapshot(), &mut Revisions::new());
+        for adapt in [Adapt::default(), Adapt::none()] {
+            let marks = Marks {
+                adapt,
+                ..Marks::default()
+            };
+            let foreground = |page: &Page| {
+                lay_out(page, View::Projection, 100, &marks)
+                    .lines
+                    .into_iter()
+                    .flat_map(|line| line.spans)
+                    .find(|span| span.text.contains("Source foreground"))
+                    .unwrap()
+                    .style
+            };
+            assert_eq!(
+                foreground(&visible),
+                foreground(&closed),
+                "popup changed foreground without changing backdrop"
+            );
+        }
+    }
 
     #[test]
     fn producer_frame_taken_before_resize_cannot_enter_new_pixel_coordinates() {

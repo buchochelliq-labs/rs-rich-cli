@@ -419,6 +419,23 @@ impl ChromeBackend {
         &self.devtools
     }
 
+    fn capture_region(&self, region: Rect, format: Format) -> io::Result<Frame> {
+        let result = self.call(
+            "Page.captureScreenshot",
+            json!({
+                "format": match format { Format::Png => "png", Format::Jpeg => "jpeg" },
+                "clip": {"x": region.x, "y": region.y, "width": region.width,
+                         "height": region.height, "scale": 1},
+                "captureBeyondViewport": true,
+            }),
+        )?;
+        let bytes = result["data"]
+            .as_str()
+            .and_then(base64_decode)
+            .ok_or_else(|| io::Error::other("a capture that is not base64"))?;
+        Ok(Frame { format, bytes })
+    }
+
     fn call(&self, method: &str, params: Value) -> io::Result<Value> {
         self.devtools.call(method, params, CALL)
     }
@@ -605,6 +622,28 @@ pub fn base64_decode(text: &str) -> Option<Vec<u8>> {
     Some(out)
 }
 
+// The same check surrounds synchronous screenshot work: an event can arrive
+// while DevTools is answering even when no invalidation was pending at entry.
+fn capture_when_current<T>(
+    current: impl Fn() -> bool,
+    capture: impl FnOnce() -> io::Result<T>,
+) -> io::Result<T> {
+    let stale = || {
+        io::Error::new(
+            ErrorKind::WouldBlock,
+            "model document or applied viewport changed",
+        )
+    };
+    if !current() {
+        return Err(stale());
+    }
+    let captured = capture()?;
+    if !current() {
+        return Err(stale());
+    }
+    Ok(captured)
+}
+
 impl Engine for ChromeBackend {
     fn resize(&mut self, columns: u16, rows: u16) -> io::Result<()> {
         self.engine.resize(columns.max(20), rows.max(5))
@@ -650,20 +689,18 @@ impl Engine for ChromeBackend {
     }
 
     fn capture(&mut self, _tab: TabId, region: Rect, format: Format) -> io::Result<Frame> {
-        let result = self.call(
-            "Page.captureScreenshot",
-            json!({
-                "format": match format { Format::Png => "png", Format::Jpeg => "jpeg" },
-                "clip": {"x": region.x, "y": region.y, "width": region.width,
-                         "height": region.height, "scale": 1},
-                "captureBeyondViewport": true,
-            }),
-        )?;
-        let bytes = result["data"]
-            .as_str()
-            .and_then(base64_decode)
-            .ok_or_else(|| io::Error::other("a capture that is not base64"))?;
-        Ok(Frame { format, bytes })
+        self.capture_region(region, format)
+    }
+
+    fn capture_model(&mut self, _tab: TabId, region: Rect, format: Format) -> io::Result<Frame> {
+        capture_when_current(
+            || {
+                self.model_scope
+                    .as_ref()
+                    .is_some_and(|scope| self.engine.screencast_scope_is_current(scope))
+            },
+            || self.capture_region(region, format),
+        )
     }
 
     fn act(&mut self, _tab: TabId, action: &PageAction) -> io::Result<()> {
@@ -1031,6 +1068,39 @@ impl Engine for ChromeBackend {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn model_capture_checks_before_and_after_screenshot_for_both_fallback_formats() {
+        use std::cell::Cell;
+        for format in [Format::Png, Format::Jpeg] {
+            for (before, during, succeeds) in [
+                (false, false, false),
+                (true, true, false),
+                (true, false, true),
+            ] {
+                let revision = Cell::new(if before { 1 } else { 2 });
+                let calls = Cell::new(0);
+                let result = capture_when_current(
+                    || revision.get() == 1,
+                    || {
+                        calls.set(calls.get() + 1);
+                        if during {
+                            revision.set(2);
+                        }
+                        Ok(Frame {
+                            format,
+                            bytes: vec![1],
+                        })
+                    },
+                );
+                assert_eq!(result.is_ok(), succeeds);
+                assert_eq!(calls.get(), usize::from(before));
+                if !succeeds {
+                    assert_eq!(result.unwrap_err().kind(), ErrorKind::WouldBlock);
+                }
+            }
+        }
+    }
 
     #[test]
     fn captures_decode_from_base64() {

@@ -1,6 +1,6 @@
 # Noctiluca media quality: handoff
 
-Updated: 2026-11-08. Branch: `codex/noctiluca-media-quality`. The design baseline is `7fcdbf7263f81d89c2975a47ee4761b4a0e1c7cc`; Tasks 1–5 have been implemented and reviewed. Task 6 remains under review and its performance and full-workspace acceptance are open.
+Updated: 2026-11-08. Branch: `codex/noctiluca-media-quality`. The design baseline is `7fcdbf7263f81d89c2975a47ee4761b4a0e1c7cc`; Tasks 1–5 have been implemented and reviewed. The aggregate final review identified modal, dialog, media-queue and capture ownership defects; the final fix wave is in progress. Performance acceptance remains open.
 
 The shared `ImagePresentation` path supports independent fitted/versioned Kitty resources, feature-aware animation and supported-format pacing. Existing low-level picture IDs remain available. Manual Driver loops must acknowledge successful frame writes and use `finish_output()` to retain final cleanup resources; see the [image guide](../guide/intuituive/plugins.md#images-art). Source frames are scoped to the document and applied viewport; stale buffered frames are discarded before navigation is published.
 
@@ -20,6 +20,8 @@ The complete native corpus, lazy reveal, navigation away/back, Ghostty, actual m
 
 
 A later native preview at source `c4ebaf62bc7ff94738ee801aca902a2ea5046ab0` (binary SHA-256 `d92c83a40fc20b770cd02c1cec296302d092b02410f173f68f80349fc36e66a9`) showed the real Speedtest privacy dialog coherently layered and fixed through page scrolling, Actions dismissal and projection/pixel switching. The local product dialog remained fixed; at 40 columns its buttons were truncated in that preview. A separate bounded visit on that same binary showed a Twitch public live video region change after play, and a Giphy tile change in pixel view. Giphy projection still showed placeholder slots and awkward spacing; its failing media stage remains unconfirmed. These are qualitative observations on the named preview, not later-source or frame-rate claims.
+
+Source dialogs use shared intuiTUIve layers and owner-controlled modal focus. Semantic absolute/static/open-native dialogs also form independent surfaces; document surfaces follow scroll and fixed surfaces preserve their docking. Hidden/offscreen surfaces cannot trap focus or intercept source Escape. Popup-open projection preserves configured PageColors while disabling geometric rearrangement, and faithful popup fills use the foreground's source-pair transform. Unsupported modern/unknown color syntax cannot establish opacity. Waiting encodes and prepared results are pruned at document/view/region boundaries while an executing current-incarnation frame can finish. Chrome guards model-owned fallback and canvas screenshots before and after capture; standalone capture stays compatible.
 
 Source dialogs now use shared intuiTUIve layers and owner-controlled modal focus. Complete Noctiluca `Page` literals must add `overlays: Vec::new()` or use `..Page::default()`; `Page::dialogs()` exposes declared source dialogs. See the [layout guide](../guide/intuituive/layout.md#owner-controlled-overlays) and the [design addendum](../superpowers/specs/2026-11-08-noctiluca-media-quality-design.md#addendum-source-dialogs-observed-during-native-review).
 

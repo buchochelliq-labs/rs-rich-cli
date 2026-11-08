@@ -262,6 +262,13 @@ pub trait Engine: Send {
     fn snapshot(&mut self, tab: TabId) -> io::Result<PageSnapshot>;
     /// Pixels of `region`, in CSS pixels of the document.
     fn capture(&mut self, tab: TabId, region: Rect, format: Format) -> io::Result<Frame>;
+    /// Capture for the most recently published model. Scope-aware backends reject
+    /// a changed document or an unapplied viewport before and after reading pixels.
+    /// Legacy engines retain their standalone capture behavior by default.
+    fn capture_model(&mut self, tab: TabId, region: Rect, format: Format) -> io::Result<Frame> {
+        self.capture(tab, region, format)
+    }
+
     fn act(&mut self, tab: TabId, action: &PageAction) -> io::Result<()>;
     /// A video or audio element's playback now.
     fn playback(&mut self, _tab: TabId, _node: NodeId) -> io::Result<Playback> {

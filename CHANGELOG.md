@@ -17,6 +17,20 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   `Page::dialogs()` to inspect source-declared dialogs; fixed geometry alone
   does not make an overlay modal. Source dialogs formerly exposed as docked
   strips are now projected independently.
+  Absolute/static `role=dialog`/`alertdialog` surfaces and open native dialogs
+  also use independent popups. Document-positioned popups move with page scroll;
+  fixed dialogs retain their docked/source placement. Only source modal semantics
+  trap focus. Unsupported computed color syntax is not treated as opaque.
+
+- Popup projection keeps foreground and background policies paired: configured
+  PageColors remains enabled while geometry stays source aligned; faithful popup
+  backgrounds use the same source-color transform as their text. Closing restores
+  configured geometry adaptations.
+- Waiting video encodes and prepared results are pruned on document, region and
+  view changes. A current executing encode can finish while newer frames coalesce.
+  The additive default `Engine::capture_model` preserves legacy engine callers;
+  Chrome guards model-owned screenshots before and after document/applied-viewport
+  changes, while standalone `capture` retains its prior behavior.
 
 - Projection, media pacing and capture handling use measured terminal geometry,
   feature-aware graphics fallbacks and document/viewport scoped frames. Adaptive

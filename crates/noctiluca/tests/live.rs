@@ -562,3 +562,80 @@ fn a_sticky_header_is_pinned_and_a_fixed_banner_docked() {
     assert!(!lines.contains("An error occurred"), "{lines}");
     assert_eq!(projection.overlays.len(), 3, "{lines}");
 }
+
+#[test]
+fn model_captures_require_current_document_and_applied_viewport_but_standalone_capture_remains_valid()
+ {
+    use noctiluca::engine::{Engine, Format, Rect, TabId};
+    let Some(binary) = chrome() else { return };
+    let mut backend = ChromeBackend::start(ChromeOptions {
+        binary: Some(binary),
+        columns: 80,
+        rows: 24,
+        ..ChromeOptions::default()
+    })
+    .unwrap();
+    let region = Rect::new(0.0, 0.0, 32.0, 32.0);
+    let wait_loaded = |backend: &mut ChromeBackend, url: &str| {
+        let deadline = Instant::now() + Duration::from_secs(10);
+        loop {
+            let state = backend.state(TabId(0));
+            if state.url == url && !state.loading {
+                break;
+            }
+            assert!(
+                Instant::now() < deadline,
+                "navigation did not finish: {state:?}"
+            );
+            std::thread::sleep(Duration::from_millis(5));
+        }
+    };
+    let read_model = |backend: &mut ChromeBackend| {
+        let deadline = Instant::now() + Duration::from_secs(10);
+        while backend.snapshot(TabId(0)).is_err() {
+            assert!(
+                Instant::now() < deadline,
+                "scope-aware snapshot did not become ready"
+            );
+            std::thread::sleep(Duration::from_millis(5));
+        }
+    };
+    let first = fixture("second.html");
+    backend.open(TabId(0), &first).unwrap();
+    wait_loaded(&mut backend, &first);
+    assert!(
+        backend
+            .capture_model(TabId(0), region, Format::Png)
+            .is_err(),
+        "no model has been published"
+    );
+    let standalone = backend.capture(TabId(0), region, Format::Png).unwrap();
+    assert!(image::load_from_memory(&standalone.bytes).is_ok());
+    read_model(&mut backend);
+    assert!(backend.capture_model(TabId(0), region, Format::Png).is_ok());
+    backend.resize(40, 24).unwrap();
+    assert!(
+        backend
+            .capture_model(TabId(0), region, Format::Png)
+            .is_err(),
+        "old model survived viewport revision"
+    );
+    read_model(&mut backend);
+    assert!(
+        backend
+            .capture_model(TabId(0), region, Format::Jpeg)
+            .is_ok()
+    );
+    let second = fixture("reader.html");
+    backend.open(TabId(0), &second).unwrap();
+    wait_loaded(&mut backend, &second);
+    assert!(
+        backend
+            .capture_model(TabId(0), region, Format::Png)
+            .is_err(),
+        "A model captured B pixels"
+    );
+    assert!(backend.capture(TabId(0), region, Format::Png).is_ok());
+    read_model(&mut backend);
+    assert!(backend.capture_model(TabId(0), region, Format::Png).is_ok());
+}

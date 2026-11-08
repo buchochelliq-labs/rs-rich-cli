@@ -1046,7 +1046,7 @@ pub fn project(page: &Page, columns: u16, cell: (f64, f64), marks: &Marks) -> Pr
     project_with_logs(page, columns, cell, marks, &mut Vec::new())
 }
 
-/// Project one source-declared fixed dialog independently of the page flow.
+/// Project one source-declared dialog independently of the page flow.
 /// Its control indices continue to refer to the original page.
 pub fn project_overlay(
     page: &Page,

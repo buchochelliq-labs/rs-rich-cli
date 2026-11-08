@@ -576,6 +576,27 @@ impl Encoder {
         Encoder { queue }
     }
 
+    /// Discard frames still waiting after the owning document or view changes.
+    /// An encode already executing may finish; its owner still validates delivery.
+    pub fn clear_waiting(&self) {
+        self.queue
+            .0
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .waiting
+            .clear();
+    }
+
+    /// Keep waiting frames only for regions present in the current model.
+    pub fn retain_waiting(&self, nodes: &std::collections::HashSet<NodeId>) {
+        self.queue
+            .0
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .waiting
+            .retain(|(job, _)| nodes.contains(&job.node));
+    }
+
     /// Encode `job`, in place of any frame of its region still waiting.
     pub fn encode(&self, job: Job) {
         self.encode_with_metrics(job, None);

@@ -843,3 +843,115 @@ fn visual_fixed_overlays_respect_opacity_paint_order_and_size_without_implying_d
         );
     }
 }
+
+#[test]
+fn semantic_dialogs_do_not_require_fixed_geometry() {
+    use noctiluca::{
+        engine::Rect,
+        layout::{Marks, project, project_overlay},
+        testing::PageBuilder,
+    };
+    for (tag, position, attrs, modal) in [
+        (
+            "DIV",
+            "absolute",
+            vec![("role", "dialog"), ("aria-modal", "true")],
+            true,
+        ),
+        ("DIV", "static", vec![("role", "alertdialog")], false),
+        ("DIALOG", "static", vec![("open", "")], false),
+    ] {
+        let mut p = PageBuilder::new("https://example.test/", "Dialogs", 800.0, 1200.0);
+        p.view(160.0, 640.0);
+        let under = p.element(
+            p.body(),
+            "P",
+            &[],
+            &[],
+            Some(Rect::new(8.0, 180.0, 100.0, 20.0)),
+        );
+        p.text(under, "Underlay", Rect::new(8.0, 180.0, 100.0, 20.0));
+        let dialog = p.element(
+            p.body(),
+            tag,
+            &attrs,
+            &[("position", position)],
+            Some(Rect::new(80.0, 240.0, 400.0, 160.0)),
+        );
+        p.text(
+            dialog,
+            "Independent popup",
+            Rect::new(88.0, 256.0, 180.0, 20.0),
+        );
+        let page = build(&p.snapshot(), &mut Revisions::new());
+        let overlay = page.dialogs().next().expect(position);
+        assert_eq!(overlay.modal, modal);
+        assert!(!page.layers[overlay.layer].fixed);
+        assert_eq!(page.layers[overlay.layer].top, 240.0);
+        let main = project(&page, 80, (8.0, 16.0), &Marks::default());
+        assert!(
+            !main
+                .lines
+                .iter()
+                .any(|l| l.plain().contains("Independent popup"))
+        );
+        let popup = project_overlay(&page, 0, 50, (8.0, 16.0), &Marks::default()).unwrap();
+        assert!(
+            popup
+                .lines
+                .iter()
+                .any(|l| l.plain().contains("Independent popup"))
+        );
+        assert!(main.lines.iter().any(|l| l.plain().contains("Underlay")));
+    }
+}
+
+#[test]
+fn opacity_requires_supported_positive_evidence_and_never_removes_semantic_dialogs() {
+    use noctiluca::{engine::Rect, testing::PageBuilder};
+    for (colour, solid) in [
+        ("rgba(10, 20, 30, 1)", true),
+        ("rgba(10, 20, 30, 0.5)", false),
+        ("rgb(10 20 30 / 1)", true),
+        ("rgb(10 20 30 / 50%)", false),
+        ("color(display-p3 1 0 0 / 0.5)", false),
+        ("color(display-p3 1 0 0 / 0)", false),
+        ("unrecognized", false),
+    ] {
+        for semantic in [false, true] {
+            let mut p = PageBuilder::new("https://example.test/", "Opacity", 800.0, 640.0);
+            p.view(0.0, 640.0);
+            let under = p.element(
+                p.body(),
+                "P",
+                &[],
+                &[],
+                Some(Rect::new(90.0, 100.0, 100.0, 20.0)),
+            );
+            p.text(under, "Underlay", Rect::new(90.0, 100.0, 100.0, 20.0));
+            let attrs = if semantic {
+                vec![("role", "dialog")]
+            } else {
+                vec![]
+            };
+            let dialog = p.element(
+                p.body(),
+                "DIV",
+                &attrs,
+                &[("position", "fixed"), ("background-color", colour)],
+                Some(Rect::new(80.0, 80.0, 400.0, 400.0)),
+            );
+            p.paint(dialog, 20);
+            p.text(dialog, "Popup", Rect::new(88.0, 96.0, 100.0, 20.0));
+            let page = build(&p.snapshot(), &mut Revisions::new());
+            assert_eq!(
+                !page.overlays.is_empty(),
+                semantic || solid,
+                "{colour}, semantic={semantic}"
+            );
+            if semantic {
+                assert_eq!(page.overlays[0].background.is_some(), solid, "{colour}");
+            }
+        }
+    }
+}
