@@ -61,24 +61,31 @@
     const who = document.createElement('span');
     who.className = 'author'; who.style.color = color; who.textContent = author;
     row.append(who, ': ');
+    const body = document.createElement('span');
+    body.className = 'message-body';
+    renderMessage(body, words);
+    row.append(body);
+    log.append(row);
+    while (log.children.length > 100) log.firstElementChild.remove();
+    log.scrollTop = log.scrollHeight;
+  }
+  function renderMessage(body, words) {
+    body.replaceChildren();
     const parts = words.split(':glow:');
     parts.forEach((part, i) => {
       if (i > 0) {
         const e = document.createElement('img');
         e.className = 'emote'; e.alt = ':glow:'; e.src = emote;
-        row.append(e);
+        body.append(e);
       }
-      row.append(part);
+      body.append(part);
     });
-    log.append(row);
-    while (log.children.length > 100) log.firstElementChild.remove();
-    log.scrollTop = log.scrollHeight;
   }
   window.post = post;
   // Explicit keyed transitions for deterministic browser-driven tests.
   window.mediaQualityChat = {
     append(key, words) { post('fixture', '#ff7f50', words, false); log.lastElementChild.dataset.key = key; },
-    edit(key, words) { const row = log.querySelector(`[data-key="${key}"]`); if (row) row.lastChild.textContent = words; },
+    edit(key, words) { const row = log.querySelector(`[data-key="${key}"]`); if (row) renderMessage(row.querySelector('.message-body'), words); },
     remove(key) { log.querySelector(`[data-key="${key}"]`)?.remove(); },
     moveFirst(key) { const row = log.querySelector(`[data-key="${key}"]`); if (row) log.prepend(row); }
   };
