@@ -18,6 +18,7 @@ pub(crate) struct Mailbox {
     pub replaced: usize,
 }
 impl Mailbox {
+    #[cfg(test)]
     pub fn push(&mut self, update: Update) {
         self.push_source(update, None);
     }

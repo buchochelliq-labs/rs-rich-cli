@@ -40,6 +40,7 @@ use crate::tab::{Command, Intent, Refusal, Tab, Update};
 use crate::video::{Encoder, Job, Pacing, VideoFrame};
 use crate::widgets::{WebControl, web_widget};
 
+#[cfg(test)]
 type UpdateSink = Arc<dyn Fn(Update) + Send + Sync>;
 
 /// The video regions on screen and the pacing's intervals, as told to the
@@ -81,6 +82,8 @@ pub struct Options {
 pub struct Browser {
     pub(crate) presentation: rich_intuituive::ImagePresentation,
     pub page: Signal<Option<Arc<Page>>>,
+    /// Complete immutable pair; the public legacy signal is its compatibility view.
+    source: Signal<Option<crate::model::SourcePage>>,
     pub state: Signal<PageState>,
     pub view: Signal<View>,
     pub hints: Signal<Option<Hints>>,
@@ -2085,6 +2088,11 @@ fn reconcile_page_media(
 
 /// Apply one of the tab's updates, on the app's thread.
 fn apply(b: Browser, update: Update, cx: &mut Ctx) {
+    apply_pair(b, update, None, cx);
+}
+
+fn apply_pair(b: Browser, update: Update, source: Option<crate::model::SourcePage>, cx: &mut Ctx) {
+    assert!(source.as_ref().is_none_or(|s| matches!(&update, Update::Page(p) if Arc::ptr_eq(p, s.page()))));
     if crate::diagnostics::enabled() {
         match &update {
             Update::Frame(f) => eprintln!(
@@ -2144,7 +2152,11 @@ fn apply(b: Browser, update: Update, cx: &mut Ctx) {
                     }
                 }
             }
-            b.page.set(Some(page));
+            // Signal::update batches nested writes: observers see one exact pair.
+            b.source.update(|current| {
+                *current = source;
+                b.page.replace(Some(page));
+            });
             b.reads.update(|n| *n += 1);
             b.refresh_controls();
             if new_document {
@@ -2204,16 +2216,17 @@ fn forward_updates(
                 let count = inbox.lock().unwrap().queue.len().min(16);
                 let started = Instant::now();
                 for _ in 0..count {
-                    let next = inbox.lock().unwrap().pop();
-                    let Some((document, update)) = next else {
+                    let next = inbox.lock().unwrap().pop_envelope();
+                    let Some((document, envelope)) = next else {
                         break;
                     };
+                    let crate::delivery::Envelope { update, source } = envelope;
                     let frame = matches!(update, Update::Frame(_) | Update::Screen(_));
                     if !frame
                         || b.page
                             .with_untracked(|p| p.as_ref().is_some_and(|p| p.document == document))
                     {
-                        apply(b, update, cx);
+                        apply_pair(b, update, source, cx);
                     }
                     if started.elapsed() >= Duration::from_millis(8) {
                         break;
@@ -3657,19 +3670,23 @@ pub fn app_with_presentation(
         let updates = Arc::new(std::sync::Mutex::new(crate::delivery::Mailbox::default()));
         let (send, receive) = mpsc::sync_channel(1);
         let inbox = updates.clone();
-        let offer: UpdateSink = Arc::new(move |update| {
+        let offer = Arc::new(move |update, source| {
             let trace = {
                 let mut inbox = inbox.lock().unwrap();
-                inbox.push(update);
+                inbox.push_source(update, source);
                 crate::diagnostics::enabled().then(|| inbox.trace())
             };
             let _ = send.try_send(());
             if let Some(trace) = trace { trace.emit(); }
         });
         #[cfg(test)]
-        TEST_OFFER.with(|slot| *slot.borrow_mut() = Some(offer.clone()));
-        let tab = Tab::spawn(engine, move |update| offer(update));
+        TEST_OFFER.with(|slot| {
+            let offer = offer.clone();
+            *slot.borrow_mut() = Some(Arc::new(move |update| offer(update, None)));
+        });
+        let tab = Tab::spawn_with_source(engine, move |update, source| offer(update, source));
         let page: Signal<Option<Arc<Page>>> = signal(None);
+        let source: Signal<Option<crate::model::SourcePage>> = signal(None);
         let view: Signal<View> = signal(if first_view == View::Raster {
             View::Projection
         } else {
@@ -3702,7 +3719,12 @@ pub fn app_with_presentation(
             };
             let view = view.get();
             page.with(|p| match p {
-                Some(p) => presentation.borrow_mut().update_shared(p, view, width, &marks),
+                Some(p) => source.with(|source| {
+                    match source.as_ref().filter(|s| Arc::ptr_eq(s.page(), p)) {
+                        Some(source) => presentation.borrow_mut().update_source(source, view, width, &marks),
+                        None => presentation.borrow_mut().update_shared(p, view, width, &marks),
+                    }
+                }),
                 None => Rc::new(Projection::default()),
             })
         });
@@ -3740,6 +3762,7 @@ pub fn app_with_presentation(
         let b = Browser {
             presentation: media_presentation,
             page,
+            source,
             state: signal(PageState::default()),
             view,
             hints,
@@ -5116,7 +5139,7 @@ mod update_measurements {
         let mut builder = crate::testing::PageBuilder::new("https://example.test/source", "source", 400.0, 400.0);
         let left = builder.element(builder.body(), "DIV", &[], &[], None);
         let right = builder.element(builder.body(), "DIV", &[], &[], None);
-        let text = builder.text(left, "Source words", Rect::new(0.0, 0.0, 100.0, 18.0));
+        let text = builder.text(left, "Source words", crate::engine::Rect::new(0.0, 0.0, 100.0, 18.0));
         let mut snapshot = builder.snapshot();
         let first = crate::model::build_source(&snapshot, &mut Revisions::new());
         let offer = |source: crate::model::SourcePage| {

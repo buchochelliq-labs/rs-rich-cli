@@ -1863,7 +1863,7 @@ mod tests {
             fn capture(&mut self, _: TabId, _: Rect, _: Format) -> io::Result<Frame> { Err(io::Error::other("no capture")) }
             fn act(&mut self, _: TabId, _: &PageAction) -> io::Result<()> { Ok(()) }
             fn events(&mut self) -> Vec<EngineEvent> { Vec::new() }
-            fn resource(&mut self, _: TabId, _: &str) -> io::Result<Vec<u8>> { Ok(vec![1,2,3]) }
+            fn resource(&mut self, _: TabId, _: &str) -> io::Result<Vec<u8>> { Ok(include_bytes!("../tests/fixtures/glow.png").to_vec()) }
             fn playback(&mut self, _: TabId, _: NodeId) -> io::Result<Playback> {
                 Ok(Playback { paused: false, time: self.0.lock().unwrap().time, ready: 4, ..Default::default() })
             }
