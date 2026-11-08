@@ -544,3 +544,30 @@ fn degrade_strips_colour_then_styles() {
     let s = c.segments_to_string(&d.rich_render(&c, &c.options().update_width(8)));
     assert_eq!(s, "+------+\n| ok   |\n+------+");
 }
+
+#[test]
+fn graphics_detection_respects_ghostty_and_unknown_multiplexer_transport() {
+    for vars in [
+        vec![("TERM_PROGRAM", "ghostty")],
+        vec![("TERM", "xterm-ghostty")],
+    ] {
+        assert_eq!(
+            Capabilities::detect(&tty(&vars)).graphics.value,
+            Graphics::Kitty
+        );
+    }
+    assert_eq!(
+        Capabilities::detect(&tty(&[("TERM_PROGRAM", "WezTerm")]))
+            .graphics
+            .value,
+        Graphics::Iterm
+    );
+    let mux = tty(&[("TERM_PROGRAM", "ghostty"), ("TMUX", "/tmp/tmux")]);
+    assert_eq!(Capabilities::detect(&mux).graphics.value, Graphics::None);
+    assert_eq!(
+        Capabilities::detect(&mux.var("RICH_GRAPHICS", "kitty"))
+            .graphics
+            .value,
+        Graphics::Kitty
+    );
+}

@@ -31,12 +31,14 @@
 //!   no. Alacritty (≥ 0.11) supports them but does not publish its version, so
 //!   it is left out on purpose — override with `RICH_HYPERLINKS=1`.
 //! * **graphics** — on a tty only: kitty (`TERM=xterm-kitty` or
-//!   `KITTY_WINDOW_ID`) → kitty; `TERM_PROGRAM` iTerm.app or WezTerm → iTerm
+//!   `KITTY_WINDOW_ID`) and Ghostty → kitty; `TERM_PROGRAM` iTerm.app or WezTerm → iTerm
 //!   inline images; else the Sixel heuristic → sixel. **sixel** is reported
 //!   separately (WezTerm speaks both): `WT_SESSION`, a `TERM` containing
 //!   `sixel`/`mlterm`/`foot`, or `TERM_PROGRAM` wezterm/mintty. This is the
 //!   same heuristic `rich_art::sixel::is_probably_supported` uses, which can
 //!   later call into this module instead.
+//!   Inside tmux or screen, graphics transport is unknown and defaults to none;
+//!   an explicit override still takes precedence.
 //! * **width / height** — `RICH_WIDTH`/`RICH_HEIGHT`, then `COLUMNS`/`LINES`,
 //!   then the terminal's reported size, then 80×25.
 //! * **interactive** — stdout is a terminal.
@@ -553,6 +555,12 @@ impl Capabilities {
             s.clone()
         } else if !tty {
             Field::new(false, Origin::Inferred, "stdout is not a terminal")
+        } else if p.get("TMUX").is_some() || p.get("STY").is_some() {
+            Field::new(
+                false,
+                Origin::Inferred,
+                "multiplexer graphics transport unknown",
+            )
         } else if let Some(reason) = p.sixel() {
             let origin = from_var(reason.split('=').next().unwrap_or(&reason));
             Field::new(true, origin, reason)
@@ -574,6 +582,23 @@ impl Capabilities {
             Field::new(value, s.origin, s.reason)
         } else if !tty {
             Field::new(Graphics::None, Origin::Inferred, "stdout is not a terminal")
+        } else if p.get("TMUX").is_some() || p.get("STY").is_some() {
+            Field::new(
+                Graphics::None,
+                Origin::Inferred,
+                "multiplexer graphics transport unknown",
+            )
+        } else if program.eq_ignore_ascii_case("ghostty") || term.contains("ghostty") {
+            let reason = if program.eq_ignore_ascii_case("ghostty") {
+                format!("TERM_PROGRAM={program}")
+            } else {
+                format!("TERM={term}")
+            };
+            Field::new(
+                Graphics::Kitty,
+                from_var(reason.split('=').next().unwrap_or("TERM")),
+                reason,
+            )
         } else if let Some(reason) = p.kitty() {
             let origin = from_var(reason.split('=').next().unwrap_or(&reason));
             Field::new(Graphics::Kitty, origin, reason)

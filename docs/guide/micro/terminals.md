@@ -12,13 +12,13 @@ iTerm2, then Sixel, then half-blocks, then the emoji or text fallback.
 | Terminal | Drawn with | Animation | Notes |
 |---|---|---|---|
 | kitty | Kitty Unicode placeholders | native (Kitty frames) | images live in the cell grid: they scroll, survive redraws, and are sent once per session |
-| Ghostty | Kitty placeholders with `RICH_MICRO=kitty` | native | Ghostty speaks Kitty's protocol but is not detected as kitty |
-| WezTerm | iTerm2 inline images (detected); Kitty with `RICH_MICRO=kitty` | native (GIF) | |
+| Ghostty | Kitty placeholders when detected | native | Requires Kitty graphics and Unicode placeholder support |
+| WezTerm | iTerm2 inline images (detected) | native (GIF) | Kitty graphics support alone does not establish Unicode placeholder support; use iTerm2 or blocks |
 | iTerm2 | iTerm2 inline images | native (GIF) | |
 | Konsole | Kitty with `RICH_MICRO=kitty`, else half-blocks | native with Kitty | |
 | foot, mlterm, Windows Terminal ≥ 1.22, mintty, xterm `-ti vt340` | Sixel, once the cell size in pixels is known | frame by frame, on redraw | Sixel is used only when the terminal is found (or said) to support it |
 | Alacritty, GNOME Terminal (VTE), Terminal.app, the Linux console with colour | the emoji fallback; half-blocks with `RICH_MICRO=blocks` | frame by frame (blocks) | no image protocol |
-| tmux, GNU screen | the emoji fallback unless passthrough is configured | — | set `RICH_MICRO=blocks` or `text`, or allow passthrough and set `RICH_MICRO` to the outer terminal's protocol |
+| tmux, GNU screen | the emoji fallback unless passthrough is configured | — | set `RICH_MICRO=blocks` or `text`, or configure compatible passthrough and explicitly select a supported protocol |
 | `TERM=dumb`, no colour | the emoji in UTF-8 output, else the text fallback, else the alt text | none | |
 | pipes, log files, `--export-html`/`--export-svg`, `--pager`, captures | the fallback (the emoji in UTF-8 output, else the text), byte for byte | none | never an escape sequence, whatever `RICH_MICRO` says; with an export or the pager, `rich -p` prints the fallback on the terminal too |
 

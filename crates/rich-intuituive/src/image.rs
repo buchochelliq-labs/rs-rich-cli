@@ -354,7 +354,17 @@ pub fn image_graphics() -> Arc<dyn PlacementSource> {
 
 /// A picture's frame at a size in a protocol, and the rows of it shown:
 /// picture, version, columns, rows, protocol, first row shown, rows shown.
-type GraphicKey = (u32, u32, usize, usize, Pixels, usize, usize);
+type GraphicKey = (
+    u32,
+    u32,
+    usize,
+    usize,
+    Pixels,
+    usize,
+    usize,
+    Option<ImageFit>,
+    ImageAnchor,
+);
 
 /// [`image_graphics`]'s source.
 struct ImageGraphics {
@@ -455,6 +465,8 @@ impl ImageGraphics {
             tag.pixels,
             first,
             shown,
+            tag.fit,
+            tag.anchor,
         );
         let mut made = self.made.lock().unwrap_or_else(|e| e.into_inner());
         if let Some(graphic) = made.get(&key) {
@@ -530,6 +542,72 @@ mod tests {
         })
         .save(path)
         .unwrap();
+    }
+
+    #[test]
+    fn graphics_cache_distinguishes_fit_and_anchor() {
+        let picture = Picture::new(DynamicImage::ImageRgb8(RgbImage::from_fn(12, 4, |x, _| {
+            Rgb([x as u8 * 20, 0, 0])
+        })));
+        let source = image_graphics();
+        let console = rich::Console::builder().width(2).build();
+        let view = ImageView::new().pixels(Pixels::Iterm).fit(ImageFit::Cover);
+        let placements = |view| {
+            let mut segments = Vec::new();
+            for line in picture.lines(&console, view, 2, 2) {
+                segments.extend(line);
+                segments.push(Segment::line());
+            }
+            source.placements(&Frame::from_segments(&segments))
+        };
+        let left = placements(view.anchor(ImageAnchor::Left));
+        let same = placements(view.anchor(ImageAnchor::Left));
+        let right = placements(view.anchor(ImageAnchor::Right));
+        assert_eq!(left.len(), 1);
+        assert_eq!(right.len(), 1);
+        assert!(
+            rich_ext::frame::graphics::plan(&left, &same, &[])
+                .draw
+                .is_empty()
+        );
+        let update = rich_ext::frame::graphics::plan(&left, &right, &[]);
+        assert_eq!(update.draw.len(), 1);
+        let raster = |escape: &str| {
+            let payload = escape
+                .split_once(':')
+                .unwrap()
+                .1
+                .split('\u{7}')
+                .next()
+                .unwrap();
+            let alphabet = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+            let mut bytes = Vec::new();
+            let (mut bits, mut count) = (0u32, 0);
+            for byte in payload.bytes().take_while(|b| *b != b'=') {
+                let value = alphabet.iter().position(|b| *b == byte).unwrap() as u32;
+                bits = (bits << 6) | value;
+                count += 6;
+                if count >= 8 {
+                    count -= 8;
+                    bytes.push((bits >> count) as u8);
+                }
+            }
+            rich_art::image::load_from_memory(&bytes)
+                .unwrap()
+                .to_rgba8()
+        };
+        let left_pixels = raster(&left[0].graphic.draw(0));
+        let right_pixels = raster(&update.draw[0].graphic.draw(0));
+        assert_eq!(left_pixels.dimensions(), (16, 32));
+        assert_eq!(right_pixels.dimensions(), (16, 32));
+        assert!(left_pixels.get_pixel(8, 16)[0] < right_pixels.get_pixel(8, 16)[0]);
+        let stretch = placements(view.fit(ImageFit::Stretch));
+        assert_eq!(
+            rich_ext::frame::graphics::plan(&right, &stretch, &[])
+                .draw
+                .len(),
+            1
+        );
     }
 
     #[test]

@@ -167,6 +167,11 @@ has no real pixels to show.
 | `ansi` | Half blocks: two pixels a cell, in colour, in any terminal |
 | `none` | No pictures: alt text only |
 
+Kitty image placement requires Unicode placeholders as well as the graphics protocol.
+WezTerm defaults to iTerm2 inline images; forcing Kitty requires placeholder support.
+Multiplexers may block or alter graphics transport, so use half blocks when
+passthrough is unavailable. A forced mode cannot add a missing terminal feature.
+
 If pictures come out as half blocks in a terminal that can do better,
 name its protocol. A site's table can turn pictures off there with
 `images = false`.
