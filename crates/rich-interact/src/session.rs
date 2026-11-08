@@ -1738,6 +1738,12 @@ impl Session {
     /// A resize to the current size, which repaints the whole view: after a
     /// suspend, what is on the screen is the shell's.
     fn repaint(&mut self) -> Event {
+        self.metrics = cell_size();
+        if self.cell.is_some()
+            && let Some(cell) = self.metrics
+        {
+            self.cell = Some(cell);
+        }
         if self.options.mouse
             && !self.options.alternate_screen
             && self.options.output == Output::Stdout
@@ -2014,6 +2020,34 @@ mod tests {
             assert_ne!(answers.encode(), 0);
             assert_eq!(Answers::decode(answers.encode()), answers);
         }
+    }
+
+    #[test]
+    fn repaint_remeasures_physical_cells_without_pixel_mouse() {
+        // Exercise the real repaint measurement path without entering raw mode.
+        let mut session = std::mem::ManuallyDrop::new(Session {
+            options: SessionOptions::default(),
+            start: Instant::now(),
+            active: false,
+            origin: 0,
+            clipboard: rich_ext::clipboard::Clipboard::detect(
+                &crate::clipboard::SessionEnvironment,
+            ),
+            kitty: false,
+            sync: false,
+            cell: None,
+            metrics: Some((u16::MAX, u16::MAX)),
+            input: None,
+            waker: None,
+            typed: Default::default(),
+            looked: Instant::now(),
+            #[cfg(unix)]
+            tty: None,
+        });
+        let expected = cell_size();
+        session.repaint();
+        assert_eq!(session.metrics, expected);
+        assert_eq!(session.cell, None);
     }
 
     #[test]

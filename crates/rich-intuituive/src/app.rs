@@ -3939,6 +3939,7 @@ impl App {
                 if inline {
                     driver.set_origin(backend.origin());
                 }
+                driver.set_cell_pixels(backend.cell_pixels());
                 driver.resize(columns, rows);
                 driver.handed_back(handoff, result);
             }
@@ -3977,6 +3978,7 @@ impl App {
                     if inline {
                         driver.set_origin(backend.origin());
                     }
+                    driver.set_cell_pixels(backend.cell_pixels());
                     driver.resize(columns, rows);
                     return Ok(());
                 }
@@ -9222,6 +9224,103 @@ mod tests {
 
     use crate::prelude::*;
     use crate::widget::{Canvas, DrawCx, Widget, widget};
+
+    #[cfg(feature = "art")]
+    struct TransitionBackend {
+        inner: rich_interact::headless::Headless,
+    }
+    #[cfg(feature = "art")]
+    impl rich_interact::Backend for TransitionBackend {
+        fn size(&self) -> (u16, u16) {
+            self.inner.size()
+        }
+        fn cell_pixels(&self) -> Option<(u16, u16)> {
+            self.inner.cell_pixels()
+        }
+        fn read(&mut self, timeout: Option<Duration>) -> std::io::Result<Option<Event>> {
+            self.inner.read(timeout)
+        }
+        fn write(&mut self, text: &str) -> std::io::Result<()> {
+            self.inner.write(text)
+        }
+        fn elapsed(&self) -> Duration {
+            self.inner.elapsed()
+        }
+        fn handoff(&mut self, _: &mut std::process::Command) -> std::io::Result<Option<i32>> {
+            self.inner.set_cell_pixels(Some((12, 24)));
+            Ok(Some(0))
+        }
+        fn alternate_screen(&self) -> bool {
+            self.inner.alternate_screen()
+        }
+        fn can_suspend(&self) -> bool {
+            true
+        }
+        fn suspend(&mut self) -> std::io::Result<()> {
+            self.inner.set_cell_pixels(Some((12, 24)));
+            Ok(())
+        }
+    }
+
+    #[cfg(feature = "art")]
+    fn transition_run(handoff: bool) -> (String, Option<(u16, u16)>) {
+        use rich_interact::headless::{Headless, Script};
+        let callback = std::rc::Rc::new(std::cell::Cell::new(None));
+        let seen = callback.clone();
+        let picture = crate::Picture::from_rgba(4, 4, vec![255; 64]).unwrap();
+        let app = App::new(move || {
+            let shown = picture.clone();
+            let seen = seen.clone();
+            crate::picture_of(
+                move || Some(shown.clone()),
+                crate::ImageView::new()
+                    .fit(crate::ImageFit::Stretch)
+                    .pixels(crate::Pixels::Kitty),
+            )
+            .fixed(2)
+            .on_key("h", move |cx| {
+                let seen = seen.clone();
+                cx.handoff_then(std::process::Command::new("test"), move |_, _| {
+                    seen.set(crate::cell_pixels().get_untracked())
+                });
+            })
+            .on_key("q", |cx| cx.quit())
+        })
+        .graphics(crate::image_graphics());
+        let key = if handoff { "h" } else { "ctrl+z" };
+        let script = Script::new()
+            .keys(key)
+            .wait(Duration::from_millis(100))
+            .keys("q");
+        let mut inner = Headless::new(script, 4, 2);
+        inner.set_cell_pixels(Some((8, 16)));
+        let record = inner.record();
+        app.run_on(&mut TransitionBackend { inner }).unwrap();
+        let out = record.borrow().output();
+        (out, callback.get())
+    }
+
+    #[cfg(feature = "art")]
+    #[test]
+    fn resumed_backend_refreshes_metrics_before_the_next_event() {
+        let (out, _) = transition_run(false);
+        assert!(out.contains("s=32,v=32"));
+        assert!(
+            out.contains("s=48,v=48"),
+            "missing resized upload during wait"
+        );
+    }
+
+    #[cfg(feature = "art")]
+    #[test]
+    fn handoff_refreshes_metrics_before_callback_and_redraw() {
+        let (out, callback) = transition_run(true);
+        assert_eq!(callback, Some((12, 24)));
+        assert!(
+            out.contains("s=48,v=48"),
+            "missing resized upload during wait"
+        );
+    }
 
     struct Hoverable;
 

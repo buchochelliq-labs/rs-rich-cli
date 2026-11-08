@@ -1224,6 +1224,7 @@ pub struct Pacer {
     /// keep to, and that spacing: a frame that comes a little early or
     /// late (a thread's hop on its way) keeps to its slot.
     slot: Option<Instant>,
+    last_scheduled: Option<Instant>,
     spacing: Duration,
 }
 
@@ -1240,6 +1241,7 @@ impl Pacer {
             stepped: None,
             measured: None,
             slot: None,
+            last_scheduled: None,
             spacing: Duration::ZERO,
         }
     }
@@ -1345,9 +1347,9 @@ impl Pacer {
         let fps = (per_second / next).min(budget.max_fps);
         let spacing = Duration::from_secs_f64(1.0 / fps.max(f64::MIN_POSITIVE)).min(WINDOW);
         self.spacing = spacing;
-        if let Some((last, _)) = self.sent.back() {
-            let slot = self.slot.unwrap_or(*last) + spacing;
-            if now + spacing / 4 < slot || now.duration_since(*last) < spacing / 2 {
+        if let Some(last) = self.last_scheduled {
+            let slot = self.slot.unwrap_or(last) + spacing;
+            if now + spacing / 4 < slot || now.duration_since(last) < spacing / 2 {
                 return false;
             }
         }
@@ -1370,17 +1372,56 @@ impl Pacer {
         largest.max(self.bytes_per_frame())
     }
 
-    /// A frame was sent at `now`, costing `bytes` (counted by the painter,
-    /// [`picture_bytes`], or `None` to take the estimate).
-    pub fn sent(&mut self, now: Instant, bytes: Option<u64>) {
-        let bytes = bytes.unwrap_or_else(|| self.bytes_per_frame() as u64);
-        // The slot it was sent for: the next on the spacing when it is
-        // near, else (a pause, a first frame) a new run of slots from now.
+    /// Record a frame scheduled now when its byte cost will be observed later.
+    /// Call [`observe_bytes`](Self::observe_bytes) when the painter reports it.
+    ///
+    /// ```
+    /// use std::time::Instant;
+    /// use rich_art::picture::{Pacer, Pixels};
+    /// let mut pacer = Pacer::new(Pixels::Sixel, 4, 3);
+    /// let now = Instant::now();
+    /// pacer.schedule(now);
+    /// // A late frame from earlier metrics belongs in the byte window,
+    /// // but should not become the estimate for the current metrics.
+    /// pacer.observe_bytes(now, 1000, false);
+    /// assert_eq!(pacer.recent_bytes(), 1000);
+    /// ```
+    pub fn schedule(&mut self, now: Instant) {
+        self.mark_slot(now);
+        self.sent.push_back((now, 0));
+        self.forget(now);
+    }
+
+    /// Add actually transmitted bytes to the rolling window. Set `measure`
+    /// only if those bytes describe the current protocol and cell metrics.
+    pub fn observe_bytes(&mut self, now: Instant, bytes: u64, measure: bool) {
+        if measure {
+            self.measured = Some(match self.measured {
+                Some(before) => before * 0.7 + bytes as f64 * 0.3,
+                None => bytes as f64,
+            });
+        }
+        self.sent.push_back((now, bytes));
+        if !measure {
+            self.stepped = Some(now + Duration::from_nanos(1));
+        }
+        self.forget(now);
+    }
+
+    fn mark_slot(&mut self, now: Instant) {
         let next = self.slot.map(|slot| slot + self.spacing);
         self.slot = Some(match next {
             Some(slot) if now + self.spacing / 4 >= slot && now < slot + self.spacing => slot,
             _ => now,
         });
+        self.last_scheduled = Some(now);
+    }
+
+    /// A frame was sent at `now`, costing `bytes` (counted by the painter,
+    /// [`picture_bytes`], or `None` to take the estimate).
+    pub fn sent(&mut self, now: Instant, bytes: Option<u64>) {
+        let bytes = bytes.unwrap_or_else(|| self.bytes_per_frame() as u64);
+        self.mark_slot(now);
         self.measured = Some(match self.measured {
             Some(before) => before * 0.7 + bytes as f64 * 0.3,
             None => bytes as f64,
@@ -1744,6 +1785,24 @@ mod tests {
         count_picture_bytes(picture.id(), 10);
         count_picture_bytes(picture.id(), 5);
         assert_eq!(picture_bytes(picture.id()), 15);
+    }
+
+    #[cfg(feature = "frames")]
+    #[test]
+    fn scheduled_frames_account_observed_bytes_without_moving_the_clock() {
+        let mut pacer = Pacer::new(Pixels::Sixel, 4, 3);
+        let budget = ByteBudget::new(10_000_000);
+        let start = Instant::now();
+        assert!(pacer.due(start, &budget, 1.0));
+        pacer.schedule(start);
+        let estimate = pacer.bytes_per_frame();
+        pacer.observe_bytes(start + Duration::from_millis(120), 43_210, false);
+        assert_eq!(pacer.recent_bytes(), 43_210);
+        assert_eq!(pacer.bytes_per_frame(), estimate);
+        assert!(pacer.due(start + Duration::from_millis(125), &budget, 1.0));
+        pacer.observe_bytes(start + Duration::from_millis(126), 7_000, true);
+        assert_eq!(pacer.recent_bytes(), 50_210);
+        assert_eq!(pacer.bytes_per_frame(), 7_000.0);
     }
 
     #[cfg(feature = "frames")]
