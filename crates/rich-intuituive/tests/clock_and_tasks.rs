@@ -398,8 +398,9 @@ fn driver_dispatches_composed_screen_with_measured_cells() {
     use rich_ext::frame::{Frame, Placement, PlacementSource};
     use rich_ext::surface::Screen;
     use std::sync::Mutex;
+    type Invocation = (bool, usize, usize, Option<(u16, u16)>);
     #[derive(Default)]
-    struct Source(Mutex<Vec<(bool, usize, usize, Option<(u16, u16)>)>>);
+    struct Source(Mutex<Vec<Invocation>>);
     impl PlacementSource for Source {
         fn placements(&self, frame: &Frame) -> Vec<Placement> {
             self.placements_with_metrics(frame, None)

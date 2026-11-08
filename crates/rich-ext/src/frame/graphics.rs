@@ -286,7 +286,8 @@ mod tests {
     fn screen_default_preserves_frame_rows_styles_and_metrics() {
         use crate::surface::Screen;
         use std::sync::Mutex;
-        struct Legacy(Mutex<Vec<(String, Vec<usize>, Option<(u16, u16)>)>>);
+        type ObservedFrame = (String, Vec<usize>, Option<(u16, u16)>);
+        struct Legacy(Mutex<Vec<ObservedFrame>>);
         impl PlacementSource for Legacy {
             fn placements(&self, frame: &Frame) -> Vec<Placement> {
                 self.placements_with_metrics(frame, None)
