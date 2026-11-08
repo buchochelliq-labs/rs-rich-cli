@@ -4744,6 +4744,64 @@ mod tests {
     }
 
     #[test]
+    fn source_pieces_survive_unicode_cleaning_merging_and_block_splits() {
+        let mut f = Fake::new();
+        let figure = f.el(0, "FIGURE", &[], "block");
+        let p = f.el(figure, "P", &[], "block");
+        let first = f.node(p, 3, "#text", Some("  café\u{1b}  "), &[], Some("inline"));
+        let second = f.node(p, 3, "#text", Some(" 世界 "), &[], Some("inline"));
+        let image = f.el(p, "IMG", &[("src", "/a.png")], "block");
+        let third = f.node(p, 3, "#text", Some(" après "), &[], Some("inline"));
+        let caption = f.el(figure, "FIGCAPTION", &[], "block");
+        f.text(caption, "Caption");
+        let snapshot = PageSnapshot { dom: f.snapshot(), ax: Value::Null };
+        let source = build_source(&snapshot, &mut Revisions::new());
+        let legacy = build(&snapshot, &mut Revisions::new());
+        assert_eq!(source.page().as_ref(), &legacy);
+        let clone = source.clone();
+        assert!(Arc::ptr_eq(source.page(), clone.page()));
+        assert!(Arc::ptr_eq(&source.relations, &clone.relations));
+        let pieces = &source.relations.runs;
+        let texts = |node| pieces.iter().filter(|p| p.node == node).map(|p| {
+            p.text(source.page()).to_string()
+        }).collect::<Vec<_>>();
+        assert_eq!(texts(first as usize), ["café "]);
+        assert_eq!(texts(second as usize), ["世界"]);
+        assert_eq!(texts(third as usize), ["après"]);
+        let owned = &source.relations.figures[0];
+        assert_eq!(owned.node, figure as usize);
+        assert_eq!(owned.captions, [caption as usize]);
+        assert!(owned.blocks.iter().any(|&b| matches!(source.page().blocks[b].kind, BlockKind::Media(m) if source.page().media[m].node == 100 + image)));
+        assert_eq!(source.relations.blocks.iter().filter(|b| b.node == p as usize).count(), 2);
+    }
+
+    #[test]
+    fn source_relationship_only_changes_are_distinct_and_boxless_ownership_is_exact() {
+        let mut f = Fake::new();
+        let grid = f.el(0, "DIV", &[], "grid");
+        let left = f.node(grid, 1, "DIV", None, &[], None);
+        let right = f.node(grid, 1, "DIV", None, &[], None);
+        let link = f.node(left, 1, "A", None, &[("href", "/original")], None);
+        let figure = f.el(link, "FIGURE", &[], "block");
+        let image = f.el(figure, "IMG", &[("src", "/a.png")], "block");
+        let nested = f.el(figure, "FIGURE", &[], "block");
+        f.el(nested, "IMG", &[("src", "/b.png")], "block");
+        let caption = f.el(figure, "FIGCAPTION", &[], "block");
+        f.text(caption, "Caption");
+        let mut snapshot = PageSnapshot { dom: f.snapshot(), ax: Value::Null };
+        let a = build_source(&snapshot, &mut Revisions::new());
+        assert_eq!(a.relations.grids[0].node, grid as usize);
+        assert_eq!(a.relations.grids[0].items, [left as usize, right as usize]);
+        assert_eq!(a.relations.media_controls[0], Some(0));
+        assert_eq!(a.page().media[0].node, 100 + image);
+        assert_eq!(a.relations.figures[1].parent, Some(figure as usize));
+        snapshot.dom["documents"][0]["nodes"]["parentIndex"][link as usize] = json!(right);
+        let b = build_source(&snapshot, &mut Revisions::new());
+        assert_eq!(a.page(), b.page());
+        assert_ne!(a.relations, b.relations);
+    }
+
+    #[test]
     fn headings_paragraphs_and_hidden_text() {
         let mut f = Fake::new();
         f.s("about:x");
