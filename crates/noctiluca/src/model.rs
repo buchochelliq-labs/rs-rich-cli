@@ -4819,6 +4819,85 @@ mod tests {
     }
 
     #[test]
+    fn source_fixed_log_contents_do_not_change_outer_memberships() {
+        let mut f = Fake::new();
+        let log = f.el(0, "DIV", &[("role", "log")], "block");
+        let entry = f.el(log, "DIV", &[], "block");
+        f.text(entry, "first");
+        let paragraph = f.el(0, "P", &[], "block");
+        f.text(paragraph, "Outside");
+        let a = build_source(&PageSnapshot { dom: f.snapshot(), ax: Value::Null }, &mut Revisions::new());
+        let next = f.el(log, "DIV", &[], "block");
+        f.text(next, "second");
+        let b = build_source(&PageSnapshot { dom: f.snapshot(), ax: Value::Null }, &mut Revisions::new());
+        assert_ne!(a.page().logs, b.page().logs);
+        assert_eq!(a.relations, b.relations, "fixed log contents are an opaque layout unit");
+    }
+
+    #[test]
+    fn source_table_cell_ranges_follow_inline_folding_and_caption_trimming() {
+        let mut f = Fake::new();
+        let table = f.el(0, "TABLE", &[], "table");
+        let caption = f.el(table, "CAPTION", &[], "table-caption");
+        let caption_text = f.node(caption, 3, "#text", Some("  Résumé  "), &[], Some("inline"));
+        let row = f.el(table, "TR", &[], "table-row");
+        let cell = f.el(row, "TD", &[], "table-cell");
+        let p = f.el(cell, "P", &[], "block");
+        let first = f.node(p, 3, "#text", Some("  naïve  "), &[], Some("inline"));
+        let strong = f.el(p, "STRONG", &[], "inline");
+        let second = f.node(strong, 3, "#text", Some(" 世界 "), &[], Some("inline"));
+        let p = f.el(cell, "P", &[], "block");
+        let third = f.node(p, 3, "#text", Some(" fin "), &[], Some("inline"));
+        let snapshot = PageSnapshot { dom: f.snapshot(), ax: Value::Null };
+        let source = build_source(&snapshot, &mut Revisions::new());
+        assert_eq!(source.page().as_ref(), &build(&snapshot, &mut Revisions::new()));
+        let read = |node| source.relations.runs.iter().filter(|r| r.node == node).map(|r| r.text(source.page())).collect::<Vec<_>>();
+        assert_eq!(read(caption_text as usize), ["Résumé"]);
+        assert_eq!(read(first as usize), ["naïve "]);
+        assert_eq!(read(second as usize), ["世界"]);
+        assert_eq!(read(third as usize), ["fin"]);
+    }
+
+    #[test]
+    fn source_tables_folded_inside_logs_leave_no_dangling_cell_addresses() {
+        let mut f = Fake::new();
+        let log = f.el(0, "DIV", &[("role", "log")], "block");
+        let entry = f.el(log, "DIV", &[], "block");
+        let table = f.el(entry, "TABLE", &[], "table");
+        let row = f.el(table, "TR", &[], "table-row");
+        let cell = f.el(row, "TD", &[], "table-cell");
+        f.text(cell, "A cell");
+        let second = f.el(entry, "TABLE", &[], "table");
+        let row = f.el(second, "TR", &[], "table-row");
+        let cell = f.el(row, "TD", &[], "table-cell");
+        f.text(cell, "Another cell");
+        let snapshot = PageSnapshot { dom: f.snapshot(), ax: Value::Null };
+        let source = build_source(&snapshot, &mut Revisions::new());
+        assert_eq!(source.page().as_ref(), &build(&snapshot, &mut Revisions::new()));
+        assert!(source.relations.runs.is_empty());
+    }
+
+    #[test]
+    fn source_retains_the_existing_twin_match_and_only_its_exact_run_ranges() {
+        let mut f = Fake::new();
+        let p = f.el(0, "P", &[], "block");
+        f.text(p, "Before ");
+        let spoken = f.el(p, "SPAN", &[], "inline");
+        clip_style(&mut f, spoken, 8, "0");
+        let said = f.node(spoken, 3, "#text", Some("$29.99"), &[], Some("inline"));
+        let shown = f.el(p, "SPAN", &[("aria-hidden", "true")], "inline");
+        let visual = f.node(shown, 3, "#text", Some("$2999"), &[], Some("inline"));
+        f.text(p, " After");
+        let source = build_source(&PageSnapshot { dom: f.snapshot(), ax: Value::Null }, &mut Revisions::new());
+        assert_eq!(source.relations.twins, [(spoken as usize, shown as usize)]);
+        let ranges = |node| source.relations.runs.iter().filter(|r| r.node == node).map(|r| r.text(source.page())).collect::<Vec<_>>();
+        assert_eq!(ranges(said as usize), ["$29.99"]);
+        assert_eq!(ranges(visual as usize), ["$2999"]);
+        assert!(source.page().text().contains("Before"));
+        assert!(source.page().text().contains("After"));
+    }
+
+    #[test]
     fn source_pieces_survive_unicode_cleaning_merging_and_block_splits() {
         let mut f = Fake::new();
         let figure = f.el(0, "FIGURE", &[], "block");
