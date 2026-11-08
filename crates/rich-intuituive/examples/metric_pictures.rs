@@ -1,8 +1,9 @@
 //! Framework-only picture demonstration. Run with `--features art --example
 //! metric_pictures -- <cells|kitty|iterm|sixel> <8x16|10x20|12x24|12x12>
-//! <contain|cover|stretch> <left|right|center> [clip|change]`.
+//! <contain|cover|stretch> <left|right|center> [clip|change|overlay|restore]`.
 //! `change` writes a second frame at 12×24 with the same picture and cell grid;
-//! `clip` shows the middle rows in a smaller viewport.
+//! `clip` shows the middle rows in a smaller viewport. `overlay` covers the
+//! left half; `restore` paints that overlay and then dismisses it.
 use intuituive::{
     App, ImageAnchor, ImageFit, ImageView, Picture, Pixels, image_graphics, picture_of,
 };
@@ -45,7 +46,11 @@ fn main() {
     });
     let picture = Picture::new(DynamicImage::ImageRgb8(image));
     let view = ImageView::new().fit(fit).anchor(anchor).pixels(pixels);
+    let overlay = std::rc::Rc::new(std::cell::Cell::new(None));
+    let overlay_handle = overlay.clone();
     let app = App::new(move || {
+        let covered = intuituive::signal(action == "overlay" || action == "restore");
+        overlay_handle.set(Some(covered));
         let image = picture_of(
             {
                 let picture = picture.clone();
@@ -57,7 +62,13 @@ fn main() {
         if action == "clip" {
             intuituive::scroll_with(image, intuituive::signal(2u16))
         } else {
-            image
+            intuituive::layers([
+                image,
+                intuituive::label("Dialog")
+                    .bg("black")
+                    .inset(2, 8, 2, 0)
+                    .shown_when(move || covered.get()),
+            ])
         }
     })
     .graphics(image_graphics());
@@ -67,6 +78,11 @@ fn main() {
     let mut out = driver.render().unwrap_or_default();
     if arg(4, "") == "change" {
         driver.set_cell_pixels(Some((12, 24)));
+        driver.update(std::time::Duration::ZERO);
+        out.push_str(&driver.render().unwrap_or_default());
+    }
+    if arg(4, "") == "restore" {
+        overlay.get().unwrap().set(false);
         driver.update(std::time::Duration::ZERO);
         out.push_str(&driver.render().unwrap_or_default());
     }

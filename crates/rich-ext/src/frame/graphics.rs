@@ -42,6 +42,13 @@ pub trait Graphic: Send + Sync + fmt::Debug {
     /// (save and restore it around anything that moves it).
     fn draw(&self, frame: usize) -> String;
 
+    /// Whether already presented in-cell data can be reused on movement.
+    /// Sources sharing a terminal resource between incompatible rasters may
+    /// disable this for those graphics. Both sides of a transition must allow it.
+    fn can_reuse_data(&self) -> bool {
+        true
+    }
+
     /// Whether the image lives in the cells themselves (Kitty's Unicode
     /// placeholders): repainting the cells repaints it, and [`draw`](Self::draw)
     /// only makes sure the terminal holds the image.
@@ -171,7 +178,20 @@ pub fn plan(previous: &[Placement], next: &[Placement], changes: &[Change]) -> G
         }
     }
     for new in next {
-        let kept = previous.iter().any(|old| old.same(new));
+        // In-cell graphics move with their cells; only the retained data matters.
+        // Limit this proof to the previous successfully presented frame (or an
+        // upload already scheduled here), never a persistent seen-id cache.
+        let kept = if new.graphic.in_cells() {
+            previous.iter().chain(out.draw.iter()).any(|old| {
+                new.graphic.can_reuse_data()
+                    && old.graphic.can_reuse_data()
+                    && old.graphic.in_cells()
+                    && old.graphic.key() == new.graphic.key()
+                    && old.frame == new.frame
+            })
+        } else {
+            previous.iter().any(|old| old.same(new))
+        };
         let wiped = !new.graphic.in_cells()
             && (changes.iter().any(|change| new.touched_by(change))
                 || out.repaint.iter().any(|(row, columns)| {
@@ -301,6 +321,61 @@ mod tests {
         let out = plan(&old, &[], &[change(1, 3..5)]);
         assert_eq!(out.repaint, vec![(1, 5..6)]);
         assert!(out.draw.is_empty());
+    }
+
+    #[test]
+    fn in_cell_data_survives_movement_fragments_but_not_absence_or_frame_change() {
+        let old = Placement {
+            graphic: Arc::new(Image(9, true)),
+            ..at(0, 0, 9, 0)
+        };
+        let moved = Placement {
+            row: 2,
+            column: 3,
+            cols: 1,
+            rows: 3,
+            ..old.clone()
+        };
+        assert!(!old.same(&moved));
+        assert!(
+            plan(
+                std::slice::from_ref(&old),
+                &[moved.clone(), old.clone()],
+                &[change(0, 0..8)]
+            )
+            .is_empty()
+        );
+        let initial = plan(&[], &[moved.clone(), old.clone(), at(4, 0, 3, 0)], &[]);
+        assert_eq!(initial.draw.len(), 2);
+        assert_eq!(initial.draw[0].graphic.key(), 9);
+        assert_eq!(initial.draw[1].graphic.key(), 3);
+        assert_eq!(plan(&[], std::slice::from_ref(&moved), &[]).draw.len(), 1);
+        assert_eq!(
+            plan(
+                std::slice::from_ref(&old),
+                &[Placement {
+                    frame: 1,
+                    ..moved.clone()
+                }],
+                &[]
+            )
+            .draw
+            .len(),
+            1
+        );
+        assert_eq!(
+            plan(
+                &[old],
+                &[Placement {
+                    graphic: Arc::new(Image(10, true)),
+                    ..moved
+                }],
+                &[]
+            )
+            .draw
+            .len(),
+            1
+        );
     }
 
     #[test]

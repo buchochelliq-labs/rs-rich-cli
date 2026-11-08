@@ -229,3 +229,24 @@ select the fallback or another protocol. For programmatic use,
 `Driver::set_cell_pixels` updates metrics and `intuituive::cell_pixels()`
 provides the reactive value. Existing placement sources can ignore metrics;
 `PlacementSource::placements_with_metrics` lets sources use them.
+
+`overlay` covers the left half of the framework example with a dialog; `restore`
+dismisses it. Stock `Picture::lines` / `picture_of` now preserve rectangular
+native image fragments around covered cells. Fitting and anchoring happen before
+cropping, using the measured physical cell size. Older hand-written `PictureTag`
+styles without source-column metadata retain conservative whole-width clipping.
+
+Sixel/iTerm overlays clear the accepted rectangle to `ImageView.background`
+(or the terminal default) before drawing transparent native pixels. This avoids
+half-block fallback colors showing through alpha; cells rejected by the encoder
+or fragment budget keep their fallback. This does not reconstruct arbitrary
+previous layers. Sixel has binary alpha and a limited palette; iTerm preserves
+PNG alpha. Encoder/recorder tests are separate from native-terminal verification.
+
+Overlay work is bounded to 32 rectangles per image instance and 128 per frame;
+over-budget shapes retain cells. The encoding cache keeps at most 128 entries
+and 16 MiB of escape data. Kitty placeholders crop in cells and reuse an unchanged
+retained upload when moved. Removal followed by reappearance uploads again.
+Simultaneous different fits of one Kitty picture still share an upload id; data
+reuse is conservatively disabled for observed conflicting variants. Use distinct
+`Picture`s for simultaneous independently fitted Kitty views.

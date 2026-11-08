@@ -421,16 +421,42 @@ type GraphicKey = (
     Option<ImageFit>,
     ImageAnchor,
     rich_art::graphics::CellPixels,
+    (usize, usize, Option<[u8; 3]>),
 );
 
 /// [`image_graphics`]'s source.
 struct ImageGraphics {
     /// The graphics made, by picture, size and protocol.
-    made: Mutex<HashMap<GraphicKey, Arc<dyn Graphic>>>,
+    made: Mutex<HashMap<GraphicKey, Arc<PixelGraphic>>>,
     /// The Kitty pictures uploaded, to free.
     uploaded: Mutex<Vec<u32>>,
     /// Weak identities of Kitty graphics, including graphics evicted from the cache.
     owners: Mutex<Vec<(u32, std::sync::Weak<dyn Graphic>)>>,
+}
+
+#[derive(Clone)]
+struct ImageRect {
+    row: usize,
+    column: usize,
+    x: usize,
+    cols: usize,
+    rows: usize,
+    tag: PictureTag,
+    known: bool,
+    background: Option<[u8; 3]>,
+}
+
+impl ImageRect {
+    fn instance(&self) -> (PictureTag, Option<[u8; 3]>, i128, i128) {
+        let mut tag = self.tag;
+        tag.row = 0;
+        (
+            tag,
+            self.background,
+            self.column as i128 - self.x as i128,
+            self.row as i128 - self.tag.row as i128,
+        )
+    }
 }
 
 impl PlacementSource for ImageGraphics {
@@ -447,70 +473,127 @@ impl PlacementSource for ImageGraphics {
             .filter(|&(w, h)| w > 0 && h > 0)
             .map(|(w, h)| rich_art::graphics::CellPixels::new(w.into(), h.into()))
             .unwrap_or_default();
-        // Each tagged run whole (cells written over a picture, a modal's,
-        // cut its runs short): its row, column and tag.
-        let mut found: Vec<(usize, usize, PictureTag)> = Vec::new();
+        // Recover exact surviving row spans, then merge only equal spans on
+        // consecutive source AND screen rows. Never bridge a dialog or a hole.
+        let mut rectangles: Vec<ImageRect> = Vec::new();
+        let mut previous: HashMap<_, usize> = HashMap::new();
+        let mut counts = HashMap::new();
+        let mut rejected = std::collections::HashSet::new();
+        let mut overlay_count = 0;
+        let mut overlay_overflow = false;
         for row in 0..frame.height() {
+            let mut spans: Vec<ImageRect> = Vec::new();
             let mut column = 0;
-            let mut open: Option<(usize, PictureTag)> = None;
-            let mut close = |open: &mut Option<(usize, PictureTag)>, end: usize| {
-                if let Some((start, tag)) = open.take() {
-                    // Kitty's placeholders show cell by cell; an overlay
-                    // (Sixel, iTerm2) would draw over what covers it.
-                    if tag.pixels == Pixels::Kitty || end - start == tag.cols {
-                        found.push((row, start, tag));
-                    }
-                }
-            };
             for run in frame.row(row) {
-                let tag = frame.styles().get(run.style()).and_then(PictureTag::of);
-                match (&open, tag) {
-                    (Some((_, a)), Some(b)) if *a == b => {}
-                    _ => {
-                        close(&mut open, column);
-                        open = tag.map(|tag| (column, tag));
+                let style = frame.styles().get(run.style());
+                let tag = style.and_then(PictureTag::of);
+                if let Some(tag) = tag.filter(|t| t.cols > 0 && t.rows > t.row) {
+                    let x = style.and_then(PictureTag::column_of);
+                    let known = x.is_some();
+                    let background = style.and_then(PictureTag::background_of);
+                    if (!known || run.cells() == 1) && run.cells() <= tag.cols {
+                        let x = x.unwrap_or(0);
+                        if let Some(last) = spans.last_mut()
+                            && last.tag == tag
+                            && last.known == known
+                            && last.background == background
+                            && last.column + last.cols == column
+                            && (if known { last.x + last.cols == x } else { true })
+                        {
+                            last.cols += run.cells();
+                        } else {
+                            spans.push(ImageRect {
+                                row,
+                                column,
+                                x,
+                                cols: run.cells(),
+                                rows: 1,
+                                tag,
+                                known,
+                                background,
+                            });
+                        }
                     }
                 }
                 column += run.cells();
             }
-            close(&mut open, column);
+            let mut current = HashMap::new();
+            for span in spans {
+                if !span.known && span.cols != span.tag.cols {
+                    continue;
+                }
+                let instance = span.instance();
+                if rejected.contains(&instance) {
+                    continue;
+                }
+                let key = (instance, span.x, span.cols);
+                if let Some(&index) = previous.get(&key) {
+                    rectangles[index].rows += 1;
+                    current.insert(key, index);
+                    continue;
+                }
+                if span.tag.pixels != Pixels::Kitty {
+                    if overlay_overflow {
+                        continue;
+                    }
+                    let count = counts.entry(instance).or_insert(0);
+                    *count += 1;
+                    if *count > 32 {
+                        rejected.insert(instance);
+                        continue;
+                    }
+                    overlay_count += 1;
+                    if overlay_count > 128 {
+                        // A pathological frame keeps its original cell fallback.
+                        overlay_overflow = true;
+                        continue;
+                    }
+                }
+                current.insert(key, rectangles.len());
+                rectangles.push(span);
+            }
+            previous = current;
         }
-        let has = |row: usize, column: usize, tag: &PictureTag, which: usize| {
-            found.iter().any(|(r, c, t)| {
-                *r == row
-                    && *c == column
-                    && (t.id, t.version) == (tag.id, tag.version)
-                    && t.row == which
-            })
-        };
         let mut out = Vec::new();
-        for (row, column, tag) in &found {
-            // Only from the first row of the picture shown here.
-            if *row > 0 && tag.row > 0 && has(row - 1, *column, tag, tag.row - 1) {
+        let mut kitty: HashMap<u32, Vec<Arc<PixelGraphic>>> = HashMap::new();
+        for rect in rectangles {
+            if rejected.contains(&rect.instance())
+                || (overlay_overflow && rect.tag.pixels != Pixels::Kitty)
+            {
                 continue;
             }
-            // Kitty's placeholders draw row by row: they need only the
-            // upload. Sixel and iTerm2 draw a block of rows: the rows of
-            // the picture shown below, so a picture partly in view
-            // (scrolled, or under the screen's edge) draws clipped to them.
-            let shown = (1..tag.rows.saturating_sub(tag.row))
-                .take_while(|&below| has(row + below, *column, tag, tag.row + below))
-                .count()
-                + 1;
-            let (first, rows) = if tag.pixels == Pixels::Kitty {
-                (0, tag.rows)
+            let tag = &rect.tag;
+            let (x, cols, first, rows) = if tag.pixels == Pixels::Kitty {
+                (0, tag.cols, 0, tag.rows)
             } else {
-                (tag.row, shown)
+                (rect.x, rect.cols, tag.row, rect.rows)
             };
-            if let Some(graphic) = self.graphic(tag, first, rows, cell) {
+            if let Some(graphic) =
+                self.graphic(tag, x..x + cols, first..first + rows, cell, rect.background)
+            {
+                if tag.pixels == Pixels::Kitty {
+                    kitty.entry(tag.id).or_default().push(graphic.clone());
+                }
                 out.push(Placement {
-                    row: *row,
-                    column: *column,
-                    cols: tag.cols,
-                    rows: shown,
+                    row: rect.row,
+                    column: rect.column,
+                    cols: rect.cols,
+                    rows: rect.rows,
                     graphic,
                     frame: 0,
                 });
+            }
+        }
+        // One Kitty id can still alias simultaneous different fitted views.
+        // Never infer retained data for an observed competing upload. This flag
+        // also reaches previous placements sharing these cached graphics.
+        for variants in kitty.values() {
+            if variants.iter().any(|g| g.key != variants[0].key) {
+                for graphic in variants {
+                    graphic
+                        .reusable
+                        .store(false, std::sync::atomic::Ordering::Relaxed);
+                }
             }
         }
         out
@@ -550,10 +633,12 @@ impl ImageGraphics {
     fn graphic(
         &self,
         tag: &PictureTag,
-        first: usize,
-        shown: usize,
+        columns: std::ops::Range<usize>,
+        rows: std::ops::Range<usize>,
         cell: rich_art::graphics::CellPixels,
-    ) -> Option<Arc<dyn Graphic>> {
+        background: Option<[u8; 3]>,
+    ) -> Option<Arc<PixelGraphic>> {
+        let (x, cols, first, shown) = (columns.start, columns.len(), rows.start, rows.len());
         let key = (
             tag.id,
             tag.version,
@@ -565,20 +650,41 @@ impl ImageGraphics {
             tag.fit,
             tag.anchor,
             cell,
+            (x, cols, background),
         );
         let mut made = self.made.lock().unwrap_or_else(|e| e.into_inner());
         if let Some(graphic) = made.get(&key) {
             return Some(graphic.clone());
         }
         let picture = tag.picture()?;
-        let escape = picture.encode_tag_with_metrics(tag, first, shown, cell)?;
+        let mut escape =
+            picture.encode_tag_rect_with_metrics(tag, x..x + cols, first..first + shown, cell)?;
+        if tag.pixels != Pixels::Kitty {
+            // Only accepted, encoded rectangles lose their fallback. Clearing
+            // before native alpha blending prevents sampled half-block colors
+            // showing through transparent PNG/Sixel pixels. Restore cursor and
+            // attributes BEFORE the encoder uses the same save/restore slot.
+            let mut clear = String::from("\x1b7\x1b[0m");
+            if let Some([r, g, b]) = background {
+                clear.push_str(&format!("\x1b[48;2;{r};{g};{b}m"));
+            }
+            for row in 0..shown {
+                if row > 0 {
+                    clear.push_str("\x1b[1B");
+                }
+                clear.push_str(&format!("\x1b[{cols}X"));
+            }
+            clear.push_str("\x1b8");
+            clear.push_str(&escape);
+            escape = clear;
+        }
         if tag.pixels == Pixels::Kitty {
             let mut uploaded = self.uploaded.lock().unwrap_or_else(|e| e.into_inner());
             if !uploaded.contains(&tag.id) {
                 uploaded.push(tag.id);
             }
         }
-        let graphic: Arc<dyn Graphic> = Arc::new(PixelGraphic {
+        let graphic = Arc::new(PixelGraphic {
             key: {
                 use std::hash::{Hash, Hasher};
                 let mut hasher = std::collections::hash_map::DefaultHasher::new();
@@ -588,14 +694,32 @@ impl ImageGraphics {
             escape,
             in_cells: tag.pixels == Pixels::Kitty,
             id: tag.id,
+            reusable: std::sync::atomic::AtomicBool::new(true),
         });
         made.retain(|(id, version, ..), _| Picture::find(*id, *version).is_some());
         if tag.pixels == Pixels::Kitty {
             let mut owners = self.owners.lock().unwrap_or_else(|e| e.into_inner());
             owners.retain(|(_, weak)| weak.strong_count() > 0);
-            owners.push((tag.id, Arc::downgrade(&graphic)));
+            let erased: Arc<dyn Graphic> = graphic.clone();
+            owners.push((tag.id, Arc::downgrade(&erased)));
         }
-        made.insert(key, graphic.clone());
+        // Bound live-picture crop history as well as old versions. Clearing the
+        // encoding cache does not release retained Kitty resources: owners track
+        // those independently, including evicted graphics.
+        const CACHE_BYTES: usize = 16 * 1024 * 1024;
+        if made.len() >= 128
+            || made
+                .values()
+                .map(|g| g.escape.len())
+                .sum::<usize>()
+                .saturating_add(graphic.escape.len())
+                > CACHE_BYTES
+        {
+            made.clear();
+        }
+        if graphic.escape.len() <= CACHE_BYTES {
+            made.insert(key, graphic.clone());
+        }
         Some(graphic)
     }
 }
@@ -608,6 +732,7 @@ struct PixelGraphic {
     in_cells: bool,
     /// The picture it draws, whose bytes it counts.
     id: u32,
+    reusable: std::sync::atomic::AtomicBool,
 }
 
 impl Graphic for PixelGraphic {
@@ -622,6 +747,10 @@ impl Graphic for PixelGraphic {
 
     fn in_cells(&self) -> bool {
         self.in_cells
+    }
+
+    fn can_reuse_data(&self) -> bool {
+        self.reusable.load(std::sync::atomic::Ordering::Relaxed)
     }
 }
 

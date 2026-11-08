@@ -566,18 +566,15 @@ impl Picture {
         if rows == 0 || cols == 0 {
             return lines;
         }
-        let tag = |row: usize| {
-            PictureTag {
-                id: self.id(),
-                version: self.version(),
-                cols,
-                rows,
-                row,
-                pixels,
-                fit: view.fit,
-                anchor: view.anchor,
-            }
-            .style()
+        let tag = |row: usize| PictureTag {
+            id: self.id(),
+            version: self.version(),
+            cols,
+            rows,
+            row,
+            pixels,
+            fit: view.fit,
+            anchor: view.anchor,
         };
         if pixels == Pixels::Kitty {
             let truecolor = console.color_system() == Some(rich::color::ColorSystem::Truecolor);
@@ -587,23 +584,18 @@ impl Picture {
             return (0..rows)
                 .map(|row| {
                     let cells = crate::kitty::placeholder_row(row, cols).unwrap_or_default();
-                    let style = Style::new().with_color(colour.clone()).combine(&tag(row));
-                    vec![Segment::new(cells, Some(style))]
+                    let line = vec![Segment::new(
+                        cells,
+                        Some(Style::new().with_color(colour.clone())),
+                    )];
+                    tag_cells(line, tag(row), view.background)
                 })
                 .collect();
         }
         lines
             .into_iter()
             .enumerate()
-            .map(|(row, line)| {
-                let tag = tag(row);
-                line.into_iter()
-                    .map(|mut segment| {
-                        segment.style = Some(segment.style.unwrap_or_default().combine(&tag));
-                        segment
-                    })
-                    .collect()
-            })
+            .map(|(row, line)| tag_cells(line, tag(row), view.background))
             .collect()
     }
 
@@ -640,24 +632,55 @@ impl Picture {
         shown: usize,
         cell: CellPixels,
     ) -> Option<String> {
+        self.encode_tag_rect_with_metrics(
+            tag,
+            0..tag.cols,
+            first..first.saturating_add(shown),
+            cell,
+        )
+    }
+
+    /// Encode a visible rectangle in the full tagged cell canvas. Fit and anchor
+    /// the entire picture first, then crop; end coordinates clamp to the canvas.
+    /// Empty, reversed or oversized canvases return `None`. Kitty uploads the
+    /// whole fitted view: its coordinate-bearing placeholders perform the crop.
+    pub fn encode_tag_rect_with_metrics(
+        &self,
+        tag: &PictureTag,
+        columns: std::ops::Range<usize>,
+        rows: std::ops::Range<usize>,
+        cell: CellPixels,
+    ) -> Option<String> {
         let cell = CellPixels::new(cell.width, cell.height);
-        let (pixels, cols, rows) = (tag.pixels, tag.cols, tag.rows);
-        if !raster_fits(cols, rows, cell) {
+        if !raster_fits(tag.cols, tag.rows, cell) {
             return None;
         }
-        let shown = shown.min(rows.saturating_sub(first));
-        if shown == 0 {
+        let right = columns.end.min(tag.cols);
+        let bottom = rows.end.min(tag.rows);
+        if columns.start >= right || rows.start >= bottom {
             return None;
         }
-        if pixels == Pixels::Kitty || (first == 0 && shown >= rows) {
-            return self.encode_fitted(pixels, cols, rows, tag.fit, tag.anchor, cell);
+        if tag.pixels == Pixels::Kitty
+            || (columns.start == 0 && rows.start == 0 && right == tag.cols && bottom == tag.rows)
+        {
+            return self.encode_fitted(tag.pixels, tag.cols, tag.rows, tag.fit, tag.anchor, cell);
         }
-        self.encode_part(
-            &self.fitted(&self.shown.image, cols, rows, tag.fit, tag.anchor, cell),
-            pixels,
-            cols,
-            first,
-            shown,
+        if tag.pixels == Pixels::Cells {
+            return None;
+        }
+        let whole = self.fitted(
+            &self.shown.image,
+            tag.cols,
+            tag.rows,
+            tag.fit,
+            tag.anchor,
+            cell,
+        );
+        self.encode_rect(
+            &whole,
+            tag.pixels,
+            columns.start..right,
+            rows.start..bottom,
             cell,
         )
     }
@@ -911,12 +934,27 @@ impl Picture {
         shown: usize,
         cell: CellPixels,
     ) -> Option<String> {
-        let top = (first as u32 * cell.height).min(whole.height());
-        let height = (shown as u32 * cell.height).min(whole.height() - top);
-        if height == 0 {
-            return None;
-        }
-        let part = image::imageops::crop_imm(whole, 0, top, whole.width(), height).to_image();
+        self.encode_rect(whole, pixels, 0..cols, first..first + shown, cell)
+    }
+
+    fn encode_rect(
+        &self,
+        whole: &RgbaImage,
+        pixels: Pixels,
+        columns: std::ops::Range<usize>,
+        rows: std::ops::Range<usize>,
+        cell: CellPixels,
+    ) -> Option<String> {
+        let cols = columns.end - columns.start;
+        let shown = rows.end - rows.start;
+        let part = image::imageops::crop_imm(
+            whole,
+            columns.start as u32 * cell.width,
+            rows.start as u32 * cell.height,
+            cols as u32 * cell.width,
+            shown as u32 * cell.height,
+        )
+        .to_image();
         match pixels {
             Pixels::Sixel => {
                 let sixel = crate::SixelArt::new(DynamicImage::ImageRgba8(part))
@@ -942,8 +980,39 @@ impl Picture {
     }
 }
 
+// Blocks and Kitty placeholders are single-cell graphemes. Divide before
+// attaching provenance so later segment clipping keeps exact source columns.
+fn tag_cells(line: Vec<Segment>, tag: PictureTag, background: Option<[u8; 3]>) -> Vec<Segment> {
+    let mut meta = Meta::new();
+    if let Some(rgb) = background {
+        meta.insert(
+            "intuituive.image.background",
+            MetaValue::List(
+                rgb.into_iter()
+                    .map(|v| MetaValue::Int(i64::from(v)))
+                    .collect(),
+            ),
+        );
+    }
+    let background = Style::from_meta(meta);
+    Segment::divide(&line, &(1..=tag.cols).collect::<Vec<_>>())
+        .into_iter()
+        .enumerate()
+        .flat_map(|(column, segments)| {
+            let style = tag.style_at(column).combine(&background);
+            segments.into_iter().map(move |mut segment| {
+                segment.style = Some(segment.style.unwrap_or_default().combine(&style));
+                segment
+            })
+        })
+        .collect()
+}
+
 // Reject oversized raster requests before allocating the fitted canvas.
 fn raster_fits(cols: usize, rows: usize, cell: CellPixels) -> bool {
+    if !(1..=4096).contains(&cols) || !(1..=4096).contains(&rows) {
+        return false;
+    }
     let (width, height) = cell.span(cols, rows);
     u64::from(width) * u64::from(height) <= crate::sixel::MAX_PIXELS
 }
@@ -1164,6 +1233,42 @@ impl PictureTag {
             ]),
         );
         Style::from_meta(meta)
+    }
+
+    /// A tag with the exact source column attached. This additive metadata
+    /// survives clipping; old `style()` tags remain valid for whole-width runs.
+    pub fn style_at(&self, column: usize) -> Style {
+        let mut meta = Meta::new();
+        if column < self.cols
+            && let Ok(column) = i64::try_from(column)
+        {
+            meta.insert("intuituive.image.column", MetaValue::Int(column));
+        }
+        self.style().combine(&Style::from_meta(meta))
+    }
+
+    /// Exact source column, when present and valid for the style's picture tag.
+    pub fn column_of(style: &Style) -> Option<usize> {
+        let tag = Self::of(style)?;
+        let MetaValue::Int(column) = style.meta_ref()?.get("intuituive.image.column")? else {
+            return None;
+        };
+        let column = usize::try_from(*column).ok()?;
+        (column < tag.cols).then_some(column)
+    }
+
+    /// The explicitly requested image background, if any. Absence means the
+    /// terminal default, as in [`ImageView::background`]. This provenance is
+    /// separate from the half-block fallback's sampled foreground/background.
+    pub fn background_of(style: &Style) -> Option<[u8; 3]> {
+        let MetaValue::List(rgb) = style.meta_ref()?.get("intuituive.image.background")? else {
+            return None;
+        };
+        let channel = |i| match rgb.get(i)? {
+            MetaValue::Int(v) => u8::try_from(*v).ok(),
+            _ => None,
+        };
+        Some([channel(0)?, channel(1)?, channel(2)?])
     }
 
     /// The frame it tags, while something holds it.
@@ -1675,6 +1780,124 @@ mod tests {
                 assert!(encoded.contains("\"1;1;32;16"), "{encoded:?}");
             }
         }
+    }
+
+    #[test]
+    fn rectangular_crops_fit_full_source_before_cropping_at_all_metrics() {
+        let image = DynamicImage::ImageRgba8(RgbaImage::from_fn(77, 31, |x, y| {
+            image::Rgba([
+                (x * 3) as u8,
+                (y * 7) as u8,
+                (x + y) as u8,
+                if x < 5 { 0 } else { 255 },
+            ])
+        }));
+        let picture = Picture::new(image.clone());
+        let mut tag = PictureTag {
+            id: picture.id(),
+            version: picture.version(),
+            cols: 8,
+            rows: 4,
+            row: 0,
+            pixels: Pixels::Iterm,
+            fit: Some(ImageFit::Stretch),
+            anchor: ImageAnchor::Center,
+        };
+        for cell in [
+            CellPixels::new(8, 16),
+            CellPixels::new(10, 20),
+            CellPixels::new(12, 24),
+        ] {
+            for fit in [
+                ImageFit::Stretch,
+                ImageFit::Cover,
+                ImageFit::Contain,
+                ImageFit::Native,
+            ] {
+                for anchor in [
+                    ImageAnchor::Left,
+                    ImageAnchor::Right,
+                    ImageAnchor::Top,
+                    ImageAnchor::Bottom,
+                ] {
+                    tag.fit = Some(fit);
+                    tag.anchor = anchor;
+                    let whole = crate::graphics::fill_pixels(
+                        &image,
+                        8 * cell.width,
+                        4 * cell.height,
+                        fit,
+                        anchor,
+                    );
+                    for (columns, rows) in [(4..8, 1..2), (0..4, 0..3), (2..7, 2..4)] {
+                        let expected = image::imageops::crop_imm(
+                            &whole,
+                            columns.start as u32 * cell.width,
+                            rows.start as u32 * cell.height,
+                            (columns.end - columns.start) as u32 * cell.width,
+                            (rows.end - rows.start) as u32 * cell.height,
+                        )
+                        .to_image();
+                        let encoded = picture
+                            .encode_tag_rect_with_metrics(&tag, columns, rows, cell)
+                            .unwrap();
+                        assert!(
+                            encoded.contains(&crate::graphics::base64(
+                                &encode_png(&expected).unwrap()
+                            ))
+                        );
+                    }
+                }
+            }
+        }
+        for (columns, rows) in [
+            (usize::MAX..usize::MAX, 0..1),
+            (0..0, 0..1),
+            (4..2, 0..1),
+            (0..1, 4..5),
+        ] {
+            assert!(
+                picture
+                    .encode_tag_rect_with_metrics(&tag, columns, rows, CellPixels::DEFAULT)
+                    .is_none()
+            );
+        }
+        assert_eq!(
+            picture.encode_tag_rect_with_metrics(
+                &tag,
+                4..usize::MAX,
+                2..usize::MAX,
+                CellPixels::DEFAULT
+            ),
+            picture.encode_tag_rect_with_metrics(&tag, 4..8, 2..4, CellPixels::DEFAULT)
+        );
+        for cols in [0, 4097, usize::MAX] {
+            tag.cols = cols;
+            assert!(
+                picture
+                    .encode_tag_rect_with_metrics(&tag, 0..1, 0..1, CellPixels::DEFAULT)
+                    .is_none()
+            );
+        }
+    }
+
+    #[test]
+    fn source_column_metadata_is_additive_and_validated() {
+        let tag = PictureTag {
+            id: 1,
+            version: 0,
+            cols: 8,
+            rows: 4,
+            row: 1,
+            pixels: Pixels::Iterm,
+            fit: None,
+            anchor: ImageAnchor::Center,
+        };
+        assert_eq!(PictureTag::column_of(&tag.style()), None);
+        assert_eq!(PictureTag::of(&tag.style_at(5)), Some(tag));
+        assert_eq!(PictureTag::column_of(&tag.style_at(5)), Some(5));
+        assert_eq!(PictureTag::column_of(&tag.style_at(8)), None);
+        assert_eq!(PictureTag::column_of(&tag.style_at(usize::MAX)), None);
     }
 
     #[test]
