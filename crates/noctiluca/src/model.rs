@@ -1540,15 +1540,18 @@ fn captioned(dom: &Dom, i: usize, alt: &str) -> bool {
             return dom
                 .descendants(parent)
                 .into_iter()
-                .filter(|&d| dom.name[d] == "FIGCAPTION" && dom.shows(d))
+                .filter(|&d| dom.name[d] == "FIGCAPTION" && dom.shows(d) && !dom.concealed[d])
                 .any(|d| {
-                    let text: String = dom
+                    // Compare what the text walker can show, not raw DOM text
+                    // hidden in a descendant. Missing rendered text is uncertain:
+                    // keep the image's alternative instead of assuming equivalence.
+                    let text: Option<String> = dom
                         .descendants(d)
                         .into_iter()
-                        .filter(|&t| dom.kind[t] == 3)
-                        .map(|t| dom.value[t].as_str())
+                        .filter(|&t| dom.kind[t] == 3 && dom.shows(t) && !dom.concealed[t])
+                        .map(|t| dom.text[t].as_deref().map(clean_inline))
                         .collect();
-                    normalize(&text) == alt
+                    text.is_some_and(|text| normalize(&text) == alt)
                 });
         }
         at = parent;

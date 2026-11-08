@@ -468,6 +468,120 @@ fn hidden_caption_does_not_replace_a_visible_alt_caption() {
 }
 
 #[test]
+fn caption_equivalence_uses_visible_rendered_descendant_text() {
+    for case in [
+        "hidden",
+        "transparent",
+        "clipped",
+        "invisible",
+        "missing text",
+        "rendered text",
+        "visible",
+    ] {
+        let mut p = PageBuilder::new("https://fixture.example/caption", "Caption", 640., 400.);
+        let f = p.element(
+            p.body(),
+            "FIGURE",
+            &[],
+            &[],
+            Some(Rect::new(0., 0., 400., 250.)),
+        );
+        p.image(f, "photo.png", "Blue boat", Rect::new(0., 0., 400., 180.));
+        let c = p.element(
+            f,
+            "FIGCAPTION",
+            &[],
+            &[],
+            Some(Rect::new(0., 180., 400., 54.)),
+        );
+        p.text(c, "Blue ", Rect::new(0., 180., 40., 18.));
+        let styles: &[(&str, &str)] = match case {
+            "hidden" => &[("display", "none")],
+            "transparent" => &[("opacity", "0")],
+            "clipped" => &[
+                ("position", "absolute"),
+                ("clip", "rect(0px, 0px, 0px, 0px)"),
+            ],
+            "invisible" => &[("visibility", "hidden")],
+            _ => &[],
+        };
+        let attrs: &[(&str, &str)] = if case == "hidden" {
+            &[("hidden", "")]
+        } else {
+            &[]
+        };
+        let span = p.element(
+            c,
+            "SPAN",
+            attrs,
+            styles,
+            (case != "hidden").then_some(Rect::new(40., 180., 40., 18.)),
+        );
+        let text_node = p.text(span, "boat", Rect::new(40., 180., 40., 18.));
+        let mut snapshot = p.snapshot();
+        if matches!(case, "missing text" | "rendered text") {
+            let layout = &snapshot.dom["documents"][0]["layout"];
+            let at = layout["nodeIndex"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .position(|n| n.as_u64() == Some(text_node as u64))
+                .unwrap();
+            let text = if case == "missing text" {
+                -1
+            } else {
+                let strings = snapshot.dom["strings"].as_array_mut().unwrap();
+                strings.push(serde_json::json!("ship"));
+                (strings.len() - 1) as i64
+            };
+            snapshot.dom["documents"][0]["layout"]["text"][at] = serde_json::json!(text);
+        }
+        let original = build(&snapshot, &mut Revisions::new());
+        let equivalent = case == "visible";
+        assert_eq!(original.media[0].captioned, equivalent, "{case}");
+        for loaded in [false, true] {
+            let mut page = original.clone();
+            if loaded {
+                page.media[0].picture = Some(rich_intuituive::Picture::new(
+                    image::DynamicImage::new_rgba8(40, 20),
+                ));
+            }
+            let projection = project(&page, 80, (8., 18.), &Marks::default());
+            let text = projection
+                .lines
+                .iter()
+                .map(|l| l.plain())
+                .collect::<Vec<_>>()
+                .join("\n");
+            assert_eq!(
+                text.contains("Image: Blue boat"),
+                !equivalent,
+                "{case}, loaded={loaded}: {text}"
+            );
+            let reader_text = reader(&page, 80, &Marks::default())
+                .into_iter()
+                .filter_map(|piece| match piece {
+                    Piece::Text(lines) => Some(
+                        lines
+                            .iter()
+                            .map(|l| l.plain())
+                            .collect::<Vec<_>>()
+                            .join(" "),
+                    ),
+                    _ => None,
+                })
+                .collect::<Vec<_>>()
+                .join(" ");
+            assert!(
+                reader_text.contains("image: Blue boat"),
+                "{case}, loaded={loaded}: {reader_text}"
+            );
+            assert_eq!(page.media[0].alt, "Blue boat");
+        }
+    }
+}
+
+#[test]
 fn adapted_source_width_floor_tracks_views_and_adaptation_without_changing_terminal() {
     use noctiluca::{
         app::{Options, app},
