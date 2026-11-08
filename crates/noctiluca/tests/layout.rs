@@ -911,7 +911,7 @@ fn opaque_tall_fixed_dialog_does_not_mix_covered_underlay() {
     assert!(!popup_text.contains("Underlying action"), "{popup_text}");
 }
 
-fn source_dialog_layer(modal: bool) {
+fn source_dialog_layer(modal: bool, higher: bool) {
     use noctiluca::{
         app::{Options, app},
         bookmarks::Bookmarks,
@@ -991,7 +991,39 @@ fn source_dialog_layer(modal: bool) {
         Some(Rect::new(410.0, 140.0, 160.0, 30.0)),
     );
     p.text(other, "Second", Rect::new(415.0, 145.0, 80.0, 18.0));
+    if higher {
+        let over = p.element(
+            body,
+            "BUTTON",
+            &[],
+            &[],
+            Some(Rect::new(700.0, 180.0, 55.0, 30.0)),
+        );
+        p.paint(over, 200);
+        p.text(over, "Above", Rect::new(700.0, 180.0, 50.0, 18.0));
+        for i in 0..35 {
+            let y = 740.0 + f64::from(i) * 30.0;
+            let row = p.element(body, "P", &[], &[], Some(Rect::new(0.0, y, 140.0, 18.0)));
+            p.text(
+                row,
+                &format!("Later row {i}"),
+                Rect::new(0.0, y, 120.0, 18.0),
+            );
+        }
+    }
     let model = build(&p.snapshot(), &mut Revisions::new());
+    let higher_node = higher.then(|| model.find("button", "Above")[0].node);
+    let lower_node = model.find("button", "Underlying action")[0].node;
+    assert!(
+        !model.overlays[0].foreground.contains(&lower_node),
+        "lower-painted control was promoted"
+    );
+    if let Some(node) = higher_node {
+        assert!(
+            model.overlays[0].foreground.contains(&node),
+            "higher-painted control was not associated"
+        );
+    }
     let expected = model.find("button", "Second")[0].node;
     let choose = model.find("button", "Choose")[0].node;
     let outside_node = model.find("button", "Outside")[0].node;
@@ -1040,6 +1072,115 @@ fn source_dialog_layer(modal: bool) {
     }
     assert!(driver.find_text("Dialog content").is_some());
     assert!(driver.find_text("Underlying action").is_none());
+    if modal {
+        let focused = driver.focused_name();
+        let before = state.lock().unwrap().actions.len();
+        driver.press("f1");
+        driver.settle();
+        assert!(
+            driver.find_text("Link hints").is_some(),
+            "Actions did not open above source modal"
+        );
+        driver.press("esc");
+        driver.settle();
+        assert!(driver.find_text("Choose").is_some());
+        assert_eq!(
+            driver.focused_name(),
+            focused,
+            "source modal focus was not restored"
+        );
+        assert!(!state.lock().unwrap().actions[before..].iter().any(|a| matches!(a, PageAction::Key(key) if *key == rich_intuituive::interact::Key::parse("esc").unwrap())), "Actions Escape reached source");
+        driver.press("a");
+        driver.settle();
+        assert!(
+            driver.find_text("Choose").is_some(),
+            "faithful projection lost source dialog"
+        );
+        driver.press("a");
+        driver.press("r");
+        driver.settle();
+        let reader = driver.screen().plain().join("\n");
+        assert!(
+            reader.matches("Dialog content").count() <= 1,
+            "Reader duplicated source popup: {reader}"
+        );
+        driver.press("r");
+        driver.settle();
+        assert!(
+            driver.find_text("Choose").is_some(),
+            "return to projection lost source dialog"
+        );
+    }
+    if let Some(target) = higher_node {
+        let (x, y) = driver
+            .find_text("Above")
+            .expect("higher-painted source control hidden by popup");
+        let copies = driver
+            .accessibility()
+            .iter()
+            .filter(|entry| entry.name.contains("Above"))
+            .count();
+        assert!(
+            copies <= 1,
+            "foreground duplicated accessibility entries: {copies}"
+        );
+        driver.click(x, y);
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while !state
+            .lock()
+            .unwrap()
+            .actions
+            .iter()
+            .any(|a| matches!(a, PageAction::Click(node) if *node == target))
+        {
+            driver.settle();
+            assert!(
+                Instant::now() < deadline,
+                "higher-painted source control did not receive click"
+            );
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        driver.press("j j");
+        driver.settle();
+        let (moved_x, moved_y) = driver
+            .find_text("Above")
+            .expect("scrolled foreground disappeared");
+        assert!(
+            moved_y < y,
+            "foreground did not follow underlay scroll: {y} -> {moved_y}"
+        );
+        assert_eq!(moved_x, x);
+        let previous = state
+            .lock()
+            .unwrap()
+            .actions
+            .iter()
+            .filter(|a| matches!(a, PageAction::Click(node) if *node == target))
+            .count();
+        driver.click(moved_x, moved_y);
+        let deadline = Instant::now() + Duration::from_secs(5);
+        loop {
+            driver.settle();
+            if state
+                .lock()
+                .unwrap()
+                .actions
+                .iter()
+                .filter(|a| matches!(a, PageAction::Click(node) if *node == target))
+                .count()
+                > previous
+            {
+                break;
+            }
+            assert!(
+                Instant::now() < deadline,
+                "scrolled foreground hit did not reach source"
+            );
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        driver.press("home");
+        driver.settle();
+    }
     let (outside_x, outside_y) = driver.find_text("Outside").unwrap();
     driver.click(outside_x, outside_y);
     let until = Instant::now() + Duration::from_millis(250);
@@ -1192,12 +1333,12 @@ fn source_dialog_layer(modal: bool) {
 
 #[test]
 fn source_nonmodal_dialog_is_shown_as_an_interactive_layer() {
-    source_dialog_layer(false);
+    source_dialog_layer(false, false);
 }
 
 #[test]
 fn source_modal_dialog_blocks_outside_and_keeps_its_actions() {
-    source_dialog_layer(true);
+    source_dialog_layer(true, false);
 }
 
 #[test]
@@ -1303,4 +1444,9 @@ fn opening_and_closing_a_fixed_dialog_keeps_the_underlay_scroll_anchor() {
             driver.screen().plain()
         );
     }
+}
+
+#[test]
+fn higher_painted_source_control_remains_above_a_nonmodal_popup() {
+    source_dialog_layer(false, true);
 }

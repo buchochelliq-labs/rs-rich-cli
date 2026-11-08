@@ -999,12 +999,16 @@ pub(crate) enum Part {
     Pinned,
     Docked,
     Overlay(usize),
+    Foreground(NodeId),
 }
 
 /// How far down `part` moves `block`'s boxes, in CSS pixels; `None` when
 /// it is not in `part`. `docked` is the top of the highest docked layer.
 fn shift(page: &Page, block: &Block, part: Part, pinned: f64, docked: f64) -> Option<f64> {
     let layer_index = block.stack.layer;
+    if let Part::Foreground(node) = part {
+        return (block.node == node).then_some(-block.rect.y);
+    }
     if let Part::Overlay(index) = part {
         let dialog = page.overlays.get(index)?;
         return (layer_index == Some(dialog.layer)).then(|| -page.layers[dialog.layer].rect.y);
@@ -1060,6 +1064,22 @@ pub fn project_overlay(
         Part::Overlay(index),
         &mut Vec::new(),
     ))
+}
+
+pub(crate) fn project_foreground(
+    page: &Page,
+    node: NodeId,
+    columns: u16,
+    cell: (f64, f64),
+) -> Projection {
+    project_part(
+        page,
+        columns,
+        cell,
+        &Marks::default(),
+        Part::Foreground(node),
+        &mut Vec::new(),
+    )
 }
 
 #[derive(Clone, Debug)]
@@ -1134,6 +1154,11 @@ fn project_part(
     let columns = columns.max(10) as usize;
     let (cw, ch) = (cell.0.max(1.0), cell.1.max(1.0));
     let origin_x = match part {
+        Part::Foreground(node) => page
+            .blocks
+            .iter()
+            .find(|b| b.node == node)
+            .map_or(0.0, |b| b.rect.x),
         Part::Overlay(index) => page
             .overlays
             .get(index)

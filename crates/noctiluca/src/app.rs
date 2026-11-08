@@ -2791,6 +2791,117 @@ fn segment_columns(segments: Vec<rich::Segment>, start: usize, width: usize) -> 
 
 // Source-controlled fixed dialogs compose over the page without changing
 // the source's dismiss behavior or inferring modality from geometry.
+// Paint source blocks above a fixed surface without moving or removing their
+// underlay model. Their visible rectangle and pointer target share one node.
+fn source_foreground(b: Browser, nodes: Vec<NodeId>, bounds: (u16, u16, u16, u16)) -> Node {
+    keyed(
+        move || {
+            let (columns, height) = b.viewport.get();
+            let rows = height.saturating_sub(CHROME_ROWS).max(1);
+            let scroll = b.scroll.get() as usize;
+            let y = if scroll == 0 {
+                0.0
+            } else {
+                b.layout.with(|layout| layout.y_of(scroll))
+            };
+            b.page.with(|page| {
+                page.as_ref()
+                    .map(|page| {
+                        nodes
+                            .iter()
+                            .filter_map(|node| {
+                                let block = page.blocks.iter().find(|block| block.node == *node)?;
+                                let x = (block.rect.x / f64::from(CELL.0)).floor() as i32;
+                                let y = ((block.rect.y - y) / f64::from(CELL.1)).floor() as i32;
+                                let width =
+                                    (block.rect.width / f64::from(CELL.0)).ceil().max(1.0) as u16;
+                                let height =
+                                    (block.rect.height / f64::from(CELL.1)).ceil().max(1.0) as u16;
+                                let (bound_left, bound_top, bound_right, bound_bottom) = bounds;
+                                let left = x.max(i32::from(bound_left)).max(0);
+                                let top = y.max(i32::from(bound_top)).max(0);
+                                let right = (x + i32::from(width))
+                                    .min(i32::from(columns.saturating_sub(bound_right)));
+                                let bottom = (y + i32::from(height))
+                                    .min(i32::from(rows.saturating_sub(bound_bottom)));
+                                if right <= left || bottom <= top {
+                                    return None;
+                                }
+                                Some((
+                                    *node,
+                                    left as u16,
+                                    top as u16,
+                                    columns - right as u16,
+                                    rows - bottom as u16,
+                                    width,
+                                    (left - x) as usize,
+                                    (top - y) as usize,
+                                ))
+                            })
+                            .collect::<Vec<_>>()
+                    })
+                    .unwrap_or_default()
+            })
+        },
+        move |specs| {
+            layers(specs.into_iter().map(
+                move |(node, left, top, right, bottom, full_width, skip_x, skip)| {
+                    let projection = memo(move || {
+                        b.page.with(|page| {
+                            page.as_ref()
+                                .map(|page| {
+                                    layout::project_foreground(
+                                        page,
+                                        node,
+                                        full_width,
+                                        (CELL.0 as f64, CELL.1 as f64),
+                                    )
+                                })
+                                .unwrap_or_default()
+                        })
+                    });
+                    let cells = Rc::new(pictures::Cells::with_presentation(b.presentation));
+                    leaf(move |console, width, height| {
+                        projection.with(|p| {
+                            (skip..skip + usize::from(height))
+                                .map(|i| {
+                                    if i < p.lines.len() {
+                                        let line = draw_row(
+                                            b,
+                                            console,
+                                            &cells,
+                                            p,
+                                            i,
+                                            usize::from(full_width),
+                                            &Marks::default(),
+                                        );
+                                        segment_columns(line, skip_x, usize::from(width))
+                                    } else {
+                                        Vec::new()
+                                    }
+                                })
+                                .collect()
+                        })
+                    })
+                    .on_click_at(move |cx, column, row| {
+                        if let Some(index) = projection.with_untracked(|p| {
+                            p.lines.get(skip + usize::from(row)).and_then(|line| {
+                                layout::control_at(line, skip_x + usize::from(column))
+                            })
+                        }) {
+                            click_control(b, index, cx);
+                        }
+                        true
+                    })
+                    .inset(top, right, bottom, left)
+                },
+            ))
+            .children_cover_only()
+        },
+    )
+    .children_cover_only()
+}
+
 fn source_dialogs(b: Browser) -> Node {
     type Spec = (
         NodeId,
@@ -2802,6 +2913,7 @@ fn source_dialogs(b: Browser) -> Node {
         bool,
         String,
         Option<String>,
+        Vec<NodeId>,
     );
     keyed(
         move || {
@@ -2846,6 +2958,7 @@ fn source_dialogs(b: Browser) -> Node {
                                     dialog.modal,
                                     dialog.name.clone(),
                                     dialog.background.clone(),
+                                    dialog.foreground.clone(),
                                 ))
                             })
                             .collect::<Vec<Spec>>()
@@ -2855,7 +2968,18 @@ fn source_dialogs(b: Browser) -> Node {
         },
         move |specs| {
             layers(specs.into_iter().map(
-                move |(node, left, top, right, bottom, is_dialog, modal, name, background)| {
+                move |(
+                    node,
+                    left,
+                    top,
+                    right,
+                    bottom,
+                    is_dialog,
+                    modal,
+                    name,
+                    background,
+                    foreground,
+                )| {
                     let width = b
                         .viewport
                         .get_untracked()
@@ -3046,11 +3170,16 @@ fn source_dialogs(b: Browser) -> Node {
                     } else {
                         popup
                     };
-                    if modal {
+                    let popup = if modal {
                         popup.controlled_modal()
                     } else {
                         popup
-                    }
+                    };
+                    layers([
+                        popup,
+                        source_foreground(b, foreground, (left, top, right, bottom)),
+                    ])
+                    .children_cover_only()
                 },
             ))
             .children_cover_only()

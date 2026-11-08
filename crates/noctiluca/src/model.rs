@@ -240,6 +240,8 @@ pub struct SourceOverlay {
     pub background: Option<String>,
     /// Chrome paint order for compositing sibling dialogs.
     pub paint_order: i64,
+    /// Ordinary source blocks painted above this surface, in paint order.
+    pub foreground: Vec<NodeId>,
 }
 
 impl Block {
@@ -3462,6 +3464,7 @@ fn stack(dom: &Dom, ax: &Ax<'_>, page: &mut Page) {
             name,
             background,
             paint_order,
+            foreground: Vec::new(),
         });
     }
 
@@ -3523,6 +3526,7 @@ fn stack(dom: &Dom, ax: &Ax<'_>, page: &mut Page) {
             name: String::new(),
             background: Some(colour),
             paint_order,
+            foreground: Vec::new(),
         });
     }
     page.overlays.sort_by_key(|dialog| dialog.paint_order);
@@ -3611,6 +3615,41 @@ fn stack(dom: &Dom, ax: &Ax<'_>, page: &mut Page) {
             })
             .min_by(|a, b| area(&a.1).total_cmp(&area(&b.1)))
             .map(|(m, _, _)| *m);
+    }
+    // Preserve only ordinary blocks actually above and intersecting a fixed
+    // surface. They remain in the underlay; this bounded association allows
+    // their visible cells and hit targets to be painted in source order.
+    let mut foreground = Vec::new();
+    for block in &page.blocks {
+        let Some(&i) = index.get(&block.node) else {
+            continue;
+        };
+        let Some(paint) = order(i) else { continue };
+        if block.stack.layer.is_some() || block.stack.covered {
+            continue;
+        }
+        let rect = block.rect;
+        let owner = page
+            .overlays
+            .iter()
+            .enumerate()
+            .filter(|(_, overlay)| {
+                let surface = page.layers[overlay.layer].rect;
+                paint > overlay.paint_order
+                    && rect.x < surface.right()
+                    && surface.x < rect.right()
+                    && rect.y < surface.bottom()
+                    && surface.y < rect.bottom()
+            })
+            .max_by_key(|(_, overlay)| overlay.paint_order)
+            .map(|(index, _)| index);
+        if let Some(owner) = owner {
+            foreground.push((owner, paint, block.node));
+        }
+    }
+    foreground.sort_by_key(|(_, paint, _)| *paint);
+    for (owner, _, node) in foreground {
+        page.overlays[owner].foreground.push(node);
     }
 }
 

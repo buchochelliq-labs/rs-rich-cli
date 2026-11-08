@@ -215,7 +215,9 @@ fn part_mut(p: &mut Projection, part: Part) -> &mut Projection {
         Part::Flow => p,
         Part::Pinned => p.pinned.as_deref_mut().unwrap(),
         Part::Docked => p.docked.as_deref_mut().unwrap(),
-        Part::Overlay(_) => unreachable!("dialog projections use independent slots"),
+        Part::Overlay(_) | Part::Foreground(_) => {
+            unreachable!("overlay projections use independent slots")
+        }
     }
 }
 
