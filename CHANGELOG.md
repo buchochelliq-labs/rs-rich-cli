@@ -46,6 +46,10 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   final cleanup resources across failed or partial writes. Existing low-level
   picture and `Driver::finish()` APIs remain available; see the image guide for
   their lifetime and simultaneous-fit limits.
+- Release validation remains blocked by the original iTerm-compatible frame,
+  input and process-CPU limits across the final three-run sample. Kitty and ANSI
+  meet their frozen frame/input limits; all observations and remaining native
+  limitations are recorded in the [media-quality handoff](docs/design/noctiluca-media-quality-status.md).
 
 ### Releases: rab v2.0.1
 

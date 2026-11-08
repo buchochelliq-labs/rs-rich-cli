@@ -1,34 +1,60 @@
 # Noctiluca media quality: handoff
 
-Updated: 2026-11-08. Branch: `codex/noctiluca-media-quality`. The design baseline is `7fcdbf7263f81d89c2975a47ee4761b4a0e1c7cc`; Tasks 1–5 have been implemented and reviewed. The aggregate final review identified modal, dialog, media-queue and capture ownership defects; the final fix wave is in progress. Performance acceptance remains open.
+Updated: 2026-11-08. Branch: `codex/noctiluca-media-quality`. Production source is frozen at `cbc7d930b81acdde5800755b69eece2b218eeccb`. The aggregate final review's functional corrections are implemented, with owning-seam RED/GREEN evidence. **Release remains blocked: all three final iTerm-compatible runs fail at least one original performance gate.** No further tuning or measurement round was started.
 
-The shared `ImagePresentation` path supports independent fitted/versioned Kitty resources, feature-aware animation and supported-format pacing. Existing low-level picture IDs remain available. Manual Driver loops must acknowledge successful frame writes and use `finish_output()` to retain final cleanup resources; see the [image guide](../guide/intuituive/plugins.md#images-art). Source frames are scoped to the document and applied viewport; stale buffered frames are discarded before navigation is published.
+## Behavior and compatibility
+
+Source dialogs use generic intuiTUIve layers with owner-controlled focus, pointer confinement and pane-local maximize scopes. Absolute/static declared dialogs and open native dialogs form independent surfaces; document surfaces scroll and fixed surfaces retain their source placement. Hidden/offscreen surfaces cannot trap focus or intercept source Escape. Popup underlays retain configured PageColors and accessible text twins, including canonical split-price alternatives, while geometric adaptations are suppressed. Faithful mode and explicit rule disables retain their behavior. Unsupported color syntax cannot establish opacity.
+
+Waiting encodes and prepared results are bounded to current document/view/region incarnations. A current executing encode can finish while newer offers coalesce. Chrome guards model-owned fallback/canvas captures before and after document/applied-viewport changes; standalone capture remains compatible. A playing region partly outside the viewport uses the existing whole-region fallback instead of waiting indefinitely for a quiet screencast. Strict incomplete-crop rejection, admission, codec/quality and pacing limits are retained.
+
+Bound picture provenance uses a checked compact carrier with exact ID/version, geometry, source column, fit/anchor, protocol and background/binding flags; unsupported values retain legacy metadata. Public unbound lines and `style()`/`style_at()` remain compatible. Generic Kitty span planning accepts adjacent copies restarting at an equal/backward nonzero source column while rejecting malformed and forward-jump spans. Manual Driver loops acknowledge successful writes with `output_written()` and retain cleanup resources with `finish_output()`; see the [image guide](../guide/intuituive/plugins.md#images-art).
+
+The sole required model migration is `Page.overlays`: complete Noctiluca `Page { ... }` literals add `overlays: Vec::new()` or use `..Page::default()`. `Page::dialogs()` exposes declared source dialogs. No required fields were added to public `ImageView`, `PictureTag`, `FrameMeta`, Layer/Stack/Projection/Job or faithful mirror types. Generic core code imports no browser types. See the [layout guide](../guide/intuituive/layout.md#owner-controlled-overlays).
+
+## Verification and immutable builds
+
+The full workspace at shared-source milestone `60037d9` passed **6,965 tests, 21 ignored** across 449 suites. The later production changes are confined to leaf Noctiluca; its complete final-source package passed **365 tests, 3 ignored** across 36 suites. This is not a full-workspace rerun claim at `cbc7d93`. The independent feature-isolated framework consumer, with no Noctiluca dependency, passed 54 public-API tests, including complete struct literals and graphics clipping/compositing. Modified-crate scoped all-target lint passes with the verified baseline-only `nonminimal_bool` allowance; strict workspace lint still has the three pre-existing faithful Rich diagnostics. Formatting and whitespace pass.
+
+Actual sandboxed Chromium regressions separately passed current-document/applied-viewport capture guards and changing pixels for the partially visible video: before the correction 58 distinct casts produced zero delivered video frames; afterward 52 distinct casts produced 23 distinct video pixel buffers. Normal optional-live package tests do not replace these explicitly executed integrations.
+
+Both final artifacts are Rust 1.90 release builds, mode `0555` (read/execute, write protected):
+
+- CLI: `/workspace/work/final-wave-immutable-binaries/noctiluca-cbc7d93-release-rust190`, SHA-256 `8ec19f52ad9d627007331bdc4a73b347ea4e518ffeed6c2312e8621e1ca97ed9`.
+- Harness: `/workspace/work/final-wave-immutable-binaries/cbc7d93-harness-99f214ce-tests`, SHA-256 `3cc28dafe30ae1525c86b30cb840306517cc911d1e2987974cd3c689819aa396`.
+
+All earlier immutable binaries, build logs, raw 33 observations, oracles and screenshots remain preserved. No faithful `crates/rich` source changed, no new release thresholds were set, and nothing was pushed, merged or published.
 
 ## Native observations
 
-The following bounded captures use immutable Noctiluca source `b6ed966ebb0fb2835610b9c6e5632bec0e087187`, binary SHA-256 `6163021047d97639283482366221cc367a59dbf7863dacc7778f8cc44457dbf6`, Debian 13, Xvfb 21.1.16 and sandboxed Chromium 156.0.8078.79. They predate the later legacy-ID wrap fix at `872504a` and are not relabeled as that build. They are qualitative native-terminal observations, not latency or frame-rate measurements.
+These are bounded qualitative observations on the explicitly named source, not FPS, physical-display latency or all-corpus conformance. Full local evidence is `/workspace/work/final-wave-native-review.md`.
 
-| Terminal and transport | Observed | Limits |
+| Source / terminal | Observed | Limits |
 |---|---|---|
-| Kitty 0.41.1 direct, Kitty graphics, 80×24 at 8×16 cells | Video and readable chat, product images and Actions overlay; initial product, scroll return and overlay dismissal screenshots match byte for byte. [Video/chat](../media/noctiluca-media-quality/video-chat-initial.png), [product](../media/noctiluca-media-quality/product-grid-initial.png), [overlay](../media/noctiluca-media-quality/product-grid-overlay.png). | The right side of the gauge scene is clipped at this width. |
-| Kitty direct, 120×40 at 10×20 and 160×50 at 12×24 | Video/chat, gauges and product images visible; product initial/up/dismiss screenshots match at each size. | At 160 columns the product page fits, so PageDown did not test scrolling. |
-| WezTerm 20240203 direct, automatic iTerm-compatible graphics, 120×40 | Product images and headings visible; Actions dismissal returns to the initial screenshot. | WezTerm is not the iTerm2 application; product scrolling was not exercised. |
-| XTerm 398 direct, Sixel, 120×40 | Stream video, readable chat and message/Send controls visible. | Dynamic capture does not establish frame rate. |
-| Kitty through local tmux 3.5a, auto Cells, 120×39 | Cell-rendered video, readable chat and Actions overlay observed. | Earlier source `03d83e7`; passthrough disabled, SSH not exercised. |
+| `cbc7d93`, Kitty 0.41.1 direct, 40×24 / 400×456 TTY pixels | Local stream movie content changes in a video-only ROI: 32,162/41,310 pixels differ between two samples. Chat #7–#24 and Message/Send remain readable after scrolling. | No message sent. This corrects the frozen movie ROI observed on `be730eb`; no native frame-rate or response-time study. |
+| `be730eb`, light Xterm 398, Sixel, 120×40 | Brand/Price/Delivery are readable; canonical `$29.99`, `$24.49`, `$49.00` appear with the source cookie popup visible. F1/Escape returns the initial PNG exactly. | Opaque fixture images do not prove alpha composition. PageUp returns row1 rather than initial row5, so scrolling screenshots are not byte-identical. |
+| `be730eb`, WezTerm 20240203, auto iTerm-compatible graphics, 120×40 | Product images/canonical prices visible; F1/Escape returns the initial PNG exactly. | No product scroll test; this is not actual macOS iTerm2. |
+| `be730eb`, Kitty, actual Speedtest at 40×24 and 120×40 | Source privacy popup visible. At 40 columns, one Tab then three PageDowns reveals controls and `f` shows their hints; 120-column F1/Escape restores the initial PNG. | Some narrow button labels truncate; no consent or speed test selected. |
+| `be730eb`, Kitty, public Twitch/Giphy | Twitch video changes after focused play; a Giphy cat tile changes in pixel view. Hacker News story list is readable. | Giphy projection still has gaps/clipped links. These samples do not prove smoothness or all-media support. |
 
-The complete native corpus, lazy reveal, navigation away/back, Ghostty, actual macOS iTerm2 and SSH remain unverified. A local real-site model read on `b6ed966` reached Speedtest, received an Amazon page titled `500 - Amazon.com` with an unsupported-client/session message, and reached a Twitch shell without proven video/chat playback. These reads do not establish native terminal usability or HTTP status.
+Public Wikipedia shows opening paragraphs with a placeholder/right-edge truncation; BBC and MDN have large gaps or fragmented/clipped text. Their causes remain unresolved. YouTube failed with `ERR_TUNNEL_CONNECTION_FAILED`; Amazon returned an unsupported-client page titled `500 - Amazon.com`. These are failures/unknowns, not site passes. Ghostty, actual macOS iTerm2 and SSH remain unverified. Earlier source-specific captures remain preserved and are not relabeled as the current build.
 
+## Final quantitative attempt — failed
 
-A later native preview at source `c4ebaf62bc7ff94738ee801aca902a2ea5046ab0` (binary SHA-256 `d92c83a40fc20b770cd02c1cec296302d092b02410f173f68f80349fc36e66a9`) showed the real Speedtest privacy dialog coherently layered and fixed through page scrolling, Actions dismissal and projection/pixel switching. The local product dialog remained fixed; at 40 columns its buttons were truncated in that preview. A separate bounded visit on that same binary showed a Twitch public live video region change after play, and a Giphy tile change in pixel view. Giphy projection still showed placeholder slots and awkward spacing; its failing media stage remains unconfirmed. These are qualitative observations on the named preview, not later-source or frame-rate claims.
+The sole declared final sequence ran exactly three current repeats each for iTerm-compatible output, Kitty and ANSI after the native content check and in a quiet window. Source, saved setup/body, release toolchain, quality/codec, byte budget, 60 frame offers, 20 semantic offers, 8 keys, 18 static images and 120×40 workload were unchanged. Frozen baseline binary SHA begins `23b7a280`; the original iTerm gate file remains byte-identical. No replacement runs or new baseline were used.
 
-Source dialogs use shared intuiTUIve layers and owner-controlled modal focus. Semantic absolute/static/open-native dialogs also form independent surfaces; document surfaces follow scroll and fixed surfaces preserve their docking. Hidden/offscreen surfaces cannot trap focus or intercept source Escape. Popup-open projection preserves configured PageColors and accessible text twins while disabling geometric rearrangement, and faithful popup fills use the foreground's source-pair transform. Unsupported modern/unknown color syntax cannot establish opacity. Waiting encodes and prepared results are pruned at document/view/region boundaries while an executing current-incarnation frame can finish. Chrome guards model-owned fallback and canvas screenshots before and after capture; standalone capture stays compatible.
+Original limits: iTerm p95 ≤13.670ms, p99 ≤15.734ms, input maximum ≤5.417ms, child CPU ≤0.806s; Kitty 46.442/50.885/16.178ms; ANSI 14.857/15.494/13.310ms. Every run passed independent emitted-color/identity decoding and population checks: all 20 semantic updates, all 8 keys observed, zero unrelated layouts, and emitted+censored=60. Emission/censoring identities are retained, rather than filtered to match older counts.
 
-A playing video partly outside the source viewport now takes the existing guarded whole-region fallback when the screencast cannot hold its complete rectangle. Continuous viewport frames previously suppressed that fallback indefinitely in a narrow adapted view. A sandboxed Chromium regression at the actual 80×19 source viewport delivers changing video-only pixels after the correction; final native confirmation and performance gates remain pending.
+| Run | Frame p95/p99 ms | Input max ms | Child CPU s | Emitted/censored | Failed original gates |
+|---|---:|---:|---:|---:|---|
+| iTerm 1 | 13.358 / 13.692 | 5.769 | 0.802852 | 59 / 1 | input |
+| iTerm 2 | 14.761 / 20.507 | 4.311 | 0.853713 | 60 / 0 | p95, p99, CPU |
+| iTerm 3 | 13.585 / 13.667 | 5.022 | 0.861565 | 59 / 1 | CPU |
+| Kitty 1 | 12.154 / 14.249 | 2.048 | 0.406366 | 25 / 35 | none |
+| Kitty 2 | 12.963 / 13.715 | 1.503 | 0.381869 | 25 / 35 | none |
+| Kitty 3 | 11.756 / 13.110 | 2.322 | 0.345280 | 25 / 35 | none |
+| ANSI 1 | 3.806 / 5.315 | 2.514 | 0.268646 | 60 / 0 | none |
+| ANSI 2 | 3.678 / 3.904 | 2.828 | 0.235291 | 60 / 0 | none |
+| ANSI 3 | 3.730 / 4.012 | 2.248 | 0.230993 | 60 / 0 | none |
 
-Source dialogs now use shared intuiTUIve layers and owner-controlled modal focus. Complete Noctiluca `Page` literals must add `overlays: Vec::new()` or use `..Page::default()`; `Page::dialogs()` exposes declared source dialogs. See the [layout guide](../guide/intuituive/layout.md#owner-controlled-overlays) and the [design addendum](../superpowers/specs/2026-11-08-noctiluca-media-quality-design.md#addendum-source-dialogs-observed-during-native-review).
-
-A source-neutral 40×24 Noctiluca Driver check at `250cfb0` proves the existing nonmodal popup keyboard route: `Tab` from the page into the popup scroll, `PageDown` to reveal its controls, then `f` and a visible hint. `Shift+Tab` returns to the page; both panes keep independent scroll positions and local source actions occur once. This adds a regression and [reading guidance](../guide/noctiluca/reading.md#top-bars-bottom-bars-and-layers), with no production change. A targeted 40×24 native check on final source `59a27e3` also showed that one Tab followed by three PageDowns reveals the live Speedtest controls and their hints while the underlay stays in place; no source choice was activated. Earlier six/24-Tab captures did not establish that this route was unavailable.
-
-## Remaining gates
-
-The frozen Rust-source `59a27e3` workspace test passed. Strict Rust 1.91 workspace Clippy still fails on three pre-existing faithful Rich `nonminimal_bool` diagnostics. Matched release-profile Kitty and ANSI runs met their original frame/input limits, but all three current iTerm-compatible runs exceeded the predeclared frame-tail and CPU limits; this is a material open performance concern. A separate comparison with production tracing disabled also showed higher iTerm cost. Task 6 evidence review and whole-branch review remain open. Keep unavailable matrix rows and performance limitations explicit, and do not merge or publish implicitly.
+Raw evidence: `/workspace/work/final-wave-release-measurements/` (all nine recordings/logs/decodes), pre-run `final-wave-release-declaration.json`, complete statistics and identities `final-wave-release-comparison.json`, and file hashes `final-wave-release-raw-manifest.json`. The full aggregate report is `.superpowers/sdd/noctiluca-media-quality/final-wave-report.md`. Component allocation reductions do not override these application failures. The final wave is closed for implementation; release acceptance and one scoped review remain outstanding. Do not merge or publish implicitly.
