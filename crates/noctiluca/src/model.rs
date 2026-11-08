@@ -3992,6 +3992,206 @@ mod tests {
         }
     }
 
+    fn clip_style(f: &mut Fake, node: i64, at: usize, value: &str) {
+        let k = f.layout.iter().position(|&n| n == node).unwrap();
+        let empty = f.s("");
+        let value = f.s(value);
+        f.styles[k].resize(16, empty);
+        f.styles[k][at] = value;
+    }
+
+    fn clip_bounds(f: &mut Fake, node: i64, bounds: [f64; 4]) {
+        let k = f.layout.iter().position(|&n| n == node).unwrap();
+        f.bounds[k] = bounds.to_vec();
+        clip_style(f, node, 14, "static");
+    }
+
+    fn clip_link(f: &mut Fake, parent: i64, text: &str, bounds: [f64; 4]) -> (i64, i64) {
+        let link = f.el(parent, "A", &[("href", "/story")], "block");
+        clip_bounds(f, link, bounds);
+        let words = f.text(link, text);
+        clip_bounds(f, words, bounds);
+        let image = f.el(link, "IMG", &[("src", "/photo.png")], "block");
+        clip_bounds(f, image, bounds);
+        (100 + link, 100 + image)
+    }
+
+    #[test]
+    fn overflow_clipped_content_is_absent_but_partial_and_other_axis_survive() {
+        // An outer bound is a conservative clip edge; content touching it
+        // from outside is hidden, but even a subpixel intersection survives.
+        for (axis, hidden, partial, other_axis) in [
+            (
+                15,
+                [120.0, 40.0, 20.0, 18.0],
+                [119.375, 40.0, 20.0, 18.0],
+                [30.0, 100.0, 20.0, 18.0],
+            ),
+            (
+                10,
+                [30.0, 90.0, 20.0, 18.0],
+                [30.0, 89.375, 20.0, 18.0],
+                [140.0, 40.0, 20.0, 18.0],
+            ),
+        ] {
+            for overflow in ["hidden", "clip"] {
+                let mut f = Fake::new();
+                let strip = f.el(0, "DIV", &[], "block");
+                clip_bounds(&mut f, strip, [20.0, 30.0, 100.0, 60.0]);
+                clip_style(&mut f, strip, axis, overflow);
+                let wrapper = f.node(strip, 1, "DIV", None, &[], None);
+                let (hidden_link, hidden_image) = clip_link(&mut f, wrapper, "Concealed", hidden);
+                let (partial_link, _) = clip_link(&mut f, wrapper, "Partial", partial);
+                let (other_link, _) = clip_link(&mut f, wrapper, "Other axis", other_axis);
+                let page = f.page(json!({"nodes": []}));
+                assert_eq!(
+                    page.controls.iter().map(|c| c.node).collect::<Vec<_>>(),
+                    vec![partial_link, other_link]
+                );
+                assert_eq!(page.media.len(), 2);
+                assert!(page.media.iter().all(|m| m.node != hidden_image));
+                assert!(page.blocks.iter().all(|b| !b.text().contains("Concealed")));
+                let marks = crate::layout::Marks {
+                    hints: HashMap::from([(0, "p".into()), (1, "o".into())]),
+                    ..Default::default()
+                };
+                for columns in [40, 80, 120] {
+                    let projection = crate::layout::project(&page, columns, (8.0, 18.0), &marks);
+                    let spans: Vec<_> = projection.lines.iter().flat_map(|l| &l.spans).collect();
+                    assert!(spans.iter().all(|s| !s.text.contains("Concealed")));
+                    assert!(
+                        spans
+                            .iter()
+                            .any(|s| s.control == Some(0) && s.text.contains("Partial"))
+                    );
+                    assert!(
+                        spans
+                            .iter()
+                            .any(|s| s.control == Some(0) && s.text.contains("[p]"))
+                    );
+                    assert!(
+                        spans
+                            .iter()
+                            .filter_map(|s| s.control)
+                            .all(|c| page.controls[c].node != hidden_link)
+                    );
+                    assert!(
+                        projection
+                            .regions
+                            .iter()
+                            .all(|r| page.media[r.media].node != hidden_image)
+                    );
+                }
+                for c in &page.controls {
+                    assert_eq!(c.href.as_deref(), Some("/story"));
+                    assert_eq!(c.revision, 1);
+                    assert_eq!(page.check(&c.binding(&page)).unwrap().node, c.node);
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn overflow_clips_use_nested_current_bounds_without_reapplying_scroll() {
+        let mut f = Fake::new();
+        let outer = f.el(0, "DIV", &[], "block");
+        clip_bounds(&mut f, outer, [20.0, 30.0, 100.0, 60.0]);
+        clip_style(&mut f, outer, 15, "hidden");
+        let inner = f.el(outer, "DIV", &[], "block");
+        clip_bounds(&mut f, inner, [0.0, 30.0, 300.0, 60.0]);
+        clip_style(&mut f, inner, 10, "hidden");
+        clip_link(&mut f, inner, "Outside x", [130.0, 40.0, 20.0, 18.0]);
+        clip_link(&mut f, inner, "Outside y", [30.0, 100.0, 20.0, 18.0]);
+        let (kept, _) = clip_link(&mut f, inner, "Scrolled visible", [30.0, 40.0, 40.0, 18.0]);
+        let mut snapshot = PageSnapshot {
+            dom: f.snapshot(),
+            ax: json!({"nodes": []}),
+        };
+        snapshot.dom["documents"][0]["scrollOffsetY"] = json!(200.0);
+        snapshot.dom["documents"][0]["layout"]["scrollRects"] =
+            json!(vec![[80.0, 200.0, 1000.0, 800.0]; f.layout.len()]);
+        snapshot.dom["documents"][0]["layout"]["clientRects"] = json!(f.bounds);
+        let page = build(&snapshot, &mut Revisions::new());
+        assert_eq!(
+            page.controls.iter().map(|c| c.node).collect::<Vec<_>>(),
+            vec![kept]
+        );
+        assert_eq!(page.media.len(), 1);
+        assert!(
+            page.blocks
+                .iter()
+                .any(|b| b.text().contains("Scrolled visible"))
+        );
+    }
+
+    #[test]
+    fn overflow_clipped_static_ancestor_preserves_positioned_descendant_actions() {
+        for position in ["fixed", "absolute", "relative", ""] {
+            for ancestor_is_link in [false, true] {
+                let mut f = Fake::new();
+                let strip = f.el(0, "DIV", &[], "block");
+                clip_bounds(&mut f, strip, [20.0, 30.0, 100.0, 60.0]);
+                clip_style(&mut f, strip, 15, "hidden");
+                let ancestor = f.el(
+                    strip,
+                    if ancestor_is_link { "A" } else { "DIV" },
+                    &[("href", "/ancestor")],
+                    "block",
+                );
+                clip_bounds(&mut f, ancestor, [200.0, 30.0, 100.0, 60.0]);
+                let clipped_text = f.text(ancestor, "Hidden ancestor words");
+                clip_bounds(&mut f, clipped_text, [200.0, 30.0, 100.0, 18.0]);
+                let positioned = f.el(ancestor, "DIV", &[], "block");
+                clip_bounds(&mut f, positioned, [240.0, 40.0, 60.0, 40.0]);
+                clip_style(&mut f, positioned, 14, position);
+                let (link, image) =
+                    clip_link(&mut f, positioned, "Escaped", [240.0, 40.0, 60.0, 18.0]);
+                let page = f.page(json!({"nodes": []}));
+                assert!(
+                    page.blocks
+                        .iter()
+                        .all(|b| !b.text().contains("Hidden ancestor words"))
+                );
+                let c = page
+                    .controls
+                    .iter()
+                    .find(|c| c.node == link)
+                    .expect("escaped source link");
+                assert_eq!(page.check(&c.binding(&page)).unwrap().node, link);
+                assert_eq!(c.href.as_deref(), Some("/story"));
+                assert!(page.media.iter().any(|m| m.node == image));
+                assert!(
+                    page.blocks
+                        .iter()
+                        .flat_map(|b| &b.runs)
+                        .any(|r| r.text == "Escaped"
+                            && r.control.is_some_and(|c| page.controls[c].node == link))
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn overflow_on_root_body_or_boxless_ancestor_does_not_clip_to_viewport() {
+        for tag in ["HTML", "BODY", "DIV"] {
+            let mut f = Fake::new();
+            let ancestor = if tag == "DIV" {
+                f.node(0, 1, tag, None, &[], None)
+            } else {
+                let n = f.el(0, tag, &[], "block");
+                clip_bounds(&mut f, n, [0.0, 0.0, 100.0, 60.0]);
+                clip_style(&mut f, n, 10, "hidden");
+                clip_style(&mut f, n, 15, "hidden");
+                n
+            };
+            let (link, _) = clip_link(&mut f, ancestor, "Adaptable", [200.0, 200.0, 60.0, 18.0]);
+            let page = f.page(json!({"nodes": []}));
+            assert_eq!(page.controls[0].node, link);
+            assert_eq!(page.media.len(), 1);
+            assert!(page.blocks.iter().any(|b| b.text().contains("Adaptable")));
+        }
+    }
+
     #[test]
     fn boxless_link_retains_visible_descendants_and_source_binding() {
         let mut f = Fake::new();
