@@ -907,6 +907,17 @@ impl Engine for FakeEngine {
             .ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "no such resource"))
     }
 
+    fn optional_resources(&mut self) -> Option<crate::engine::ResourceReader> {
+        let state = self.state.clone();
+        Some(Box::new(move |url| {
+            state
+                .lock()
+                .unwrap()
+                .resource(url)
+                .ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "no such resource"))
+        }))
+    }
+
     fn metrics(&mut self, _tab: TabId) -> io::Result<Metrics> {
         let state = self.lock();
         Ok(Metrics {

@@ -506,6 +506,13 @@ impl Encoder {
                     }
                     queue.waiting.remove(0)
                 };
+                let tracing = crate::diagnostics::enabled();
+                if tracing {
+                    eprintln!(
+                        "RICH_MEDIA {{\"stage\":\"encoder_start\",\"decoded_bytes\":{}}}",
+                        job.picture.image().as_bytes().len()
+                    );
+                }
                 let cell = metrics
                     .filter(|&(w, h)| w > 0 && h > 0)
                     .map(|(w, h)| rich_art::graphics::CellPixels::new(w.into(), h.into()))
@@ -516,6 +523,9 @@ impl Encoder {
                     job.rows,
                     cell,
                 );
+                if tracing {
+                    eprintln!("RICH_MEDIA {{\"stage\":\"encoder_done\"}}");
+                }
                 done(job);
             }
         });
@@ -535,6 +545,17 @@ impl Encoder {
             .waiting
             .retain(|(waiting, _)| waiting.node != job.node);
         queue.waiting.push((job, metrics));
+        if crate::diagnostics::enabled() {
+            eprintln!(
+                "RICH_MEDIA {{\"stage\":\"encoder_queue\",\"waiting\":{},\"decoded_bytes\":{}}}",
+                queue.waiting.len(),
+                queue
+                    .waiting
+                    .iter()
+                    .map(|(job, _)| job.picture.image().as_bytes().len())
+                    .sum::<usize>()
+            );
+        }
         ready.notify_one();
     }
 }

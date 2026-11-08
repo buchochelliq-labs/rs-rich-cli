@@ -88,18 +88,50 @@ impl Screen {
         budget: &ByteBudget,
         now: Instant,
     ) -> Option<Vec<usize>> {
+        if !self.accept(cols, rows, budget, now) {
+            return None;
+        }
+        Some(self.update_tiles(frame, cols, rows, now))
+    }
+
+    fn accept(&mut self, cols: usize, rows: usize, budget: &ByteBudget, now: Instant) -> bool {
         self.pacer.resize(cols, rows);
         if !self.pacer.due(now, budget, 1.0) {
             self.stats.dropped += 1;
-            return None;
+            return false;
         }
+        true
+    }
+
+    fn update_tiles(
+        &mut self,
+        frame: &RgbaImage,
+        cols: usize,
+        rows: usize,
+        now: Instant,
+    ) -> Vec<usize> {
         let changed = self.tiler.update(frame, cols, rows);
         let bytes = self.tiler.estimate(&changed, Pixels::Kitty);
         self.pacer.sent(now, Some(bytes.max(1)));
         self.stats.frames += 1;
         self.stats.tiles += changed.len() as u64;
         self.stats.bytes += bytes;
-        Some(changed)
+        changed
+    }
+
+    fn take_lazy(
+        &mut self,
+        cols: usize,
+        rows: usize,
+        budget: &ByteBudget,
+        now: Instant,
+        convert: impl FnOnce() -> Option<RgbaImage>,
+    ) -> Option<Vec<usize>> {
+        if !self.accept(cols, rows, budget, now) {
+            return None;
+        }
+        let frame = convert()?;
+        Some(self.update_tiles(&frame, cols, rows, now))
     }
 
     /// The tiles, as shown.
@@ -150,19 +182,20 @@ pub fn frame(b: Browser, frame: &rich_embed::ScreencastFrame) {
     if b.view.get_untracked() != crate::config::View::Pixels {
         return;
     }
-    let Some(image) = rgba(frame) else { return };
     let (cols, rows) = b.viewport.get_untracked();
     let rows = rows.saturating_sub(CHROME_ROWS);
     let budget = byte_budget(b);
     let screen = b.screen.get_untracked();
     let mut screen = screen.borrow_mut();
     if screen
-        .take(&image, cols.into(), rows.into(), &budget, Instant::now())
+        .take_lazy(cols.into(), rows.into(), &budget, Instant::now(), || {
+            rgba(frame)
+        })
         .is_some()
     {
         b.screen_tiles.set(screen.tiles());
-        b.screen_stats.set(screen.stats);
     }
+    b.screen_stats.set(screen.stats);
 }
 
 /// The view: the tiles, in Kitty graphics; a click and the wheel go to
@@ -223,6 +256,36 @@ mod tests {
         // Later, the same frame: shown, and nothing changed.
         let later = now + Duration::from_secs(3);
         assert_eq!(screen.take(&white, 80, 16, &budget, later), Some(vec![]));
+        assert_eq!(screen.stats.frames, 2);
+    }
+
+    #[test]
+    fn rejected_frame_does_not_convert_and_invalid_frame_is_not_sent() {
+        let mut screen = Screen::new();
+        let budget = ByteBudget::new(4 << 20);
+        let now = Instant::now();
+        let calls = std::cell::Cell::new(0);
+        let convert = || {
+            calls.set(calls.get() + 1);
+            Some(RgbaImage::from_pixel(64, 64, Rgba([255; 4])))
+        };
+        assert!(screen.take_lazy(8, 4, &budget, now, convert).is_some());
+        assert!(screen.take_lazy(8, 4, &budget, now, convert).is_none());
+        assert_eq!(calls.get(), 1);
+        assert_eq!(screen.stats.frames, 1);
+        assert_eq!(screen.stats.dropped, 1);
+        assert!(
+            screen
+                .take_lazy(8, 4, &budget, now + Duration::from_secs(3), || None)
+                .is_none()
+        );
+        assert_eq!(screen.stats.frames, 1);
+        assert!(
+            screen
+                .take_lazy(8, 4, &budget, now + Duration::from_secs(3), convert)
+                .is_some()
+        );
+        assert_eq!(calls.get(), 2);
         assert_eq!(screen.stats.frames, 2);
     }
 

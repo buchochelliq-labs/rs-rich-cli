@@ -233,6 +233,10 @@ pub enum EngineEvent {
     DownloadDone { guid: String, path: String },
 }
 
+/// An independent reader of resources already loaded by the same browser
+/// session. It must preserve `resource`'s access/cache semantics.
+pub type ResourceReader = Box<dyn FnMut(&str) -> io::Result<Vec<u8>> + Send>;
+
 /// A browser engine behind Noctiluca.
 pub trait Engine: Send {
     /// Lay pages out at `columns` x `rows` cells.
@@ -272,6 +276,15 @@ pub trait Engine: Send {
             "no resources here",
         ))
     }
+    /// Optional concurrent cache access for inline pictures. Engines may
+    /// return an independent reader; the default leaves optional external
+    /// pictures as alt text, keeping the engine available for navigation.
+    /// Data URLs do not require this capability. Existing `resource`
+    /// implementations still serve explicit media reads unchanged.
+    fn optional_resources(&mut self) -> Option<ResourceReader> {
+        None
+    }
+
     /// Whether an image element has its picture yet: a lazy image below
     /// the fold has none until the page scrolls near it. A still of one
     /// that has none would be blank.

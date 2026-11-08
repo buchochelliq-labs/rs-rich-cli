@@ -442,6 +442,7 @@ struct Worker<'a> {
     /// The small pictures in lines, decoded by source, and those asked for.
     inline: HashMap<String, Picture>,
     inline_asked: HashSet<String>,
+    inline_loader: Option<crate::inline_resources::InlineResources>,
     decode_inline: Sender<((u64, String), Arc<[u8]>)>,
     decoded_inline: Receiver<((u64, String), Picture)>,
     /// Where Chrome's view was last seen: images near it are captured
@@ -548,7 +549,13 @@ impl Worker<'_> {
     /// Read the page and publish it; `None` if the engine refused (a
     /// navigation swapping the page's process, say).
     fn read(&mut self) -> Option<Arc<Page>> {
+        if crate::diagnostics::enabled() {
+            eprintln!("RICH_MEDIA {{\"stage\":\"model_snapshot_attempt\"}}");
+        }
         let snapshot = self.engine.snapshot(TabId(0)).ok()?;
+        if crate::diagnostics::enabled() {
+            eprintln!("RICH_MEDIA {{\"stage\":\"model_read\"}}");
+        }
         if let Ok(boxes) = self.engine.appended(TabId(0)) {
             self.appended = boxes.into_iter().collect();
         }
@@ -824,15 +831,29 @@ impl Worker<'_> {
                 entry.runs.iter().for_each(&mut note);
             }
         }
+        sources.truncate(MAX_INLINE);
+        let needed: HashSet<_> = sources.iter().cloned().collect();
+        self.inline.retain(|src, _| needed.contains(src));
+        self.inline_asked.retain(|src| needed.contains(src));
+        if let Some(loader) = &self.inline_loader {
+            loader.retain(page.document, &needed);
+        }
         page.inline_pictures.clear();
         for src in sources {
             if let Some(picture) = self.inline.get(&src) {
                 page.inline_pictures.insert(src, picture.clone());
                 continue;
             }
-            if self.inline_asked.len() >= MAX_INLINE || !self.inline_asked.insert(src.clone()) {
+            if self.inline_asked.len() >= MAX_INLINE || self.inline_asked.contains(&src) {
                 continue;
             }
+            if let Some(loader) = &self.inline_loader {
+                if loader.submit(page.document, src.clone()) {
+                    self.inline_asked.insert(src);
+                }
+                continue;
+            }
+            self.inline_asked.insert(src.clone());
             let bytes = if let Some(data) = src.strip_prefix("data:") {
                 data_bytes(data)
             } else {
@@ -989,8 +1010,26 @@ impl Worker<'_> {
             self.pictures.insert(key, picture);
             any = true;
         }
-        while let Ok(((document, src), picture)) = self.decoded_inline.try_recv() {
-            if self.page.as_ref().map(|p| p.document) != Some(document) {
+        loop {
+            let decoded = self
+                .inline_loader
+                .as_ref()
+                .and_then(|loader| loader.take())
+                .or_else(|| self.decoded_inline.try_recv().ok());
+            let Some(((document, src), picture)) = decoded else {
+                break;
+            };
+            if self.page.as_ref().map(|p| p.document) != Some(document)
+                || !self.inline_asked.contains(&src)
+            {
+                continue;
+            }
+            let used: usize = self
+                .inline
+                .values()
+                .map(crate::inline_resources::retained_bytes)
+                .sum();
+            if used + crate::inline_resources::retained_bytes(&picture) > 32 << 20 {
                 continue;
             }
             self.inline.insert(src, picture);
@@ -1515,7 +1554,7 @@ impl Worker<'_> {
 }
 
 /// At most this many sources of small pictures in lines are read.
-const MAX_INLINE: usize = 2000;
+const MAX_INLINE: usize = 512;
 
 /// What a still is kept by: the node, its address, its size and its
 /// content's revision (a drawing's).
@@ -1549,7 +1588,7 @@ fn decodable(bytes: &[u8]) -> bool {
 
 /// The bytes of a `data:` address's body (after `data:`), when it is
 /// base64; at most 16 MiB.
-fn data_bytes(data: &str) -> Option<Vec<u8>> {
+pub(crate) fn data_bytes(data: &str) -> Option<Vec<u8>> {
     let (head, body) = data.split_once(',')?;
     if !head.ends_with(";base64") || body.len() > 22 << 20 {
         return None;
@@ -1596,13 +1635,15 @@ fn key_of(media: &Media) -> StillKey {
 }
 
 fn run(
-    engine: Box<dyn Engine>,
+    mut engine: Box<dyn Engine>,
     commands: Receiver<(u64, Command)>,
     stop: &AtomicBool,
     update: &dyn Fn(Update),
 ) {
     let (decode, decoded) = decoder();
     let (decode_inline, decoded_inline) = decoder();
+    let inline_loader =
+        crate::inline_resources::InlineResources::spawn(engine.optional_resources());
     let mut worker = Worker {
         engine,
         update,
@@ -1616,6 +1657,7 @@ fn run(
         decoded,
         inline: HashMap::new(),
         inline_asked: HashSet::new(),
+        inline_loader: Some(inline_loader),
         decode_inline,
         decoded_inline,
         metrics: None,
@@ -1782,6 +1824,7 @@ mod tests {
             decoded,
             inline: HashMap::new(),
             inline_asked: HashSet::new(),
+            inline_loader: None,
             decode_inline,
             decoded_inline,
             metrics: None,
@@ -1871,6 +1914,7 @@ mod tests {
                 decoded,
                 inline: HashMap::new(),
                 inline_asked: HashSet::new(),
+                inline_loader: None,
                 decode_inline,
                 decoded_inline,
                 metrics: None,
@@ -1994,6 +2038,7 @@ mod tests {
             decoded,
             inline: HashMap::new(),
             inline_asked: HashSet::new(),
+            inline_loader: None,
             decode_inline,
             decoded_inline,
             metrics: None,
@@ -2054,6 +2099,55 @@ mod tests {
                 .contains_key(src)
         );
         assert!(inline_jobs.try_recv().is_ok());
+        // Exercise the actual concurrent loader too. It can complete the
+        // old document only after B is already authoritative. Green B
+        // cannot arrive until take_decoded has consumed the stale result.
+        let (started, entered) = mpsc::sync_channel(1);
+        let (release, gate) = mpsc::sync_channel(1);
+        let png = |rgba| {
+            let mut bytes = std::io::Cursor::new(Vec::new());
+            image::DynamicImage::ImageRgba8(image::RgbaImage::from_pixel(2, 2, image::Rgba(rgba)))
+                .write_to(&mut bytes, image::ImageFormat::Png)
+                .unwrap();
+            bytes.into_inner()
+        };
+        let red = png([255, 0, 0, 255]);
+        let green = png([0, 255, 0, 255]);
+        let mut first = true;
+        worker.inline_loader = Some(crate::inline_resources::InlineResources::spawn(Some(
+            Box::new(move |_| {
+                if first {
+                    first = false;
+                    started.send(()).unwrap();
+                    gate.recv().unwrap();
+                    Ok(red.clone())
+                } else {
+                    Ok(green.clone())
+                }
+            }),
+        )));
+        worker.inline_asked.clear();
+        worker.inline.clear();
+        worker.read().unwrap();
+        entered.recv_timeout(Duration::from_secs(2)).unwrap();
+        state.lock().unwrap().current = Some("b".into());
+        let document = worker.read().unwrap().document;
+        release.send(()).unwrap();
+        let end = Instant::now() + Duration::from_secs(2);
+        loop {
+            worker.take_decoded();
+            let page = worker.page.as_ref().unwrap();
+            assert_eq!(page.document, document);
+            if let Some(p) = page.inline_pictures.get(src) {
+                assert_eq!(p.image().to_rgba8().get_pixel(0, 0).0, [0, 255, 0, 255]);
+                break;
+            }
+            assert!(
+                Instant::now() < end,
+                "new document inline completion missing"
+            );
+            std::thread::yield_now();
+        }
     }
 
     #[test]

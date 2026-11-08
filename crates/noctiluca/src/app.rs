@@ -279,7 +279,20 @@ impl Browser {
 /// every piece of reader mode in turn (a media region or a control as its
 /// rows of nothing), or the projection, with each row's key and place on
 /// the page.
+#[cfg(test)]
 pub(crate) fn lay_out(page: &Page, view: View, width: u16, marks: &Marks) -> Projection {
+    lay_out_with_logs(page, view, width, marks, &mut Vec::new())
+}
+
+pub(crate) fn lay_out_with_logs(
+    page: &Page,
+    view: View,
+    width: u16,
+    marks: &Marks,
+    slots: &mut Vec<layout::LogSlot>,
+) -> Projection {
+    #[cfg(test)]
+    TEST_LAYOUTS.with(|n| n.set(n.get() + 1));
     match view {
         View::Reader => {
             let mut lines = Vec::new();
@@ -304,7 +317,7 @@ pub(crate) fn lay_out(page: &Page, view: View, width: u16, marks: &Marks) -> Pro
                 ..Projection::default()
             }
         }
-        _ => layout::project(page, width, (CELL.0 as f64, CELL.1 as f64), marks),
+        _ => layout::project_with_logs(page, width, (CELL.0 as f64, CELL.1 as f64), marks, slots),
     }
 }
 
@@ -2014,6 +2027,17 @@ fn reconcile_page_media(
 
 /// Apply one of the tab's updates, on the app's thread.
 fn apply(b: Browser, update: Update, cx: &mut Ctx) {
+    if crate::diagnostics::enabled() {
+        match &update {
+            Update::Frame(f) => eprintln!(
+                "RICH_MEDIA {{\"stage\":\"frame_apply\",\"seq\":{},\"bytes\":{}}}",
+                f.seq,
+                f.pixels.rgb.len()
+            ),
+            Update::Page(_) => eprintln!("RICH_MEDIA {{\"stage\":\"page_apply\"}}"),
+            _ => {}
+        }
+    }
     match update {
         Update::Page(page) => {
             let new_document =
@@ -2082,7 +2106,15 @@ fn apply(b: Browser, update: Update, cx: &mut Ctx) {
                 }
             }
         }
-        Update::Frame(frame) => video_frame(b, &frame),
+        Update::Frame(frame) => {
+            video_frame(b, &frame);
+            if crate::diagnostics::enabled() {
+                eprintln!(
+                    "RICH_MEDIA {{\"stage\":\"frame_done\",\"seq\":{}}}",
+                    frame.seq
+                );
+            }
+        }
         Update::Screen(frame) => crate::pixel_view::frame(b, &frame),
         Update::Still(node) => {
             b.pacing.with_untracked(|p| p.borrow_mut().still(node));
@@ -2094,6 +2126,83 @@ fn apply(b: Browser, update: Update, cx: &mut Ctx) {
         )),
         Update::DownloadDone { .. } => {}
         Update::About { answers, product } => about(b, answers, product, cx),
+    }
+}
+
+// One marker holds no image. It consumes only the initial bounded batch;
+// newly arriving frames stay replaceable until the next UI turn.
+fn forward_updates(
+    b: Browser,
+    receive: mpsc::Receiver<()>,
+    updates: Arc<std::sync::Mutex<crate::delivery::Mailbox>>,
+    proxy: rich_intuituive::Proxy,
+) {
+    while receive.recv().is_ok() {
+        while !updates.lock().unwrap().queue.is_empty() {
+            let inbox = updates.clone();
+            let (done, wait) = mpsc::sync_channel(1);
+            if !proxy.run_with(move |cx| {
+                let count = inbox.lock().unwrap().queue.len().min(16);
+                let started = Instant::now();
+                for _ in 0..count {
+                    let next = inbox.lock().unwrap().pop();
+                    let Some((document, update)) = next else {
+                        break;
+                    };
+                    let frame = matches!(update, Update::Frame(_) | Update::Screen(_));
+                    if !frame
+                        || b.page
+                            .with_untracked(|p| p.as_ref().is_some_and(|p| p.document == document))
+                    {
+                        apply(b, update, cx);
+                    }
+                    if started.elapsed() >= Duration::from_millis(8) {
+                        break;
+                    }
+                }
+                let _ = done.send(());
+            }) {
+                return;
+            }
+            if wait.recv().is_err() {
+                return;
+            }
+        }
+    }
+}
+
+// Prepared pictures retain their original identity; show_frame rejects a
+// completion invalidated by navigation, a view change or a newer picture.
+fn forward_prepared(
+    b: Browser,
+    ready: mpsc::Receiver<()>,
+    prepared: Arc<std::sync::Mutex<std::collections::VecDeque<Job>>>,
+    proxy: rich_intuituive::Proxy,
+) {
+    while ready.recv().is_ok() {
+        while !prepared.lock().unwrap().is_empty() {
+            let inbox = prepared.clone();
+            let (done, wait) = mpsc::sync_channel(1);
+            if !proxy.run_with(move |_| {
+                let next = inbox.lock().unwrap().pop_front();
+                if let Some(job) = next {
+                    show_frame(
+                        b,
+                        job.node,
+                        Live {
+                            picture: job.picture,
+                            pixels: job.pixels,
+                        },
+                    );
+                }
+                let _ = done.send(());
+            }) {
+                return;
+            }
+            if wait.recv().is_err() {
+                return;
+            }
+        }
     }
 }
 
@@ -2909,10 +3018,16 @@ pub fn app(engine: Box<dyn Engine>, options: Options) -> App {
         let (keymap, warnings) = actions::keymap(config.preset, &config.keys);
         let mut warnings = [config.warnings.clone(), warnings].concat();
         warnings.truncate(3);
-        let (send, receive) = mpsc::channel::<Update>();
-        let tab = Tab::spawn(engine, move |update| {
-            let _ = send.send(update);
+        let updates=Arc::new(std::sync::Mutex::new(crate::delivery::Mailbox::default()));
+        let (send,receive)=mpsc::sync_channel(1);
+        let inbox=updates.clone();
+        let offer: Arc<dyn Fn(Update) + Send + Sync> = Arc::new(move |update| {
+            inbox.lock().unwrap().push(update);
+            let _=send.try_send(());
         });
+        #[cfg(test)]
+        TEST_OFFER.with(|slot|*slot.borrow_mut()=Some(offer.clone()));
+        let tab = Tab::spawn(engine,move |update|offer(update));
         let page: Signal<Option<Arc<Page>>> = signal(None);
         let view: Signal<View> = signal(if first_view == View::Raster {
             View::Projection
@@ -2926,6 +3041,7 @@ pub fn app(engine: Box<dyn Engine>, options: Options) -> App {
         let faithful = signal(false);
         let logs: Signal<HashMap<NodeId, LogScroll>> = signal(HashMap::new());
         let port = viewport();
+        let presentation = RefCell::new(crate::presentation::Presentation::default());
         let layout = memo(move || {
             let width = port.get().0;
             let marks = Marks {
@@ -2944,11 +3060,10 @@ pub fn app(engine: Box<dyn Engine>, options: Options) -> App {
                 ..Marks::default()
             };
             let view = view.get();
-            Rc::new(page.with(|p| {
-                p.as_ref()
-                    .map(|p| lay_out(p, view, width, &marks))
-                    .unwrap_or_default()
-            }))
+            page.with(|p| match p {
+                Some(p) => presentation.borrow_mut().update(p, view, width, &marks),
+                None => Rc::new(Projection::default()),
+            })
         });
         let images_signal = signal(images);
         let found = memo(move || {
@@ -2967,8 +3082,16 @@ pub fn app(engine: Box<dyn Engine>, options: Options) -> App {
             })
         });
         let pacing = video_pacing(&config, images);
-        let (prepared, ready) = mpsc::channel::<Job>();
-        let encoder = Encoder::spawn(move |job| drop(prepared.send(job)));
+        let prepared=Arc::new(std::sync::Mutex::new(std::collections::VecDeque::<Job>::new()));
+        let completions=prepared.clone();
+        let (wake_prepared,ready)=mpsc::sync_channel(1);
+        let encoder = Encoder::spawn(move |job| {
+            let mut q=completions.lock().unwrap();
+            q.retain(|old|old.node!=job.node);
+            q.push_back(job);
+            if crate::diagnostics::enabled() {eprintln!("RICH_MEDIA {{\"stage\":\"prepared_queue\",\"waiting\":{},\"decoded_bytes\":{}}}",q.len(),q.iter().map(|job|job.picture.image().as_bytes().len()).sum::<usize>());}
+            let _=wake_prepared.try_send(());
+        });
         let b = Browser {
             page,
             state: signal(PageState::default()),
@@ -3017,6 +3140,8 @@ pub fn app(engine: Box<dyn Engine>, options: Options) -> App {
             screen_tiles: signal(Vec::new()),
             screen_stats: signal(crate::pixel_view::ScreenStats::default()),
         };
+        #[cfg(test)]
+        TEST_BROWSER.with(|slot| slot.set(Some(b)));
         // The pixel view needs Kitty graphics; without them it says so and
         // the projection shows.
         if b.view.get_untracked() == View::Pixels && !crate::pixel_view::available(b) {
@@ -3058,27 +3183,8 @@ pub fn app(engine: Box<dyn Engine>, options: Options) -> App {
             b.tunnel.set(Some(watch.says(&crate::ssh::TunnelState::Up)));
             every(TUNNEL_LOOK, move |_| watch.look(b));
         }
-        spawn_stream(move |stream| {
-            let proxy = stream.proxy().clone();
-            while let Ok(update) = receive.recv() {
-                if !proxy.run_with(move |cx| apply(b, update, cx)) {
-                    break;
-                }
-            }
-        });
-        // Video frames, once encoded, are shown.
-        spawn_stream(move |stream| {
-            let proxy = stream.proxy().clone();
-            while let Ok(job) = ready.recv() {
-                let live = Live {
-                    picture: job.picture,
-                    pixels: job.pixels,
-                };
-                if !proxy.run_with(move |_| show_frame(b, job.node, live)) {
-                    break;
-                }
-            }
-        });
+        spawn_stream(move |stream| forward_updates(b, receive, updates, stream.proxy().clone()));
+        spawn_stream(move |stream| forward_prepared(b, ready, prepared, stream.proxy().clone()));
         // Moving pictures in view step within the byte budget.
         let motion = Rc::new(std::cell::RefCell::new(pictures::Motion::new(byte_budget(
             b,
@@ -3569,5 +3675,433 @@ mod tests {
         // Writes that took no time say nothing.
         rate.observe(900_000, Duration::from_secs(2));
         assert_eq!(rate.rate(), Some(now));
+    }
+}
+
+#[cfg(test)]
+thread_local! {
+    static TEST_OFFER: RefCell<Option<Arc<dyn Fn(Update) + Send + Sync>>> = const { RefCell::new(None) };
+    static TEST_BROWSER: std::cell::Cell<Option<Browser>> = const { std::cell::Cell::new(None) };
+    static TEST_LAYOUTS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+#[cfg(test)]
+mod update_measurements {
+    use super::*;
+    use crate::model::{Entry, Revisions, Run, build};
+    use rich_intuituive::{Driver, Proxy};
+    fn setup() -> (Driver, Browser, Page, Proxy) {
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/snapshots");
+        let engine = crate::testing::FakeEngine::from_dir(&root).unwrap();
+        let mut page = build(
+            &crate::testing::snapshot_file(&root.join("stream-with-log.json")).unwrap(),
+            &mut Revisions::new(),
+        );
+        for run in page.blocks.iter().flat_map(|b| b.runs.iter()).chain(
+            page.logs
+                .iter()
+                .flat_map(|l| l.entries.iter().flat_map(|e| e.runs.iter())),
+        ) {
+            if let Some(inline) = &run.picture {
+                if let Some(bytes) = engine.state.lock().unwrap().resource(&inline.src) {
+                    if let Ok(picture) = Picture::decode(&bytes) {
+                        page.inline_pictures.insert(inline.src.clone(), picture);
+                    }
+                }
+            }
+        }
+        let images = match std::env::var("NOCTILUCA_MEASURE_PROTOCOL").as_deref() {
+            Ok("kitty") => Images::Kitty,
+            Ok("sixel") => Images::Sixel,
+            _ => Images::Ansi,
+        };
+        let options = Options {
+            config: Config::default(),
+            bookmarks: Bookmarks::default(),
+            url: None,
+            view: Some(View::Projection),
+            images: Some(images),
+            tunnel: None,
+            control: None,
+        };
+        let app = app(Box::new(engine), options);
+        let proxy = app.proxy();
+        let mut driver = app.driver(120, 40);
+        driver.settle();
+        let b = TEST_BROWSER.with(|slot| slot.get().unwrap());
+        proxy.run_with({
+            let page = page.clone();
+            move |cx| {
+                b.start.set(false);
+                apply(b, Update::Page(Arc::new(page)), cx);
+            }
+        });
+        driver.settle();
+        (driver, b, page, proxy)
+    }
+    fn put(driver: &mut Driver, proxy: &Proxy, b: Browser, page: Page) -> usize {
+        TEST_LAYOUTS.with(|n| n.set(0));
+        proxy.run_with(move |cx| apply(b, Update::Page(Arc::new(page)), cx));
+        driver.update(Duration::ZERO);
+        driver.render();
+        TEST_LAYOUTS.with(|n| n.get())
+    }
+    #[test]
+    fn playback_update_does_no_unrelated_layout() {
+        let (mut d, b, mut p, proxy) = setup();
+        p.media[0].playback = Some(Playback {
+            time: 42.0,
+            ..Playback::default()
+        });
+        assert_eq!(put(&mut d, &proxy, b, p), 0);
+    }
+    #[test]
+    fn unchanged_rectangle_decode_does_no_unrelated_layout() {
+        let (mut d, b, mut p, proxy) = setup();
+        p.media[0].picture = Picture::from_rgba(1, 1, vec![10, 20, 30, 255]);
+        assert_eq!(put(&mut d, &proxy, b, p), 0);
+    }
+    #[test]
+    fn side_by_side_log_append_preserves_scrollback_without_unrelated_layout() {
+        let (mut d, b, mut p, proxy) = setup();
+        let node = p.logs[0].node;
+        p.logs[0].entries = (1..=20)
+            .map(|key| Entry {
+                key,
+                runs: vec![Run::plain(format!("message {key}"))],
+            })
+            .collect();
+        put(&mut d, &proxy, b, p.clone());
+        proxy.run(move || {
+            b.logs.update(|logs| {
+                logs.insert(node, LogScroll::Paused(12));
+            })
+        });
+        d.settle();
+        p.logs[0].entries.push(Entry {
+            key: 21,
+            runs: vec![Run::plain("new message")],
+        });
+        assert_eq!(put(&mut d, &proxy, b, p.clone()), 0);
+        proxy.run(move || {
+            assert_eq!(
+                *b.layout.get(),
+                lay_out(&p, View::Projection, 120, &b.hint_marks())
+            );
+            assert_eq!(b.logs.get()[&node], LogScroll::Paused(12));
+        });
+        d.update(Duration::ZERO);
+    }
+
+    #[test]
+    fn log_follow_inline_edits_and_geometry_match_full_composition() {
+        let (_d, _b, mut p, _proxy) = setup();
+        let mut retained = crate::presentation::Presentation::default();
+        let marks = Marks::default();
+        retained.update(&p, View::Projection, 120, &marks);
+        let original = p.logs[0]
+            .entries
+            .iter()
+            .find(|e| e.runs.iter().any(|r| r.picture.is_some()))
+            .unwrap()
+            .clone();
+        for n in 0..10 {
+            let mut entry = original.clone();
+            entry.key = 500 + n;
+            entry
+                .runs
+                .insert(0, Run::plain(format!("new wide 界 e\u{301} {n} ")));
+            p.logs[0].entries.push(entry);
+            TEST_LAYOUTS.with(|n| n.set(0));
+            let actual = retained.update(&p, View::Projection, 120, &marks);
+            assert_eq!(TEST_LAYOUTS.with(|n| n.get()), 0);
+            assert_eq!(*actual, lay_out(&p, View::Projection, 120, &marks));
+        }
+        p.logs[0].rect.width -= 16.0;
+        TEST_LAYOUTS.with(|n| n.set(0));
+        let actual = retained.update(&p, View::Projection, 120, &marks);
+        assert_eq!(TEST_LAYOUTS.with(|n| n.get()), 1);
+        assert_eq!(*actual, lay_out(&p, View::Projection, 120, &marks));
+        p.media[0].rect.height += 18.0;
+        let actual = retained.update(&p, View::Projection, 120, &marks);
+        assert_eq!(*actual, lay_out(&p, View::Projection, 120, &marks));
+        for playing in [false, true, false] {
+            p.media[0].playback = Some(Playback {
+                paused: !playing,
+                ready: 4,
+                ..Playback::default()
+            });
+            TEST_LAYOUTS.with(|n| n.set(0));
+            let actual = retained.update(&p, View::Projection, 120, &marks);
+            assert_eq!(TEST_LAYOUTS.with(|n| n.get()), 0);
+            assert_eq!(*actual, lay_out(&p, View::Projection, 120, &marks));
+        }
+    }
+
+    #[test]
+    fn draft_and_focus_survive_combined_frame_and_chat_delivery() {
+        let (mut d, b, mut p, proxy) = setup();
+        let offer = TEST_OFFER.with(|slot| slot.borrow().as_ref().unwrap().clone());
+        let index = p.controls.iter().position(|c| c.role.is_text()).unwrap();
+        proxy.run_with(move |cx| activate(b, index, cx));
+        d.settle();
+        d.type_text("unsent draft");
+        let focus = d.focused();
+        assert!(focus.is_some());
+        assert!(d.screen().plain().join("\n").contains("unsent draft"));
+        let initial = b.reads.get_untracked();
+        p.media[0].playback = Some(Playback {
+            ready: 4,
+            ..Playback::default()
+        });
+        for n in 1..=20 {
+            p.logs[0].entries.push(Entry {
+                key: 1000 + n,
+                runs: vec![Run::plain(format!("chat {n}"))],
+            });
+            offer(Update::Page(Arc::new(p.clone())));
+            offer(Update::Frame(Arc::new(VideoFrame {
+                node: p.media[0].node,
+                seq: n,
+                pixels: rich_embed::Pixels::new(2, 2, vec![n as u8; 12]).unwrap(),
+            })));
+        }
+        let until = Instant::now() + Duration::from_secs(2);
+        while b.reads.get_untracked() < initial + 20 {
+            d.update(Duration::ZERO);
+            d.render();
+            assert!(Instant::now() < until, "semantic pages were lost");
+            std::thread::yield_now();
+        }
+        assert_eq!(d.focused(), focus);
+        assert!(d.screen().plain().join("\n").contains("unsent draft"));
+        let web = b
+            .controls
+            .with_untracked(|c| c[&p.controls[index].node].clone());
+        assert!(web.draft.borrow().draft().contains("unsent draft"));
+        assert_eq!(
+            b.page.get_untracked().unwrap().logs[0]
+                .entries
+                .last()
+                .unwrap()
+                .key,
+            1020
+        );
+    }
+
+    #[test]
+    fn control_meaning_and_document_boundaries_invalidate_retained_layout() {
+        let (_d, _b, mut p, _proxy) = setup();
+        let mut retained = crate::presentation::Presentation::default();
+        let marks = Marks::default();
+        retained.update(&p, View::Projection, 120, &marks);
+        p.controls[0].disabled = !p.controls[0].disabled;
+        TEST_LAYOUTS.with(|n| n.set(0));
+        let actual = retained.update(&p, View::Projection, 120, &marks);
+        assert_eq!(TEST_LAYOUTS.with(|n| n.get()), 1);
+        assert_eq!(*actual, lay_out(&p, View::Projection, 120, &marks));
+        p.document += 1;
+        TEST_LAYOUTS.with(|n| n.set(0));
+        retained.update(&p, View::Projection, 120, &marks);
+        assert_eq!(TEST_LAYOUTS.with(|n| n.get()), 1);
+        retained.update(&p, View::Reader, 120, &marks);
+        p.logs[0].entries.push(Entry {
+            key: 9999,
+            runs: vec![Run::plain("reader grows")],
+        });
+        TEST_LAYOUTS.with(|n| n.set(0));
+        let actual = retained.update(&p, View::Reader, 120, &marks);
+        assert_eq!(TEST_LAYOUTS.with(|n| n.get()), 1);
+        assert_eq!(*actual, lay_out(&p, View::Reader, 120, &marks));
+    }
+
+    #[test]
+    #[ignore = "measured update/render baseline; run with --ignored --nocapture"]
+    fn combined_update_baseline() {
+        let (mut d, b, mut p, proxy) = setup();
+        let start = d.stats();
+        eprintln!("RICH_MEDIA {{\"window\":\"begin\"}}");
+        let mut latency = Vec::new();
+        let mut layouts = 0;
+        let mut bytes = 0;
+        let mut emitted = 0;
+        for n in 1..=100 {
+            p.media[0].playback = Some(Playback {
+                time: n as f64,
+                ..Playback::default()
+            });
+            if n % 5 == 0 {
+                p.media[0].picture = Picture::from_rgba(2, 2, vec![n as u8; 16]);
+            }
+            if n % 4 == 0 {
+                p.logs[0].entries.push(Entry {
+                    key: 1000 + n,
+                    runs: vec![Run::plain(format!("message {n}"))],
+                });
+            }
+            let page = Arc::new(p.clone());
+            let at = Instant::now();
+            TEST_LAYOUTS.with(|n| n.set(0));
+            proxy.run_with(move |cx| apply(b, Update::Page(page), cx));
+            d.update(Duration::ZERO);
+            if let Some(out) = d.render() {
+                bytes += out.len();
+                emitted += 1;
+                latency.push(at.elapsed().as_secs_f64() * 1000.0);
+            }
+            layouts += TEST_LAYOUTS.with(|n| n.get());
+        }
+        latency.sort_by(f64::total_cmp);
+        let q = |p: f64| latency[((latency.len() - 1) as f64 * p).round() as usize];
+        let end = d.stats();
+        eprintln!("RICH_MEDIA {{\"window\":\"end\"}}");
+        println!(
+            "combined: config=120x40/visible-body/saved-stream-with-log/100-serial-updates reads=100 playback=100 decode=20 log=25 layouts={layouts} emitted={emitted} censored={} exact_bytes={bytes} latency_ms p50={} p95={} p99={} widget_draw_ms={} paint_encode_ms={}",
+            100 - emitted,
+            q(0.5),
+            q(0.95),
+            q(0.99),
+            (end.total_draw - start.total_draw).as_secs_f64() * 1000.0,
+            (end.total_paint - start.total_paint).as_secs_f64() * 1000.0
+        );
+    }
+    #[test]
+    #[ignore = "combined frame/chat pipeline; emitted bytes, not native presentation"]
+    fn combined_frame_pipeline() {
+        use std::sync::Mutex;
+        let (mut d, b, mut p, _proxy) = setup();
+        let offer = TEST_OFFER.with(|slot| slot.borrow().as_ref().unwrap().clone());
+        p.media[0].playback = Some(Playback {
+            ready: 4,
+            volume: 1.0,
+            ..Playback::default()
+        });
+        let template = p.logs[0]
+            .entries
+            .iter()
+            .find(|e| e.runs.iter().any(|r| r.picture.is_some()))
+            .unwrap()
+            .runs
+            .clone();
+        p.logs[0].entries = (1..=30)
+            .map(|key| {
+                let mut runs = vec![Run::plain(format!("chat {key} "))];
+                runs.extend(template.clone());
+                Entry { key, runs }
+            })
+            .collect();
+        offer(Update::Page(Arc::new(p.clone())));
+        for _ in 0..20 {
+            d.update(Duration::ZERO);
+            d.render();
+            std::thread::sleep(Duration::from_millis(2));
+        }
+        let node = p.media[0].node;
+        let stamps = Arc::new(Mutex::new(HashMap::<u64, Instant>::new()));
+        let emitted = Arc::new(Mutex::new(std::collections::HashSet::<u64>::new()));
+        let sent = stamps.clone();
+        let begun = Instant::now();
+        TEST_LAYOUTS.with(|n| n.set(0));
+        let start = d.stats();
+        let initial_reads = b.reads.get_untracked();
+        eprintln!("RICH_MEDIA {{\"window\":\"begin\",\"workload\":\"frames+chat\"}}");
+        let producer = std::thread::spawn(move || {
+            for seq in 1..=60u64 {
+                sent.lock().unwrap().insert(seq, Instant::now());
+                let pixels =
+                    rich_embed::Pixels::new(480, 270, [seq as u8, 77, 91].repeat(480 * 270))
+                        .unwrap();
+                eprintln!(
+                    "RICH_MEDIA {{\"stage\":\"frame_offer\",\"seq\":{seq},\"bytes\":{}}}",
+                    pixels.rgb.len()
+                );
+                offer(Update::Frame(Arc::new(VideoFrame { node, pixels, seq })));
+                if seq % 3 == 0 {
+                    let mut runs = vec![Run::plain(format!("new chat {seq} "))];
+                    runs.extend(template.clone());
+                    p.logs[0].entries.push(Entry {
+                        key: 1000 + seq,
+                        runs,
+                    });
+                    p.media[0].playback.as_mut().unwrap().time = seq as f64 / 30.0;
+                    offer(Update::Page(Arc::new(p.clone())));
+                }
+                std::thread::sleep(Duration::from_millis(33));
+            }
+        });
+        let mut bytes = 0usize;
+        let mut nonempty = 0;
+        let mut empty = 0;
+        let mut latency = Vec::new();
+        let mut updates = Vec::new();
+        let mut inputs = Vec::new();
+        let mut last_frame = 0;
+        let mut next_input = Duration::from_millis(200);
+        let mut input = None;
+        let mut input_count = 0;
+        while begun.elapsed() < Duration::from_millis(2400) {
+            let elapsed = begun.elapsed();
+            if elapsed >= next_input && input_count < 8 {
+                input = Some(Instant::now());
+                let key = if input_count % 2 == 0 { "{" } else { "}" };
+                d.event(rich_intuituive::interact::Event::Key(
+                    Key::parse(key).unwrap(),
+                ));
+                input_count += 1;
+                next_input += Duration::from_millis(200);
+            }
+            let at = Instant::now();
+            d.update(elapsed);
+            updates.push(at.elapsed().as_secs_f64() * 1000.0);
+            if let Some(out) = d.render() {
+                if out.is_empty() {
+                    empty += 1;
+                } else {
+                    nonempty += 1;
+                    bytes += out.len();
+                    if let Some(at) = input.take() {
+                        inputs.push(at.elapsed().as_secs_f64() * 1000.0);
+                    }
+                    if let Some(live) = b.videos.get_untracked().get(&node) {
+                        let seq = live.picture.image().to_rgb8().get_pixel(0, 0).0[0] as u64;
+                        if seq != last_frame && stamps.lock().unwrap().contains_key(&seq) {
+                            last_frame = seq;
+                            emitted.lock().unwrap().insert(seq);
+                            latency.push(
+                                stamps.lock().unwrap()[&seq].elapsed().as_secs_f64() * 1000.0,
+                            );
+                        }
+                    }
+                }
+            }
+            std::thread::sleep(Duration::from_millis(1));
+        }
+        producer.join().unwrap();
+        eprintln!("RICH_MEDIA {{\"window\":\"end\"}}");
+        let q = |values: &mut Vec<f64>| {
+            values.sort_by(f64::total_cmp);
+            [0.5, 0.95, 0.99].map(|p| {
+                values
+                    .get(((values.len().saturating_sub(1)) as f64 * p).round() as usize)
+                    .copied()
+                    .unwrap_or(0.0)
+            })
+        };
+        let end = d.stats();
+        println!(
+            "pipeline: config=120x40/480x270-RGB/30fps/2s-source/2.4s-drain applied_pages={} actual_layouts={} offered_frames=60 emitted_frame_ids={} dropped_or_censored={} nonempty_outputs={nonempty} empty_outputs={empty} exact_bytes={bytes} frame_latency_ms={:?} update_latency_ms={:?} input_population={} input_censored={} input_latency_ms={:?} widget_draw_ms={} paint_encode_ms={}",
+            b.reads.get_untracked() - initial_reads,
+            TEST_LAYOUTS.with(|n| n.get()),
+            latency.len(),
+            60 - latency.len(),
+            q(&mut latency),
+            q(&mut updates),
+            inputs.len(),
+            input_count - inputs.len(),
+            q(&mut inputs),
+            (end.total_draw - start.total_draw).as_secs_f64() * 1000.0,
+            (end.total_paint - start.total_paint).as_secs_f64() * 1000.0
+        );
+        assert!(nonempty > 0);
+        assert!(!latency.is_empty(), "no real frame emitted");
     }
 }

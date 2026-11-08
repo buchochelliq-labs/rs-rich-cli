@@ -50,7 +50,8 @@ fn chat_scrollback_survives_media_updates() {
 struct GatedEngine {
     inner: noctiluca::testing::FakeEngine,
     entered: std::sync::mpsc::SyncSender<()>,
-    release: std::sync::mpsc::Receiver<()>,
+    release: Option<std::sync::mpsc::Receiver<()>>,
+    async_gate: bool,
     gated: bool,
 }
 
@@ -97,10 +98,36 @@ impl noctiluca::engine::Engine for GatedEngine {
             self.gated = true;
             self.entered.send(()).unwrap();
             self.release
+                .as_ref()
+                .unwrap()
                 .recv_timeout(std::time::Duration::from_secs(10))
                 .expect("resource gate released");
         }
         self.inner.resource(t, u)
+    }
+    fn optional_resources(&mut self) -> Option<noctiluca::engine::ResourceReader> {
+        if !self.async_gate {
+            return None;
+        }
+        self.gated = true;
+        let entered = self.entered.clone();
+        let release = self.release.take().unwrap();
+        let state = self.inner.state.clone();
+        let mut first = true;
+        Some(Box::new(move |url| {
+            if first {
+                first = false;
+                entered.send(()).unwrap();
+                release
+                    .recv_timeout(std::time::Duration::from_secs(10))
+                    .unwrap();
+            }
+            state
+                .lock()
+                .unwrap()
+                .resource(url)
+                .ok_or_else(|| std::io::Error::other("no resource"))
+        }))
     }
     fn image_ready(&mut self, t: noctiluca::engine::TabId, n: i64) -> std::io::Result<bool> {
         self.inner.image_ready(t, n)
@@ -125,7 +152,8 @@ fn navigation_queued_during_resource_load_keeps_new_document() {
         Box::new(GatedEngine {
             inner: engine,
             entered: entered_tx,
-            release: release_rx,
+            release: Some(release_rx),
+            async_gate: false,
             gated: false,
         }),
         move |u| {
@@ -209,4 +237,56 @@ fn media_lifecycle_matches_clean_render() {
     d.resize(80, 30);
     wait(&mut d, |d| d.screen().plain()[2..28] == baseline[2..28]);
     assert_eq!(&d.screen().plain()[2..28], &baseline[2..28]);
+}
+
+#[test]
+fn slow_optional_inline_load_allows_text_and_navigation_before_completion() {
+    use noctiluca::tab::{Command, Tab, Update};
+    use std::sync::mpsc;
+    use std::time::{Duration, Instant};
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests");
+    let engine = noctiluca::testing::FakeEngine::from_dir(&root.join("snapshots")).unwrap();
+    let (entered, started) = mpsc::sync_channel(1);
+    let (release, gate) = mpsc::sync_channel(1);
+    let (send, receive) = mpsc::channel();
+    let tab = Tab::spawn(
+        Box::new(GatedEngine {
+            inner: engine,
+            entered,
+            release: Some(gate),
+            gated: false,
+            async_gate: true,
+        }),
+        move |u| {
+            let _ = send.send(u);
+        },
+    );
+    tab.send(Command::Open("stream-with-log.html".into()));
+    started
+        .recv_timeout(Duration::from_secs(2))
+        .expect("optional read started");
+    let until = Instant::now() + Duration::from_secs(2);
+    let mut text = false;
+    while Instant::now() < until {
+        if let Ok(Update::Page(p)) = receive.recv_timeout(Duration::from_millis(20)) {
+            if !p.logs.is_empty() {
+                text = true;
+                break;
+            }
+        }
+    }
+    assert!(text, "useful text was held behind optional resource");
+    tab.send(Command::Open("echo.html".into()));
+    let until = Instant::now() + Duration::from_secs(2);
+    let mut navigated = false;
+    while Instant::now() < until {
+        if let Ok(Update::Page(p)) = receive.recv_timeout(Duration::from_millis(20)) {
+            if p.url.contains("echo.html") {
+                navigated = true;
+                break;
+            }
+        }
+    }
+    release.send(()).unwrap();
+    assert!(navigated, "navigation waited for optional resource");
 }

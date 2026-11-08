@@ -23,7 +23,7 @@ use std::collections::{HashMap, HashSet, VecDeque};
 use std::marker::PhantomData;
 use std::panic::Location;
 use std::rc::Rc;
-use std::sync::atomic::AtomicUsize;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, mpsc};
 
 use crate::app::Ctx;
@@ -84,6 +84,7 @@ pub(crate) struct Runtime {
     /// Closures sent from other threads, run on the app's thread.
     inbox: mpsc::Receiver<Job>,
     outbox: mpsc::Sender<Job>,
+    pending_jobs: Arc<AtomicUsize>,
     /// What wakes the loop's wait when another thread sends a closure.
     pub(crate) wake: Arc<WakeSlot>,
     /// Tasks started and not yet delivered.
@@ -178,6 +179,7 @@ impl Runtime {
                 graph: RefCell::new(Graph::default()),
                 inbox,
                 outbox,
+                pending_jobs: Arc::default(),
                 wake: Arc::default(),
                 tasks: Arc::new(AtomicUsize::new(0)),
                 clock: crate::task::ThreadClock::new(),
@@ -655,9 +657,23 @@ impl Runtime {
     /// Run the closures other threads sent; whether there were any.
     pub(crate) fn run_inbox(&self, cx: &mut Ctx) -> bool {
         let mut ran = false;
-        while let Ok(job) = self.inbox.try_recv() {
+        // Snapshot this turn's work: replacements arriving during a costly
+        // job belong to the next turn. Also bound large initial batches.
+        let count = self.pending_jobs.load(Ordering::Acquire).min(64);
+        let started = std::time::Instant::now();
+        for _ in 0..count {
+            let Ok(job) = self.inbox.try_recv() else {
+                break;
+            };
+            self.pending_jobs.fetch_sub(1, Ordering::AcqRel);
             job(cx);
             ran = true;
+            if started.elapsed() >= std::time::Duration::from_millis(8) {
+                break;
+            }
+        }
+        if self.pending_jobs.load(Ordering::Acquire) > 0 {
+            self.wake.wake();
         }
         ran
     }
@@ -665,6 +681,7 @@ impl Runtime {
     pub(crate) fn proxy(&self) -> Proxy {
         Proxy {
             outbox: self.outbox.clone(),
+            pending_jobs: self.pending_jobs.clone(),
             wake: self.wake.clone(),
         }
     }
@@ -1206,6 +1223,7 @@ impl<T: Clone + 'static> Memo<T> {
 #[derive(Clone)]
 pub struct Proxy {
     outbox: mpsc::Sender<Job>,
+    pending_jobs: Arc<AtomicUsize>,
     wake: Arc<WakeSlot>,
 }
 
@@ -1269,7 +1287,11 @@ impl Proxy {
     /// Send `job` as it is: a task's delivery, which traces itself. The
     /// loop's wait on the terminal ends, so it runs at once.
     pub(crate) fn send(&self, job: Job) -> bool {
+        self.pending_jobs.fetch_add(1, Ordering::AcqRel);
         let sent = self.outbox.send(job).is_ok();
+        if !sent {
+            self.pending_jobs.fetch_sub(1, Ordering::AcqRel);
+        }
         if sent {
             self.wake.wake();
         }

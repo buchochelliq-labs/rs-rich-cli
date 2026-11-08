@@ -757,6 +757,50 @@ impl Picture {
         anchor: ImageAnchor,
         cell: CellPixels,
     ) -> Option<String> {
+        let measured = media_trace_enabled().then(std::time::Instant::now);
+        let result = self.encode_new_inner(pixels, cols, rows, fit, anchor, cell);
+        if let Some(start) = measured {
+            let pictures = PICTURES.lock().unwrap_or_else(|e| e.into_inner());
+            let mut decoded = 0usize;
+            let mut encoded = 0usize;
+            let mut live = 0usize;
+            for weak in pictures.values() {
+                if let Some(p) = weak.upgrade() {
+                    live += 1;
+                    decoded += p.image.as_bytes().len();
+                    decoded += p.animation.as_ref().map_or(0, |a| {
+                        a.iter().map(|f| f.image.as_raw().len()).sum::<usize>()
+                    });
+                    encoded += p
+                        .encoded
+                        .lock()
+                        .unwrap_or_else(|e| e.into_inner())
+                        .as_ref()
+                        .map_or(0, |(_, s)| s.len());
+                }
+            }
+            eprintln!(
+                "RICH_MEDIA {{\"stage\":\"encode\",\"ns\":{},\"bytes\":{},\"decoded_bytes\":{},\"cached_escapes_bytes\":{},\"live_pictures\":{},\"weak_slots\":{}}}",
+                start.elapsed().as_nanos(),
+                result.as_ref().map_or(0, |s| s.len()),
+                decoded,
+                encoded,
+                live,
+                pictures.len()
+            );
+        }
+        result
+    }
+
+    fn encode_new_inner(
+        &self,
+        pixels: Pixels,
+        cols: usize,
+        rows: usize,
+        fit: Option<ImageFit>,
+        anchor: ImageAnchor,
+        cell: CellPixels,
+    ) -> Option<String> {
         let fitted = |image: &DynamicImage| self.fitted(image, cols, rows, fit, anchor, cell);
         match pixels {
             Pixels::Cells => None,
@@ -2143,4 +2187,9 @@ mod tests {
         assert!(sent.len() >= 8, "{sent:?}");
         assert!(pacer.recent_bytes() <= 800_000);
     }
+}
+
+fn media_trace_enabled() -> bool {
+    static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *ON.get_or_init(|| std::env::var_os("RICH_MEDIA_TRACE").is_some())
 }

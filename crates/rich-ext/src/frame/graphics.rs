@@ -143,6 +143,7 @@ impl GraphicsPlan {
 /// What to redraw going from `previous` placements to `next`, after the
 /// cell `changes` were painted.
 pub fn plan(previous: &[Placement], next: &[Placement], changes: &[Change]) -> GraphicsPlan {
+    let measured = media_trace_enabled().then(std::time::Instant::now);
     let mut out = GraphicsPlan::default();
     for old in previous {
         if old.graphic.in_cells() || next.iter().any(|new| new.same(old)) {
@@ -191,6 +192,15 @@ pub fn plan(previous: &[Placement], next: &[Placement], changes: &[Change]) -> G
         if !kept || wiped || covered {
             out.draw.push(new.clone());
         }
+    }
+    if let Some(start) = measured {
+        eprintln!(
+            "RICH_MEDIA {{\"stage\":\"graphics_plan\",\"ns\":{},\"previous\":{},\"next\":{},\"draw\":{}}}",
+            start.elapsed().as_nanos(),
+            previous.len(),
+            next.len(),
+            out.draw.len()
+        );
     }
     out
 }
@@ -303,4 +313,9 @@ mod tests {
         assert!(again.is_empty());
         assert!(plan(std::slice::from_ref(&kitty), &[], &[]).is_empty());
     }
+}
+
+fn media_trace_enabled() -> bool {
+    static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *ON.get_or_init(|| std::env::var_os("RICH_MEDIA_TRACE").is_some())
 }

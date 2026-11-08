@@ -84,7 +84,7 @@ pub fn control_at(line: &Line, column: usize) -> Option<usize> {
 }
 
 /// What the views are asked to mark.
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, Default, PartialEq)]
 pub struct Marks {
     /// Link hint labels, by control.
     pub hints: HashMap<usize, String>,
@@ -964,8 +964,8 @@ pub struct Projection {
 }
 
 /// Which part of the page a projection holds.
-#[derive(Clone, Copy, PartialEq, Eq)]
-enum Part {
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Part {
     Flow,
     Pinned,
     Docked,
@@ -1001,12 +1001,29 @@ impl Projection {
 /// The [`projection`] with its rows' keys and page positions, and the
 /// page's pinned and docked strips.
 pub fn project(page: &Page, columns: u16, cell: (f64, f64), marks: &Marks) -> Projection {
-    let mut main = project_part(page, columns, cell, marks, Part::Flow);
+    project_with_logs(page, columns, cell, marks, &mut Vec::new())
+}
+
+#[derive(Clone, Debug)]
+pub(crate) struct LogSlot {
+    pub node: NodeId,
+    pub region: Region,
+    pub part: Part,
+}
+
+pub(crate) fn project_with_logs(
+    page: &Page,
+    columns: u16,
+    cell: (f64, f64),
+    marks: &Marks,
+    slots: &mut Vec<LogSlot>,
+) -> Projection {
+    let mut main = project_part(page, columns, cell, marks, Part::Flow, slots);
     for (place, part) in [(Place::Pinned, Part::Pinned), (Place::Docked, Part::Docked)] {
         if !page.layers.iter().any(|l| l.place == place) {
             continue;
         }
-        let strip = project_part(page, columns, cell, marks, part);
+        let strip = project_part(page, columns, cell, marks, part, slots);
         if strip.lines.is_empty() {
             continue;
         }
@@ -1054,6 +1071,7 @@ fn project_part(
     cell: (f64, f64),
     marks: &Marks,
     part: Part,
+    slots: &mut Vec<LogSlot>,
 ) -> Projection {
     let columns = columns.max(10) as usize;
     let (cw, ch) = (cell.0.max(1.0), cell.1.max(1.0));
@@ -1964,6 +1982,8 @@ fn project_part(
         })
         .collect();
     let mut placed_logs = Vec::new();
+    let slot_start = slots.len();
+    let mut occupied: Vec<(NodeId, Region)> = Vec::new();
     let mut regions = Vec::new();
     let mut inline: Vec<(Region, String)> = Vec::new();
     // Each row's first box: its node, which of its lines, and that line's
@@ -2008,7 +2028,20 @@ fn project_part(
             });
             y = y.max(row_y);
         }
+        let rectangle = Region {
+            row: y,
+            column: x0,
+            cols: x1 - x0,
+            rows: lines.len(),
+            media: usize::MAX,
+        };
+        occupied.push((node, rectangle));
         if let Some(at) = logs.iter().position(|(log, _)| *log == node) {
+            slots.push(LogSlot {
+                node,
+                region: rectangle,
+                part,
+            });
             let (log, rows) = logs.remove(at);
             placed_logs.push((log, y, rows));
         }
@@ -2124,8 +2157,31 @@ fn project_part(
                 x += w;
             }
         }
+        occupied.push((
+            i64::MIN,
+            Region {
+                row,
+                column,
+                cols: line.width(),
+                rows: 1,
+                media: usize::MAX,
+            },
+        ));
         overlays.push((row, column, line));
     }
+    // Only exclusive rectangles can be patched; adjacent video/text is
+    // safe, but overlapping contributors retain the full composition path.
+    let safe: Vec<_> = slots
+        .drain(slot_start..)
+        .filter(|slot| {
+            occupied
+                .iter()
+                .filter(|(_, r)| rectangles_overlap(*r, slot.region))
+                .count()
+                == 1
+        })
+        .collect();
+    slots.extend(safe);
     // Keys: a row with no box keeps to the row above it; a key met twice
     // (a table's caption and its cells share the table's node) is told
     // apart by how often it came.
@@ -2477,4 +2533,12 @@ mod tests {
         assert_eq!(point_in(0.0, 0.0, 30, 8, (3.0, 3.0)), (0.0, 0.0));
         assert_eq!(inside(10.0, 20.0, 110.0, 70.0, 50.0, 25.0), (60.0, 45.0));
     }
+}
+
+/// Cell rectangle overlap, including rows shared by adjacent boxes.
+pub(crate) fn rectangles_overlap(a: Region, b: Region) -> bool {
+    a.row < b.row + b.rows
+        && b.row < a.row + a.rows
+        && a.column < b.column + b.cols
+        && b.column < a.column + a.cols
 }

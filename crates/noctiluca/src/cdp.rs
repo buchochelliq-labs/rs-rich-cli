@@ -778,6 +778,32 @@ impl Engine for ChromeBackend {
         Ok(bytes)
     }
 
+    fn optional_resources(&mut self) -> Option<crate::engine::ResourceReader> {
+        let devtools = self.devtools.clone();
+        Some(Box::new(move |url| {
+            let tree = devtools.call("Page.getFrameTree", json!({}), CALL)?;
+            let frame = tree["frameTree"]["frame"]["id"]
+                .as_str()
+                .ok_or_else(|| io::Error::other("no main frame"))?;
+            let result = devtools.call(
+                "Page.getResourceContent",
+                json!({"frameId":frame,"url":url}),
+                CALL,
+            )?;
+            let content = result["content"].as_str().unwrap_or_default();
+            let bytes = if result["base64Encoded"].as_bool() == Some(true) {
+                base64_decode(content)
+                    .ok_or_else(|| io::Error::other("a resource that is not base64"))?
+            } else {
+                content.as_bytes().to_vec()
+            };
+            if bytes.is_empty() {
+                return Err(io::Error::new(ErrorKind::NotFound, "an empty resource"));
+            }
+            Ok(bytes)
+        }))
+    }
+
     fn image_ready(&mut self, _tab: TabId, node: i64) -> io::Result<bool> {
         let value = self.call_on(
             node,
