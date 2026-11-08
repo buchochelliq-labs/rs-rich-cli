@@ -1576,7 +1576,23 @@ impl Session {
             Some(id) => self.session.as_deref() == Some(id),
             None => true,
         };
-        if ours && !method.is_empty() {
+        if !ours {
+            return Ok(());
+        }
+        // Retire the previous document's buffers before a listener can publish
+        // the new document. A pending raw frame owns at most one outstanding ACK.
+        if method == "Page.frameNavigated" && params["frame"].get("parentId").is_none() {
+            let ack = {
+                let mut state = lock(shared);
+                state.frame = None;
+                state.meta = FrameMeta::default();
+                state.raw.take().and_then(|(_, _, ack)| ack)
+            };
+            if let Some(ack) = ack {
+                self.page("Page.screencastFrameAck", json!({"sessionId": ack}))?;
+            }
+        }
+        if !method.is_empty() {
             deliver(&self.listeners, method, params);
         }
         match method {
@@ -1947,6 +1963,121 @@ mod tests {
         let last = taken.last().unwrap();
         assert_eq!((last.pixels.width, last.pixels.height), (80, 80));
         assert_eq!(last.meta.scroll_y, 40.0);
+    }
+
+    #[cfg(unix)]
+    fn pending_session() -> (ChromeEngine, Session, io::PipeReader, Receiver<Request>) {
+        let (read, write) = io::pipe().unwrap();
+        let mut engine = ChromeEngine::new().screencast_on_demand(true);
+        let (send, requests) = mpsc::channel();
+        engine.commands = Some(send);
+        let session = Session {
+            transport: Transport::Pipe {
+                write,
+                read: mpsc::channel().1,
+                stderr: mpsc::channel().1,
+            },
+            next: 0,
+            pending: Vec::new(),
+            session: Some("ours".into()),
+            target: Some("main".into()),
+            history: Vec::new(),
+            current: 0,
+            size: (80, 24),
+            cell: (10, 20),
+            waiting: Vec::new(),
+            calls: Vec::new(),
+            listeners: engine.listeners.clone(),
+            screencast: true,
+            on_demand: true,
+            scale: 1.0,
+        };
+        (engine, session, read, requests)
+    }
+
+    #[cfg(unix)]
+    fn send_test_frame(session: &mut Session, shared: &Mutex<Shared>, id: i64, rgb: [u8; 3]) {
+        let mut png = Vec::new();
+        image::RgbImage::from_pixel(1, 1, image::Rgb(rgb))
+            .write_to(&mut io::Cursor::new(&mut png), image::ImageFormat::Png)
+            .unwrap();
+        session
+            .message(
+                &json!({
+                    "sessionId": "ours", "method": "Page.screencastFrame",
+                    "params": {"data": encode(&png), "sessionId": id, "metadata": {}}
+                })
+                .to_string(),
+                shared,
+            )
+            .unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn main_navigation_discards_pending_frames_and_acknowledges_once() {
+        use std::io::Read;
+        for count in [1, 2] {
+            let (mut engine, mut session, mut output, requests) = pending_session();
+            for id in 1..=count {
+                send_test_frame(&mut session, &engine.shared, id, [255, 0, 0]);
+            }
+            // Also discard the decoded fallback, not only the raw slot.
+            lock(&engine.shared).frame = Some(Pixels::new(1, 1, vec![255, 0, 0]).unwrap());
+            session
+                .message(
+                    &json!({"sessionId":"ours", "method":"Page.frameNavigated",
+                "params":{"frame":{"id":"main", "url":"https://b.test"}}})
+                    .to_string(),
+                    &engine.shared,
+                )
+                .unwrap();
+            assert!(
+                engine.take_screencast().is_none(),
+                "pre-navigation A must not escape into B"
+            );
+            assert!(
+                requests.try_recv().is_err(),
+                "discard ACK belongs to the session boundary"
+            );
+            send_test_frame(&mut session, &engine.shared, 3, [0, 0, 255]);
+            assert_eq!(engine.take_screencast().unwrap().pixels.rgb, [0, 0, 255]);
+            drop(session);
+            let mut wire = String::new();
+            output.read_to_string(&mut wire).unwrap();
+            let acks: Vec<_> = wire
+                .split('\0')
+                .filter_map(|m| serde_json::from_str::<Value>(m).ok())
+                .filter(|m| m["method"] == "Page.screencastFrameAck")
+                .map(|m| m["params"]["sessionId"].as_i64().unwrap())
+                .collect();
+            assert_eq!(
+                acks,
+                if count == 1 {
+                    vec![1, 3]
+                } else {
+                    vec![1, 2, 3]
+                }
+            );
+        }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn other_navigation_boundaries_preserve_pending_frame() {
+        for event in [
+            json!({"sessionId":"ours", "method":"Page.frameNavigated", "params":{"frame":{"parentId":"main", "url":"https://child.test"}}}),
+            json!({"sessionId":"ours", "method":"Page.navigatedWithinDocument", "params":{"url":"https://a.test/#hash"}}),
+            json!({"sessionId":"foreign", "method":"Page.frameNavigated", "params":{"frame":{"url":"https://other.test"}}}),
+        ] {
+            let (mut engine, mut session, _output, requests) = pending_session();
+            send_test_frame(&mut session, &engine.shared, 1, [255, 0, 0]);
+            send_test_frame(&mut session, &engine.shared, 2, [255, 0, 0]);
+            session.message(&event.to_string(), &engine.shared).unwrap();
+            assert_eq!(engine.take_screencast().unwrap().pixels.rgb, [255, 0, 0]);
+            assert!(matches!(requests.try_recv(), Ok(Request::Ack(2))));
+            assert!(requests.try_recv().is_err());
+        }
     }
 
     #[test]

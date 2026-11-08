@@ -1758,9 +1758,7 @@ fn run(
             probed = Instant::now();
             worker.follow_playback();
         }
-        if worker.pixels {
-            worker.screen();
-        } else {
+        if !worker.pixels {
             worker.video();
             worker.poll_canvases();
         }
@@ -1786,6 +1784,11 @@ fn run(
         } else if worker.stills_pending {
             worker.capture_stills();
         }
+        // A sole fresh frame belongs to the model published for its document.
+        // Keep it in the engine while an initial/navigation snapshot is refused.
+        if worker.pixels && !read_now && worker.page.is_some() {
+            worker.screen();
+        }
         // Legacy engines cannot lend a concurrent reader. Preserve their
         // existing resource behavior, but only after text is published and
         // with one bounded fetch per turn. Chrome uses its independent CDP
@@ -1809,6 +1812,108 @@ fn run(
 mod tests {
     use super::*;
     use crate::testing::FakeEngine;
+
+    /// A producer with a sole fresh B frame, including one refused model read.
+    /// No Update callbacks are fabricated: the actual run loop emits all of them.
+    #[test]
+    fn fresh_screen_waits_for_initial_or_navigation_model() {
+        use crate::engine::{Frame, HistoryStep, PageSnapshot};
+        use crate::testing::feed_snapshot;
+        use rich_embed::{Pixels, ScreencastFrame};
+        use std::io;
+        struct Source {
+            old: bool,
+            refused: bool,
+            on: bool,
+            frame: Option<ScreencastFrame>,
+            navigation: bool,
+        }
+        impl Engine for Source {
+            fn resize(&mut self, _: u16, _: u16) -> io::Result<()> {
+                Ok(())
+            }
+            fn open(&mut self, _: TabId, _: &str) -> io::Result<()> {
+                Ok(())
+            }
+            fn history(&mut self, _: TabId, _: HistoryStep) -> io::Result<()> {
+                Ok(())
+            }
+            fn state(&self, _: TabId) -> PageState {
+                PageState::default()
+            }
+            fn snapshot(&mut self, _: TabId) -> io::Result<PageSnapshot> {
+                if self.old && !self.on {
+                    return Ok(feed_snapshot("https://a.test", 1));
+                }
+                if self.refused {
+                    self.refused = false;
+                    return Err(io::Error::other("renderer swapping"));
+                }
+                Ok(feed_snapshot("https://b.test", 1))
+            }
+            fn capture(&mut self, _: TabId, _: Rect, _: Format) -> io::Result<Frame> {
+                Err(io::Error::other("no regions"))
+            }
+            fn act(&mut self, _: TabId, _: &PageAction) -> io::Result<()> {
+                Ok(())
+            }
+            fn set_screencast(&mut self, _: TabId, on: bool) -> io::Result<()> {
+                self.on = on;
+                self.navigation = on && self.old;
+                Ok(())
+            }
+            fn screencast_frame(&mut self, _: TabId) -> Option<ScreencastFrame> {
+                self.on.then(|| self.frame.take()).flatten()
+            }
+            fn events(&mut self) -> Vec<EngineEvent> {
+                if std::mem::take(&mut self.navigation) {
+                    vec![EngineEvent::Navigated("https://b.test".into())]
+                } else {
+                    vec![]
+                }
+            }
+        }
+        for old in [false, true] {
+            for refused in [false, true] {
+                let engine = Source {
+                    old,
+                    refused,
+                    on: false,
+                    navigation: false,
+                    frame: Some(ScreencastFrame {
+                        pixels: Pixels::new(1, 1, vec![0, 0, 255]).unwrap(),
+                        meta: Default::default(),
+                    }),
+                };
+                let (send, receive) = mpsc::channel();
+                // Existing A is genuinely read before the navigation command.
+                send.send((1, Command::Pixels(!old))).unwrap();
+                let stop = AtomicBool::new(false);
+                let updates = Mutex::new(Vec::new());
+                run(Box::new(engine), receive, &stop, &|update| match update {
+                    Update::Page(page) => {
+                        updates.lock().unwrap().push(page.url.clone());
+                        if page.url == "https://a.test" {
+                            send.send((2, Command::Pixels(true))).unwrap();
+                        }
+                    }
+                    Update::Screen(frame) => {
+                        assert_eq!(frame.pixels.rgb, [0, 0, 255]);
+                        updates.lock().unwrap().push("screen B".into());
+                        stop.store(true, Ordering::SeqCst);
+                    }
+                    _ => {}
+                });
+                let updates = updates.into_inner().unwrap();
+                let expected = if old {
+                    vec!["https://a.test", "https://b.test", "screen B"]
+                } else {
+                    vec!["https://b.test", "screen B"]
+                };
+                assert_eq!(updates, expected, "old={old}, refused={refused}");
+            }
+        }
+    }
 
     #[test]
     fn old_decoder_completion_cannot_replace_new_document_image() {
