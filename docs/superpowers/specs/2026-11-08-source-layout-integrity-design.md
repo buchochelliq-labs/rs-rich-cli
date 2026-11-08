@@ -6,6 +6,8 @@ The concrete source/model evidence, capture configuration and neutral assertions
 
 ## Contract
 
+- An empty selected-image URL must not resolve to the page URL. Fall back to a nonempty declared image source while loading, or keep it absent/pending; never manufacture the document as an image resource. Actual later selected-source changes remain authoritative. The matched live observer confirms this separate early-loading defect; it also confirms later 1x1 GIF changes were actual browser DOM state, not a reason to override the page.
+
 - A source-declared link with no own layout box retains its actually laid-out visible descendants and original source action identity. Derive a visible footprint from those descendants when needed; do not invent a new target or discard its destination/revision. A hidden subtree with no visible layout remains absent.
 - Source grid items traverse boxless wrappers to first actual layout boxes, in source order. Stop at normally boxed children; do not flatten all descendants or infer a card from proximity. Keep established public Grid/Page/Block shapes.
 - Fully outside ordinary descendants of a proven overflow clip produce no visible text, hints or graphics. Use the clipped axis only, current source coordinates and conservative outer bounds; do not double-apply scroll offsets or mistake scrollWidth for client width. Preserve partial intersections. Do not apply page-viewport clipping as a blanket content filter, since terminal adaptation may legitimately rearrange content outside the source viewport.
