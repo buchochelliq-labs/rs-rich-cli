@@ -482,7 +482,9 @@ impl Picture {
 
     fn family() -> Arc<Family> {
         Arc::new(Family {
-            id: reserve(1, u32::MAX).expect("picture ID namespace exhausted"),
+            id: reserve(1, 0x00ff_ffff)
+                .or_else(|| reserve(0x0100_0000, u32::MAX))
+                .expect("picture ID namespace exhausted"),
             next_version: std::sync::atomic::AtomicU32::new(1),
         })
     }
@@ -2137,6 +2139,29 @@ mod tests {
         let mut legacy = Pacer::new(Pixels::Kitty, 40, 10);
         while legacy.settle(&ByteBudget::new(60_000), 1.0) {}
         assert_eq!(legacy.pixels(), Pixels::Sixel);
+    }
+
+    #[test]
+    fn legacy_picture_id_wraps_to_a_representable_free_colour() {
+        if std::env::var_os("TEST_LEGACY_ID_WRAP_CHILD").is_some() {
+            IDS.lock().unwrap().next = 0x0100_0000;
+            let picture = Picture::new(solid(1));
+            assert!(
+                crate::kitty::id_color(picture.id(), true).is_some(),
+                "legacy picture ID {} cannot be represented",
+                picture.id()
+            );
+            return;
+        }
+        let status = std::process::Command::new(std::env::current_exe().unwrap())
+            .args([
+                "--exact",
+                "picture::tests::legacy_picture_id_wraps_to_a_representable_free_colour",
+            ])
+            .env("TEST_LEGACY_ID_WRAP_CHILD", "1")
+            .status()
+            .unwrap();
+        assert!(status.success());
     }
 
     #[test]
