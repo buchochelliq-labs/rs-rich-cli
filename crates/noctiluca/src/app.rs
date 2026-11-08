@@ -337,6 +337,10 @@ pub(crate) fn lay_out_with_logs(
                     .with(
                         crate::adapt::Rule::PageColors,
                         marks.adapt.on(crate::adapt::Rule::PageColors),
+                    )
+                    .with(
+                        crate::adapt::Rule::ScreenReaderTwins,
+                        marks.adapt.on(crate::adapt::Rule::ScreenReaderTwins),
                     );
             }
             layout::project_with_logs(
@@ -3933,6 +3937,143 @@ pub fn app_with_presentation(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn popup_underlay_retains_configured_semantic_twins_through_scroll_and_close() {
+        use crate::adapt::Rule;
+        let engine = crate::testing::FakeEngine::from_dir(
+            &std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/snapshots"),
+        )
+        .unwrap();
+        let visible = crate::model::build(
+            &crate::testing::snapshot_file(
+                &std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+                    .join("tests/snapshots/product-grid.json"),
+            )
+            .unwrap(),
+            &mut crate::model::Revisions::new(),
+        );
+        let application = app(
+            Box::new(engine),
+            Options {
+                config: Config::default(),
+                bookmarks: Bookmarks::default(),
+                url: None,
+                view: Some(View::Projection),
+                images: Some(Images::None),
+                tunnel: None,
+                control: None,
+            },
+        );
+        let proxy = application.proxy();
+        let mut driver = application.driver(160, 60);
+        driver.settle();
+        let b = TEST_BROWSER.with(|slot| slot.get().unwrap());
+        b.start.set(false);
+        assert!(!visible.overlays.is_empty());
+        let mut closed = visible.clone();
+        for overlay in closed.overlays.drain(..) {
+            closed.layers[overlay.layer].place = crate::model::Place::Off;
+        }
+        for (adapt, faithful, canonical) in [
+            (Adapt::default(), false, true),
+            (
+                Adapt::default().with(Rule::ScreenReaderTwins, false),
+                false,
+                false,
+            ),
+            (Adapt::default(), true, false),
+        ] {
+            b.adapt.set(adapt);
+            b.faithful.set(faithful);
+            for open in [true, false, true] {
+                let page = if open { &visible } else { &closed }.clone();
+                proxy.run_with(move |cx| apply(b, Update::Page(Arc::new(page)), cx));
+                for scroll in [0, 1, 0] {
+                    b.scroll.set(scroll);
+                    driver.settle();
+                    let text = driver.screen().plain().join("\n");
+                    assert_eq!(text.contains("We use cookies"), open, "{text}");
+                    for (spoken, shown) in [
+                        ("$29.99", "$2999"),
+                        ("$24.49", "$2449"),
+                        ("$49.00", "$4900"),
+                    ] {
+                        let (wanted, excluded) = if canonical {
+                            (spoken, shown)
+                        } else {
+                            (shown, spoken)
+                        };
+                        assert!(
+                            text.contains(wanted) && !text.contains(excluded),
+                            "open={open}, scroll={scroll}, faithful={faithful}, adapt={adapt:?}: {text}"
+                        );
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn popup_underlay_keeps_nonprice_accessible_twins_without_changing_their_match() {
+        use crate::{adapt::Rule, engine::Rect, testing::PageBuilder};
+        let mut p = PageBuilder::new("https://example.test/", "Revision", 800.0, 640.0);
+        let line = p.element(
+            p.body(),
+            "P",
+            &[],
+            &[],
+            Some(Rect::new(8.0, 8.0, 240.0, 24.0)),
+        );
+        let spoken = p.element(
+            line,
+            "SPAN",
+            &[],
+            &[
+                ("position", "absolute"),
+                ("clip", "rect(0px, 0px, 0px, 0px)"),
+            ],
+            Some(Rect::new(8.0, 8.0, 1.0, 1.0)),
+        );
+        p.text(spoken, "Revision v2.03", Rect::new(8.0, 8.0, 100.0, 20.0));
+        let shown = p.element(
+            line,
+            "SPAN",
+            &[("aria-hidden", "true")],
+            &[],
+            Some(Rect::new(8.0, 8.0, 120.0, 24.0)),
+        );
+        p.text(shown, "Revision v203", Rect::new(8.0, 8.0, 120.0, 24.0));
+        let popup = p.element(
+            p.body(),
+            "DIV",
+            &[("role", "dialog")],
+            &[("position", "fixed")],
+            Some(Rect::new(400.0, 200.0, 300.0, 200.0)),
+        );
+        p.text(popup, "Popup", Rect::new(408.0, 208.0, 80.0, 20.0));
+        let page = crate::model::build(&p.snapshot(), &mut crate::model::Revisions::new());
+        assert!(page.text().contains("Revision v2.03"));
+        assert_eq!(page.overlays.len(), 1);
+        for enabled in [true, false] {
+            let marks = Marks {
+                adapt: Adapt::none().with(Rule::ScreenReaderTwins, enabled),
+                ..Marks::default()
+            };
+            let text = lay_out(&page, View::Projection, 100, &marks)
+                .lines
+                .iter()
+                .map(Line::plain)
+                .collect::<Vec<_>>()
+                .join("\n");
+            let wanted = if enabled {
+                "Revision v2.03"
+            } else {
+                "Revision v203"
+            };
+            assert!(text.contains(wanted), "enabled={enabled}: {text}");
+        }
+    }
 
     #[test]
     fn popup_underlay_retains_shelf_strip_after_image_decode() {

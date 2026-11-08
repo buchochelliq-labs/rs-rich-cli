@@ -25,7 +25,9 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 - Popup projection keeps foreground and background policies paired: configured
   PageColors remains enabled while geometry stays source aligned; faithful popup
   backgrounds use the same source-color transform as their text. Closing restores
-  configured geometry adaptations.
+  configured geometry adaptations. Configured accessible text twins also stay
+  enabled under a popup, preserving canonical text such as split prices; faithful
+  mode and an explicit rule disable keep their existing behavior.
 - Waiting video encodes and prepared results are pruned on document, region and
   view changes. A current executing encode can finish while newer frames coalesce.
   The additive default `Engine::capture_model` preserves legacy engine callers;
