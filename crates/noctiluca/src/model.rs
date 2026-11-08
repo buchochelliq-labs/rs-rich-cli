@@ -4070,7 +4070,8 @@ mod tests {
         let k = f.layout.iter().position(|&n| n == node).unwrap();
         let empty = f.s("");
         let value = f.s(value);
-        f.styles[k].resize(16, empty);
+        let count = f.styles[k].len().max(16).max(at + 1);
+        f.styles[k].resize(count, empty);
         f.styles[k][at] = value;
     }
 
@@ -4088,6 +4089,84 @@ mod tests {
         let image = f.el(link, "IMG", &[("src", "/photo.png")], "block");
         clip_bounds(f, image, bounds);
         (100 + link, 100 + image)
+    }
+
+    #[test]
+    fn overflow_clip_margin_requires_known_zero_before_rejecting_content() {
+        for (margin, retained) in [
+            (Some("40px"), true),
+            (None, true),
+            (Some(""), true),
+            (Some("unknown"), true),
+            (Some("border-box 40px"), true),
+            (Some("0px"), false),
+            (Some("border-box 0px"), false),
+            (Some("padding-box 0px"), false),
+            (Some("content-box 0px"), false),
+        ] {
+            for bounds in [[130.0, 40.0, 20.0, 18.0], [30.0, 100.0, 20.0, 18.0]] {
+                for overflow in ["clip", "hidden"] {
+                    let mut f = Fake::new();
+                    let strip = f.el(0, "DIV", &[], "block");
+                    clip_bounds(&mut f, strip, [20.0, 30.0, 100.0, 60.0]);
+                    clip_style(&mut f, strip, 10, overflow);
+                    clip_style(&mut f, strip, 15, overflow);
+                    if let Some(margin) = margin {
+                        clip_style(&mut f, strip, 16, margin);
+                    }
+                    let (link, image) = clip_link(&mut f, strip, "Margin", bounds);
+                    let page = f.page(json!({"nodes": []}));
+                    let visible = overflow == "clip" && retained;
+                    assert_eq!(
+                        page.controls.len(),
+                        usize::from(visible),
+                        "{overflow} {margin:?} {bounds:?}"
+                    );
+                    assert_eq!(page.media.len(), usize::from(visible));
+                    if visible {
+                        let c = &page.controls[0];
+                        assert_eq!(page.check(&c.binding(&page)).unwrap().node, link);
+                        assert_eq!(c.href.as_deref(), Some("/story"));
+                        assert_eq!(page.media[0].node, image);
+                    }
+                    let marks = crate::layout::Marks {
+                        hints: HashMap::from([(0, "m".into())]),
+                        ..Default::default()
+                    };
+                    for columns in [40, 80, 120] {
+                        let projected = crate::layout::project(&page, columns, (8.0, 18.0), &marks);
+                        let spans: Vec<_> = projected.lines.iter().flat_map(|l| &l.spans).collect();
+                        assert_eq!(spans.iter().any(|s| s.text.contains("Margin")), visible);
+                        assert_eq!(
+                            spans
+                                .iter()
+                                .any(|s| s.control == Some(0) && s.text.contains("[m]")),
+                            visible
+                        );
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn uncertain_clip_margin_does_not_mask_an_independent_hidden_clip() {
+        for hidden_axis in [10, 15] {
+            let mut f = Fake::new();
+            let outer = f.el(0, "DIV", &[], "block");
+            clip_bounds(&mut f, outer, [20.0, 30.0, 100.0, 60.0]);
+            clip_style(&mut f, outer, hidden_axis, "hidden");
+            clip_style(&mut f, outer, 16, "40px");
+            let inner = f.el(outer, "DIV", &[], "block");
+            clip_bounds(&mut f, inner, [20.0, 30.0, 100.0, 60.0]);
+            clip_style(&mut f, inner, 10, "clip");
+            clip_style(&mut f, inner, 15, "clip");
+            clip_link(&mut f, inner, "Outside hidden", [130.0, 100.0, 20.0, 18.0]);
+            let page = f.page(json!({"nodes": []}));
+            assert!(page.controls.is_empty());
+            assert!(page.media.is_empty());
+            assert!(page.blocks.is_empty());
+        }
     }
 
     #[test]
@@ -4125,6 +4204,7 @@ mod tests {
                 let strip = f.el(0, "DIV", &[], "block");
                 clip_bounds(&mut f, strip, [20.0, 30.0, 100.0, 60.0]);
                 clip_style(&mut f, strip, axis, overflow);
+                clip_style(&mut f, strip, 16, "0px");
                 let wrapper = f.node(strip, 1, "DIV", None, &[], None);
                 let (hidden_link, hidden_image) = clip_link(&mut f, wrapper, "Concealed", hidden);
                 let (partial_link, _) = clip_link(&mut f, wrapper, "Partial", partial);

@@ -1070,6 +1070,33 @@ mod tests {
     use super::*;
 
     #[test]
+    fn snapshot_styles_append_clip_margin_without_reindexing_legacy_captures() {
+        // Saved snapshots encode these positions, not property names.
+        assert_eq!(
+            &SNAPSHOT_STYLES[..16],
+            &[
+                "display",
+                "visibility",
+                "color",
+                "background-color",
+                "font-weight",
+                "font-style",
+                "text-decoration-line",
+                "white-space",
+                "opacity",
+                "background-image",
+                "overflow-y",
+                "flex-wrap",
+                "clip",
+                "clip-path",
+                "position",
+                "overflow-x",
+            ]
+        );
+        assert_eq!(SNAPSHOT_STYLES.get(16), Some(&"overflow-clip-margin"));
+    }
+
+    #[test]
     fn model_capture_checks_before_and_after_screenshot_for_both_fallback_formats() {
         use std::cell::Cell;
         for format in [Format::Png, Format::Jpeg] {
