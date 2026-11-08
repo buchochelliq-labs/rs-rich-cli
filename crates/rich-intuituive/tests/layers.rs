@@ -4,7 +4,7 @@ use std::time::Duration;
 
 use intuituive::interact::{Button, Event, Mouse, MouseKind};
 use intuituive::prelude::*;
-use intuituive::{Driver, assert_screen};
+use intuituive::{Driver, assert_screen, button};
 
 fn shown(app: App, width: u16, height: u16) -> Driver {
     let mut driver = app.driver(width, height);
@@ -248,4 +248,158 @@ fn nested_owner_modals_restore_each_focus_and_preserve_a_live_draft() {
     outer.set(false);
     driver.settle();
     driver.assert_focused("base");
+}
+
+#[test]
+fn controlled_modal_releases_stock_button_capture_outside() {
+    use std::{cell::Cell, rc::Rc};
+    let hits = Rc::new(Cell::new(0));
+    let under = Rc::new(Cell::new(0));
+    let (h, u) = (hits.clone(), under.clone());
+    let app = App::new(move || {
+        let (h, u) = (h.clone(), u.clone());
+        layers([
+            label("under").on_click(move |_| u.set(u.get() + 1)),
+            button("Save", move |_| h.set(h.get() + 1))
+                .controlled_modal()
+                .inset(1, 4, 1, 4),
+        ])
+    });
+    let mut driver = shown(app, 20, 5);
+    driver.event(Event::Mouse(Mouse::new(
+        MouseKind::Down(Button::Left),
+        6,
+        2,
+    )));
+    driver.event(Event::Mouse(Mouse::new(
+        MouseKind::Drag(Button::Left),
+        0,
+        0,
+    )));
+    driver.event(Event::Mouse(Mouse::new(MouseKind::Up(Button::Left), 0, 0)));
+    driver.event(Event::Mouse(Mouse::new(MouseKind::Up(Button::Left), 6, 2)));
+    driver.settle();
+    assert_eq!(hits.get(), 0, "stale capture accepted a later release");
+    assert_eq!(under.get(), 0, "modal leaked a pointer event");
+    click(&mut driver, 6, 2);
+    assert_eq!(hits.get(), 1, "subsequent normal click failed");
+}
+
+#[test]
+fn text_only_controlled_modal_routes_owner_escape_and_restores_focus() {
+    use std::{cell::Cell, rc::Rc};
+    let state = Rc::new(Cell::new(None));
+    let handle = state.clone();
+    let app = App::new(move || {
+        let open = signal(false);
+        handle.set(Some(open));
+        layers([
+            label("under").focusable().name("under"),
+            label("Information")
+                .controlled_modal()
+                .on_key("esc", move |_| open.set(false))
+                .inset(1, 2, 1, 2)
+                .shown_when(move || open.get()),
+        ])
+    });
+    let mut driver = shown(app, 20, 5);
+    driver.assert_focused("under");
+    driver.event(Event::Mouse(Mouse::new(MouseKind::Moved, 0, 0)));
+    state.get().unwrap().set(true);
+    driver.settle();
+    driver.press("esc");
+    driver.settle();
+    assert!(
+        !state.get().unwrap().get_untracked(),
+        "owner did not receive Escape"
+    );
+    driver.assert_focused("under");
+}
+
+#[test]
+fn controlled_modal_does_not_route_old_underlay_capture_into_its_scope() {
+    use std::{cell::Cell, rc::Rc};
+    let open = Rc::new(Cell::new(None));
+    let handle = open.clone();
+    let hits = Rc::new(Cell::new(0));
+    let h = hits.clone();
+    let routed = Rc::new(Cell::new(0));
+    let routed_handle = routed.clone();
+    let app = App::new(move || {
+        let shown = signal(false);
+        handle.set(Some(shown));
+        let h = h.clone();
+        let routed_handle = routed_handle.clone();
+        layers([
+            button("under", move |_| h.set(h.get() + 1)).on_mouse(move |_, mouse| {
+                if matches!(mouse.kind, MouseKind::Up(_)) {
+                    routed_handle.set(routed_handle.get() + 1);
+                }
+                false
+            }),
+            label("Information")
+                .controlled_modal()
+                .inset(1, 2, 1, 2)
+                .shown_when(move || shown.get()),
+        ])
+    });
+    let mut d = shown(app, 20, 5);
+    d.event(Event::Mouse(Mouse::new(
+        MouseKind::Down(Button::Left),
+        6,
+        2,
+    )));
+    open.get().unwrap().set(true);
+    d.settle();
+    d.event(Event::Mouse(Mouse::new(MouseKind::Up(Button::Left), 6, 2)));
+    d.settle();
+    assert_eq!(
+        hits.get(),
+        0,
+        "capture belonging to underlay received a modal event"
+    );
+    assert_eq!(routed.get(), 0, "underlay received the modal release");
+}
+
+#[test]
+fn controlled_modal_slider_drag_left_keeps_direction_and_releases() {
+    use intuituive::slider;
+    use std::{cell::Cell, rc::Rc};
+    let value = Rc::new(Cell::new(None));
+    let handle = value.clone();
+    let app = App::new(move || {
+        let volume = signal(50.0);
+        handle.set(Some(volume));
+        layers([
+            label("under"),
+            slider(volume, 0.0..=100.0, 1.0)
+                .controlled_modal()
+                .inset(1, 4, 1, 4),
+        ])
+    });
+    let mut d = shown(app, 20, 5);
+    d.event(Event::Mouse(Mouse::new(
+        MouseKind::Down(Button::Left),
+        12,
+        2,
+    )));
+    d.event(Event::Mouse(Mouse::new(
+        MouseKind::Drag(Button::Left),
+        0,
+        2,
+    )));
+    d.settle();
+    assert_eq!(
+        value.get().unwrap().get_untracked(),
+        0.0,
+        "left drag went to the maximum"
+    );
+    d.event(Event::Mouse(Mouse::new(MouseKind::Up(Button::Left), 0, 2)));
+    d.event(Event::Mouse(Mouse::new(MouseKind::Moved, 14, 2)));
+    d.settle();
+    assert_eq!(
+        value.get().unwrap().get_untracked(),
+        0.0,
+        "released slider continued dragging"
+    );
 }

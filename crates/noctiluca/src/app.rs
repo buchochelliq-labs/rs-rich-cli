@@ -2927,10 +2927,19 @@ fn source_dialogs(b: Browser) -> Node {
                             .iter()
                             .filter_map(|dialog| {
                                 let layer = page.layers.get(dialog.layer)?;
+                                // Fit first, then keep as much of the source origin as
+                                // remains available in the actual terminal container.
+                                let width = ((layer.rect.width / f64::from(CELL.0)).ceil().max(1.0)
+                                    as u16)
+                                    .min(columns.max(1));
+                                let height = ((layer.rect.height / f64::from(CELL.1))
+                                    .ceil()
+                                    .max(1.0) as u16)
+                                    .min(rows);
                                 let left = ((layer.rect.x / f64::from(CELL.0)).round().max(0.0)
                                     as u16)
-                                    .min(columns.saturating_sub(1));
-                                let top = if layer.place == crate::model::Place::Docked
+                                    .min(columns.saturating_sub(width));
+                                let desired_top = if layer.place == crate::model::Place::Docked
                                     && page.view_height > 0.0
                                 {
                                     let from_bottom = ((page.view_height - layer.top).max(0.0)
@@ -2939,16 +2948,9 @@ fn source_dialogs(b: Browser) -> Node {
                                         as u16;
                                     rows.saturating_sub(from_bottom)
                                 } else {
-                                    ((layer.top / f64::from(CELL.1)).round().max(0.0) as u16)
-                                        .min(rows.saturating_sub(1))
+                                    (layer.top / f64::from(CELL.1)).round().max(0.0) as u16
                                 };
-                                let width = ((layer.rect.width / f64::from(CELL.0)).ceil().max(1.0)
-                                    as u16)
-                                    .min(columns.saturating_sub(left).max(1));
-                                let height = ((layer.rect.height / f64::from(CELL.1))
-                                    .ceil()
-                                    .max(1.0) as u16)
-                                    .min(rows.saturating_sub(top).max(1));
+                                let top = desired_top.min(rows.saturating_sub(height));
                                 Some((
                                     dialog.node,
                                     left,
@@ -3000,7 +3002,7 @@ fn source_dialogs(b: Browser) -> Node {
                                         index,
                                         width,
                                         (CELL.0 as f64, CELL.1 as f64),
-                                        &Marks::default(),
+                                        &b.hint_marks(),
                                     )
                                 })
                                 .unwrap_or_default()
@@ -3026,7 +3028,7 @@ fn source_dialogs(b: Browser) -> Node {
                                         p,
                                         i,
                                         usize::from(width.max(1)),
-                                        &Marks::default(),
+                                        &b.marks(),
                                     )]
                                 })
                             })
@@ -3124,7 +3126,7 @@ fn source_dialogs(b: Browser) -> Node {
                                                         p,
                                                         i,
                                                         usize::from(width),
-                                                        &Marks::default(),
+                                                        &b.marks(),
                                                     );
                                                     vec![segment_columns(
                                                         line,

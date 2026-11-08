@@ -6315,8 +6315,24 @@ impl App {
     /// holds work too.
     fn key_path(&self) -> Vec<NodeId> {
         match self.focus().map(|id| self.path_to(id)) {
-            Some(path) if !path.is_empty() => path,
+            Some(path)
+                if !path.is_empty()
+                    && self
+                        .controlled_scope()
+                        .is_none_or(|scope| path.contains(&scope)) =>
+            {
+                path
+            }
             _ => {
+                // An owner-controlled scope must receive its own keys even
+                // when it contains no focusable child. Never use stale hover
+                // outside the active scope in that case.
+                if let Some(scope) = self.controlled_scope() {
+                    let path = self.path_to(scope);
+                    if !path.is_empty() {
+                        return path;
+                    }
+                }
                 let hovered = self.hover_path.get_untracked();
                 if hovered.first() == Some(&self.top().root.id) {
                     return hovered;
@@ -6898,8 +6914,19 @@ impl App {
     /// under the pointer. Whether to quit.
     fn mouse_event(&mut self, mouse: rich_interact::Mouse) -> Option<bool> {
         if let Some(scope) = self.controlled_scope()
+            && self
+                .capture
+                .is_some_and(|(id, _)| !self.path_to(id).contains(&scope))
+        {
+            self.capture = None;
+        }
+        if let Some(scope) = self.controlled_scope()
             && !node_rect(&self.layers, scope)
                 .is_some_and(|rect| rect.contains(mouse.column, mouse.row))
+            && !(matches!(mouse.kind, MouseKind::Drag(_) | MouseKind::Up(_))
+                && self
+                    .capture
+                    .is_some_and(|(id, _)| self.path_to(id).contains(&scope)))
         {
             return Some(false);
         }
@@ -7133,7 +7160,14 @@ impl App {
         // Into the node's coordinates (they differ inside a scroll), then
         // relative to its rectangle.
         let at = |value: u16, by: i32, from: u16| {
-            (value as i32 + by - from as i32).clamp(0, u16::MAX as i32) as u16
+            let local = value as i32 + by - from as i32;
+            // An outside release must not look like a click at the top-left.
+            // Drags still clamp left/up to zero so sliders move toward their minimum.
+            if local < 0 && matches!(mouse.kind, MouseKind::Up(_)) {
+                u16::MAX
+            } else {
+                local.clamp(0, u16::MAX as i32) as u16
+            }
         };
         // Keeping its modifiers: Shift+wheel scrolls across.
         let local = rich_interact::Mouse {

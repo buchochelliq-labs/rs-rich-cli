@@ -991,6 +991,31 @@ fn source_dialog_layer(modal: bool, higher: bool) {
         Some(Rect::new(410.0, 140.0, 160.0, 30.0)),
     );
     p.text(other, "Second", Rect::new(415.0, 145.0, 80.0, 18.0));
+    if !higher && !modal {
+        for i in 0..45 {
+            let y = 180.0 + f64::from(i) * 18.0;
+            let row = p.element(
+                dialog,
+                "P",
+                &[],
+                &[],
+                Some(Rect::new(210.0, y, 200.0, 18.0)),
+            );
+            p.text(
+                row,
+                &format!("Popup row {i}"),
+                Rect::new(210.0, y, 180.0, 18.0),
+            );
+        }
+        let deep = p.element(
+            dialog,
+            "BUTTON",
+            &[],
+            &[],
+            Some(Rect::new(210.0, 1000.0, 150.0, 30.0)),
+        );
+        p.text(deep, "Deep action", Rect::new(210.0, 1000.0, 130.0, 18.0));
+    }
     if higher {
         let over = p.element(
             body,
@@ -1048,6 +1073,18 @@ fn source_dialog_layer(modal: bool, higher: bool) {
     }
     let expected = model.find("button", "Second")[0].node;
     let choose = model.find("button", "Choose")[0].node;
+    let deep = (!higher && !modal).then(|| model.find("button", "Deep action")[0].node);
+    let hint_for = |node| {
+        let controls = model
+            .controls
+            .iter()
+            .filter(|c| !c.disabled && !c.hover_only)
+            .collect::<Vec<_>>();
+        let index = controls.iter().position(|c| c.node == node).unwrap();
+        noctiluca::layout::hint_labels(controls.len())[index].clone()
+    };
+    let choose_hint = hint_for(choose);
+    let deep_hint = deep.map(hint_for);
     let outside_node = model.find("button", "Outside")[0].node;
     let visible = p.snapshot();
     p.set_style(panel, "opacity", "0");
@@ -1094,6 +1131,53 @@ fn source_dialog_layer(modal: bool, higher: bool) {
     }
     assert!(driver.find_text("Dialog content").is_some());
     assert!(driver.find_text("Underlying action").is_none());
+    if let Some(deep_node) = deep {
+        driver.press("f");
+        driver.settle();
+        assert!(
+            driver.find_text(&format!("[{choose_hint}]")).is_some(),
+            "popup hint was not visible"
+        );
+        driver.press("esc");
+        use rich_intuituive::interact::{Event, Mouse, MouseKind};
+        for _ in 0..35 {
+            driver.event(Event::Mouse(Mouse::new(MouseKind::ScrollDown, 30, 10)));
+        }
+        driver.settle();
+        assert!(
+            driver.find_text("Deep action").is_some(),
+            "popup did not scroll to its deep control: {:?}",
+            driver.screen().plain()
+        );
+        driver.press("f");
+        driver.settle();
+        driver
+            .find_text(&format!("[{}]", deep_hint.as_ref().unwrap()))
+            .expect("scrolled popup hint was not visible");
+        driver.type_text(deep_hint.as_ref().unwrap());
+        let deadline = Instant::now() + Duration::from_secs(5);
+        loop {
+            driver.settle();
+            if state
+                .lock()
+                .unwrap()
+                .actions
+                .iter()
+                .any(|a| matches!(a, PageAction::Click(node) if *node == deep_node))
+            {
+                break;
+            }
+            assert!(
+                Instant::now() < deadline,
+                "scrolled popup hint did not activate its source control"
+            );
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        for _ in 0..35 {
+            driver.event(Event::Mouse(Mouse::new(MouseKind::ScrollUp, 30, 10)));
+        }
+        driver.settle();
+    }
     if modal {
         let focused = driver.focused_name();
         let before = state.lock().unwrap().actions.len();
@@ -1538,4 +1622,104 @@ fn opening_and_closing_a_fixed_dialog_keeps_the_underlay_scroll_anchor() {
 #[test]
 fn higher_painted_source_control_remains_above_a_nonmodal_popup() {
     source_dialog_layer(false, true);
+}
+
+#[test]
+fn source_dialog_fits_narrow_off_right_and_short_viewports_with_reachable_controls() {
+    use noctiluca::{
+        app::{Options, app},
+        bookmarks::Bookmarks,
+        config::{Config, Images, View},
+        engine::{PageAction, Rect},
+        testing::{FakeEngine, PageBuilder},
+    };
+    use std::time::{Duration, Instant};
+    for (columns, rows, source_x, source_y) in [
+        (40, 24, 196.0, 72.0),
+        (20, 16, 196.0, 72.0),
+        (40, 24, 900.0, 500.0),
+    ] {
+        let mut p = PageBuilder::new("https://example.test/fit.html", "Fit", 960.0, 720.0);
+        p.view(0.0, 720.0);
+        let panel = p.element(
+            p.body(),
+            "DIV",
+            &[("role", "dialog")],
+            &[
+                ("position", "fixed"),
+                ("background-color", "rgb(55, 57, 82)"),
+            ],
+            Some(Rect::new(source_x, source_y, 567.0, 532.0)),
+        );
+        p.paint(panel, 100);
+        let action = p.element(
+            panel,
+            "BUTTON",
+            &[],
+            &[],
+            Some(Rect::new(source_x + 16.0, source_y + 18.0, 112.0, 30.0)),
+        );
+        p.text(
+            action,
+            "Accept",
+            Rect::new(source_x + 16.0, source_y + 18.0, 90.0, 18.0),
+        );
+        let model = build(&p.snapshot(), &mut Revisions::new());
+        let target = model.find("button", "Accept")[0].node;
+        let engine = FakeEngine::from_dir(
+            &std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/snapshots"),
+        )
+        .unwrap();
+        let state = engine.state.clone();
+        state
+            .lock()
+            .unwrap()
+            .pages
+            .insert("fit".into(), p.snapshot());
+        let mut driver = app(
+            Box::new(engine),
+            Options {
+                config: Config::default(),
+                bookmarks: Bookmarks::default(),
+                url: Some("fit.html".into()),
+                view: Some(View::Projection),
+                images: Some(Images::None),
+                tunnel: None,
+                control: None,
+            },
+        )
+        .driver(columns, rows);
+        let deadline = Instant::now() + Duration::from_secs(2);
+        let (x, y) = loop {
+            driver.settle();
+            if let Some(at) = driver.find_text("Accept") {
+                break at;
+            }
+            assert!(
+                Instant::now() < deadline,
+                "popup control not identifiable in {columns}x{rows} at {source_x},{source_y}: {:?}",
+                driver.screen().plain()
+            );
+            std::thread::sleep(Duration::from_millis(10));
+        };
+        driver.click(x, y);
+        let deadline = Instant::now() + Duration::from_secs(2);
+        loop {
+            driver.settle();
+            if state
+                .lock()
+                .unwrap()
+                .actions
+                .iter()
+                .any(|action| matches!(action, PageAction::Click(node) if *node == target))
+            {
+                break;
+            }
+            assert!(
+                Instant::now() < deadline,
+                "fitted control was not reachable"
+            );
+            std::thread::sleep(Duration::from_millis(10));
+        }
+    }
 }
