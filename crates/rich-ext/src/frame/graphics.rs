@@ -178,7 +178,17 @@ pub fn plan(previous: &[Placement], next: &[Placement], changes: &[Change]) -> G
                         && columns.start < new.column + new.cols
                         && new.column < columns.end
                 }));
-        if !kept || wiped {
+        // Earlier overlays are painted first. If one intersects this
+        // retained overlay, restore it on top in the source's order.
+        let covered = !new.graphic.in_cells()
+            && out.draw.iter().any(|lower| {
+                !lower.graphic.in_cells()
+                    && lower.row < new.row + new.rows
+                    && new.row < lower.row + lower.rows
+                    && lower.column < new.column + new.cols
+                    && new.column < lower.column + lower.cols
+            });
+        if !kept || wiped || covered {
             out.draw.push(new.clone());
         }
     }
@@ -235,6 +245,17 @@ mod tests {
 
     fn change(row: usize, columns: Range<usize>) -> Change {
         Change { row, columns }
+    }
+
+    #[test]
+    fn newly_drawn_lower_overlay_restores_retained_higher_overlay() {
+        let high = at(0, 1, 2, 0);
+        let lower = at(0, 0, 1, 0);
+        let out = plan(std::slice::from_ref(&high), &[lower, high.clone()], &[]);
+        assert_eq!(
+            out.draw.iter().map(|p| p.graphic.key()).collect::<Vec<_>>(),
+            vec![1, 2]
+        );
     }
 
     #[test]

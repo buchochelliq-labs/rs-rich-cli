@@ -438,12 +438,12 @@ struct Worker<'a> {
     /// Stills to decode, to the decoder thread.
     decode: Sender<Job>,
     /// Pictures decoded, from the decoder thread.
-    decoded: Receiver<(StillKey, Picture)>,
+    decoded: Receiver<((u64, StillKey), Picture)>,
     /// The small pictures in lines, decoded by source, and those asked for.
     inline: HashMap<String, Picture>,
     inline_asked: HashSet<String>,
-    decode_inline: Sender<(String, Arc<[u8]>)>,
-    decoded_inline: Receiver<(String, Picture)>,
+    decode_inline: Sender<((u64, String), Arc<[u8]>)>,
+    decoded_inline: Receiver<((u64, String), Picture)>,
     /// Where Chrome's view was last seen: images near it are captured
     /// first.
     metrics: Option<Metrics>,
@@ -556,6 +556,10 @@ impl Worker<'_> {
         self.dress_error(&mut page);
         if self.page.as_ref().map(|p| p.document) != Some(page.document) {
             self.live.clear();
+            self.stills.clear();
+            self.pictures.clear();
+            self.inline.clear();
+            self.inline_asked.clear();
             self.latest.clear();
             self.drawn.clear();
             self.canvases.clear();
@@ -835,7 +839,9 @@ impl Worker<'_> {
                 self.engine.resource(TabId(0), &src).ok()
             };
             if let Some(bytes) = bytes.filter(|b| decodable(b)) {
-                let _ = self.decode_inline.send((src, bytes.into()));
+                let _ = self
+                    .decode_inline
+                    .send(((page.document, src), bytes.into()));
             }
         }
     }
@@ -920,7 +926,7 @@ impl Worker<'_> {
                 self.stale.remove(&node);
                 self.latest.insert(node, key.clone());
                 self.stills.insert(key.clone(), still.clone());
-                let _ = self.decode.send((key, still.clone()));
+                let _ = self.decode.send(((page.document, key), still.clone()));
                 for media in page.media.iter_mut().filter(|m| m.node == node) {
                     media.still = Some(still.clone());
                 }
@@ -965,7 +971,10 @@ impl Worker<'_> {
     /// publish it again.
     fn take_decoded(&mut self) {
         let mut any = false;
-        while let Ok((key, picture)) = self.decoded.try_recv() {
+        while let Ok(((document, key), picture)) = self.decoded.try_recv() {
+            if self.page.as_ref().map(|p| p.document) != Some(document) {
+                continue;
+            }
             // A still a newer one already replaced: not shown again.
             if !self.stills.contains_key(&key) {
                 continue;
@@ -980,7 +989,10 @@ impl Worker<'_> {
             self.pictures.insert(key, picture);
             any = true;
         }
-        while let Ok((src, picture)) = self.decoded_inline.try_recv() {
+        while let Ok(((document, src), picture)) = self.decoded_inline.try_recv() {
+            if self.page.as_ref().map(|p| p.document) != Some(document) {
+                continue;
+            }
             self.inline.insert(src, picture);
             any = true;
         }
@@ -1513,7 +1525,7 @@ type Decoded<K> = Receiver<(K, Picture)>;
 /// Bytes to decode, by what asks for them.
 type ToDecode<K> = Sender<(K, Arc<[u8]>)>;
 /// A still for the decoder thread.
-type Job = (StillKey, Arc<[u8]>);
+type Job = ((u64, StillKey), Arc<[u8]>);
 
 /// Whether rs-rich-art can decode `bytes`: a format it recognises *and*
 /// reads (PNG, JPEG, GIF, WebP). An SVG or an AVIF (which Chrome asks for,
@@ -1723,6 +1735,223 @@ fn run(
 mod tests {
     use super::*;
     use crate::testing::FakeEngine;
+
+    #[test]
+    fn old_decoder_completion_cannot_replace_new_document_image() {
+        use crate::testing::PageBuilder;
+        let dir = std::env::temp_dir().join(format!("tab-decoder-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let engine = FakeEngine::from_dir(&dir).unwrap();
+        let state = engine.state.clone();
+        for name in ["a", "b"] {
+            let mut page = PageBuilder::new(
+                &format!("https://example.test/{name}"),
+                "test",
+                400.0,
+                400.0,
+            );
+            page.image(
+                page.body(),
+                "https://example.test/image.png",
+                "image",
+                Rect::new(0.0, 0.0, 100.0, 100.0),
+            );
+            state
+                .lock()
+                .unwrap()
+                .pages
+                .insert(name.into(), page.snapshot());
+        }
+        state.lock().unwrap().current = Some("a".into());
+        let engine: Box<dyn Engine> = Box::new(engine);
+        let update = |_: Update| {};
+        let (decode, jobs) = mpsc::channel();
+        let (done, decoded) = mpsc::channel();
+        let (decode_inline, _inline_jobs) = mpsc::channel();
+        let (_inline_done, decoded_inline) = mpsc::channel();
+        let mut worker = Worker {
+            engine,
+            update: &update,
+            revisions: Revisions::new(),
+            page: None,
+            state: PageState::default(),
+            dirty: None,
+            stills: HashMap::new(),
+            pictures: HashMap::new(),
+            decode,
+            decoded,
+            inline: HashMap::new(),
+            inline_asked: HashSet::new(),
+            decode_inline,
+            decoded_inline,
+            metrics: None,
+            frames: Frames::default(),
+            on_screen: HashSet::new(),
+            intervals: HashMap::new(),
+            last_frame: None,
+            starved: false,
+            scale: 1.0,
+            scale_given: 1.0,
+            shown_time: HashMap::new(),
+            live: HashMap::new(),
+            appended: HashSet::new(),
+            settle: None,
+            stills_pending: false,
+            pixels: false,
+            pixels_cast: false,
+            screen_at: None,
+            latest: HashMap::new(),
+            drawn: HashMap::new(),
+            stale: HashSet::new(),
+            canvases: HashMap::new(),
+            asked: None,
+        };
+        worker.read().unwrap();
+        worker.capture_stills();
+        let (old_key, _) = jobs.try_recv().unwrap();
+        state.lock().unwrap().current = Some("b".into());
+        let page = worker.read().unwrap();
+        assert!(page.media[0].picture.is_none());
+        assert!(page.media[0].still.is_none());
+        worker.capture_stills();
+        let (new_key, _) = jobs.try_recv().unwrap();
+        let old = Picture::from_rgba(1, 1, vec![255, 0, 0, 255]).unwrap();
+        done.send((old_key, old)).unwrap();
+        worker.take_decoded();
+        assert!(worker.page.as_ref().unwrap().media[0].picture.is_none());
+        let new = Picture::from_rgba(1, 1, vec![0, 255, 0, 255]).unwrap();
+        done.send((new_key, new.clone())).unwrap();
+        worker.take_decoded();
+        assert_eq!(
+            worker.page.as_ref().unwrap().media[0].picture.as_ref(),
+            Some(&new)
+        );
+    }
+
+    #[test]
+    fn inline_decodes_are_scoped_to_the_document() {
+        use crate::testing::PageBuilder;
+        let dir = std::env::temp_dir().join(format!("tab-inline-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let engine = FakeEngine::from_dir(&dir).unwrap();
+        let state = engine.state.clone();
+        let src = "https://example.test/emote.png";
+        let mut png = std::io::Cursor::new(Vec::new());
+        image::DynamicImage::ImageRgba8(image::RgbaImage::from_pixel(
+            2,
+            2,
+            image::Rgba([1, 2, 3, 255]),
+        ))
+        .write_to(&mut png, image::ImageFormat::Png)
+        .unwrap();
+        state
+            .lock()
+            .unwrap()
+            .resources
+            .insert(src.into(), png.into_inner());
+        for name in ["a", "b"] {
+            let mut page = PageBuilder::new(
+                &format!("https://example.test/{name}"),
+                "test",
+                400.0,
+                400.0,
+            );
+            let log = page.element(
+                page.body(),
+                "DIV",
+                &[("role", "log")],
+                &[],
+                Some(Rect::new(0.0, 0.0, 100.0, 100.0)),
+            );
+            let entry = page.element(log, "DIV", &[], &[], Some(Rect::new(0.0, 0.0, 100.0, 20.0)));
+            page.image(entry, src, "emote", Rect::new(0.0, 0.0, 16.0, 16.0));
+            state
+                .lock()
+                .unwrap()
+                .pages
+                .insert(name.into(), page.snapshot());
+        }
+        state.lock().unwrap().current = Some("a".into());
+        let engine: Box<dyn Engine> = Box::new(engine);
+        let update = |_: Update| {};
+        let (decode, _jobs) = mpsc::channel();
+        let (_done, decoded) = mpsc::channel();
+        let (decode_inline, inline_jobs) = mpsc::channel();
+        let (inline_done, decoded_inline) = mpsc::channel();
+        let mut worker = Worker {
+            engine,
+            update: &update,
+            revisions: Revisions::new(),
+            page: None,
+            state: PageState::default(),
+            dirty: None,
+            stills: HashMap::new(),
+            pictures: HashMap::new(),
+            decode,
+            decoded,
+            inline: HashMap::new(),
+            inline_asked: HashSet::new(),
+            decode_inline,
+            decoded_inline,
+            metrics: None,
+            frames: Frames::default(),
+            on_screen: HashSet::new(),
+            intervals: HashMap::new(),
+            last_frame: None,
+            starved: false,
+            scale: 1.0,
+            scale_given: 1.0,
+            shown_time: HashMap::new(),
+            live: HashMap::new(),
+            appended: HashSet::new(),
+            settle: None,
+            stills_pending: false,
+            pixels: false,
+            pixels_cast: false,
+            screen_at: None,
+            latest: HashMap::new(),
+            drawn: HashMap::new(),
+            stale: HashSet::new(),
+            canvases: HashMap::new(),
+            asked: None,
+        };
+        worker.read().unwrap();
+        let (old_key, _) = inline_jobs.try_recv().expect("first inline job");
+        state.lock().unwrap().current = Some("b".into());
+        worker.read().unwrap();
+        let (new_key, _) = inline_jobs
+            .try_recv()
+            .expect("new document requests same URL");
+        let old = Picture::from_rgba(1, 1, vec![255, 0, 0, 255]).unwrap();
+        inline_done.send((old_key, old)).unwrap();
+        worker.take_decoded();
+        assert!(
+            !worker
+                .page
+                .as_ref()
+                .unwrap()
+                .inline_pictures
+                .contains_key(src)
+        );
+        let new = Picture::from_rgba(1, 1, vec![0, 255, 0, 255]).unwrap();
+        inline_done.send((new_key, new.clone())).unwrap();
+        worker.take_decoded();
+        assert_eq!(
+            worker.page.as_ref().unwrap().inline_pictures.get(src),
+            Some(&new)
+        );
+        state.lock().unwrap().current = Some("a".into());
+        worker.read().unwrap();
+        assert!(
+            !worker
+                .page
+                .as_ref()
+                .unwrap()
+                .inline_pictures
+                .contains_key(src)
+        );
+        assert!(inline_jobs.try_recv().is_ok());
+    }
 
     #[test]
     fn ended_tabs_leave_the_registry() {

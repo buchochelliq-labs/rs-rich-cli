@@ -645,6 +645,10 @@ impl Picture {
         if !raster_fits(cols, rows, cell) {
             return None;
         }
+        let shown = shown.min(rows.saturating_sub(first));
+        if shown == 0 {
+            return None;
+        }
         if pixels == Pixels::Kitty || (first == 0 && shown >= rows) {
             return self.encode_fitted(pixels, cols, rows, tag.fit, tag.anchor, cell);
         }
@@ -839,6 +843,10 @@ impl Picture {
     ) -> Option<String> {
         let cell = CellPixels::new(cell.width, cell.height);
         if !raster_fits(cols, rows, cell) {
+            return None;
+        }
+        let shown = shown.min(rows.saturating_sub(first));
+        if shown == 0 {
             return None;
         }
         if pixels == Pixels::Kitty || (first == 0 && shown >= rows) {
@@ -1604,6 +1612,20 @@ mod tests {
             .unwrap();
         assert!(changed.contains("s=48,v=48"));
         assert!(!picture.is_prepared_with_metrics(view, 4, 2, cell));
+    }
+
+    #[test]
+    fn cropped_rows_clamp_to_image_and_out_of_range_is_empty() {
+        let picture = Picture::from_rgba(4, 4, vec![255; 64]).unwrap();
+        for pixels in [Pixels::Iterm, Pixels::Sixel] {
+            assert!(picture.encode_rows(pixels, 4, 3, usize::MAX, 3).is_none());
+            let encoded = picture.encode_rows(pixels, 4, 3, 2, 3).unwrap();
+            if pixels == Pixels::Iterm {
+                assert!(encoded.contains("height=1"), "{encoded:?}");
+            } else {
+                assert!(encoded.contains("\"1;1;32;16"), "{encoded:?}");
+            }
+        }
     }
 
     #[test]

@@ -909,16 +909,11 @@ fn drawn_cells(b: Browser, node: NodeId) -> Option<(usize, usize)> {
 /// Show a video's frame in its region, with the moving GIFs: unless the
 /// region is gone (a new document) or shows a newer frame already.
 fn show_frame(b: Browser, node: NodeId, live: Live) {
-    if !b.pacing.with_untracked(|p| p.borrow().has(node)) {
-        return;
-    }
-    let newer = b.videos.with_untracked(|v| {
-        v.get(&node).is_some_and(|shown| {
-            shown.picture.id() == live.picture.id()
-                && shown.picture.version() > live.picture.version()
-        })
-    });
-    if newer {
+    let shown = b.videos.with_untracked(|v| v.get(&node).cloned());
+    let accepted = b
+        .pacing
+        .with_untracked(|p| accepts_frame(&p.borrow(), shown.as_ref(), node, &live));
+    if !accepted {
         return;
     }
     let mut videos = (*b.videos.get_untracked()).clone();
@@ -927,6 +922,15 @@ fn show_frame(b: Browser, node: NodeId, live: Live) {
     let mut shown = (*b.live.get_untracked()).clone();
     shown.insert(node, live);
     b.live.set(Rc::new(shown));
+}
+
+fn accepts_frame(pacing: &Pacing, shown: Option<&Live>, node: NodeId, live: &Live) -> bool {
+    pacing.owns_picture(node, &live.picture)
+        && pacing.pixels(node) == live.pixels
+        && !shown.is_some_and(|shown| {
+            shown.picture.id() == live.picture.id()
+                && shown.picture.version() > live.picture.version()
+        })
 }
 
 /// The moving regions the view shows (videos, and canvases, which the
@@ -3087,6 +3091,74 @@ pub fn app(engine: Box<dyn Engine>, options: Options) -> App {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn old_encoder_completion_cannot_replace_recreated_region() {
+        let mut pacing = Pacing::new(
+            rich_art::picture::ByteBudget::new(10_000_000),
+            Pixels::Kitty,
+        );
+        let (send, receive) = mpsc::channel();
+        let encoder = Encoder::spawn(move |job| {
+            send.send(job).unwrap();
+        });
+        let frame = |seq| crate::video::VideoFrame {
+            node: 7,
+            seq,
+            pixels: rich_embed::Pixels::new(4, 4, vec![255; 48]).unwrap(),
+        };
+        let offer = |pacing: &mut Pacing, seq| {
+            pacing
+                .offer(&frame(seq), 2, 2, Instant::now(), |_| 0)
+                .unwrap()
+        };
+        let old = offer(&mut pacing, 1);
+        encoder.encode(Job {
+            node: 7,
+            picture: old,
+            pixels: Pixels::Kitty,
+            cols: 2,
+            rows: 2,
+        });
+        let old = receive.recv_timeout(Duration::from_secs(5)).unwrap();
+        pacing.clear();
+        let current = offer(&mut pacing, 1);
+        encoder.encode(Job {
+            node: 7,
+            picture: current.clone(),
+            pixels: Pixels::Kitty,
+            cols: 2,
+            rows: 2,
+        });
+        let current_job = receive.recv_timeout(Duration::from_secs(5)).unwrap();
+        let current_live = Live {
+            picture: current_job.picture,
+            pixels: current_job.pixels,
+        };
+        assert!(accepts_frame(&pacing, None, 7, &current_live));
+        let old_live = Live {
+            picture: old.picture,
+            pixels: old.pixels,
+        };
+        assert!(!accepts_frame(&pacing, Some(&current_live), 7, &old_live));
+        let newer = pacing
+            .offer(
+                &frame(2),
+                2,
+                2,
+                Instant::now() + Duration::from_secs(1),
+                |_| 0,
+            )
+            .unwrap();
+        assert!(accepts_frame(&pacing, None, 7, &current_live));
+        let newer_live = Live {
+            picture: newer,
+            pixels: Pixels::Kitty,
+        };
+        assert!(!accepts_frame(&pacing, Some(&newer_live), 7, &current_live));
+        pacing.forget(7);
+        assert!(!accepts_frame(&pacing, None, 7, &current_live));
+    }
 
     #[test]
     fn the_output_rate_is_measured_once_enough_was_written() {

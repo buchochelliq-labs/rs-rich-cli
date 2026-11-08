@@ -405,6 +405,13 @@ impl Pacing {
         self.regions.contains_key(&node)
     }
 
+    /// Whether this picture belongs to the current incarnation of a region.
+    pub(crate) fn owns_picture(&self, node: NodeId, picture: &Picture) -> bool {
+        self.regions
+            .get(&node)
+            .is_some_and(|region| region.picture.id() == picture.id())
+    }
+
     /// The protocol `node`'s frames are drawn in now.
     pub fn pixels(&self, node: NodeId) -> Pixels {
         self.regions

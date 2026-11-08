@@ -404,6 +404,7 @@ pub fn image_graphics() -> Arc<dyn PlacementSource> {
     Arc::new(ImageGraphics {
         made: Mutex::new(HashMap::new()),
         uploaded: Mutex::new(Vec::new()),
+        owners: Mutex::new(Vec::new()),
     })
 }
 
@@ -428,6 +429,8 @@ struct ImageGraphics {
     made: Mutex<HashMap<GraphicKey, Arc<dyn Graphic>>>,
     /// The Kitty pictures uploaded, to free.
     uploaded: Mutex<Vec<u32>>,
+    /// Weak identities of Kitty graphics, including graphics evicted from the cache.
+    owners: Mutex<Vec<(u32, std::sync::Weak<dyn Graphic>)>>,
 }
 
 impl PlacementSource for ImageGraphics {
@@ -514,10 +517,30 @@ impl PlacementSource for ImageGraphics {
     }
 
     fn release(&self, retained: &[Placement]) -> String {
-        let _ = retained;
-        let uploaded =
-            std::mem::take(&mut *self.uploaded.lock().unwrap_or_else(|e| e.into_inner()));
-        uploaded.into_iter().map(Picture::release).collect()
+        let mut made = self.made.lock().unwrap_or_else(|e| e.into_inner());
+        let mut uploaded = self.uploaded.lock().unwrap_or_else(|e| e.into_inner());
+        let mut owners = self.owners.lock().unwrap_or_else(|e| e.into_inner());
+        let kept: std::collections::HashSet<u32> = owners
+            .iter()
+            .filter_map(|(id, graphic)| {
+                let graphic = graphic.upgrade()?;
+                retained
+                    .iter()
+                    .any(|p| Arc::ptr_eq(&p.graphic, &graphic))
+                    .then_some(*id)
+            })
+            .collect();
+        let released: Vec<_> = uploaded
+            .iter()
+            .copied()
+            .filter(|id| !kept.contains(id))
+            .collect();
+        uploaded.retain(|id| kept.contains(id));
+        owners.retain(|(id, weak)| kept.contains(id) && weak.strong_count() > 0);
+        made.retain(|(id, _, _, _, pixels, ..), _| {
+            *pixels != Pixels::Kitty || !released.contains(id)
+        });
+        released.into_iter().map(Picture::release).collect()
     }
 }
 
@@ -566,6 +589,12 @@ impl ImageGraphics {
             in_cells: tag.pixels == Pixels::Kitty,
             id: tag.id,
         });
+        if tag.pixels == Pixels::Kitty {
+            self.owners
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .push((tag.id, Arc::downgrade(&graphic)));
+        }
         made.retain(|(id, version, ..), _| Picture::find(*id, *version).is_some());
         made.insert(key, graphic.clone());
         Some(graphic)
@@ -617,6 +646,25 @@ mod tests {
         })
         .save(path)
         .unwrap();
+    }
+
+    #[test]
+    fn release_preserves_retained_kitty_picture_until_later_release() {
+        let picture = Picture::from_rgba(4, 4, vec![255; 64]).unwrap();
+        let source = image_graphics();
+        let console = rich::Console::builder()
+            .width(2)
+            .color_system(Some(rich::color::ColorSystem::Truecolor))
+            .build();
+        let mut segments = Vec::new();
+        for line in picture.lines(&console, ImageView::new().pixels(Pixels::Kitty), 2, 2) {
+            segments.extend(line);
+            segments.push(Segment::line());
+        }
+        let placements = source.placements(&Frame::from_segments(&segments));
+        assert_eq!(placements.len(), 1);
+        assert!(source.release(&placements).is_empty());
+        assert!(source.release(&[]).contains("a=d"));
     }
 
     #[test]

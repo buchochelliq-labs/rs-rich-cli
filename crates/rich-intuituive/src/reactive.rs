@@ -207,6 +207,9 @@ impl Runtime {
                 locals: RefCell::new(HashMap::new()),
                 next_local: Cell::new(0),
             });
+            // Metrics may first be read while another signal is borrowed.
+            // Allocate the slot before any observer or drawing callback runs.
+            runtime.cell_pixels();
             all.push(Some(runtime.clone()));
             runtime
         })
