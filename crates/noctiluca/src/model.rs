@@ -1322,6 +1322,7 @@ fn veils(dom: &Dom, i: usize) -> bool {
 /// it may retain clipped border/padding pixels, but never trims visible ones.
 /// Containing blocks and transforms are not captured, so stop at a nonstatic
 /// positioned chain rather than guessing whether it escapes an older clip.
+/// Explicit veils keep their existing semantic-twin/name-only policy.
 fn overflow_clipped(dom: &Dom, i: usize) -> bool {
     let valid = |r: Rect| {
         [r.x, r.y, r.width, r.height, r.right(), r.bottom()]
@@ -1343,8 +1344,18 @@ fn overflow_clipped(dom: &Dom, i: usize) -> bool {
         }
         let display = dom.style(parent, 0);
         if dom.is_element(parent)
+            && !veils(dom, parent)
             && !matches!(dom.name[parent].as_str(), "HTML" | "BODY")
-            && !matches!(display, "" | "inline" | "contents" | "none")
+            && matches!(
+                display,
+                "block"
+                    | "flow-root"
+                    | "inline-block"
+                    | "flex"
+                    | "inline-flex"
+                    | "grid"
+                    | "inline-grid"
+            )
             && let Some(clip) = dom.rect(parent).filter(|&r| valid(r))
             && ((matches!(dom.style(parent, SNAPSHOT_OVERFLOW_X), "hidden" | "clip")
                 && (rect.x >= clip.right() || rect.right() <= clip.x))
@@ -1394,6 +1405,9 @@ fn twins(dom: &Dom) -> HashMap<usize, Twin> {
                 && hidden(s)
                 && dom.layout[s].is_some()
                 && !dom.concealed[s]
+                // The hidden representation cannot revive a source pair
+                // whose shown counterpart is wholly overflow-clipped.
+                && !dom.overflow_clipped[s]
                 && digits(&dom.raw_text(s)) == said
         });
         if let Some(shown) = shown {
@@ -4251,6 +4265,122 @@ mod tests {
                 );
             }
         }
+    }
+
+    #[test]
+    fn overflow_on_inline_or_table_row_does_not_hide_descendants() {
+        for display in ["inline", "table-row"] {
+            let mut f = Fake::new();
+            let ancestor = f.el(0, "DIV", &[], display);
+            clip_bounds(&mut f, ancestor, [20.0, 30.0, 100.0, 60.0]);
+            clip_style(&mut f, ancestor, 10, "hidden");
+            clip_style(&mut f, ancestor, 15, "hidden");
+            let (link, _) = clip_link(&mut f, ancestor, "Unclipped", [200.0, 200.0, 60.0, 18.0]);
+            let page = f.page(json!({"nodes": []}));
+            assert_eq!(
+                page.controls.iter().map(|c| c.node).collect::<Vec<_>>(),
+                vec![link]
+            );
+            assert_eq!(page.media.len(), 1);
+            assert!(page.blocks.iter().any(|b| b.text().contains("Unclipped")));
+        }
+    }
+
+    #[test]
+    fn overflow_clipped_price_pair_stays_absent_with_twins_on_or_off() {
+        use crate::adapt::{Adapt, Rule};
+        for group_x in [20.0, 200.0] {
+            for spoken_x in [group_x, -10000.0] {
+                let mut f = Fake::new();
+                let strip = f.el(0, "DIV", &[], "block");
+                clip_bounds(&mut f, strip, [0.0, 0.0, 120.0, 90.0]);
+                clip_style(&mut f, strip, 15, "hidden");
+                let row = f.el(strip, "DIV", &[], "block");
+                clip_bounds(&mut f, row, [group_x, 30.0, 60.0, 30.0]);
+                let spoken = f.el(row, "SPAN", &[], "block");
+                clip_bounds(&mut f, spoken, [spoken_x, 30.0, 1.0, 1.0]);
+                clip_style(&mut f, spoken, 14, "absolute");
+                clip_style(&mut f, spoken, 12, "rect(0px, 0px, 0px, 0px)");
+                clip_style(&mut f, spoken, 10, "hidden");
+                let words = f.text(spoken, "$29.99");
+                clip_bounds(&mut f, words, [spoken_x, 31.0, 40.0, 18.0]);
+                let shown = f.el(row, "SPAN", &[("aria-hidden", "true")], "block");
+                clip_bounds(&mut f, shown, [group_x, 30.0, 40.0, 18.0]);
+                let parts = f.text(shown, "$2999");
+                clip_bounds(&mut f, parts, [group_x, 30.0, 40.0, 18.0]);
+                let page = f.page(json!({"nodes": []}));
+                if group_x == 20.0 {
+                    // The original canonical text survives even if its hidden
+                    // source representation is positioned offscreen.
+                    assert!(page.text().contains("$29.99"));
+                }
+                for twins in [true, false] {
+                    let marks = crate::layout::Marks {
+                        adapt: Adapt::default().with(Rule::ScreenReaderTwins, twins),
+                        ..Default::default()
+                    };
+                    for columns in [40, 80, 120] {
+                        let projection =
+                            crate::layout::project(&page, columns, (8.0, 18.0), &marks);
+                        let text = projection
+                            .lines
+                            .iter()
+                            .map(|l| l.plain())
+                            .collect::<Vec<_>>()
+                            .join("\n");
+                        if group_x == 200.0 {
+                            assert!(!text.contains("29"), "clipped price: {text}");
+                        } else if spoken_x == group_x || !twins {
+                            // Relocating an independently blocked offscreen
+                            // canonical representation is a separate layout concern.
+                            let (wanted, excluded) = if twins {
+                                ("$29.99", "$2999")
+                            } else {
+                                ("$2999", "$29.99")
+                            };
+                            assert!(
+                                text.contains(wanted) && !text.contains(excluded),
+                                "visible price: {text}"
+                            );
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn overflow_clip_preserves_explicit_veil_semantic_twins() {
+        let mut f = Fake::new();
+        let row = f.el(0, "DIV", &[], "block");
+        clip_bounds(&mut f, row, [20.0, 30.0, 100.0, 60.0]);
+        let spoken = f.el(row, "SPAN", &[], "block");
+        clip_bounds(&mut f, spoken, [20.0, 30.0, 1.0, 1.0]);
+        clip_style(&mut f, spoken, 14, "absolute");
+        clip_style(&mut f, spoken, 12, "rect(0px, 0px, 0px, 0px)");
+        clip_style(&mut f, spoken, 10, "hidden");
+        clip_style(&mut f, spoken, 15, "hidden");
+        let words = f.text(spoken, "$29.99");
+        clip_bounds(&mut f, words, [20.0, 31.0, 40.0, 18.0]);
+        let shown = f.el(row, "SPAN", &[("aria-hidden", "true")], "block");
+        clip_bounds(&mut f, shown, [20.0, 30.0, 40.0, 18.0]);
+        let parts = f.text(shown, "$2999");
+        clip_bounds(&mut f, parts, [20.0, 30.0, 40.0, 18.0]);
+        let page = f.page(json!({"nodes": []}));
+        assert!(
+            page.blocks
+                .iter()
+                .flat_map(|b| &b.runs)
+                .any(|r| { r.text == "$29.99" && r.twin == Some(Twin::Spoken) })
+        );
+        assert!(
+            page.blocks
+                .iter()
+                .flat_map(|b| &b.runs)
+                .any(|r| { r.text == "$2999" && r.twin == Some(Twin::Shown) })
+        );
+        assert!(page.text().contains("$29.99"));
+        assert!(!page.text().contains("$2999"));
     }
 
     #[test]
