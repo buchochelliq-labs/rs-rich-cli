@@ -459,6 +459,33 @@ impl ImageRect {
     }
 }
 
+// Kitty already embeds source coordinates in every placeholder. Decode that
+// existing provenance without adding one new metadata style per cell.
+fn kitty_column(text: &str, tag: &PictureTag) -> Option<usize> {
+    use rich_art::kitty::{DIACRITICS, PLACEHOLDER};
+    let mut chars = text.chars();
+    if chars.next()? != PLACEHOLDER || chars.next()? != *DIACRITICS.get(tag.row)? {
+        return None;
+    }
+    let column = chars.next()?;
+    let first = DIACRITICS.iter().position(|&c| c == column)?;
+    if first >= tag.cols {
+        return None;
+    }
+    let mut next = first + 1;
+    while let Some(c) = chars.next() {
+        if c != PLACEHOLDER
+            || chars.next()? != *DIACRITICS.get(tag.row)?
+            || chars.next()? != *DIACRITICS.get(next)?
+            || next >= tag.cols
+        {
+            return None;
+        }
+        next += 1;
+    }
+    Some(first)
+}
+
 impl PlacementSource for ImageGraphics {
     fn placements(&self, frame: &Frame) -> Vec<Placement> {
         self.placements_with_metrics(frame, None)
@@ -488,10 +515,16 @@ impl PlacementSource for ImageGraphics {
                 let style = frame.styles().get(run.style());
                 let tag = style.and_then(PictureTag::of);
                 if let Some(tag) = tag.filter(|t| t.cols > 0 && t.rows > t.row) {
-                    let x = style.and_then(PictureTag::column_of);
+                    let x = if tag.pixels == Pixels::Kitty {
+                        kitty_column(frame.run_text(run), &tag)
+                    } else {
+                        style.and_then(PictureTag::column_of)
+                    };
                     let known = x.is_some();
                     let background = style.and_then(PictureTag::background_of);
-                    if (!known || run.cells() == 1) && run.cells() <= tag.cols {
+                    if (!known || run.cells() == 1 || tag.pixels == Pixels::Kitty)
+                        && run.cells() <= tag.cols
+                    {
                         let x = x.unwrap_or(0);
                         if let Some(last) = spans.last_mut()
                             && last.tag == tag
@@ -795,6 +828,45 @@ mod tests {
             segments.push(Segment::line());
         }
         source.placements(&Frame::from_segments(&segments))
+    }
+
+    #[test]
+    fn live_picture_crop_cache_is_bounded() {
+        let source = tracked_source();
+        let picture = Picture::from_rgba(4, 4, vec![255; 64]).unwrap();
+        let tag = PictureTag {
+            id: picture.id(),
+            version: picture.version(),
+            cols: 16,
+            rows: 16,
+            row: 0,
+            pixels: Pixels::Iterm,
+            fit: Some(ImageFit::Stretch),
+            anchor: ImageAnchor::Center,
+        };
+        for row in 0..16 {
+            for column in 0..16 {
+                assert!(
+                    source
+                        .graphic(
+                            &tag,
+                            column..column + 1,
+                            row..row + 1,
+                            rich_art::graphics::CellPixels::DEFAULT,
+                            None
+                        )
+                        .is_some()
+                );
+                let made = source.made.lock().unwrap();
+                assert!(made.len() <= 128);
+                assert!(
+                    made.values()
+                        .map(|graphic| graphic.escape.len())
+                        .sum::<usize>()
+                        <= 16 * 1024 * 1024
+                );
+            }
+        }
     }
 
     #[test]
@@ -1533,12 +1605,13 @@ mod tests {
         .graphics(image_graphics());
         let mut driver = app.driver(8, 2);
         let out = written(&mut driver, "\x1bP", 20);
-        // Only its whole first row is drawn: one row high.
+        // Its first row and the uncovered left half below are native pixels.
         assert!(out.contains("\x1bP"), "{out:?}");
         let id = picture.id();
         assert!(picture_bytes(id) > 0);
         assert!(out.contains("\"1;1;64;16"), "{out:?}");
         assert!(!out.contains("\"1;1;64;32"), "{out:?}");
+        assert!(out.contains("\"1;1;32;16"), "{out:?}");
     }
 
     #[test]

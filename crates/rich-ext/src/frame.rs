@@ -64,9 +64,8 @@ pub type Rgb = [u8; 3];
 
 /// Styles, stored once each. Runs refer to them by [`StyleId`].
 ///
-/// Interning hashes a style's public parts (colours, attributes and link)
-/// with a fast non-cryptographic hash and confirms a match with `==`, so
-/// metadata still tells styles apart. A style made of two plain colours can
+/// Interning hashes a style's public parts (colours, attributes, link and
+/// metadata) with a fast non-cryptographic hash and confirms a match with `==`. A style made of two plain colours can
 /// be interned by the colours alone ([`intern_rgb`](Self::intern_rgb)),
 /// without building a [`Style`] unless it is new.
 ///
@@ -323,7 +322,7 @@ impl StyleRemap {
 }
 
 /// The key a style is interned by: its colours (without the names they
-/// were spelled with), attributes and link.
+/// were spelled with), attributes, link and metadata.
 fn style_key(style: &Style) -> u64 {
     let mut hasher = FxHasher::default();
     hash_color(style.color(), &mut hasher);
@@ -339,6 +338,9 @@ fn style_key(style: &Style) -> u64 {
     hasher.write_u32(attrs);
     if let Some(link) = style.link() {
         hasher.write(link.as_bytes());
+    }
+    if let Some(meta) = style.meta_ref() {
+        std::hash::Hash::hash(meta, &mut hasher);
     }
     hasher.finish()
 }
@@ -967,6 +969,71 @@ fn flush(out: &mut String, text: &str, style: Option<&Style>, system: Option<Col
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn metadata_interning_preserves_order_and_all_value_equality() {
+        use rich::style::{Meta, MetaValue};
+        let values = vec![
+            MetaValue::None,
+            MetaValue::Bool(true),
+            MetaValue::Int(-3),
+            MetaValue::Float(-0.0),
+            MetaValue::Float(f64::NAN),
+            MetaValue::Str("é".into()),
+            MetaValue::List(vec![MetaValue::Int(1)]),
+            MetaValue::Tuple(vec![MetaValue::Int(1)]),
+        ];
+        let mut table = StyleTable::new();
+        for value in values {
+            let mut meta = Meta::new();
+            meta.insert("a", value.clone());
+            meta.insert("b", MetaValue::Int(2));
+            let a = Style::from_meta(meta.clone());
+            meta.insert("a", value.clone()); // Updating in place preserves insertion order.
+            let b = Style::from_meta(meta);
+            assert_eq!(a, b);
+            assert_eq!(style_key(&a), style_key(&b));
+            assert_eq!(table.intern(Some(&a)), table.intern(Some(&b)));
+            let mut reversed = Meta::new();
+            reversed.insert("b", MetaValue::Int(2));
+            reversed.insert("a", value);
+            let reversed = Style::from_meta(reversed);
+            assert_ne!(a, reversed);
+            assert_ne!(table.intern(Some(&a)), table.intern(Some(&reversed)));
+        }
+        assert_ne!(
+            table.intern(Some(&Style::new())),
+            table.intern(Some(&Style::from_meta(Meta::new())))
+        );
+    }
+
+    #[test]
+    fn distinct_metadata_does_not_form_a_quadratic_intern_chain() {
+        let mut table = StyleTable::new();
+        for column in 0..1024 {
+            let mut meta = rich::style::Meta::new();
+            meta.insert("column", rich::style::MetaValue::Int(column));
+            table.intern(Some(&Style::from_meta(meta)));
+        }
+        let max = table
+            .index
+            .values()
+            .map(|&head| {
+                let mut at = head;
+                let mut count = 0;
+                while at != 0 {
+                    count += 1;
+                    at = table.chain[at as usize];
+                }
+                count
+            })
+            .max()
+            .unwrap();
+        assert!(
+            max < 32,
+            "metadata collisions require {max} equality probes per insertion"
+        );
+    }
 
     fn seg(text: &str, style: Option<&str>) -> Segment {
         Segment::new(text, style.map(|s| Style::parse(s).unwrap()))

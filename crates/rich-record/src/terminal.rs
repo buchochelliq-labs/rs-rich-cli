@@ -456,6 +456,42 @@ impl Terminal {
                 }
             }
             (b'J', _) if matches!(number(&csi), Some(2 | 3)) => self.graphics.clear(),
+            (b'J' | b'K' | b'X', _) if self.graphics.has_cell_overlays() => {
+                // Flush the prefix (the CSI final byte is appended by feed)
+                // so this erase uses the cursor after all preceding writes.
+                self.flush();
+                let (row, column) = self.parser.screen().cursor_position();
+                let (rows, cols) = self.parser.screen().size();
+                let n = number(&csi).unwrap_or(0);
+                match (last, n) {
+                    (b'X', n) => self.graphics.erase_cells(
+                        row,
+                        column
+                            ..column
+                                .saturating_add(n.max(1).min(u32::from(cols)) as u16)
+                                .min(cols),
+                    ),
+                    (b'K', 0) => self.graphics.erase_cells(row, column..cols),
+                    (b'K', 1) => self
+                        .graphics
+                        .erase_cells(row, 0..column.saturating_add(1).min(cols)),
+                    (b'K', 2) => self.graphics.erase_cells(row, 0..cols),
+                    (b'J', 0) => {
+                        self.graphics.erase_cells(row, column..cols);
+                        for y in row.saturating_add(1)..rows {
+                            self.graphics.erase_cells(y, 0..cols);
+                        }
+                    }
+                    (b'J', 1) => {
+                        for y in 0..row {
+                            self.graphics.erase_cells(y, 0..cols);
+                        }
+                        self.graphics
+                            .erase_cells(row, 0..column.saturating_add(1).min(cols));
+                    }
+                    _ => {}
+                }
+            }
             _ => {}
         }
         self.csi = csi;
@@ -543,6 +579,16 @@ impl Terminal {
             }
         }
         push(&mut self.out, c);
+        if let Some(width) = width.filter(|&width| width > 0)
+            && self.graphics.has_cell_overlays()
+        {
+            // After vt100 consumes the character its cursor also accounts for
+            // wrapping. Only overlays pay this flush; ordinary text stays batched.
+            self.flush();
+            let (row, column) = self.parser.screen().cursor_position();
+            self.graphics
+                .erase_cells(row, column.saturating_sub(width as u16)..column);
+        }
         self.cluster = match width {
             Some(native) if native > 0 => Some(Cluster {
                 text: c.to_string(),
@@ -604,6 +650,8 @@ impl Terminal {
             self.cluster = None;
             return false;
         };
+        self.graphics
+            .erase_cells(row, start..start.saturating_add(cells as u16));
         let back = column - start;
         if back > 0 {
             self.out

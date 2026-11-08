@@ -297,3 +297,59 @@ fn adjacent_same_view_instances_survive_frame_run_coalescing() {
         );
     }
 }
+
+#[test]
+fn driver_four_moves_count_actual_protocol_work() {
+    use rich_art::picture::picture_bytes;
+    use std::{cell::Cell, rc::Rc, time::Duration};
+    for pixels in [Pixels::Cells, Pixels::Kitty, Pixels::Sixel, Pixels::Iterm] {
+        let picture = Picture::from_rgba(4, 4, vec![255; 64]).unwrap();
+        let id = picture.id();
+        let handle = Rc::new(Cell::new(None));
+        let copy = handle.clone();
+        let app = intuituive::App::new(move || {
+            let offset = intuituive::signal(0usize);
+            copy.set(Some(offset));
+            let picture = picture.clone();
+            intuituive::node::leaf(move |console, _, _| {
+                let mut lines = vec![vec![]; offset.get()];
+                lines.extend(picture.lines(
+                    console,
+                    ImageView::new().fit(ImageFit::Stretch).pixels(pixels),
+                    4,
+                    3,
+                ));
+                lines
+            })
+        })
+        .graphics(image_graphics());
+        let mut driver = app.driver(4, 5);
+        driver.set_cell_pixels(Some((8, 16)));
+        driver.update(Duration::ZERO);
+        let initial = driver.render().unwrap_or_default();
+        let before = picture_bytes(id);
+        let mut draws = 0;
+        for offset in [1, 2, 1, 0] {
+            handle.get().unwrap().set(offset);
+            driver.update(Duration::ZERO);
+            let output = driver.render().unwrap_or_default();
+            draws += match pixels {
+                Pixels::Kitty => output.matches("a=T,").count(),
+                Pixels::Sixel => output.matches("\x1bP").count(),
+                Pixels::Iterm => output.matches("]1337;").count(),
+                Pixels::Cells => 0,
+            };
+        }
+        let bytes = picture_bytes(id) - before;
+        println!(
+            "movement {pixels:?}: initial_output={} graphics_bytes={bytes} draws={draws}",
+            initial.len()
+        );
+        if pixels == Pixels::Kitty || pixels == Pixels::Cells {
+            assert_eq!((bytes, draws), (0, 0));
+        } else {
+            assert!(bytes > 0);
+            assert_eq!(draws, 4);
+        }
+    }
+}

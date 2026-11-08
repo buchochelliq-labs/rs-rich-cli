@@ -584,11 +584,12 @@ impl Picture {
             return (0..rows)
                 .map(|row| {
                     let cells = crate::kitty::placeholder_row(row, cols).unwrap_or_default();
-                    let line = vec![Segment::new(
-                        cells,
-                        Some(Style::new().with_color(colour.clone())),
-                    )];
-                    tag_cells(line, tag(row), view.background)
+                    // Placeholder diacritics already carry exact row/column
+                    // provenance. Keep a single style/segment for the whole row.
+                    let style = Style::new()
+                        .with_color(colour.clone())
+                        .combine(&tag(row).style());
+                    vec![Segment::new(cells, Some(style))]
                 })
                 .collect();
         }
@@ -995,17 +996,27 @@ fn tag_cells(line: Vec<Segment>, tag: PictureTag, background: Option<[u8; 3]>) -
         );
     }
     let background = Style::from_meta(meta);
-    Segment::divide(&line, &(1..=tag.cols).collect::<Vec<_>>())
-        .into_iter()
-        .enumerate()
-        .flat_map(|(column, segments)| {
+    let mut out = Vec::with_capacity(tag.cols);
+    let mut column = 0;
+    for segment in line {
+        // BlockArt normally emits one cell per segment. Avoid the general
+        // grapheme splitter on that path; retain it for merged input segments.
+        let cells = rich::cells::cell_len(&segment.text);
+        let pieces = if cells == 1 {
+            vec![vec![segment]]
+        } else {
+            Segment::divide(&[segment], &(1..=cells).collect::<Vec<_>>())
+        };
+        for pieces in pieces {
             let style = tag.style_at(column).combine(&background);
-            segments.into_iter().map(move |mut segment| {
+            for mut segment in pieces {
                 segment.style = Some(segment.style.unwrap_or_default().combine(&style));
-                segment
-            })
-        })
-        .collect()
+                out.push(segment);
+            }
+            column += 1;
+        }
+    }
+    out
 }
 
 // Reject oversized raster requests before allocating the fitted canvas.
