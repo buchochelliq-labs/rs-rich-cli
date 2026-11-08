@@ -1109,6 +1109,9 @@ fn project_part(
         top: f64,
         bottom: f64,
         left: f64,
+        /// Unclipped source edges for a source-container transform. Terminal
+        /// clipping must not erase a pane to the right before it is stacked.
+        source_x: (usize, usize),
         x0: usize,
         x1: usize,
         /// Text to wrap to the box's width, with a first-line prefix; or
@@ -1165,6 +1168,13 @@ fn project_part(
     // Short texts over a picture: (the picture, the box), placed in its
     // cells once it has its place.
     let mut overlaid: Vec<(usize, Item)> = Vec::new();
+    let source_snap = |left: f64, right: f64| -> (usize, usize) {
+        let start = ((left / cw).round().max(0.0) as usize).min(usize::MAX - 1);
+        (
+            start,
+            ((right / cw).round().max(0.0) as usize).max(start + 1),
+        )
+    };
     let snap = |left: f64, right: f64| -> (usize, usize) {
         // Both edges round, so boxes that touch in Chrome touch here and
         // never share a column.
@@ -1183,6 +1193,7 @@ fn project_part(
             top: rect.y,
             bottom: rect.bottom(),
             left,
+            source_x: source_snap(left, right),
             x0,
             x1,
             wrap: Some((spans, first)),
@@ -1286,6 +1297,7 @@ fn project_part(
             top: rect.y,
             bottom: rect.y + ch,
             left: rect.x,
+            source_x: source_snap(rect.x, rect.right()),
             x0,
             x1,
             wrap: None,
@@ -1311,6 +1323,7 @@ fn project_part(
                 top,
                 bottom: top + ch,
                 left: shelf.rect.x,
+                source_x: source_snap(shelf.rect.x, shelf.rect.right()),
                 x0,
                 x1,
                 wrap: None,
@@ -1418,10 +1431,12 @@ fn project_part(
                     top: log.rect.y,
                     bottom: log.rect.bottom(),
                     left: log.rect.x,
+                    source_x: source_snap(log.rect.x, log.rect.right()),
                     x0,
                     x1,
                     wrap: None,
-                    lines: log_lines(log, x1 - x0, rows, page, marks),
+                    // Reserve height now; source reflow determines the usable width.
+                    lines: vec![Line::default(); rows],
                     node: log.node,
                     log: Some(log.node),
                     media: None,
@@ -1464,6 +1479,7 @@ fn project_part(
                         top: indicator.rect.y,
                         bottom: indicator.rect.y + full as f64 * ch,
                         left: indicator.rect.x,
+                        source_x: source_snap(indicator.rect.x, indicator.rect.right()),
                         x0: i0,
                         x1: (i0 + lines.first().map_or(1, Line::width))
                             .min(columns)
@@ -1550,6 +1566,7 @@ fn project_part(
                     top: media.rect.y,
                     bottom: media.rect.y + rows as f64 * ch,
                     left: media.rect.x,
+                    source_x: source_snap(media.rect.x, media.rect.right()),
                     x0: m0,
                     x1,
                     wrap: None,
@@ -1616,6 +1633,7 @@ fn project_part(
                     top: block.rect.y,
                     bottom: block.rect.bottom(),
                     left,
+                    source_x: source_snap(left, right),
                     x0,
                     x1,
                     wrap: None,
@@ -1694,15 +1712,24 @@ fn project_part(
             } else {
                 crate::adapt::MIN_GRID_CELLS
             };
-            snap_grid(grid, &mut items, columns, ch, &snap, minimum, |item| {
-                (
-                    &mut item.top,
-                    &mut item.bottom,
-                    &mut item.x0,
-                    &mut item.x1,
-                    item.left,
-                )
-            });
+            snap_grid(
+                grid,
+                &mut items,
+                columns,
+                (cw, ch),
+                &snap,
+                minimum,
+                |item| {
+                    (
+                        &mut item.top,
+                        &mut item.bottom,
+                        &mut item.x0,
+                        &mut item.x1,
+                        item.left,
+                        item.source_x,
+                    )
+                },
+            );
         }
     }
     // What shrank moves what is under it, in its columns, up by the rows
@@ -1941,6 +1968,14 @@ fn project_part(
         placed[n].2 = start;
     }
     for item in items.iter_mut() {
+        if let Some(node) = item.log {
+            let log = page
+                .logs
+                .iter()
+                .find(|log| log.node == node)
+                .expect("source log");
+            item.lines = log_lines(log, item.x1 - item.x0, item.lines.len(), page, marks);
+        }
         if let Some(caption) = &item.caption {
             item.lines
                 .extend(wrap(caption, (item.x1 - item.x0).max(1), &[], &[]));
@@ -2325,11 +2360,21 @@ fn snap_grid<T>(
     grid: &crate::model::Grid,
     items: &mut [T],
     columns: usize,
-    ch: f64,
+    cell: (f64, f64),
     snap: &dyn Fn(f64, f64) -> (usize, usize),
     minimum: usize,
-    parts: impl Fn(&mut T) -> (&mut f64, &mut f64, &mut usize, &mut usize, f64),
+    parts: impl Fn(
+        &mut T,
+    ) -> (
+        &mut f64,
+        &mut f64,
+        &mut usize,
+        &mut usize,
+        f64,
+        (usize, usize),
+    ),
 ) {
+    let (cw, ch) = cell;
     let (g0, g1) = snap(grid.rect.x, grid.rect.right());
     let width = g1.saturating_sub(g0);
     // Chrome's rows of items: by their tops.
@@ -2375,7 +2420,7 @@ fn snap_grid<T>(
     let old_bottom = grid.items.iter().map(|r| r.bottom()).fold(0.0, f64::max);
     let grown = ((top - gap - old_bottom) / ch).round() * ch;
     for item in items.iter_mut() {
-        let (item_top, item_bottom, x0, x1, left) = parts(item);
+        let (item_top, item_bottom, x0, x1, left, source_x) = parts(item);
         let inside = grid.items.iter().position(|r| {
             *item_top >= r.y - 0.5
                 && *item_top < r.bottom()
@@ -2384,7 +2429,8 @@ fn snap_grid<T>(
         });
         if let Some(n) = inside {
             let (dy, n0, n1) = places[n];
-            let (o0, o1) = snap(grid.items[n].x, grid.items[n].right());
+            let o0 = (grid.items[n].x / cw).round().max(0.0) as usize;
+            let o1 = (grid.items[n].right() / cw).round().max(0.0) as usize;
             let dy = (dy / ch).round() * ch;
             *item_top += dy;
             *item_bottom += dy;
@@ -2401,8 +2447,8 @@ fn snap_grid<T>(
                     scale(x)
                 }
             };
-            let start = scale(*x0).min(n1.saturating_sub(1));
-            let end = scale(*x1).clamp(start + 1, n1.max(start + 1));
+            let start = scale(source_x.0).min(n1.saturating_sub(1));
+            let end = scale(source_x.1).clamp(start + 1, n1.max(start + 1));
             *x0 = start;
             *x1 = end;
         } else if *item_top >= old_bottom - 0.5 && *x0 < g1 && g0 < *x1 && grown != 0.0 {

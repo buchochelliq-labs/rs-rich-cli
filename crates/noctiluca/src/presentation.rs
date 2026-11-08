@@ -408,3 +408,54 @@ fn refresh_media(p: &mut Projection, page: &Page, width: usize) {
         refresh_media(s, page, width);
     }
 }
+
+#[cfg(test)]
+mod narrow_source_tests {
+    use super::*;
+    #[test]
+    fn transformed_log_slot_keeps_readable_width_on_passive_updates() {
+        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("tests/snapshots/stream-narrow-source.json");
+        let mut page = crate::model::build(
+            &crate::testing::snapshot_file(&path).unwrap(),
+            &mut crate::model::Revisions::new(),
+        );
+        let mut shown = Presentation::default();
+        let mut marks = Marks::default();
+        shown.update(&page, View::Projection, 40, &marks);
+        let slot = shown
+            .slots
+            .iter()
+            .find(|s| s.node == page.logs[0].node)
+            .unwrap()
+            .region;
+        assert!(slot.cols >= 30, "actual transformed slot: {slot:?}");
+        assert_eq!(slot.rows, 18);
+        let key = page.logs[0].entries.last().unwrap().key;
+        marks
+            .logs
+            .insert(page.logs[0].node, crate::layout::LogScroll::Paused(key));
+        let before = shown.update(&page, View::Projection, 40, &marks);
+        let before_lines = before.lines[slot.row..slot.row + slot.rows].to_vec();
+        page.logs[0].entries.push(crate::model::Entry {
+            key: key + 1000,
+            runs: vec![crate::model::Run::plain("new message after paused anchor")],
+        });
+        let after = shown.update(&page, View::Projection, 40, &marks);
+        assert_eq!(&after.lines[slot.row..slot.row + slot.rows], before_lines);
+        assert!(
+            before_lines
+                .iter()
+                .any(|l| l.plain().contains("tide is coming"))
+        );
+        marks.logs.clear();
+        let resumed = shown.update(&page, View::Projection, 40, &marks);
+        assert!(
+            resumed
+                .lines
+                .iter()
+                .any(|l| l.plain().contains("new message after paused anchor"))
+        );
+        assert_eq!(shown.slots[0].region, slot);
+    }
+}

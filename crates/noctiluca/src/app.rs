@@ -2585,9 +2585,9 @@ fn click_control(b: Browser, index: usize, cx: &mut Ctx) {
 }
 
 /// The page's own colours as a backdrop for its rows, when the page
-/// colours rule is off: on white (a light terminal) or black; with
-/// `--transparent`, on the page's own background, or the terminal's where
-/// it sets none.
+/// colours rule is off: transform the source background together with its
+/// foreground. Where no source background is set, use the configured terminal
+/// fallback, or the terminal's own surface with `--transparent`.
 fn backdrop(b: Browser) -> Option<String> {
     if b.effective_adapt().on(crate::adapt::Rule::PageColors) {
         return None;

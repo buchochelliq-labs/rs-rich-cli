@@ -279,3 +279,89 @@ fn gauge_updates_and_fixed_action_survive_all_projection_widths() {
         assert_eq!(evaluate(&engine, "window.probeHits"), json!(4));
     }
 }
+
+#[test]
+fn narrow_original_chat_is_readable_and_send_is_reachable_after_scrolling() {
+    use noctiluca::{
+        app::{Options, app},
+        bookmarks::Bookmarks,
+        config::{Config, Images, View},
+        layout::{Marks, project},
+        model::{Revisions, build},
+        testing::FakeEngine,
+    };
+    let Some(mut engine) = browser("stream-with-log.html?quiet") else {
+        return;
+    };
+    engine.resize(80, 20).unwrap();
+    let snapshot = engine.snapshot(TabId(0)).unwrap();
+    if let Ok(path) = std::env::var("NOCTILUCA_CAPTURE_SNAPSHOT") {
+        std::fs::write(
+            path,
+            serde_json::to_vec(&json!({"dom":snapshot.dom,"ax":snapshot.ax})).unwrap(),
+        )
+        .unwrap();
+    }
+    let page = build(&snapshot, &mut Revisions::new());
+    eprintln!("source log={:?} grids={:?}", page.logs[0].rect, page.grids);
+    let p = project(&page, 40, (8., 18.), &Marks::default());
+    eprintln!(
+        "projected log={:?}\n{}",
+        p.logs,
+        p.lines
+            .iter()
+            .map(|l| l.plain())
+            .collect::<Vec<_>>()
+            .join("\n")
+    );
+    let fake = FakeEngine::from_dir(
+        &std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/snapshots"),
+    )
+    .unwrap();
+    fake.state
+        .lock()
+        .unwrap()
+        .pages
+        .insert("stream-with-log".into(), snapshot);
+    let mut d = app(
+        Box::new(fake),
+        Options {
+            config: Config::default(),
+            bookmarks: Bookmarks::default(),
+            url: Some("stream-with-log.html".into()),
+            view: Some(View::Projection),
+            images: Some(Images::None),
+            tunnel: None,
+            control: None,
+        },
+    )
+    .driver(40, 24);
+    let until = Instant::now() + Duration::from_secs(10);
+    loop {
+        d.settle();
+        if d.find_text("Lanternfish").is_some() {
+            break;
+        }
+        assert!(Instant::now() < until);
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    d.press("pagedown");
+    d.settle();
+    let text = d.screen().plain().join("\n");
+    assert!(
+        text.contains("tide is coming"),
+        "chat must contain readable words after PageDown:\n{text}"
+    );
+    d.press("G");
+    d.settle();
+    assert!(
+        d.find_text("Send a message").is_some(),
+        "{}",
+        d.screen().plain().join("\n")
+    );
+    assert!(
+        d.find_text("[Send]").is_some(),
+        "{}",
+        d.screen().plain().join("\n")
+    );
+}

@@ -531,3 +531,132 @@ fn adapted_source_width_floor_tracks_views_and_adaptation_without_changing_termi
         }
     }
 }
+
+#[test]
+fn captured_chrome_narrow_chat_has_readable_rows_and_reachable_send() {
+    use noctiluca::{
+        app::{Options, app},
+        bookmarks::Bookmarks,
+        config::{Config, Images, View},
+        testing::FakeEngine,
+    };
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/snapshots");
+    let engine = FakeEngine::from_dir(&root).unwrap();
+    let state = engine.state.clone();
+    let snapshot =
+        noctiluca::testing::snapshot_file(&root.join("stream-narrow-source.json")).unwrap();
+    let page = build(&snapshot, &mut Revisions::new());
+    let send = page.find("button", "Send")[0].node;
+    engine
+        .state
+        .lock()
+        .unwrap()
+        .pages
+        .insert("stream-with-log".into(), snapshot);
+    let mut d = app(
+        Box::new(engine),
+        Options {
+            config: Config::default(),
+            bookmarks: Bookmarks::default(),
+            url: Some("stream-with-log.html".into()),
+            view: Some(View::Projection),
+            images: Some(Images::None),
+            tunnel: None,
+            control: None,
+        },
+    )
+    .driver(40, 24);
+    wait(&mut d, |d| d.find_text("Lanternfish").is_some());
+    d.press("pagedown");
+    d.settle();
+    assert!(
+        d.screen().plain().join("\n").contains("tide is coming"),
+        "{}",
+        d.screen().plain().join("\n")
+    );
+    d.press("G");
+    d.settle();
+    assert!(d.find_text("Send a message").is_some());
+    assert!(d.find_text("[Send]").is_some());
+    let (x, y) = d.find_text("[Send]").unwrap();
+    d.click(x + 2, y);
+    wait(&mut d, |_| {
+        state
+            .lock()
+            .unwrap()
+            .actions
+            .iter()
+            .any(|a| matches!(a,noctiluca::engine::PageAction::Click(n) if *n==send))
+    });
+}
+
+#[test]
+fn faithful_dark_source_page_keeps_neutral_text_readable_on_its_owned_backdrop() {
+    use noctiluca::{
+        app::{Options, app},
+        bookmarks::Bookmarks,
+        config::{Config, Images, View},
+        testing::FakeEngine,
+    };
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/snapshots");
+    let snapshot =
+        noctiluca::testing::snapshot_file(&root.join("stream-narrow-source.json")).unwrap();
+    let page = build(&snapshot, &mut Revisions::new());
+    let marks = Marks {
+        adapt: Adapt::none(),
+        ..Marks::default()
+    };
+    let projection = project(&page, 120, (8., 18.), &marks);
+    assert!(
+        projection.inline.is_empty(),
+        "faithful disables inline-picture adaptation"
+    );
+    assert!(
+        projection
+            .lines
+            .iter()
+            .any(|l| l.plain().contains("moderator"))
+    );
+    for transparent in [false, true] {
+        let engine = FakeEngine::from_dir(&root).unwrap();
+        engine
+            .state
+            .lock()
+            .unwrap()
+            .pages
+            .insert("stream-with-log".into(), snapshot.clone());
+        let config = Config {
+            adapt: Adapt::none(),
+            transparent,
+            ..Config::default()
+        };
+        let mut d = app(
+            Box::new(engine),
+            Options {
+                config,
+                bookmarks: Bookmarks::default(),
+                url: Some("stream-with-log.html".into()),
+                view: Some(View::Projection),
+                images: Some(Images::None),
+                tunnel: None,
+                control: None,
+            },
+        )
+        .driver(120, 40);
+        wait(&mut d, |d| d.find_text("tide is coming").is_some());
+        for text in ["Lanternfish", "tide is coming"] {
+            let (x, y) = d.find_text(text).unwrap();
+            let cell = d.screen().cell(x, y);
+            let style = d.screen().style(cell.style).unwrap();
+            let fg = style.color().unwrap().get_truecolor().unwrap();
+            let bg = style.bgcolor().unwrap().get_truecolor().unwrap();
+            let luma = |c: rich::color::ColorTriplet| {
+                0.2126 * f64::from(c.red) + 0.7152 * f64::from(c.green) + 0.0722 * f64::from(c.blue)
+            };
+            assert!(
+                (luma(fg) - luma(bg)).abs() > 100.,
+                "{text} transparent={transparent}: {style:?}"
+            );
+        }
+    }
+}

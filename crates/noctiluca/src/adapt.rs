@@ -507,21 +507,19 @@ pub fn backdrop(background: Background) -> &'static str {
 }
 
 /// The background drawn behind the projected page with the page colours
-/// rule off. Without `transparent`, the [`backdrop`]. With it, the page's
-/// own background (`page`, its CSS, as [`raw_color`] draws colours), and
-/// none where the page sets none: the terminal's own background shows.
-/// Raw colours already follow the terminal's background, so the page's
-/// text stays readable on it.
+/// rule off. A source background uses the same [`raw_color`] transform as
+/// its foreground, preserving their contrast on both light and dark pages.
+/// Without a source background, use [`backdrop`] unless `transparent` asks
+/// for the terminal's own surface. Inverting a dark page's light text onto
+/// an unrelated black fallback would make both text and surface dark.
 pub fn page_backdrop(
     page: Option<&str>,
     transparent: bool,
     background: Background,
 ) -> Option<String> {
-    if !transparent {
-        return Some(backdrop(background).to_string());
-    }
     page.and_then(|css| raw_color(css, background))
         .map(|colour| format!("on {colour}"))
+        .or_else(|| (!transparent).then(|| backdrop(background).to_string()))
 }
 
 /// sRGB (0 to 255) to OKLab.
