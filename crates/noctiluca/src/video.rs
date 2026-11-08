@@ -399,6 +399,11 @@ impl Pacing {
         self.regions.remove(&node);
     }
 
+    /// Forget regions that no longer occur on the current page.
+    pub(crate) fn retain_regions(&mut self, nodes: &std::collections::HashSet<NodeId>) {
+        self.regions.retain(|node, _| nodes.contains(node));
+    }
+
     /// Whether `node` is a region it paces (it has had a frame since the
     /// document opened, and is not gone).
     pub fn has(&self, node: NodeId) -> bool {

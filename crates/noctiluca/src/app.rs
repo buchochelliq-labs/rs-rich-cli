@@ -1957,16 +1957,51 @@ fn apply_site(b: Browser, url: &str) {
     b.send(Command::Resize(width, rows.saturating_sub(CHROME_ROWS)));
 }
 
+/// Reconcile media state at a page transition.
+fn reconcile_page_media(
+    new_document: bool,
+    nodes: &std::collections::HashSet<NodeId>,
+    pacing: &mut Pacing,
+    videos: &mut HashMap<NodeId, Live>,
+    live: &mut HashMap<NodeId, Live>,
+) {
+    if new_document {
+        pacing.clear();
+        videos.clear();
+        live.clear();
+    } else {
+        pacing.retain_regions(nodes);
+        videos.retain(|node, _| nodes.contains(node));
+        live.retain(|node, _| nodes.contains(node));
+    }
+}
+
 /// Apply one of the tab's updates, on the app's thread.
 fn apply(b: Browser, update: Update, cx: &mut Ctx) {
     match update {
         Update::Page(page) => {
             let new_document =
                 b.page.with_untracked(|p| p.as_ref().map(|p| p.document)) != Some(page.document);
+            let nodes = page.media.iter().map(|media| media.node).collect();
+            let mut videos = (*b.videos.get_untracked()).clone();
+            let mut live = (*b.live.get_untracked()).clone();
+            b.pacing.with_untracked(|p| {
+                reconcile_page_media(
+                    new_document,
+                    &nodes,
+                    &mut p.borrow_mut(),
+                    &mut videos,
+                    &mut live,
+                )
+            });
+            if *b.videos.get_untracked() != videos {
+                b.videos.set(Rc::new(videos));
+            }
+            if *b.live.get_untracked() != live {
+                b.live.set(Rc::new(live));
+            }
             if new_document {
                 b.controls.update(HashMap::clear);
-                b.videos.set(Rc::new(HashMap::new()));
-                b.pacing.with_untracked(|p| p.borrow_mut().clear());
                 b.logs.update(HashMap::clear);
                 b.scroll.set(0);
                 b.hints.set(None);
@@ -3158,6 +3193,109 @@ mod tests {
         assert!(!accepts_frame(&pacing, Some(&newer_live), 7, &current_live));
         pacing.forget(7);
         assert!(!accepts_frame(&pacing, None, 7, &current_live));
+    }
+
+    #[test]
+    fn page_transition_removes_old_live_pixels_immediately() {
+        let mut pacing = Pacing::new(
+            rich_art::picture::ByteBudget::new(10_000_000),
+            Pixels::Kitty,
+        );
+        let picture = Picture::from_rgba(1, 1, vec![255; 4]).unwrap();
+        let old = Live {
+            picture,
+            pixels: Pixels::Kitty,
+        };
+        let mut videos = HashMap::from([(7, old.clone())]);
+        let mut live = HashMap::from([(7, old)]);
+        reconcile_page_media(
+            true,
+            &std::collections::HashSet::from([7]),
+            &mut pacing,
+            &mut videos,
+            &mut live,
+        );
+        assert!(videos.is_empty());
+        assert!(
+            live.is_empty(),
+            "previous document's live image was retained"
+        );
+    }
+
+    #[test]
+    fn removal_then_readd_rejects_held_encoder_completion() {
+        let mut pacing = Pacing::new(
+            rich_art::picture::ByteBudget::new(10_000_000),
+            Pixels::Kitty,
+        );
+        let (send, receive) = mpsc::channel();
+        let encoder = Encoder::spawn(move |job| {
+            send.send(job).unwrap();
+        });
+        let frame = |seq| crate::video::VideoFrame {
+            node: 7,
+            seq,
+            pixels: rich_embed::Pixels::new(4, 4, vec![255; 48]).unwrap(),
+        };
+        let old = pacing
+            .offer(&frame(1), 2, 2, Instant::now(), |_| 0)
+            .unwrap();
+        encoder.encode(Job {
+            node: 7,
+            picture: old,
+            pixels: Pixels::Kitty,
+            cols: 2,
+            rows: 2,
+        });
+        let old = receive.recv_timeout(Duration::from_secs(5)).unwrap();
+        let old_live = Live {
+            picture: old.picture,
+            pixels: old.pixels,
+        };
+        let mut videos = HashMap::from([(7, old_live.clone())]);
+        let mut live = HashMap::from([(7, old_live.clone())]);
+        reconcile_page_media(
+            false,
+            &std::collections::HashSet::from([7]),
+            &mut pacing,
+            &mut videos,
+            &mut live,
+        );
+        assert!(accepts_frame(&pacing, videos.get(&7), 7, &old_live));
+        reconcile_page_media(
+            false,
+            &std::collections::HashSet::new(),
+            &mut pacing,
+            &mut videos,
+            &mut live,
+        );
+        assert!(videos.is_empty());
+        assert!(live.is_empty());
+        reconcile_page_media(
+            false,
+            &std::collections::HashSet::from([7]),
+            &mut pacing,
+            &mut videos,
+            &mut live,
+        );
+        let current = pacing
+            .offer(
+                &frame(2),
+                2,
+                2,
+                Instant::now() + Duration::from_secs(1),
+                |_| 0,
+            )
+            .unwrap();
+        let current_live = Live {
+            picture: current,
+            pixels: Pixels::Kitty,
+        };
+        assert!(accepts_frame(&pacing, None, 7, &current_live));
+        assert!(
+            !accepts_frame(&pacing, None, 7, &old_live),
+            "old encoder completion survived region removal"
+        );
     }
 
     #[test]
