@@ -2092,7 +2092,11 @@ fn apply(b: Browser, update: Update, cx: &mut Ctx) {
 }
 
 fn apply_pair(b: Browser, update: Update, source: Option<crate::model::SourcePage>, cx: &mut Ctx) {
-    assert!(source.as_ref().is_none_or(|s| matches!(&update, Update::Page(p) if Arc::ptr_eq(p, s.page()))));
+    assert!(
+        source
+            .as_ref()
+            .is_none_or(|s| matches!(&update, Update::Page(p) if Arc::ptr_eq(p, s.page())))
+    );
     if crate::diagnostics::enabled() {
         match &update {
             Update::Frame(f) => eprintln!(
@@ -5136,14 +5140,21 @@ mod update_measurements {
     #[test]
     fn source_pair_is_atomic_and_external_legacy_replacement_cannot_reuse_it() {
         let (mut driver, b, _, proxy) = setup();
-        let mut builder = crate::testing::PageBuilder::new("https://example.test/source", "source", 400.0, 400.0);
+        let mut builder =
+            crate::testing::PageBuilder::new("https://example.test/source", "source", 400.0, 400.0);
         let left = builder.element(builder.body(), "DIV", &[], &[], None);
         let right = builder.element(builder.body(), "DIV", &[], &[], None);
-        let text = builder.text(left, "Source words", crate::engine::Rect::new(0.0, 0.0, 100.0, 18.0));
+        let text = builder.text(
+            left,
+            "Source words",
+            crate::engine::Rect::new(0.0, 0.0, 100.0, 18.0),
+        );
         let mut snapshot = builder.snapshot();
         let first = crate::model::build_source(&snapshot, &mut Revisions::new());
         let offer = |source: crate::model::SourcePage| {
-            proxy.run_with(move |cx| apply_pair(b, Update::Page(source.page().clone()), Some(source), cx));
+            proxy.run_with(move |cx| {
+                apply_pair(b, Update::Page(source.page().clone()), Some(source), cx)
+            });
         };
         offer(first.clone());
         driver.settle();
@@ -5153,14 +5164,24 @@ mod update_measurements {
         assert_eq!(first.page(), changed.page());
         offer(changed.clone());
         driver.settle();
-        assert_eq!(TEST_LAYOUTS.with(|n| n.get()), 1, "source-only change has one layout, no transient legacy pair");
+        assert_eq!(
+            TEST_LAYOUTS.with(|n| n.get()),
+            1,
+            "source-only change has one layout, no transient legacy pair"
+        );
         proxy.run_with(move |_| {
             let page = b.page.get_untracked().unwrap();
-            b.source.with_untracked(|s| assert!(Arc::ptr_eq(s.as_ref().unwrap().page(), &page)));
+            b.source
+                .with_untracked(|s| assert!(Arc::ptr_eq(s.as_ref().unwrap().page(), &page)));
         });
         TEST_LAYOUTS.with(|n| n.set(0));
         // Public callers can replace the legacy signal directly.
-        proxy.run_with(move |_| { b.page.replace(Some(Arc::new(Page { document: 900, ..Default::default() }))); });
+        proxy.run_with(move |_| {
+            b.page.replace(Some(Arc::new(Page {
+                document: 900,
+                ..Default::default()
+            })));
+        });
         driver.settle();
         assert_eq!(TEST_LAYOUTS.with(|n| n.get()), 1);
         proxy.run_with(move |cx| apply(b, Update::Page(first.page().clone()), cx));

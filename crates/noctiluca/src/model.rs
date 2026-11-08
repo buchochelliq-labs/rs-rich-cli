@@ -1857,7 +1857,9 @@ impl Walker<'_> {
                     && !run.text.starts_with(char::is_whitespace)
                 {
                     self.runs.push(Run::plain(" "));
-                    if let Some(source) = &mut self.source { source.runs.push(vec![None]); }
+                    if let Some(source) = &mut self.source {
+                        source.runs.push(vec![None]);
+                    }
                 }
             }
             self.last = Some(rect);
@@ -1876,13 +1878,21 @@ impl Walker<'_> {
             {
                 last.text.push_str(&run.text);
                 if let Some(source) = &mut self.source {
-                    source.runs.last_mut().unwrap().extend(run.text.chars().map(|_| Some(node)));
+                    source
+                        .runs
+                        .last_mut()
+                        .unwrap()
+                        .extend(run.text.chars().map(|_| Some(node)));
                 }
             }
             _ => {
-                if let Some(source) = &mut self.source { source.runs.push(run.text.chars().map(|_| Some(node)).collect()); }
+                if let Some(source) = &mut self.source {
+                    source
+                        .runs
+                        .push(run.text.chars().map(|_| Some(node)).collect());
+                }
                 self.runs.push(run);
-            },
+            }
         }
     }
 
@@ -3028,7 +3038,15 @@ impl Walker<'_> {
                     let start = text.chars().take_while(|c| c.is_whitespace()).count();
                     table.caption = text.trim().to_string();
                     if let Some(origins) = origins {
-                        cells.push((RunLocation::Caption { block }, origins.into_iter().flatten().skip(start).take(table.caption.chars().count()).collect()));
+                        cells.push((
+                            RunLocation::Caption { block },
+                            origins
+                                .into_iter()
+                                .flatten()
+                                .skip(start)
+                                .take(table.caption.chars().count())
+                                .collect(),
+                        ));
                     }
                 }
                 "TR" => {
@@ -3042,7 +3060,15 @@ impl Walker<'_> {
                         tidy_origins(&mut runs, origins.as_mut());
                         if let Some(origins) = origins {
                             for (run, origins) in origins.into_iter().enumerate() {
-                                cells.push((RunLocation::Cell { block, row: table.rows.len(), cell: row.len(), run }, origins));
+                                cells.push((
+                                    RunLocation::Cell {
+                                        block,
+                                        row: table.rows.len(),
+                                        cell: row.len(),
+                                        run,
+                                    },
+                                    origins,
+                                ));
                             }
                         }
                         row.push(Cell {
@@ -3059,9 +3085,13 @@ impl Walker<'_> {
             }
         }
         if !table.rows.is_empty() {
-            if let Some(source) = &mut self.source { source.cells.extend(cells); }
+            if let Some(source) = &mut self.source {
+                source.cells.extend(cells);
+            }
             Some(table)
-        } else { None }
+        } else {
+            None
+        }
     }
 
     /// The text runs of node `i`, its blocks run together: a cell's.
@@ -3084,9 +3114,15 @@ impl Walker<'_> {
         let made: Vec<Block> = self.page.blocks.drain(blocks..).collect();
         let mut runs = Vec::new();
         for (index, block) in made.into_iter().enumerate() {
-            let original = self.source.as_mut().and_then(|s| s.blocks.remove(&(blocks + index)));
+            let original = self
+                .source
+                .as_mut()
+                .and_then(|s| s.blocks.remove(&(blocks + index)));
             let start = runs.len();
-            let node = self.dom.backend.iter().position(|&n| n == block.node);
+            let node = self
+                .source
+                .as_ref()
+                .and_then(|_| self.dom.backend.iter().position(|&n| n == block.node));
             match block.kind {
                 BlockKind::Control(index) => runs.push(Run {
                     text: format!("[{}] ", self.page.controls[index].name),
@@ -3118,7 +3154,11 @@ impl Walker<'_> {
                     origins.extend(original);
                     origins.push(vec![None]);
                 } else {
-                    origins.extend(runs[start..].iter().map(|r| r.text.chars().map(|_| node).collect()));
+                    origins.extend(
+                        runs[start..]
+                            .iter()
+                            .map(|r| r.text.chars().map(|_| node).collect()),
+                    );
                 }
             }
         }
@@ -3446,42 +3486,63 @@ fn tidy_origins(runs: &mut Vec<Run>, mut origins: Option<&mut Origins>) {
             if c == '\n' {
                 while text.ends_with(' ') {
                     text.pop();
-                    if let Some(kept) = &mut kept { kept.pop(); }
+                    if let Some(kept) = &mut kept {
+                        kept.pop();
+                    }
                 }
                 text.push('\n');
                 space = true;
             } else if c == ' ' {
-                if space { continue; }
+                if space {
+                    continue;
+                }
                 text.push(' ');
                 space = true;
             } else {
                 text.push(c);
                 space = false;
             }
-            if let (Some(kept), Some(origins)) = (&mut kept, &origins) { kept.push(origins[index][character]); }
+            if let (Some(kept), Some(origins)) = (&mut kept, &origins) {
+                kept.push(origins[index][character]);
+            }
         }
         run.text = text;
-        if let (Some(origins), Some(kept)) = (&mut origins, kept) { origins[index] = kept; }
+        if let (Some(origins), Some(kept)) = (&mut origins, kept) {
+            origins[index] = kept;
+        }
     }
     while let Some(last) = runs.last_mut() {
         let trimmed = last.text.trim_end_matches([' ', '\n']).len();
         last.text.truncate(trimmed);
-        if let Some(origins) = &mut origins { origins.last_mut().unwrap().truncate(last.text.chars().count()); }
+        if let Some(origins) = &mut origins {
+            origins
+                .last_mut()
+                .unwrap()
+                .truncate(last.text.chars().count());
+        }
         if last.text.is_empty() {
             runs.pop();
-            if let Some(origins) = &mut origins { origins.pop(); }
-        } else { break; }
+            if let Some(origins) = &mut origins {
+                origins.pop();
+            }
+        } else {
+            break;
+        }
     }
     for i in (0..runs.len()).rev() {
         if runs[i].text.is_empty() {
             runs.remove(i);
-            if let Some(origins) = &mut origins { origins.remove(i); }
+            if let Some(origins) = &mut origins {
+                origins.remove(i);
+            }
         }
     }
     if let Some(first) = runs.first_mut() {
         let count = first.text.chars().take_while(|&c| c == '\n').count();
         first.text = first.text.trim_start_matches(['\n']).to_string();
-        if let Some(origins) = &mut origins { origins[0].drain(..count); }
+        if let Some(origins) = &mut origins {
+            origins[0].drain(..count);
+        }
     }
 }
 
@@ -3948,12 +4009,24 @@ pub fn build_source(snapshot: &PageSnapshot, revisions: &mut Revisions) -> Sourc
 }
 
 /// [`build_source`], recognizing the engine's appended scroll boxes as live logs.
-pub fn build_source_with(snapshot: &PageSnapshot, revisions: &mut Revisions, appended: &HashSet<NodeId>) -> SourcePage {
+pub fn build_source_with(
+    snapshot: &PageSnapshot,
+    revisions: &mut Revisions,
+    appended: &HashSet<NodeId>,
+) -> SourcePage {
     let (page, relations) = build_parts(snapshot, revisions, appended, true);
-    SourcePage { page: Arc::new(page), relations: Arc::new(relations.unwrap()) }
+    SourcePage {
+        page: Arc::new(page),
+        relations: Arc::new(relations.unwrap()),
+    }
 }
 
-fn build_parts(snapshot: &PageSnapshot, revisions: &mut Revisions, appended: &HashSet<NodeId>, source: bool) -> (Page, Option<source::SourceRelations>) {
+fn build_parts(
+    snapshot: &PageSnapshot,
+    revisions: &mut Revisions,
+    appended: &HashSet<NodeId>,
+    source: bool,
+) -> (Page, Option<source::SourceRelations>) {
     let dom = Dom::parse(&snapshot.dom);
     let ax = Ax::parse(&snapshot.ax);
     let root = dom.backend.first().copied().unwrap_or(-1);
@@ -4822,6 +4895,66 @@ mod tests {
     }
 
     #[test]
+    fn source_flow_eligibility_requires_known_block_flow_and_position() {
+        let mut f = Fake::new();
+        let ordinary = f.el(0, "DIV", &[], "block");
+        clip_style(&mut f, ordinary, 14, "static");
+        let positioned = f.el(ordinary, "DIV", &[], "block");
+        clip_style(&mut f, positioned, 14, "absolute");
+        let grid = f.el(ordinary, "DIV", &[], "grid");
+        clip_style(&mut f, grid, 14, "static");
+        let flex = f.el(ordinary, "DIV", &[], "flex");
+        clip_style(&mut f, flex, 14, "static");
+        let boxless = f.node(ordinary, 1, "DIV", None, &[], None);
+        let unknown_position = f.el(ordinary, "DIV", &[], "block");
+        let source = build_source(
+            &PageSnapshot {
+                dom: f.snapshot(),
+                ax: Value::Null,
+            },
+            &mut Revisions::new(),
+        );
+        assert!(source.relations.nodes[ordinary as usize].ordinary);
+        for node in [positioned, grid, flex, boxless, unknown_position] {
+            assert!(
+                !source.relations.nodes[node as usize].ordinary,
+                "uncertain/nonordinary flow on {node}"
+            );
+        }
+    }
+
+    #[test]
+    fn source_saved_snapshots_match_legacy_and_all_final_ranges_resolve() {
+        let directory = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/snapshots");
+        let mut count = 0;
+        for entry in std::fs::read_dir(directory).unwrap() {
+            let path = entry.unwrap().path();
+            if path.extension().is_none_or(|e| e != "json") {
+                continue;
+            }
+            let snapshot = crate::testing::snapshot_file(&path).unwrap();
+            let source = build_source(&snapshot, &mut Revisions::new());
+            assert_eq!(
+                source.page().as_ref(),
+                &build(&snapshot, &mut Revisions::new()),
+                "{}",
+                path.display()
+            );
+            for range in &source.relations.runs {
+                assert!(!range.text(source.page()).is_empty());
+            }
+            for piece in &source.relations.blocks {
+                assert_eq!(
+                    source.relations.nodes[piece.node].node,
+                    source.page().blocks[piece.block].node
+                );
+            }
+            count += 1;
+        }
+        assert!(count >= 25);
+    }
+
+    #[test]
     fn source_interactive_log_retains_control_and_media_ancestry() {
         let mut f = Fake::new();
         let log = f.el(0, "DIV", &[("role", "log")], "block");
@@ -4830,12 +4963,33 @@ mod tests {
         let image = f.el(link, "IMG", &[("src", "/a.png")], "block");
         let sibling = f.el(log, "DIV", &[], "block");
         f.text(sibling, "another entry");
-        let source = build_source(&PageSnapshot { dom: f.snapshot(), ax: Value::Null }, &mut Revisions::new());
+        let source = build_source(
+            &PageSnapshot {
+                dom: f.snapshot(),
+                ax: Value::Null,
+            },
+            &mut Revisions::new(),
+        );
         assert_eq!(source.page().controls.len(), 1);
         assert_eq!(source.relations.media_controls, [Some(0)]);
-        let index = |node| source.relations.nodes.iter().position(|n| n.node == node).expect("interactive log source remains available");
-        assert!(source.relations.contains(index(100 + link), index(100 + image)));
-        assert!(source.relations.contains(index(100 + log), index(100 + link)));
+        let index = |node| {
+            source
+                .relations
+                .nodes
+                .iter()
+                .position(|n| n.node == node)
+                .expect("interactive log source remains available")
+        };
+        assert!(
+            source
+                .relations
+                .contains(index(100 + link), index(100 + image))
+        );
+        assert!(
+            source
+                .relations
+                .contains(index(100 + log), index(100 + link))
+        );
     }
 
     #[test]
@@ -4846,12 +5000,27 @@ mod tests {
         f.text(entry, "first");
         let paragraph = f.el(0, "P", &[], "block");
         f.text(paragraph, "Outside");
-        let a = build_source(&PageSnapshot { dom: f.snapshot(), ax: Value::Null }, &mut Revisions::new());
+        let a = build_source(
+            &PageSnapshot {
+                dom: f.snapshot(),
+                ax: Value::Null,
+            },
+            &mut Revisions::new(),
+        );
         let next = f.el(log, "DIV", &[], "block");
         f.text(next, "second");
-        let b = build_source(&PageSnapshot { dom: f.snapshot(), ax: Value::Null }, &mut Revisions::new());
+        let b = build_source(
+            &PageSnapshot {
+                dom: f.snapshot(),
+                ax: Value::Null,
+            },
+            &mut Revisions::new(),
+        );
         assert_ne!(a.page().logs, b.page().logs);
-        assert_eq!(a.relations, b.relations, "fixed log contents are an opaque layout unit");
+        assert_eq!(
+            a.relations, b.relations,
+            "fixed log contents are an opaque layout unit"
+        );
     }
 
     #[test]
@@ -4868,10 +5037,24 @@ mod tests {
         let second = f.node(strong, 3, "#text", Some(" 世界 "), &[], Some("inline"));
         let p = f.el(cell, "P", &[], "block");
         let third = f.node(p, 3, "#text", Some(" fin "), &[], Some("inline"));
-        let snapshot = PageSnapshot { dom: f.snapshot(), ax: Value::Null };
+        let snapshot = PageSnapshot {
+            dom: f.snapshot(),
+            ax: Value::Null,
+        };
         let source = build_source(&snapshot, &mut Revisions::new());
-        assert_eq!(source.page().as_ref(), &build(&snapshot, &mut Revisions::new()));
-        let read = |node| source.relations.runs.iter().filter(|r| r.node == node).map(|r| r.text(source.page())).collect::<Vec<_>>();
+        assert_eq!(
+            source.page().as_ref(),
+            &build(&snapshot, &mut Revisions::new())
+        );
+        let read = |node| {
+            source
+                .relations
+                .runs
+                .iter()
+                .filter(|r| r.node == node)
+                .map(|r| r.text(source.page()))
+                .collect::<Vec<_>>()
+        };
         assert_eq!(read(caption_text as usize), ["Résumé"]);
         assert_eq!(read(first as usize), ["naïve "]);
         assert_eq!(read(second as usize), ["世界"]);
@@ -4893,9 +5076,15 @@ mod tests {
         f.text(cell, "Another cell");
         let sibling = f.el(log, "DIV", &[], "block");
         f.text(sibling, "An ordinary entry");
-        let snapshot = PageSnapshot { dom: f.snapshot(), ax: Value::Null };
+        let snapshot = PageSnapshot {
+            dom: f.snapshot(),
+            ax: Value::Null,
+        };
         let source = build_source(&snapshot, &mut Revisions::new());
-        assert_eq!(source.page().as_ref(), &build(&snapshot, &mut Revisions::new()));
+        assert_eq!(
+            source.page().as_ref(),
+            &build(&snapshot, &mut Revisions::new())
+        );
         assert!(source.relations.runs.is_empty());
     }
 
@@ -4910,9 +5099,23 @@ mod tests {
         let shown = f.el(p, "SPAN", &[("aria-hidden", "true")], "inline");
         let visual = f.node(shown, 3, "#text", Some("$2999"), &[], Some("inline"));
         f.text(p, " After");
-        let source = build_source(&PageSnapshot { dom: f.snapshot(), ax: Value::Null }, &mut Revisions::new());
+        let source = build_source(
+            &PageSnapshot {
+                dom: f.snapshot(),
+                ax: Value::Null,
+            },
+            &mut Revisions::new(),
+        );
         assert_eq!(source.relations.twins, [(spoken as usize, shown as usize)]);
-        let ranges = |node| source.relations.runs.iter().filter(|r| r.node == node).map(|r| r.text(source.page())).collect::<Vec<_>>();
+        let ranges = |node| {
+            source
+                .relations
+                .runs
+                .iter()
+                .filter(|r| r.node == node)
+                .map(|r| r.text(source.page()))
+                .collect::<Vec<_>>()
+        };
         assert_eq!(ranges(said as usize), ["$29.99"]);
         assert_eq!(ranges(visual as usize), ["$2999"]);
         assert!(source.page().text().contains("Before"));
@@ -4930,7 +5133,10 @@ mod tests {
         let third = f.node(p, 3, "#text", Some(" après "), &[], Some("inline"));
         let caption = f.el(figure, "FIGCAPTION", &[], "block");
         f.text(caption, "Caption");
-        let snapshot = PageSnapshot { dom: f.snapshot(), ax: Value::Null };
+        let snapshot = PageSnapshot {
+            dom: f.snapshot(),
+            ax: Value::Null,
+        };
         let source = build_source(&snapshot, &mut Revisions::new());
         let legacy = build(&snapshot, &mut Revisions::new());
         assert_eq!(source.page().as_ref(), &legacy);
@@ -4938,9 +5144,13 @@ mod tests {
         assert!(Arc::ptr_eq(source.page(), clone.page()));
         assert!(Arc::ptr_eq(&source.relations, &clone.relations));
         let pieces = &source.relations.runs;
-        let texts = |node| pieces.iter().filter(|p| p.node == node).map(|p| {
-            p.text(source.page()).to_string()
-        }).collect::<Vec<_>>();
+        let texts = |node| {
+            pieces
+                .iter()
+                .filter(|p| p.node == node)
+                .map(|p| p.text(source.page()).to_string())
+                .collect::<Vec<_>>()
+        };
         assert_eq!(texts(first as usize), ["café "]);
         assert_eq!(texts(second as usize), ["世界"]);
         assert_eq!(texts(third as usize), ["après"]);
@@ -4948,7 +5158,15 @@ mod tests {
         assert_eq!(owned.node, figure as usize);
         assert_eq!(owned.captions, [caption as usize]);
         assert!(owned.blocks.iter().any(|&b| matches!(source.page().blocks[b].kind, BlockKind::Media(m) if source.page().media[m].node == 100 + image)));
-        assert_eq!(source.relations.blocks.iter().filter(|b| b.node == p as usize).count(), 2);
+        assert_eq!(
+            source
+                .relations
+                .blocks
+                .iter()
+                .filter(|b| b.node == p as usize)
+                .count(),
+            2
+        );
     }
 
     #[test]
@@ -4964,7 +5182,10 @@ mod tests {
         f.el(nested, "IMG", &[("src", "/b.png")], "block");
         let caption = f.el(figure, "FIGCAPTION", &[], "block");
         f.text(caption, "Caption");
-        let mut snapshot = PageSnapshot { dom: f.snapshot(), ax: Value::Null };
+        let mut snapshot = PageSnapshot {
+            dom: f.snapshot(),
+            ax: Value::Null,
+        };
         let a = build_source(&snapshot, &mut Revisions::new());
         assert_eq!(a.relations.grids[0].node, grid as usize);
         assert_eq!(a.relations.grids[0].items, [left as usize, right as usize]);

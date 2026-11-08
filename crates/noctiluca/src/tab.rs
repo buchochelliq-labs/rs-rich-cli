@@ -321,7 +321,10 @@ impl Tab {
 
     /// Run the same worker, retaining source relationships. Every Page update
     /// carries Some whose page is the exact same Arc; other updates carry None.
-    pub fn spawn_with_source(engine: Box<dyn Engine>, update: impl Fn(Update, Option<SourcePage>) + Send + 'static) -> Tab {
+    pub fn spawn_with_source(
+        engine: Box<dyn Engine>,
+        update: impl Fn(Update, Option<SourcePage>) + Send + 'static,
+    ) -> Tab {
         let (commands, receive) = mpsc::channel();
         let stop = Arc::new(AtomicBool::new(false));
         let (ended, done) = mpsc::channel::<()>();
@@ -336,7 +339,13 @@ impl Tab {
         thread::spawn(move || {
             // Dropped last, after the engine, even when the thread panics.
             let _ended = ended;
-            run_with_source(engine, receive, &stop, &|event| update(event, None), Some(&update));
+            run_with_source(
+                engine,
+                receive,
+                &stop,
+                &|event| update(event, None),
+                Some(&update),
+            );
         });
         Tab {
             commands,
@@ -574,7 +583,9 @@ impl Worker<'_> {
 
     /// Every Page leaves through this helper, with the exact immutable pair.
     fn publish(&mut self, page: Arc<Page>, source: Option<SourcePage>) -> Arc<Page> {
-        let mut source = source.or_else(|| self.source.clone()).map(|s| s.republish(page.clone()));
+        let mut source = source
+            .or_else(|| self.source.clone())
+            .map(|s| s.republish(page.clone()));
         if let (Some(next), Some(previous)) = (&mut source, &self.source) {
             next.reuse_relations(previous);
         }
@@ -609,7 +620,9 @@ impl Worker<'_> {
         if let Ok(boxes) = self.engine.appended(TabId(0)) {
             self.appended = boxes.into_iter().collect();
         }
-        let source = self.source_update.map(|_| build_source_with(&snapshot, &mut self.revisions, &self.appended));
+        let source = self
+            .source_update
+            .map(|_| build_source_with(&snapshot, &mut self.revisions, &self.appended));
         let mut page = match &source {
             Some(source) => source.page().as_ref().clone(),
             None => build_with(&snapshot, &mut self.revisions, &self.appended),
@@ -1679,7 +1692,12 @@ fn key_of(media: &Media) -> StillKey {
 }
 
 #[cfg(test)]
-fn run(engine: Box<dyn Engine>, commands: Receiver<(u64, Command)>, stop: &AtomicBool, update: &dyn Fn(Update)) {
+fn run(
+    engine: Box<dyn Engine>,
+    commands: Receiver<(u64, Command)>,
+    stop: &AtomicBool,
+    update: &dyn Fn(Update),
+) {
     run_with_source(engine, commands, stop, update, None);
 }
 
@@ -1846,41 +1864,99 @@ mod tests {
     use super::*;
     use crate::testing::FakeEngine;
 
-
     #[test]
     fn source_publication_pairs_all_five_paths_and_reuses_passive_relations() {
         use crate::engine::{Frame, LiveRead, PageSnapshot, Playback};
         use crate::testing::PageBuilder;
         use std::{cell::RefCell, io};
-        struct State { snapshot: PageSnapshot, text: &'static str, time: f64 }
+        struct State {
+            snapshot: PageSnapshot,
+            text: &'static str,
+            time: f64,
+        }
         struct Source(Arc<Mutex<State>>);
         impl Engine for Source {
-            fn resize(&mut self, _: u16, _: u16) -> io::Result<()> { Ok(()) }
-            fn open(&mut self, _: TabId, _: &str) -> io::Result<()> { Ok(()) }
-            fn history(&mut self, _: TabId, _: HistoryStep) -> io::Result<()> { Ok(()) }
-            fn state(&self, _: TabId) -> PageState { PageState::default() }
-            fn snapshot(&mut self, _: TabId) -> io::Result<PageSnapshot> { Ok(self.0.lock().unwrap().snapshot.clone()) }
-            fn capture(&mut self, _: TabId, _: Rect, _: Format) -> io::Result<Frame> { Err(io::Error::other("no capture")) }
-            fn act(&mut self, _: TabId, _: &PageAction) -> io::Result<()> { Ok(()) }
-            fn events(&mut self) -> Vec<EngineEvent> { Vec::new() }
-            fn resource(&mut self, _: TabId, _: &str) -> io::Result<Vec<u8>> { Ok(include_bytes!("../tests/fixtures/glow.png").to_vec()) }
+            fn resize(&mut self, _: u16, _: u16) -> io::Result<()> {
+                Ok(())
+            }
+            fn open(&mut self, _: TabId, _: &str) -> io::Result<()> {
+                Ok(())
+            }
+            fn history(&mut self, _: TabId, _: HistoryStep) -> io::Result<()> {
+                Ok(())
+            }
+            fn state(&self, _: TabId) -> PageState {
+                PageState::default()
+            }
+            fn snapshot(&mut self, _: TabId) -> io::Result<PageSnapshot> {
+                Ok(self.0.lock().unwrap().snapshot.clone())
+            }
+            fn capture(&mut self, _: TabId, _: Rect, _: Format) -> io::Result<Frame> {
+                Err(io::Error::other("no capture"))
+            }
+            fn act(&mut self, _: TabId, _: &PageAction) -> io::Result<()> {
+                Ok(())
+            }
+            fn events(&mut self) -> Vec<EngineEvent> {
+                Vec::new()
+            }
+            fn resource(&mut self, _: TabId, _: &str) -> io::Result<Vec<u8>> {
+                Ok(include_bytes!("../tests/fixtures/glow.png").to_vec())
+            }
             fn playback(&mut self, _: TabId, _: NodeId) -> io::Result<Playback> {
-                Ok(Playback { paused: false, time: self.0.lock().unwrap().time, ready: 4, ..Default::default() })
+                Ok(Playback {
+                    paused: false,
+                    time: self.0.lock().unwrap().time,
+                    ready: 4,
+                    ..Default::default()
+                })
             }
             fn read_live(&mut self, _: TabId, _: NodeId, _: bool) -> io::Result<LiveRead> {
-                Ok(LiveRead { order: vec![7], fresh: vec![(7, serde_json::json!([{"t": self.0.lock().unwrap().text}]))], first_shown: Some(7), interactive: false })
+                Ok(LiveRead {
+                    order: vec![7],
+                    fresh: vec![(7, serde_json::json!([{"t": self.0.lock().unwrap().text}]))],
+                    first_shown: Some(7),
+                    interactive: false,
+                })
             }
         }
         let mut builder = PageBuilder::new("https://example.test/a", "source", 400.0, 400.0);
         let left = builder.element(builder.body(), "DIV", &[], &[], None);
         let right = builder.element(builder.body(), "DIV", &[], &[], None);
         let text = builder.text(left, "Words", Rect::new(0.0, 0.0, 100.0, 18.0));
-        builder.image(builder.body(), "https://example.test/a.png", "image", Rect::new(0.0, 30.0, 100.0, 100.0));
-        builder.element(builder.body(), "VIDEO", &[("src", "https://example.test/a.webm")], &[], Some(Rect::new(0.0, 140.0, 100.0, 100.0)));
-        let log = builder.element(builder.body(), "DIV", &[("role", "log")], &[], Some(Rect::new(120.0, 30.0, 100.0, 100.0)));
-        let entry = builder.element(log, "DIV", &[], &[], Some(Rect::new(120.0, 30.0, 100.0, 18.0)));
+        builder.image(
+            builder.body(),
+            "https://example.test/a.png",
+            "image",
+            Rect::new(0.0, 30.0, 100.0, 100.0),
+        );
+        builder.element(
+            builder.body(),
+            "VIDEO",
+            &[("src", "https://example.test/a.webm")],
+            &[],
+            Some(Rect::new(0.0, 140.0, 100.0, 100.0)),
+        );
+        let log = builder.element(
+            builder.body(),
+            "DIV",
+            &[("role", "log")],
+            &[],
+            Some(Rect::new(120.0, 30.0, 100.0, 100.0)),
+        );
+        let entry = builder.element(
+            log,
+            "DIV",
+            &[],
+            &[],
+            Some(Rect::new(120.0, 30.0, 100.0, 18.0)),
+        );
         builder.text(entry, "first", Rect::new(120.0, 30.0, 100.0, 18.0));
-        let state = Arc::new(Mutex::new(State { snapshot: builder.snapshot(), text: "first", time: 0.0 }));
+        let state = Arc::new(Mutex::new(State {
+            snapshot: builder.snapshot(),
+            text: "first",
+            time: 0.0,
+        }));
         let engine: Box<dyn Engine> = Box::new(Source(state.clone()));
         let updates = RefCell::new(Vec::new());
         let paired = |update: Update, source: Option<SourcePage>| {
@@ -1888,53 +1964,55 @@ mod tests {
                 let source = source.expect("every Page has its source");
                 assert!(Arc::ptr_eq(&page, source.page()));
                 updates.borrow_mut().push(source);
-            } else { assert!(source.is_none()); }
+            } else {
+                assert!(source.is_none());
+            }
         };
         let legacy = |_: Update| panic!("source publication must use paired callback");
         let (decode, jobs) = mpsc::channel();
         let (done, decoded) = mpsc::channel();
         let (decode_inline, _inline_jobs) = mpsc::channel();
         let (_inline_done, decoded_inline) = mpsc::channel();
-    let mut worker = Worker {
-        engine,
-        update: &legacy,
-        source_update: Some(&paired),
-        source: None,
-        revisions: Revisions::new(),
-        page: None,
-        state: PageState::default(),
-        dirty: None,
-        stills: HashMap::new(),
-        pictures: HashMap::new(),
-        decode,
-        decoded,
-        inline: HashMap::new(),
-        inline_asked: HashSet::new(),
-        inline_loader: None,
-        decode_inline,
-        decoded_inline,
-        metrics: None,
-        frames: Frames::default(),
-        on_screen: HashSet::new(),
-        intervals: HashMap::new(),
-        last_frame: None,
-        starved: false,
-        scale: 1.0,
-        scale_given: 1.0,
-        shown_time: HashMap::new(),
-        live: HashMap::new(),
-        appended: HashSet::new(),
-        settle: None,
-        stills_pending: false,
-        pixels: false,
-        pixels_cast: false,
-        screen_at: None,
-        latest: HashMap::new(),
-        drawn: HashMap::new(),
-        stale: HashSet::new(),
-        canvases: HashMap::new(),
-        asked: None,
-    };
+        let mut worker = Worker {
+            engine,
+            update: &legacy,
+            source_update: Some(&paired),
+            source: None,
+            revisions: Revisions::new(),
+            page: None,
+            state: PageState::default(),
+            dirty: None,
+            stills: HashMap::new(),
+            pictures: HashMap::new(),
+            decode,
+            decoded,
+            inline: HashMap::new(),
+            inline_asked: HashSet::new(),
+            inline_loader: None,
+            decode_inline,
+            decoded_inline,
+            metrics: None,
+            frames: Frames::default(),
+            on_screen: HashSet::new(),
+            intervals: HashMap::new(),
+            last_frame: None,
+            starved: false,
+            scale: 1.0,
+            scale_given: 1.0,
+            shown_time: HashMap::new(),
+            live: HashMap::new(),
+            appended: HashSet::new(),
+            settle: None,
+            stills_pending: false,
+            pixels: false,
+            pixels_cast: false,
+            screen_at: None,
+            latest: HashMap::new(),
+            drawn: HashMap::new(),
+            stale: HashSet::new(),
+            canvases: HashMap::new(),
+            asked: None,
+        };
         worker.read().unwrap();
         let first = updates.borrow()[0].clone();
         worker.read().unwrap();
@@ -1942,31 +2020,51 @@ mod tests {
         state.lock().unwrap().text = "changed live text";
         worker.read_live();
         assert_eq!(updates.borrow().len(), 2);
-        assert_eq!(worker.page.as_ref().unwrap().logs[0].entries[0].text(), "changed live text");
+        assert_eq!(
+            worker.page.as_ref().unwrap().logs[0].entries[0].text(),
+            "changed live text"
+        );
         state.lock().unwrap().time = 1.0;
         worker.follow_playback();
         assert_eq!(updates.borrow().len(), 3);
         worker.capture_stills();
         assert_eq!(updates.borrow().len(), 4);
         let (job, _) = jobs.try_recv().unwrap();
-        done.send((job.clone(), Picture::from_rgba(1, 1, vec![255,0,0,255]).unwrap())).unwrap();
+        done.send((
+            job.clone(),
+            Picture::from_rgba(1, 1, vec![255, 0, 0, 255]).unwrap(),
+        ))
+        .unwrap();
         worker.take_decoded();
         assert_eq!(updates.borrow().len(), 5);
-        for source in updates.borrow().iter() { assert!(Arc::ptr_eq(&first.relations, &source.relations)); }
-        state.lock().unwrap().snapshot.dom["documents"][0]["nodes"]["parentIndex"][text] = serde_json::json!(right);
+        for source in updates.borrow().iter() {
+            assert!(Arc::ptr_eq(&first.relations, &source.relations));
+        }
+        state.lock().unwrap().snapshot.dom["documents"][0]["nodes"]["parentIndex"][text] =
+            serde_json::json!(right);
         let before = worker.page.clone().unwrap();
         worker.read().unwrap();
-        assert_eq!(updates.borrow().len(), 6, "relationship-only read publishes");
+        assert_eq!(
+            updates.borrow().len(),
+            6,
+            "relationship-only read publishes"
+        );
         let changed = updates.borrow().last().unwrap().clone();
         assert_eq!(changed.page(), &before);
         assert!(!first.same_relations(&changed));
-        state.lock().unwrap().snapshot = PageBuilder::new("https://example.test/b", "new", 400.0, 400.0).snapshot();
+        state.lock().unwrap().snapshot =
+            PageBuilder::new("https://example.test/b", "new", 400.0, 400.0).snapshot();
         worker.read().unwrap();
         let nav = updates.borrow().last().unwrap().clone();
         assert_ne!(nav.page().document, first.page().document);
-        done.send((job, Picture::from_rgba(1, 1, vec![0,255,0,255]).unwrap())).unwrap();
+        done.send((job, Picture::from_rgba(1, 1, vec![0, 255, 0, 255]).unwrap()))
+            .unwrap();
         worker.take_decoded();
-        assert_eq!(updates.borrow().len(), 7, "stale decode cannot republish an old pair");
+        assert_eq!(
+            updates.borrow().len(),
+            7,
+            "stale decode cannot republish an old pair"
+        );
     }
 
     #[test]
@@ -2088,8 +2186,8 @@ mod tests {
             let mut worker = Worker {
                 engine: Box::new(engine),
                 update: &update,
-        source_update: None,
-        source: None,
+                source_update: None,
+                source: None,
                 revisions: Revisions::new(),
                 page: Some(Arc::new(page)),
                 state: PageState::default(),
@@ -2428,8 +2526,8 @@ mod tests {
         let mut worker = Worker {
             engine,
             update: &update,
-        source_update: None,
-        source: None,
+            source_update: None,
+            source: None,
             revisions: Revisions::new(),
             page: None,
             state: PageState::default(),
@@ -2520,8 +2618,8 @@ mod tests {
             let mut worker = Worker {
                 engine,
                 update: &update,
-        source_update: None,
-        source: None,
+                source_update: None,
+                source: None,
                 revisions: Revisions::new(),
                 page: None,
                 state: PageState::default(),
@@ -2646,8 +2744,8 @@ mod tests {
         let mut worker = Worker {
             engine,
             update: &update,
-        source_update: None,
-        source: None,
+            source_update: None,
+            source: None,
             revisions: Revisions::new(),
             page: None,
             state: PageState::default(),
@@ -2890,8 +2988,8 @@ mod tests {
         let mut worker = Worker {
             engine,
             update: &update,
-        source_update: None,
-        source: None,
+            source_update: None,
+            source: None,
             revisions: Revisions::new(),
             page: None,
             state: PageState::default(),

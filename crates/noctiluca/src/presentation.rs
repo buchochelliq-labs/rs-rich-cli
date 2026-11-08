@@ -153,10 +153,23 @@ impl Presentation {
     ) -> Rc<Projection> {
         self.update_pair(page, None, view, width, marks)
     }
-    pub fn update_source(&mut self, source: &SourcePage, view: View, width: u16, marks: &Marks) -> Rc<Projection> {
+    pub fn update_source(
+        &mut self,
+        source: &SourcePage,
+        view: View,
+        width: u16,
+        marks: &Marks,
+    ) -> Rc<Projection> {
         self.update_pair(source.page(), Some(source), view, width, marks)
     }
-    fn update_pair(&mut self, page: &Arc<Page>, source: Option<&SourcePage>, view: View, width: u16, marks: &Marks) -> Rc<Projection> {
+    fn update_pair(
+        &mut self,
+        page: &Arc<Page>,
+        source: Option<&SourcePage>,
+        view: View,
+        width: u16,
+        marks: &Marks,
+    ) -> Rc<Projection> {
         let same_source = match (&self.source, source) {
             (Some(old), Some(new)) => old.same_relations(new),
             (None, None) => true,
@@ -181,8 +194,9 @@ impl Presentation {
                 && changed
                     .iter()
                     .all(|node| self.slots.iter().any(|s| s.node == *node));
-            if same_source && same && (changed.is_empty() || patch_logs) && { same_dependencies(old, page, true) }
-            {
+            if same_source && same && (changed.is_empty() || patch_logs) && {
+                same_dependencies(old, page, true)
+            } {
                 let playback_changed = old.media.iter().zip(&page.media).any(|(a, b)| {
                     a.playback.is_some_and(|p| p.playing())
                         != b.playback.is_some_and(|p| p.playing())
@@ -487,7 +501,11 @@ mod source_tests {
         let mut builder = PageBuilder::new("https://example.test/", "source", 400.0, 400.0);
         let left = builder.element(builder.body(), "DIV", &[], &[], None);
         let right = builder.element(builder.body(), "DIV", &[], &[], None);
-        builder.text(left, "Same words", crate::engine::Rect::new(0.0, 0.0, 120.0, 18.0));
+        builder.text(
+            left,
+            "Same words",
+            crate::engine::Rect::new(0.0, 0.0, 120.0, 18.0),
+        );
         let mut snapshot = builder.snapshot();
         let a = build_source(&snapshot, &mut Revisions::new());
         let equal = build_source(&snapshot, &mut Revisions::new());
@@ -495,14 +513,21 @@ mod source_tests {
         let first = presentation.update_source(&a, View::Projection, 40, &Marks::default());
         let same = presentation.update_source(&equal, View::Projection, 40, &Marks::default());
         assert!(Rc::ptr_eq(&first, &same));
-        let parents = snapshot.dom["documents"][0]["nodes"]["parentIndex"].as_array_mut().unwrap();
-        for parent in parents { if parent.as_u64() == Some(left as u64) { *parent = serde_json::json!(right); } }
+        let parents = snapshot.dom["documents"][0]["nodes"]["parentIndex"]
+            .as_array_mut()
+            .unwrap();
+        for parent in parents {
+            if parent.as_u64() == Some(left as u64) {
+                *parent = serde_json::json!(right);
+            }
+        }
         let changed = build_source(&snapshot, &mut Revisions::new());
         assert_eq!(a.page(), changed.page());
         let next = presentation.update_source(&changed, View::Projection, 40, &Marks::default());
         assert!(!Rc::ptr_eq(&same, &next));
         assert_eq!(same.lines, next.lines);
-        let legacy = presentation.update_shared(changed.page(), View::Projection, 40, &Marks::default());
+        let legacy =
+            presentation.update_shared(changed.page(), View::Projection, 40, &Marks::default());
         assert!(!Rc::ptr_eq(&next, &legacy));
     }
 }

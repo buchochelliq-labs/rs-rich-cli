@@ -1,7 +1,7 @@
 //! Lossless semantic updates and replaceable frames share one ordered
 //! mailbox. Only one lightweight proxy marker is outstanding.
-use crate::tab::Update;
 use crate::model::SourcePage;
+use crate::tab::Update;
 
 pub(crate) struct Envelope {
     pub update: Update,
@@ -23,16 +23,20 @@ impl Mailbox {
         self.push_source(update, None);
     }
     pub fn push_source(&mut self, update: Update, source: Option<SourcePage>) {
-        assert!(source.as_ref().is_none_or(|s| matches!(&update, Update::Page(p) if std::sync::Arc::ptr_eq(p, s.page()))));
+        assert!(source.as_ref().is_none_or(
+            |s| matches!(&update, Update::Page(p) if std::sync::Arc::ptr_eq(p, s.page()))
+        ));
         if let Update::Page(p) = &update {
             self.document = p.document;
         }
         if let Some(key) = key_of(&update) {
             let before = self.queue.len();
-            self.queue.retain(|(_, old)| key_of(&old.update) != Some(key));
+            self.queue
+                .retain(|(_, old)| key_of(&old.update) != Some(key));
             self.replaced += before - self.queue.len();
         }
-        self.queue.push_back((self.document, Envelope { update, source }));
+        self.queue
+            .push_back((self.document, Envelope { update, source }));
         self.high_water = self.high_water.max(self.queue.len());
         let retained = self.queue.iter().map(|(_, u)| bytes(&u.update)).sum();
         self.retained_high_water = self.retained_high_water.max(retained);
@@ -52,7 +56,8 @@ impl Mailbox {
     }
     #[cfg(test)]
     pub fn pop(&mut self) -> Option<(u64, Update)> {
-        self.pop_envelope().map(|(document, event)| (document, event.update))
+        self.pop_envelope()
+            .map(|(document, event)| (document, event.update))
     }
 }
 pub(crate) struct Trace {
@@ -97,13 +102,20 @@ mod tests {
     }
     #[test]
     fn source_envelope_keeps_the_exact_page_across_navigation_and_legacy_updates() {
-        let snapshot = crate::testing::PageBuilder::new("https://example.test/", "pair", 400.0, 400.0).snapshot();
+        let snapshot =
+            crate::testing::PageBuilder::new("https://example.test/", "pair", 400.0, 400.0)
+                .snapshot();
         let source = crate::model::build_source(&snapshot, &mut crate::model::Revisions::new());
         let mut q = Mailbox::default();
         q.push_source(Update::Page(source.page().clone()), Some(source.clone()));
-        q.push(Update::Page(Arc::new(crate::model::Page { document: 50, ..Default::default() })));
+        q.push(Update::Page(Arc::new(crate::model::Page {
+            document: 50,
+            ..Default::default()
+        })));
         let (_, first) = q.pop_envelope().unwrap();
-        let Update::Page(page) = first.update else { panic!("page expected") };
+        let Update::Page(page) = first.update else {
+            panic!("page expected")
+        };
         assert!(Arc::ptr_eq(&page, first.source.unwrap().page()));
         assert!(Arc::ptr_eq(&page, source.page()));
         let (document, legacy) = q.pop_envelope().unwrap();
