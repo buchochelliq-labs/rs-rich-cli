@@ -2087,6 +2087,7 @@ fn reconcile_page_media(
 }
 
 /// Apply one of the tab's updates, on the app's thread.
+#[cfg(test)]
 fn apply(b: Browser, update: Update, cx: &mut Ctx) {
     apply_pair(b, update, None, cx);
 }

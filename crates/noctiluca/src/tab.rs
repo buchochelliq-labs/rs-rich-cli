@@ -1873,6 +1873,8 @@ mod tests {
             snapshot: PageSnapshot,
             text: &'static str,
             time: f64,
+            interactive: bool,
+            snapshots: usize,
         }
         struct Source(Arc<Mutex<State>>);
         impl Engine for Source {
@@ -1889,7 +1891,9 @@ mod tests {
                 PageState::default()
             }
             fn snapshot(&mut self, _: TabId) -> io::Result<PageSnapshot> {
-                Ok(self.0.lock().unwrap().snapshot.clone())
+                let mut state = self.0.lock().unwrap();
+                state.snapshots += 1;
+                Ok(state.snapshot.clone())
             }
             fn capture(&mut self, _: TabId, _: Rect, _: Format) -> io::Result<Frame> {
                 Err(io::Error::other("no capture"))
@@ -1912,11 +1916,12 @@ mod tests {
                 })
             }
             fn read_live(&mut self, _: TabId, _: NodeId, _: bool) -> io::Result<LiveRead> {
+                let state = self.0.lock().unwrap();
                 Ok(LiveRead {
                     order: vec![7],
-                    fresh: vec![(7, serde_json::json!([{"t": self.0.lock().unwrap().text}]))],
+                    fresh: vec![(7, serde_json::json!([{"t": state.text}]))],
                     first_shown: Some(7),
-                    interactive: false,
+                    interactive: state.interactive,
                 })
             }
         }
@@ -1956,6 +1961,8 @@ mod tests {
             snapshot: builder.snapshot(),
             text: "first",
             time: 0.0,
+            interactive: false,
+            snapshots: 0,
         }));
         let engine: Box<dyn Engine> = Box::new(Source(state.clone()));
         let updates = RefCell::new(Vec::new());
@@ -2052,6 +2059,34 @@ mod tests {
         let changed = updates.borrow().last().unwrap().clone();
         assert_eq!(changed.page(), &before);
         assert!(!first.same_relations(&changed));
+        let control = builder.element(
+            entry,
+            "A",
+            &[("href", "/guarded")],
+            &[("display", "inline")],
+            Some(Rect::new(120.0, 50.0, 100.0, 18.0)),
+        );
+        builder.text(
+            control,
+            "Guarded live action",
+            Rect::new(120.0, 50.0, 100.0, 18.0),
+        );
+        let before_reads = {
+            let mut state = state.lock().unwrap();
+            state.snapshot = builder.snapshot();
+            state.interactive = true;
+            state.snapshots
+        };
+        worker.read_live();
+        assert_eq!(
+            state.lock().unwrap().snapshots,
+            before_reads + 1,
+            "interactive log takes a complete source snapshot"
+        );
+        assert_eq!(updates.borrow().len(), 7);
+        let active = worker.page.as_ref().unwrap();
+        assert_eq!(active.controls.len(), 1);
+        assert!(active.check(&active.controls[0].binding(active)).is_ok());
         state.lock().unwrap().snapshot =
             PageBuilder::new("https://example.test/b", "new", 400.0, 400.0).snapshot();
         worker.read().unwrap();
@@ -2062,7 +2097,7 @@ mod tests {
         worker.take_decoded();
         assert_eq!(
             updates.borrow().len(),
-            7,
+            8,
             "stale decode cannot republish an old pair"
         );
     }

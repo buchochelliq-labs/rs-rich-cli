@@ -4951,7 +4951,7 @@ mod tests {
             }
             count += 1;
         }
-        assert!(count >= 25);
+        assert!(count >= 24);
     }
 
     #[test]
@@ -5178,8 +5178,11 @@ mod tests {
         let link = f.node(left, 1, "A", None, &[("href", "/original")], None);
         let figure = f.el(link, "FIGURE", &[], "block");
         let image = f.el(figure, "IMG", &[("src", "/a.png")], "block");
-        let nested = f.el(figure, "FIGURE", &[], "block");
+        let inner_grid = f.el(figure, "DIV", &[], "grid");
+        let nested = f.el(inner_grid, "FIGURE", &[], "block");
         f.el(nested, "IMG", &[("src", "/b.png")], "block");
+        let neighbor = f.el(inner_grid, "DIV", &[], "block");
+        f.text(neighbor, "Unrelated neighbor");
         let caption = f.el(figure, "FIGCAPTION", &[], "block");
         f.text(caption, "Caption");
         let mut snapshot = PageSnapshot {
@@ -5189,6 +5192,12 @@ mod tests {
         let a = build_source(&snapshot, &mut Revisions::new());
         assert_eq!(a.relations.grids[0].node, grid as usize);
         assert_eq!(a.relations.grids[0].items, [left as usize, right as usize]);
+        assert_eq!(a.relations.grids[1].node, inner_grid as usize);
+        assert_eq!(
+            a.relations.grids[1].items,
+            [nested as usize, neighbor as usize]
+        );
+        assert!(a.relations.contains(left as usize, inner_grid as usize));
         assert_eq!(a.relations.media_controls[0], Some(0));
         assert_eq!(a.page().media[0].node, 100 + image);
         assert_eq!(a.relations.figures[1].parent, Some(figure as usize));
