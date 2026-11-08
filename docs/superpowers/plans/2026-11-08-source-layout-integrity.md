@@ -46,10 +46,10 @@
 
 **Interfaces:** Consumes existing private DOM parent/layout/client/scroll/style data and Task1 traversal. Produces unchanged public model with conservative source visibility filtering, no new required fields or snapshot-style migration.
 
-- [ ] Add ordinary static overflow-hidden strips with wholly outside linked text/media and intersecting siblings. Assert fully outside content has no visible projected text/hints/regions; partial intersection remains admitted. Cover x-only/y-only clips, nested clips, boxless intermediates and already-scrolled coordinates. Add absolute/fixed escape case and root/body viewport-overflow case that must remain visible. Record intended RED.
-- [ ] Implement conservative ancestor-clip rejection using clipped axis and present source bounds. Do not reject across uncertain positioned chains, guess transforms/containment, use scrollWidth as clip edge, or globally clip to page viewport. Preserve semantic popup/twin behavior.
-- [ ] Run model/layout/popup regressions. Rerun unchanged saved-source consumer to new directory; Giphy wholly hidden labels484–492 must no longer create the prior right-edge spans, and partly intersecting483 must remain a separate admitted case. Source actions for retained items unchanged.
-- [ ] Fmt/scoped lint, self-review, commit and report with proof/limits; root independent task review before Task3.
+- [x] Add ordinary static overflow-hidden strips with wholly outside linked text/media and intersecting siblings. Assert fully outside content has no visible projected text/hints/regions; partial intersection remains admitted. Cover x-only/y-only clips, nested clips, boxless intermediates and already-scrolled coordinates. Add absolute/fixed escape case and root/body viewport-overflow case that must remain visible. Record intended RED.
+- [x] Implement conservative ancestor-clip rejection using clipped axis and present source bounds. Do not reject across uncertain positioned chains, guess transforms/containment, use scrollWidth as clip edge, or globally clip to page viewport. Preserve semantic popup/twin behavior.
+- [x] Run model/layout/popup regressions. Rerun unchanged saved-source consumer to new directory; Giphy wholly hidden labels484–492 must no longer create the prior right-edge spans, and partly intersecting483 must remain a separate admitted case. Source actions for retained items unchanged.
+- [x] Fmt/scoped lint, self-review, commit and report with proof/limits; root independent task review before Task3.
 
 ### Task 3: Preserve immutable grid membership through nested transforms
 
@@ -61,3 +61,6 @@
 - [ ] Retain actual grid layout boxes through boxless wrappers, then repair membership based on original source containment/frame before transforms and compose parent/child movement in consistent coordinates. Source grids with unequal row spans must not be blindly packed as equal-height repeated cards; preserve source relationships or conservatively bypass an unsafe snap. Do not force MDN outer-grid admission at the cost of header/body association. Do not increase a positional tolerance to paper over glyph overhang, regroup by title/proximity or rewrite general CSS layout. If existing rectangles cannot safely establish membership, report the exact ambiguous neutral case before introducing a private/additive source plan.
 - [ ] Run layout/product/media/popup/anchor regressions. Saved-source consumer must keep BBC heading372 and its related summary/metadata in their declared item after adaptation (resolve current control by source node/destination; ordinal12 from the old snapshot is not stable after retained links); retain fresh separate outputs and compare MDN nested behavior without attributing all gaps to Task1.
 - [ ] Build current Noctiluca for root native BBC/Giphy/MDN screenshots; record source-version/config and dynamic content limits. Fmt/scoped lint, self-review, commit and report. Root task review and later broad continuation review remain required; no application gate claims from source fixtures.
+
+
+Task3 routing: source rectangles alone cannot preserve figure/control/mixed-run ownership (matched source audit). The additive source-relations plan now implements these cases in its Task2. Do not execute this older Task3 separately; it remains pending until the source-aware task is independently reviewed.
