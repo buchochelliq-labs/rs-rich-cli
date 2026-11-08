@@ -953,6 +953,9 @@ struct Dom {
     faded: Vec<bool>,
     /// Concealed another way ([`veils`]): clipped or shrunk away.
     veiled: Vec<bool>,
+    /// This node alone is proven outside an ordinary overflow clip.
+    /// Never inherited: positioned descendants can escape that clip.
+    overflow_clipped: Vec<bool>,
     /// The [screen-reader twins](Twin): each element of a pair.
     twins: HashMap<usize, Twin>,
     /// Elements by their `id`, the first of each.
@@ -1119,6 +1122,7 @@ impl Dom {
             concealed: Vec::new(),
             faded: Vec::new(),
             veiled: Vec::new(),
+            overflow_clipped: Vec::new(),
             twins: HashMap::new(),
             ids: HashMap::new(),
             paint: ints(&layout_tree["paintOrders"]),
@@ -1137,6 +1141,7 @@ impl Dom {
         dom.concealed = faded.iter().zip(&veiled).map(|(f, v)| *f || *v).collect();
         dom.faded = faded;
         dom.veiled = veiled;
+        dom.overflow_clipped = (0..n).map(|i| overflow_clipped(&dom, i)).collect();
         for i in 0..n {
             if let Some(id) = dom.attr(i, "id").filter(|id| !id.is_empty()) {
                 dom.ids.entry(id.to_string()).or_insert(i);
@@ -1175,9 +1180,10 @@ impl Dom {
         self.kind[i] == 1
     }
 
-    /// Whether a laid-out node shows: not hidden, not transparent.
+    /// Whether a laid-out node shows: not hidden, transparent, or fully clipped.
     fn shows(&self, i: usize) -> bool {
         self.layout[i].is_some()
+            && !self.overflow_clipped[i]
             && !matches!(self.style(i, 1), "hidden" | "collapse")
             && self.style(i, 8) != "0"
     }
@@ -1307,6 +1313,47 @@ fn veils(dom: &Dom, i: usize) -> bool {
         && (rect.width <= 1.0 || rect.height <= 1.0)
     {
         return true;
+    }
+    false
+}
+
+/// Reject only a whole source box outside a known clipped axis. Snapshot
+/// bounds already include scrolling. The outer border box is conservative:
+/// it may retain clipped border/padding pixels, but never trims visible ones.
+/// Containing blocks and transforms are not captured, so stop at a nonstatic
+/// positioned chain rather than guessing whether it escapes an older clip.
+fn overflow_clipped(dom: &Dom, i: usize) -> bool {
+    let valid = |r: Rect| {
+        [r.x, r.y, r.width, r.height, r.right(), r.bottom()]
+            .into_iter()
+            .all(f64::is_finite)
+            && !r.is_empty()
+    };
+    let Some(rect) = dom.rect(i).filter(|&r| valid(r)) else {
+        return false;
+    };
+    let mut child = i;
+    while let Some(parent) = usize::try_from(dom.parent[child])
+        .ok()
+        .filter(|&p| p < child)
+    {
+        if dom.is_element(child) && dom.layout[child].is_some() && dom.style(child, 14) != "static"
+        {
+            return false;
+        }
+        let display = dom.style(parent, 0);
+        if dom.is_element(parent)
+            && !matches!(dom.name[parent].as_str(), "HTML" | "BODY")
+            && !matches!(display, "" | "inline" | "contents" | "none")
+            && let Some(clip) = dom.rect(parent).filter(|&r| valid(r))
+            && ((matches!(dom.style(parent, SNAPSHOT_OVERFLOW_X), "hidden" | "clip")
+                && (rect.x >= clip.right() || rect.right() <= clip.x))
+                || (matches!(dom.style(parent, 10), "hidden" | "clip")
+                    && (rect.y >= clip.bottom() || rect.bottom() <= clip.y)))
+        {
+            return true;
+        }
+        child = parent;
     }
     false
 }
@@ -1855,6 +1902,19 @@ impl Walker<'_> {
 
     fn walk(&mut self, i: usize, context: &Context) {
         let dom = self.dom;
+        if dom.overflow_clipped[i] {
+            // A clipped ancestor is not a subtree veil. Keep looking for
+            // escaping descendants, including their original source links.
+            let link_with_content = dom.is_element(i)
+                && self.ax.role(dom.backend[i]).or_else(|| dom_role(dom, i)) == Some(Role::Link)
+                && visible_footprint(dom, i).is_some();
+            if !link_with_content {
+                for &child in &dom.children[i] {
+                    self.walk(child, context);
+                }
+                return;
+            }
+        }
         match dom.kind[i] {
             3 => {
                 if context.silent
@@ -1994,7 +2054,7 @@ impl Walker<'_> {
                 self.page.controls[index].hover_only = true;
                 return;
             }
-            let footprint = (!laid_out && role == Role::Link)
+            let footprint = ((!laid_out || dom.overflow_clipped[i]) && role == Role::Link)
                 .then(|| visible_footprint(dom, i))
                 .flatten();
             if !laid_out && footprint.is_none()
@@ -4033,6 +4093,18 @@ mod tests {
                 [30.0, 89.375, 20.0, 18.0],
                 [140.0, 40.0, 20.0, 18.0],
             ),
+            (
+                15,
+                [0.0, 40.0, 20.0, 18.0],
+                [0.625, 40.0, 20.0, 18.0],
+                [30.0, 100.0, 20.0, 18.0],
+            ),
+            (
+                10,
+                [30.0, 12.0, 20.0, 18.0],
+                [30.0, 12.625, 20.0, 18.0],
+                [140.0, 40.0, 20.0, 18.0],
+            ),
         ] {
             for overflow in ["hidden", "clip"] {
                 let mut f = Fake::new();
@@ -4144,8 +4216,17 @@ mod tests {
                 let positioned = f.el(ancestor, "DIV", &[], "block");
                 clip_bounds(&mut f, positioned, [240.0, 40.0, 60.0, 40.0]);
                 clip_style(&mut f, positioned, 14, position);
-                let (link, image) =
-                    clip_link(&mut f, positioned, "Escaped", [240.0, 40.0, 60.0, 18.0]);
+                let (link, image, href) = if ancestor_is_link {
+                    let text = f.text(positioned, "Escaped");
+                    clip_bounds(&mut f, text, [240.0, 40.0, 60.0, 18.0]);
+                    let image = f.el(positioned, "IMG", &[("src", "/photo.png")], "block");
+                    clip_bounds(&mut f, image, [240.0, 40.0, 60.0, 18.0]);
+                    (100 + ancestor, 100 + image, "/ancestor")
+                } else {
+                    let (link, image) =
+                        clip_link(&mut f, positioned, "Escaped", [240.0, 40.0, 60.0, 18.0]);
+                    (link, image, "/story")
+                };
                 let page = f.page(json!({"nodes": []}));
                 assert!(
                     page.blocks
@@ -4158,7 +4239,8 @@ mod tests {
                     .find(|c| c.node == link)
                     .expect("escaped source link");
                 assert_eq!(page.check(&c.binding(&page)).unwrap().node, link);
-                assert_eq!(c.href.as_deref(), Some("/story"));
+                assert_eq!(c.href.as_deref(), Some(href));
+                assert_eq!(c.revision, 1);
                 assert!(page.media.iter().any(|m| m.node == image));
                 assert!(
                     page.blocks
