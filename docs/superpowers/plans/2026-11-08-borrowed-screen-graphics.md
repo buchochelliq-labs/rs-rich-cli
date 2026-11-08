@@ -36,7 +36,7 @@
 - Modify/test: `crates/rich-intuituive/src/image.rs` (borrowed adapter/shared rectangle construction).
 - Modify: `crates/rich-intuituive/src/app.rs` (`draw_graphics` calls new entry point).
 - Extend: existing `crates/rich-intuituive/tests/image_clipping.rs`, `image_compositing.rs` and external public consumer as appropriate for actual target names.
-- Document: `docs/guide/intuituive-images.md` if present, else nearest existing image guide section; no new duplicate guide.
+- Document: `docs/guide/intuituive/plugins.md` (existing Images/art and graphics-source section).
 
 **Interfaces:**
 - Consumes unchanged `PlacementSource::placements(&Frame)` and `placements_with_metrics(&Frame, Option<(u16,u16)>)`.
