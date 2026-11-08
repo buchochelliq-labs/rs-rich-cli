@@ -153,3 +153,25 @@ Choose the smallest additive metrics/context API after tracing the current backe
 - [Shared component audit #866](https://github.com/buchochelliq-labs/rs-rich-cli/issues/866)
 - [Browser translation #867](https://github.com/buchochelliq-labs/rs-rich-cli/issues/867)
 - [Performance evaluation approach #861](https://github.com/buchochelliq-labs/rs-rich-cli/issues/861)
+
+## Addendum: source dialogs observed during native review
+
+A real Speedtest privacy panel showed that source-declared dialogs must remain
+independent popups instead of being interleaved with the page under them. Use
+the public intuiTUIve layer and owner-controlled modal primitives for this
+composition, with source-declared modal semantics determining focus capture;
+geometry alone does not infer a modal. Preserve ordinary source controls and
+underlay data, forward source-owned Escape, and use the browser image only in
+pixel view. A visible fixed popup temporarily uses source-position-preserving
+underlay projection so its rectangle and page content remain aligned; the
+configured adaptation returns when it closes. This can reduce compaction while
+open. Higher-painted ordinary source blocks that can horizontally overlap are
+retained in bounded per-overlay metadata and projected at their current scroll
+position. This is not a general CSS compositor.
+
+The necessary unreleased Noctiluca model migration adds `Page.overlays`;
+complete `Page` literals add `overlays: Vec::new()` or `..Page::default()`.
+Consumers inspecting source dialogs use `Page::dialogs()` instead of relying
+on their former docked-strip classification. Generic framework additions stay
+additive and contain no browser types. See the changelog and the framework
+layout guide for the APIs and owner-controlled dismissal behavior.
