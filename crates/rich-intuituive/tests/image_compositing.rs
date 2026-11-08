@@ -146,14 +146,14 @@ mod scenes {
     };
     use std::{cell::Cell, rc::Rc, time::Duration};
 
+    type SceneState = (bool, usize, bool);
+    type SceneHandle = Rc<Cell<Option<intuituive::Signal<SceneState>>>>;
+
     fn make(
         picture: Picture,
         pixels: Pixels,
-        state: (bool, usize, bool),
-    ) -> (
-        intuituive::Driver,
-        Rc<Cell<Option<intuituive::Signal<(bool, usize, bool)>>>>,
-    ) {
+        state: SceneState,
+    ) -> (intuituive::Driver, SceneHandle) {
         let handle = Rc::new(Cell::new(None));
         let copy = handle.clone();
         let app = App::new(move || {
