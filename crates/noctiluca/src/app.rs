@@ -3027,8 +3027,13 @@ pub fn app(engine: Box<dyn Engine>, options: Options) -> App {
         let (send, receive) = mpsc::sync_channel(1);
         let inbox = updates.clone();
         let offer: UpdateSink = Arc::new(move |update| {
-            inbox.lock().unwrap().push(update);
+            let trace = {
+                let mut inbox = inbox.lock().unwrap();
+                inbox.push(update);
+                crate::diagnostics::enabled().then(|| inbox.trace())
+            };
             let _ = send.try_send(());
+            if let Some(trace) = trace { trace.emit(); }
         });
         #[cfg(test)]
         TEST_OFFER.with(|slot| *slot.borrow_mut() = Some(offer.clone()));
@@ -3091,11 +3096,16 @@ pub fn app(engine: Box<dyn Engine>, options: Options) -> App {
         let completions = prepared.clone();
         let (wake_prepared, ready) = mpsc::sync_channel(1);
         let encoder = Encoder::spawn(move |job| {
-            let mut q = completions.lock().unwrap();
-            q.retain(|old| old.node != job.node);
-            q.push_back(job);
-            if crate::diagnostics::enabled() {eprintln!("RICH_MEDIA {{\"stage\":\"prepared_queue\",\"waiting\":{},\"decoded_bytes\":{}}}",q.len(),q.iter().map(|job|job.picture.image().as_bytes().len()).sum::<usize>());}
+            let trace = {
+                let mut q = completions.lock().unwrap();
+                q.retain(|old| old.node != job.node);
+                q.push_back(job);
+                crate::diagnostics::enabled().then(|| (q.len(), q.iter().map(|job| job.picture.image().as_bytes().len()).sum::<usize>()))
+            };
             let _ = wake_prepared.try_send(());
+            if let Some((waiting, bytes)) = trace {
+                eprintln!("RICH_MEDIA {{\"stage\":\"prepared_queue\",\"waiting\":{waiting},\"decoded_bytes\":{bytes}}}");
+            }
         });
         let b = Browser {
             page,

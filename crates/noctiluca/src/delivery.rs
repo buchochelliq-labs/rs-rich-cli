@@ -24,19 +24,34 @@ impl Mailbox {
         self.high_water = self.high_water.max(self.queue.len());
         let retained = self.queue.iter().map(|(_, u)| bytes(u)).sum();
         self.retained_high_water = self.retained_high_water.max(retained);
-        if crate::diagnostics::enabled() {
-            eprintln!(
-                "RICH_MEDIA {{\"stage\":\"delivery_queue\",\"waiting\":{},\"waiting_peak\":{},\"rgb_bytes\":{},\"rgb_peak\":{},\"replaced\":{}}}",
-                self.queue.len(),
-                self.high_water,
-                retained,
-                self.retained_high_water,
-                self.replaced
-            );
+    }
+    pub fn trace(&self) -> Trace {
+        Trace {
+            waiting: self.queue.len(),
+            high_water: self.high_water,
+            retained: self.queue.iter().map(|(_, u)| bytes(u)).sum(),
+            retained_high_water: self.retained_high_water,
+            replaced: self.replaced,
         }
     }
+
     pub fn pop(&mut self) -> Option<(u64, Update)> {
         self.queue.pop_front()
+    }
+}
+pub(crate) struct Trace {
+    waiting: usize,
+    high_water: usize,
+    retained: usize,
+    retained_high_water: usize,
+    replaced: usize,
+}
+impl Trace {
+    pub fn emit(self) {
+        eprintln!(
+            "RICH_MEDIA {{\"stage\":\"delivery_queue\",\"waiting\":{},\"waiting_peak\":{},\"rgb_bytes\":{},\"rgb_peak\":{},\"replaced\":{}}}",
+            self.waiting, self.high_water, self.retained, self.retained_high_water, self.replaced
+        );
     }
 }
 fn key_of(update: &Update) -> Option<Option<i64>> {

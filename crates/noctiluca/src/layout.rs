@@ -128,35 +128,62 @@ pub fn scroll_log(log: &Log, state: LogScroll, by: isize) -> LogScroll {
     }
 }
 
+#[cfg(test)]
+thread_local! { static TEST_LOG_ENTRY_WRAPS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) }; }
+fn entry_lines(entry: &crate::model::Entry, width: usize, page: &Page, marks: &Marks) -> Vec<Line> {
+    #[cfg(test)]
+    TEST_LOG_ENTRY_WRAPS.with(|n| n.set(n.get() + 1));
+    wrap(&spans(&entry.runs, "", page, marks), width, &[], &[])
+}
+
 /// The `rows` lines of `log` in view at `width` cells: its newest (or,
 /// scrolled up, those up to the entry it is paused on) with the
 /// [live tail](Rule::LiveTail); without it, from the entry Chrome shows
 /// first. Padded to `rows`.
+/// Entries outside that window do not need text layout.
 pub fn log_lines(log: &Log, width: usize, rows: usize, page: &Page, marks: &Marks) -> Vec<Line> {
-    let mut lines = Vec::new();
-    // Each entry's first line.
-    let mut starts = Vec::with_capacity(log.entries.len());
-    for entry in &log.entries {
-        starts.push(lines.len());
-        lines.extend(wrap(&spans(&entry.runs, "", page, marks), width, &[], &[]));
+    if rows == 0 {
+        return Vec::new();
     }
-    let line_of = |key: u64| log.entries.iter().position(|e| e.key == key);
-    let (start, end) = if marks.adapt.on(Rule::LiveTail) {
-        let end = match marks.logs.get(&log.node).copied().unwrap_or_default() {
-            LogScroll::Follow => lines.len(),
-            LogScroll::Paused(key) => match line_of(key) {
-                Some(n) => starts.get(n + 1).copied().unwrap_or(lines.len()),
-                None => rows.min(lines.len()),
+    let position = |key| log.entries.iter().position(|entry| entry.key == key);
+    let (first, end, reverse) = if marks.adapt.on(Rule::LiveTail) {
+        match marks.logs.get(&log.node).copied().unwrap_or_default() {
+            LogScroll::Follow => (0, log.entries.len(), true),
+            LogScroll::Paused(key) => match position(key) {
+                Some(at) => (0, at + 1, true),
+                None => (0, log.entries.len(), false),
             },
-        };
-        (end.saturating_sub(rows), end)
+        }
     } else {
-        let start = log.first_shown.and_then(line_of).map_or(0, |n| starts[n]);
-        (start, (start + rows).min(lines.len()))
+        (
+            log.first_shown.and_then(position).unwrap_or(0),
+            log.entries.len(),
+            false,
+        )
     };
-    let mut out: Vec<Line> = lines[start..end].to_vec();
-    out.resize(rows, Line::default());
-    out
+    let mut lines = Vec::new();
+    for offset in 0..end - first {
+        let index = if reverse {
+            end - 1 - offset
+        } else {
+            first + offset
+        };
+        let entry = entry_lines(&log.entries[index], width, page, marks);
+        if reverse {
+            lines.extend(entry.into_iter().rev());
+        } else {
+            lines.extend(entry);
+        }
+        if lines.len() >= rows {
+            break;
+        }
+    }
+    lines.truncate(rows);
+    if reverse {
+        lines.reverse();
+    }
+    lines.resize(rows, Line::default());
+    lines
 }
 
 /// Lines as rich text, one per row, no wrapping.
@@ -2435,6 +2462,127 @@ pub(crate) fn rectangles_overlap(a: Region, b: Region) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn log_fixture() -> Page {
+        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("tests/snapshots/stream-with-log.json");
+        crate::model::build(
+            &crate::testing::snapshot_file(&path).unwrap(),
+            &mut crate::model::Revisions::new(),
+        )
+    }
+    #[test]
+    fn fixed_log_wraps_only_entries_contributing_visible_rows() {
+        let page = log_fixture();
+        let mut log = page.logs[0].clone();
+        log.entries = (0..100)
+            .map(|key| crate::model::Entry {
+                key,
+                runs: vec![Run::plain("x")],
+            })
+            .collect();
+        let mut marks = Marks::default();
+        for state in [
+            LogScroll::Follow,
+            LogScroll::Paused(50),
+            LogScroll::Paused(999),
+        ] {
+            marks.logs.insert(log.node, state);
+            TEST_LOG_ENTRY_WRAPS.with(|n| n.set(0));
+            assert_eq!(log_lines(&log, 20, 3, &page, &marks).len(), 3);
+            assert_eq!(TEST_LOG_ENTRY_WRAPS.with(|n| n.get()), 3);
+        }
+        marks.adapt = Adapt::none();
+        log.first_shown = Some(80);
+        TEST_LOG_ENTRY_WRAPS.with(|n| n.set(0));
+        log_lines(&log, 20, 3, &page, &marks);
+        assert_eq!(TEST_LOG_ENTRY_WRAPS.with(|n| n.get()), 3);
+        TEST_LOG_ENTRY_WRAPS.with(|n| n.set(0));
+        assert!(log_lines(&log, 20, 0, &page, &marks).is_empty());
+        assert_eq!(TEST_LOG_ENTRY_WRAPS.with(|n| n.get()), 0);
+    }
+    #[test]
+    fn bounded_log_lines_match_full_wrapping_with_inline_styles_and_unicode() {
+        let page = log_fixture();
+        let mut log = page.logs[0].clone();
+        let template = log
+            .entries
+            .iter()
+            .find(|e| e.runs.iter().any(|r| r.picture.is_some()))
+            .unwrap()
+            .clone();
+        log.entries = (0..60)
+            .map(|key| {
+                let mut e = template.clone();
+                e.key = key;
+                let mut run = Run::plain(format!(
+                    "row {key} 界 e\u{301} 👩\u{200d}💻\nlongwordabcdefghijklmnopqrstuvwxyz "
+                ));
+                run.bold = true;
+                run.control = Some(0);
+                e.runs.insert(0, run);
+                e
+            })
+            .collect();
+        for width in [1, 8, 40] {
+            for rows in [0, 1, 5, 18] {
+                for first in [None, Some(10), Some(999)] {
+                    for state in [
+                        LogScroll::Follow,
+                        LogScroll::Paused(30),
+                        LogScroll::Paused(999),
+                    ] {
+                        for adapted in [false, true] {
+                            log.first_shown = first;
+                            let mut marks = Marks::default();
+                            if !adapted {
+                                marks.adapt = Adapt::none();
+                            }
+                            marks.logs.insert(log.node, state);
+                            marks.hints.insert(0, "ab".into());
+                            assert_eq!(
+                                log_lines(&log, width, rows, &page, &marks),
+                                all_entry_log_reference(&log, width, rows, &page, &marks),
+                                "{width}/{rows}/{first:?}/{state:?}/{adapted}"
+                            );
+                        }
+                    }
+                }
+            }
+        }
+    }
+    fn all_entry_log_reference(
+        log: &Log,
+        width: usize,
+        rows: usize,
+        page: &Page,
+        marks: &Marks,
+    ) -> Vec<Line> {
+        let mut lines = Vec::new();
+        // Each entry's first line.
+        let mut starts = Vec::with_capacity(log.entries.len());
+        for entry in &log.entries {
+            starts.push(lines.len());
+            lines.extend(wrap(&spans(&entry.runs, "", page, marks), width, &[], &[]));
+        }
+        let line_of = |key: u64| log.entries.iter().position(|e| e.key == key);
+        let (start, end) = if marks.adapt.on(Rule::LiveTail) {
+            let end = match marks.logs.get(&log.node).copied().unwrap_or_default() {
+                LogScroll::Follow => lines.len(),
+                LogScroll::Paused(key) => match line_of(key) {
+                    Some(n) => starts.get(n + 1).copied().unwrap_or(lines.len()),
+                    None => rows.min(lines.len()),
+                },
+            };
+            (end.saturating_sub(rows), end)
+        } else {
+            let start = log.first_shown.and_then(line_of).map_or(0, |n| starts[n]);
+            (start, (start + rows).min(lines.len()))
+        };
+        let mut out: Vec<Line> = lines[start..end].to_vec();
+        out.resize(rows, Line::default());
+        out
+    }
 
     fn s(text: &str) -> Span {
         Span::new(text, "")

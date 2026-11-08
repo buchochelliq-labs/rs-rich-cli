@@ -2,48 +2,137 @@
 //! playback, decoded pixels and fixed-box log contents.
 use crate::config::View;
 use crate::layout::{self, Line, LogSlot, Marks, Part, Projection, Region, Span};
-use crate::model::Page;
+use crate::model::{Log, Media, Page};
 use std::rc::Rc;
 use std::sync::Arc;
 
 #[derive(Default)]
 pub(crate) struct Presentation {
     previous: Option<(Arc<Page>, View, u16, Marks)>,
-    dependencies: Option<Page>,
     projection: Rc<Projection>,
     slots: Vec<LogSlot>,
 }
 
-// Exact equality, not the rounded geometry heuristic used by tab settling.
-fn dependencies(page: &Page, logs: bool) -> Page {
-    let mut key = page.clone();
-    key.inline_pictures.clear();
-    for m in &mut key.media {
-        m.still = None;
-        m.picture = None;
-        m.playback = None;
-    }
-    if logs {
-        for l in &mut key.logs {
-            l.entries.clear();
-            l.first_shown = None;
+// Borrow every layout dependency exactly. Exhaustive destructuring makes
+// additions to Page/Media/Log require a conscious invalidation decision.
+fn page_key(page: &Page) -> impl PartialEq + '_ {
+    let Page {
+        url,
+        title,
+        document,
+        blocks,
+        controls,
+        media: _,
+        width,
+        height,
+        truncated,
+        has_ax,
+        background,
+        logs: _,
+        inline_pictures: _,
+        regions,
+        grids,
+        indicators,
+        shelves,
+        layers,
+        scroll_y,
+        view_height,
+    } = page;
+    (
+        (url, title, document, blocks, controls),
+        (
+            width,
+            height,
+            truncated,
+            has_ax,
+            background,
+            scroll_y,
+            view_height,
+        ),
+        (regions, grids, indicators, shelves, layers),
+    )
+}
+fn media_key(media: &Media) -> impl PartialEq + '_ {
+    let Media {
+        node,
+        kind,
+        rect,
+        alt,
+        src,
+        still: _,
+        picture: _,
+        captioned,
+        playback: _,
+        poster,
+        controls,
+        autoplay,
+        empty_alt,
+        aria_hidden,
+        in_label,
+        revision,
+        text,
+        pending,
+    } = media;
+    (
+        (node, kind, rect, alt, src, captioned, poster),
+        (
+            controls,
+            autoplay,
+            empty_alt,
+            aria_hidden,
+            in_label,
+            revision,
+            text,
+            pending,
+        ),
+    )
+}
+fn log_key(log: &Log) -> impl PartialEq + '_ {
+    let Log {
+        node,
+        kind,
+        rect,
+        label,
+        entries: _,
+        first_shown: _,
+    } = log;
+    (node, kind, rect, label)
+}
+fn same_dependencies(a: &Page, b: &Page, patch_logs: bool) -> bool {
+    page_key(a) == page_key(b)
+        && a.media
+            .iter()
+            .map(media_key)
+            .eq(b.media.iter().map(media_key))
+        && if patch_logs {
+            a.logs.iter().map(log_key).eq(b.logs.iter().map(log_key))
+        } else {
+            a.logs == b.logs
         }
-    }
-    key
 }
 
 #[derive(Default)]
 pub(crate) struct Reading {
-    previous: Option<(Page, u16, Marks)>,
-    pieces: Vec<layout::Piece>,
+    previous: Option<(Arc<Page>, u16, Marks)>,
+    pieces: Rc<Vec<layout::Piece>>,
 }
 impl Reading {
-    pub fn update(&mut self, page: &Page, width: u16, marks: &Marks) -> Vec<layout::Piece> {
-        let key = (dependencies(page, false), width, marks.clone());
-        if self.previous.as_ref() != Some(&key) {
-            self.pieces = layout::reader(page, width, marks);
-            self.previous = Some(key);
+    pub fn update(
+        &mut self,
+        page: &Arc<Page>,
+        width: u16,
+        marks: &Marks,
+    ) -> Rc<Vec<layout::Piece>> {
+        let same = self
+            .previous
+            .as_ref()
+            .is_some_and(|(old, old_width, old_marks)| {
+                *old_width == width && old_marks == marks && same_dependencies(old, page, false)
+            });
+        if !same {
+            self.pieces = Rc::new(layout::reader(page, width, marks));
         }
+        self.previous = Some((page.clone(), width, marks.clone()));
         self.pieces.clone()
     }
 }
@@ -60,7 +149,6 @@ impl Presentation {
         width: u16,
         marks: &Marks,
     ) -> Rc<Projection> {
-        let key = dependencies(page, true);
         if let Some((old, old_view, old_width, old_marks)) = &self.previous {
             let mut outer_marks = marks.clone();
             outer_marks.logs = old_marks.logs.clone();
@@ -79,31 +167,31 @@ impl Presentation {
                 && changed
                     .iter()
                     .all(|node| self.slots.iter().any(|s| s.node == *node));
-            if same
-                && (changed.is_empty() || patch_logs)
-                && self.dependencies.as_ref() == Some(&key)
+            if same && (changed.is_empty() || patch_logs) && { same_dependencies(old, page, true) }
             {
                 let playback_changed = old.media.iter().zip(&page.media).any(|(a, b)| {
                     a.playback.is_some_and(|p| p.playing())
                         != b.playback.is_some_and(|p| p.playing())
                 });
                 if !changed.is_empty() || (playback_changed && view != View::Reader) {
-                    let output = Rc::make_mut(&mut self.projection);
+                    let output = { Rc::make_mut(&mut self.projection) };
                     for slot in &self.slots {
                         if !changed.contains(&slot.node) {
                             continue;
                         }
                         let log = page.logs.iter().find(|l| l.node == slot.node).unwrap();
-                        let lines =
-                            layout::log_lines(log, slot.region.cols, slot.region.rows, page, marks);
+                        let lines = {
+                            layout::log_lines(log, slot.region.cols, slot.region.rows, page, marks)
+                        };
                         let part = part_mut(output, slot.part);
-                        patch(part, slot.region, &lines, width as usize);
+                        {
+                            patch(part, slot.region, &lines, width as usize);
+                        }
                     }
                     if playback_changed {
                         refresh_media(output, page, width as usize);
                     }
                 }
-                self.dependencies = Some(key);
                 self.previous = Some((page.clone(), view, width, marks.clone()));
                 return self.projection.clone();
             }
@@ -116,7 +204,6 @@ impl Presentation {
             marks,
             &mut self.slots,
         ));
-        self.dependencies = Some(key);
         self.previous = Some((page.clone(), view, width, marks.clone()));
         self.projection.clone()
     }
@@ -130,7 +217,34 @@ fn part_mut(p: &mut Projection, part: Part) -> &mut Projection {
     }
 }
 
-type Cell = (String, usize);
+#[derive(Clone)]
+enum Glyph {
+    Scalar(char),
+    Joined(String),
+    Continuation,
+}
+impl Glyph {
+    fn join(&mut self, ch: char) {
+        match self {
+            Self::Scalar(base) => {
+                let mut text = String::new();
+                text.push(*base);
+                text.push(ch);
+                *self = Self::Joined(text);
+            }
+            Self::Joined(text) => text.push(ch),
+            Self::Continuation => unreachable!(),
+        }
+    }
+    fn push_to(&self, text: &mut String) {
+        match self {
+            Self::Scalar(ch) => text.push(*ch),
+            Self::Joined(s) => text.push_str(s),
+            Self::Continuation => {}
+        }
+    }
+}
+type Cell = (Glyph, usize);
 type CellStyle = (String, Option<usize>);
 fn cells(line: &Line, width: usize, styles: &mut Vec<CellStyle>) -> Vec<Cell> {
     let mut out = Vec::new();
@@ -143,38 +257,46 @@ fn cells(line: &Line, width: usize, styles: &mut Vec<CellStyle>) -> Vec<Cell> {
                 styles.len() - 1
             });
         for ch in span.text.chars() {
-            let w = rich::cells::cell_len(&ch.to_string());
+            let w = rich::cells::cell_len(ch.encode_utf8(&mut [0; 4]));
             if w == 0 {
-                if let Some(cell) = out.iter_mut().rev().find(|c: &&mut Cell| !c.0.is_empty()) {
-                    cell.0.push(ch);
+                if let Some(cell) = out
+                    .iter_mut()
+                    .rev()
+                    .find(|c: &&mut Cell| !matches!(c.0, Glyph::Continuation))
+                {
+                    cell.0.join(ch);
                 }
                 continue;
             }
             if out.len() + w > width {
                 break;
             }
-            out.push((ch.to_string(), style));
+            out.push((Glyph::Scalar(ch), style));
             for _ in 1..w {
-                out.push((String::new(), style));
+                out.push((Glyph::Continuation, style));
             }
         }
     }
-    out.resize(width, (" ".into(), 0));
+    out.resize(width, (Glyph::Scalar(' '), 0));
     out
 }
 fn line(cells: Vec<Cell>, styles: &[CellStyle]) -> Line {
     let mut out = Line::default();
     for (text, style) in cells {
         let (style, control) = &styles[style];
-        if text.is_empty() {
+        if matches!(text, Glyph::Continuation) {
             continue;
         }
         match out.spans.last_mut() {
             Some(last) if last.style == *style && last.control == *control => {
-                last.text.push_str(&text)
+                text.push_to(&mut last.text)
             }
             _ => out.spans.push(Span {
-                text,
+                text: {
+                    let mut out = String::new();
+                    text.push_to(&mut out);
+                    out
+                },
                 style: style.clone(),
                 control: *control,
                 picture: None,
@@ -208,7 +330,7 @@ fn patch(p: &mut Projection, r: Region, lines: &[Line], width: usize) {
         for span in &replacement.spans {
             let start = x;
             for ch in span.text.chars() {
-                let w = rich::cells::cell_len(&ch.to_string());
+                let w = rich::cells::cell_len(ch.encode_utf8(&mut [0; 4]));
                 if x + w > end {
                     break;
                 }
