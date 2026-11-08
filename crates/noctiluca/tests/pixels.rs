@@ -115,6 +115,83 @@ fn the_screencast_shows_as_tiles_and_one_change_sends_one_tile() {
 }
 
 #[test]
+fn navigation_and_view_switch_discard_old_tiles_until_a_new_frame() {
+    let engine = engine();
+    let state = engine.state.clone();
+    let mut driver = app(Box::new(engine), options(Images::Kitty)).driver(80, 10);
+    driver.settle();
+    let start = Instant::now();
+    while !state.lock().unwrap().screencast {
+        driver.settle();
+        assert!(start.elapsed() < Duration::from_secs(5));
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    let old = RgbImage::from_pixel(640, 108, Rgb([255, 0, 0]));
+    state.lock().unwrap().frames.push(frame(&old));
+    let output = written(&mut driver, 200, |o| o.contains("a=T"));
+    assert!(output.contains("a=T"), "first frame was not uploaded");
+    assert!(screen(&driver).contains(rich_art::kitty::PLACEHOLDER));
+    driver.press("alt+x");
+    driver.press("alt+x");
+    assert!(
+        !screen(&driver).contains(rich_art::kitty::PLACEHOLDER),
+        "previous view's pixels returned without a frame"
+    );
+    state.lock().unwrap().frames.push(frame(&old));
+    let output = written(&mut driver, 200, |o| o.contains("a=T"));
+    assert!(output.contains("a=T"));
+    state.lock().unwrap().go("docs.html");
+    let start = Instant::now();
+    while !screen(&driver).contains("docs.html") {
+        driver.settle();
+        assert!(
+            start.elapsed() < Duration::from_secs(5),
+            "{}",
+            screen(&driver)
+        );
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    assert!(
+        !screen(&driver).contains(rich_art::kitty::PLACEHOLDER),
+        "previous document's pixels survived navigation"
+    );
+}
+
+#[test]
+fn navigation_discards_old_tiles_until_a_new_frame() {
+    let engine = engine();
+    let state = engine.state.clone();
+    let mut driver = app(Box::new(engine), options(Images::Kitty)).driver(80, 10);
+    driver.settle();
+    let start = Instant::now();
+    while !state.lock().unwrap().screencast {
+        driver.settle();
+        assert!(start.elapsed() < Duration::from_secs(5));
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    let old = RgbImage::from_pixel(640, 108, Rgb([255, 0, 0]));
+    state.lock().unwrap().frames.push(frame(&old));
+    let output = written(&mut driver, 200, |o| o.contains("a=T"));
+    assert!(output.contains("a=T"), "first frame was not uploaded");
+    assert!(screen(&driver).contains(rich_art::kitty::PLACEHOLDER));
+    state.lock().unwrap().go("docs.html");
+    let start = Instant::now();
+    while !screen(&driver).contains("docs.html") {
+        driver.settle();
+        assert!(
+            start.elapsed() < Duration::from_secs(5),
+            "{}",
+            screen(&driver)
+        );
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    assert!(
+        !screen(&driver).contains(rich_art::kitty::PLACEHOLDER),
+        "previous document's pixels survived navigation"
+    );
+}
+
+#[test]
 fn a_click_lands_at_its_point_and_keys_pass_through() {
     let engine = engine();
     let state = engine.state.clone();

@@ -1829,6 +1829,109 @@ mod tests {
     }
 
     #[test]
+    fn same_document_still_revisions_keep_latest_decoded_fallback() {
+        use crate::testing::PageBuilder;
+        for newest_first in [false, true] {
+            let dir = std::env::temp_dir().join(format!("tab-revisions-{}", std::process::id()));
+            std::fs::create_dir_all(&dir).unwrap();
+            let engine = FakeEngine::from_dir(&dir).unwrap();
+            let state = engine.state.clone();
+            for (name, color) in [("one", "red"), ("two", "green"), ("three", "blue")] {
+                let mut page = PageBuilder::new("https://example.test/page", "test", 400.0, 400.0);
+                page.element(
+                    page.body(),
+                    "SVG",
+                    &[("fill", color)],
+                    &[],
+                    Some(Rect::new(0.0, 0.0, 100.0, 100.0)),
+                );
+                state
+                    .lock()
+                    .unwrap()
+                    .pages
+                    .insert(name.into(), page.snapshot());
+            }
+            state.lock().unwrap().current = Some("one".into());
+            let engine: Box<dyn Engine> = Box::new(engine);
+            let update = |_: Update| {};
+            let (decode, jobs) = mpsc::channel();
+            let (done, decoded) = mpsc::channel();
+            let (decode_inline, _inline_jobs) = mpsc::channel();
+            let (_inline_done, decoded_inline) = mpsc::channel();
+            let mut worker = Worker {
+                engine,
+                update: &update,
+                revisions: Revisions::new(),
+                page: None,
+                state: PageState::default(),
+                dirty: None,
+                stills: HashMap::new(),
+                pictures: HashMap::new(),
+                decode,
+                decoded,
+                inline: HashMap::new(),
+                inline_asked: HashSet::new(),
+                decode_inline,
+                decoded_inline,
+                metrics: None,
+                frames: Frames::default(),
+                on_screen: HashSet::new(),
+                intervals: HashMap::new(),
+                last_frame: None,
+                starved: false,
+                scale: 1.0,
+                scale_given: 1.0,
+                shown_time: HashMap::new(),
+                live: HashMap::new(),
+                appended: HashSet::new(),
+                settle: None,
+                stills_pending: false,
+                pixels: false,
+                pixels_cast: false,
+                screen_at: None,
+                latest: HashMap::new(),
+                drawn: HashMap::new(),
+                stale: HashSet::new(),
+                canvases: HashMap::new(),
+                asked: None,
+            };
+            worker.read().unwrap();
+            worker.capture_stills();
+            let (key_one, _) = jobs.try_recv().unwrap();
+            state.lock().unwrap().current = Some("two".into());
+            let page_two = worker.read().unwrap();
+            assert!(page_two.media[0].picture.is_none());
+            worker.capture_stills();
+            let (key_two, _) = jobs.try_recv().unwrap();
+            assert_ne!(key_one, key_two);
+            let one = Picture::from_rgba(1, 1, vec![255, 0, 0, 255]).unwrap();
+            let two = Picture::from_rgba(1, 1, vec![0, 255, 0, 255]).unwrap();
+            if newest_first {
+                done.send((key_two, two.clone())).unwrap();
+                worker.take_decoded();
+                done.send((key_one, one)).unwrap();
+                worker.take_decoded();
+            } else {
+                done.send((key_one, one.clone())).unwrap();
+                worker.take_decoded();
+                assert_eq!(
+                    worker.page.as_ref().unwrap().media[0].picture.as_ref(),
+                    Some(&one)
+                );
+                done.send((key_two, two.clone())).unwrap();
+                worker.take_decoded();
+            }
+            assert_eq!(
+                worker.page.as_ref().unwrap().media[0].picture.as_ref(),
+                Some(&two)
+            );
+            state.lock().unwrap().current = Some("three".into());
+            let page_three = worker.read().unwrap();
+            assert_eq!(page_three.media[0].picture.as_ref(), Some(&two));
+        }
+    }
+
+    #[test]
     fn inline_decodes_are_scoped_to_the_document() {
         use crate::testing::PageBuilder;
         let dir = std::env::temp_dir().join(format!("tab-inline-{}", std::process::id()));

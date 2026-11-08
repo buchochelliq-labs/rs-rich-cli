@@ -843,6 +843,23 @@ use crate::bars::clock;
 /// How far the seek keys move the media, in seconds: the PoC's step.
 const SEEK: f64 = 5.0;
 
+fn offer_video_frame(
+    view: View,
+    pacing: &mut Pacing,
+    frame: &VideoFrame,
+    cols: usize,
+    rows: usize,
+    cell: rich_art::graphics::CellPixels,
+    now: Instant,
+) -> (Option<Picture>, Pixels) {
+    if view != View::Projection {
+        return (None, pacing.pixels(frame.node));
+    }
+    pacing.set_cell_pixels(cell);
+    let picture = pacing.offer(frame, cols, rows, now, picture_bytes);
+    (picture, pacing.pixels(frame.node))
+}
+
 /// A video's frame from the tab: offered to its pacing, and drawn when due.
 fn video_frame(b: Browser, frame: &VideoFrame) {
     let Some(rect) = b.page.with_untracked(|p| {
@@ -861,11 +878,17 @@ fn video_frame(b: Browser, frame: &VideoFrame) {
     let cell = metrics
         .map(|(w, h)| rich_art::graphics::CellPixels::new(w.into(), h.into()))
         .unwrap_or_default();
+    let view = b.view.get_untracked();
     let (picture, pixels) = b.pacing.with_untracked(|p| {
-        let mut pacing = p.borrow_mut();
-        pacing.set_cell_pixels(cell);
-        let picture = pacing.offer(frame, cols, rows, Instant::now(), picture_bytes);
-        (picture, pacing.pixels(frame.node))
+        offer_video_frame(
+            view,
+            &mut p.borrow_mut(),
+            frame,
+            cols,
+            rows,
+            cell,
+            Instant::now(),
+        )
     });
     match picture {
         // Cells are made as they are drawn, and cheaply.
@@ -1957,6 +1980,19 @@ fn apply_site(b: Browser, url: &str) {
     b.send(Command::Resize(width, rows.saturating_sub(CHROME_ROWS)));
 }
 
+fn reconcile_view_media(
+    projection: bool,
+    pacing: &mut Pacing,
+    videos: &mut HashMap<NodeId, Live>,
+    live: &mut HashMap<NodeId, Live>,
+) {
+    if !projection {
+        pacing.clear();
+        videos.clear();
+        live.clear();
+    }
+}
+
 /// Reconcile media state at a page transition.
 fn reconcile_page_media(
     new_document: bool,
@@ -2001,6 +2037,7 @@ fn apply(b: Browser, update: Update, cx: &mut Ctx) {
                 b.live.set(Rc::new(live));
             }
             if new_document {
+                crate::pixel_view::invalidate(b);
                 b.controls.update(HashMap::clear);
                 b.logs.update(HashMap::clear);
                 b.scroll.set(0);
@@ -2993,7 +3030,24 @@ pub fn app(engine: Box<dyn Engine>, options: Options) -> App {
         watch(
             move || b.view.get() == View::Pixels,
             move |on, _| {
+                crate::pixel_view::invalidate(b);
                 b.send(Command::Pixels(on));
+            },
+        );
+        watch(
+            move || b.view.get() == View::Projection,
+            move |projection, _| {
+                let mut videos = (*b.videos.get_untracked()).clone();
+                let mut live = (*b.live.get_untracked()).clone();
+                b.pacing.with_untracked(|p| {
+                    reconcile_view_media(projection, &mut p.borrow_mut(), &mut videos, &mut live)
+                });
+                if *b.videos.get_untracked() != videos {
+                    b.videos.set(Rc::new(videos));
+                }
+                if *b.live.get_untracked() != live {
+                    b.live.set(Rc::new(live));
+                }
             },
         );
         if let Some(server) = control.as_ref().and_then(|c| c.take()) {
@@ -3193,6 +3247,207 @@ mod tests {
         assert!(!accepts_frame(&pacing, Some(&newer_live), 7, &current_live));
         pacing.forget(7);
         assert!(!accepts_frame(&pacing, None, 7, &current_live));
+    }
+
+    #[test]
+    fn queued_video_frame_does_not_recreate_pacing_outside_projection() {
+        let mut pacing = Pacing::new(
+            rich_art::picture::ByteBudget::new(10_000_000),
+            Pixels::Kitty,
+        );
+        let frame = VideoFrame {
+            node: 7,
+            seq: 1,
+            pixels: rich_embed::Pixels::new(4, 4, vec![255; 48]).unwrap(),
+        };
+        for view in [View::Reader, View::Pixels] {
+            let (picture, _) = offer_video_frame(
+                view,
+                &mut pacing,
+                &frame,
+                2,
+                2,
+                Default::default(),
+                Instant::now(),
+            );
+            assert!(
+                picture.is_none(),
+                "queued frame recreated pacing in {view:?}"
+            );
+            assert!(!pacing.has(7));
+        }
+        let (picture, _) = offer_video_frame(
+            View::Projection,
+            &mut pacing,
+            &frame,
+            2,
+            2,
+            Default::default(),
+            Instant::now(),
+        );
+        assert!(picture.is_some());
+        assert!(pacing.has(7));
+    }
+
+    #[test]
+    fn old_encoder_completion_is_invalidated_by_leaving_projection() {
+        let mut pacing = Pacing::new(
+            rich_art::picture::ByteBudget::new(10_000_000),
+            Pixels::Kitty,
+        );
+        let (send, receive) = mpsc::channel();
+        let encoder = Encoder::spawn(move |job| {
+            send.send(job).unwrap();
+        });
+        let frame = |seq| VideoFrame {
+            node: 7,
+            seq,
+            pixels: rich_embed::Pixels::new(4, 4, vec![255; 48]).unwrap(),
+        };
+        let picture = pacing
+            .offer(&frame(1), 2, 2, Instant::now(), |_| 0)
+            .unwrap();
+        encoder.encode(Job {
+            node: 7,
+            picture,
+            pixels: Pixels::Kitty,
+            cols: 2,
+            rows: 2,
+        });
+        let held = receive.recv_timeout(Duration::from_secs(5)).unwrap();
+        let old = Live {
+            picture: held.picture,
+            pixels: held.pixels,
+        };
+        let mut videos = HashMap::from([(7, old.clone())]);
+        let mut live = videos.clone();
+        reconcile_view_media(false, &mut pacing, &mut videos, &mut live);
+        reconcile_view_media(true, &mut pacing, &mut videos, &mut live);
+        assert!(
+            !accepts_frame(&pacing, None, 7, &old),
+            "old prepared frame survived the view transition"
+        );
+        assert!(videos.is_empty());
+        assert!(live.is_empty());
+        let current = pacing
+            .offer(
+                &frame(2),
+                2,
+                2,
+                Instant::now() + Duration::from_secs(1),
+                |_| 0,
+            )
+            .unwrap();
+        let current = Live {
+            picture: current,
+            pixels: Pixels::Kitty,
+        };
+        assert!(accepts_frame(&pacing, None, 7, &current));
+        assert!(!accepts_frame(&pacing, None, 7, &old));
+    }
+
+    #[test]
+    fn held_encoder_completion_is_rejected_after_protocol_steps_down() {
+        let mut pacing = Pacing::new(
+            rich_art::picture::ByteBudget::new(10_000_000),
+            Pixels::Kitty,
+        );
+        let (send, receive) = mpsc::channel();
+        let encoder = Encoder::spawn(move |job| {
+            send.send(job).unwrap();
+        });
+        let frame = |seq| VideoFrame {
+            node: 7,
+            seq,
+            pixels: rich_embed::Pixels::new(4, 4, vec![255; 48]).unwrap(),
+        };
+        let now = Instant::now();
+        let picture = pacing.offer(&frame(1), 20, 10, now, |_| 0).unwrap();
+        encoder.encode(Job {
+            node: 7,
+            picture,
+            pixels: Pixels::Kitty,
+            cols: 20,
+            rows: 10,
+        });
+        let held = receive.recv_timeout(Duration::from_secs(5)).unwrap();
+        let old = Live {
+            picture: held.picture,
+            pixels: held.pixels,
+        };
+        assert!(accepts_frame(&pacing, None, 7, &old));
+        pacing.budget = rich_art::picture::ByteBudget::new(1);
+        let _ = pacing.offer(&frame(2), 20, 10, now + Duration::from_secs(30), |_| 0);
+        assert_ne!(pacing.pixels(7), Pixels::Kitty);
+        assert!(!accepts_frame(&pacing, None, 7, &old));
+    }
+
+    #[test]
+    fn held_encoder_preparation_is_rebuilt_for_current_paint_context() {
+        use rich_art::graphics::CellPixels;
+        use rich_ext::frame::Frame;
+        let (send, receive) = mpsc::channel();
+        let encoder = Encoder::spawn(move |job| {
+            send.send(job).unwrap();
+        });
+        let rgba = vec![255; 4 * 4 * 4];
+        let picture = Picture::from_rgba(4, 4, rgba.clone()).unwrap();
+        encoder.encode_with_metrics(
+            Job {
+                node: 7,
+                picture: picture.clone(),
+                pixels: Pixels::Iterm,
+                cols: 2,
+                rows: 2,
+            },
+            Some((8, 16)),
+        );
+        let held = receive.recv_timeout(Duration::from_secs(5)).unwrap();
+        assert!(held.picture.is_prepared_with_metrics(
+            pictures::view(Pixels::Iterm),
+            2,
+            2,
+            CellPixels::new(8, 16)
+        ));
+        let console = rich::Console::builder()
+            .width(3)
+            .color_system(Some(rich::ColorSystem::Truecolor))
+            .build();
+        let paint = |picture: &Picture, pixels: Pixels| {
+            let cells = pictures::Cells::default();
+            let lines = cells.of_with_metrics(&console, picture, pixels, 3, 4, Some((10, 20)));
+            let mut segments = Vec::new();
+            for line in lines.iter() {
+                segments.extend(line.clone());
+                segments.push(rich::Segment::line());
+            }
+            let source = image_graphics();
+            let placements =
+                source.placements_with_metrics(&Frame::from_segments(&segments), Some((10, 20)));
+            assert_eq!(placements.len(), 1);
+            placements[0].graphic.draw(0)
+        };
+        assert!(!held.picture.is_prepared_with_metrics(
+            pictures::view(Pixels::Iterm),
+            3,
+            4,
+            CellPixels::new(10, 20)
+        ));
+        let transitioned = paint(&held.picture, Pixels::Iterm);
+        let clean = Picture::from_rgba(4, 4, rgba).unwrap();
+        assert_eq!(transitioned, paint(&clean, Pixels::Iterm));
+        assert!(held.picture.is_prepared_with_metrics(
+            pictures::view(Pixels::Iterm),
+            3,
+            4,
+            CellPixels::new(10, 20)
+        ));
+        assert_eq!(
+            paint(&held.picture, Pixels::Sixel),
+            paint(&clean, Pixels::Sixel)
+        );
+        let kitty = paint(&held.picture, Pixels::Kitty);
+        assert!(kitty.contains("s=30,v=80"), "{kitty:?}");
     }
 
     #[test]

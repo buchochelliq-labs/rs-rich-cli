@@ -2272,6 +2272,7 @@ dependencies = [
  "rs-rich",
  "rs-rich-art",
  "rs-rich-embed",
+ "rs-rich-ext",
  "rs-rich-interact",
  "rs-rich-intuituive",
  "rs-rich-record",

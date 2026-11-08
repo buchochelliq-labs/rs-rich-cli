@@ -66,6 +66,7 @@ toml_edit = "0.25"
 libc = "0.2"
 
 [dev-dependencies]
+rich-ext.workspace = true
 # The end-to-end test: the binary on a PTY, read through rs-rich-record's
 # VT emulator.
 rich-record.workspace = true

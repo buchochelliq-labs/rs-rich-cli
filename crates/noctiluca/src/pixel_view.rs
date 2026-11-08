@@ -136,6 +136,14 @@ pub fn available(b: Browser) -> bool {
     b.pixels.get_untracked() == Pixels::Kitty
 }
 
+/// Discard the last document or view's tiles and restart pacing.
+pub(crate) fn invalidate(b: Browser) {
+    let screen = b.screen.get_untracked();
+    *screen.borrow_mut() = Screen::new();
+    b.screen_tiles.set(Vec::new());
+    b.screen_stats.set(ScreenStats::default());
+}
+
 /// A screencast frame for the pixel view: cut into tiles and shown, if
 /// the view shows and the budget lets it through.
 pub fn frame(b: Browser, frame: &rich_embed::ScreencastFrame) {
