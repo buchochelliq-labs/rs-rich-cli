@@ -353,7 +353,7 @@ impl noctiluca::engine::Engine for LegacyEngine {
 #[test]
 fn legacy_resource_only_engine_keeps_inline_pictures_after_publishing_text() {
     use noctiluca::{
-        app::{Options, app},
+        app::{Options, app_with_presentation},
         bookmarks::Bookmarks,
         config::{Config, Images, View},
         engine::Rect,
@@ -412,13 +412,21 @@ fn legacy_resource_only_engine_keeps_inline_pictures_after_publishing_text() {
         tunnel: None,
         control: None,
     };
-    let mut d = app(
+    let mut d = app_with_presentation(
         Box::new(LegacyEngine {
             inner: engine,
             entered,
             release: Some(gate),
         }),
         options,
+        rich_intuituive::ImagePresentation::new(
+            rich_intuituive::Pixels::Kitty,
+            rich_intuituive::KittyFeatures {
+                unicode_placeholders: true,
+                native_animation: true,
+            },
+            rich_intuituive::PixelFormats::cells().with(rich_intuituive::Pixels::Kitty),
+        ),
     )
     .driver(100, 30);
     started
