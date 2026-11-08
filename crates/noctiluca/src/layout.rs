@@ -600,8 +600,8 @@ pub fn reader(page: &Page, width: u16, marks: &Marks) -> Vec<Piece> {
         match &block.kind {
             BlockKind::Heading(level) => {
                 let base = match level {
-                    1 => "bold underline bright_white",
-                    2 => "bold bright_white",
+                    1 => "bold underline",
+                    2 => "bold",
                     _ => "bold",
                 };
                 let mut runs = block.runs.clone();
@@ -1630,8 +1630,8 @@ fn project_part(
             }
             kind => {
                 let base = match kind {
-                    BlockKind::Heading(1) => "bold underline bright_white",
-                    BlockKind::Heading(_) => "bold bright_white",
+                    BlockKind::Heading(1) => "bold underline",
+                    BlockKind::Heading(_) => "bold",
                     _ if block.quote > 0 => "italic",
                     _ => "",
                 };
@@ -2321,7 +2321,12 @@ fn snap_grid<T>(
         return;
     }
     let min = crate::adapt::MIN_GRID_CELLS;
-    let fit = ((width + 1) / (min + 1)).clamp(1, count);
+    let fit = rich_intuituive::layout::adaptive_columns(
+        width.min(u16::MAX as usize) as u16,
+        min as u16,
+        1,
+        count,
+    );
     let cell = (width + 1) / fit - 1;
     let gap = match chrome_rows.as_slice() {
         [a, b, ..] => {

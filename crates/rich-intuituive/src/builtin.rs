@@ -598,12 +598,28 @@ pub(crate) struct Grid {
     pub columns: Vec<Size>,
     /// Whether code gave the columns (else a stylesheet may).
     pub code_columns: bool,
+    pub adaptive: Option<(u16, usize)>,
+    pub placed_columns: usize,
     pub rows: Vec<Size>,
     /// Between rows, and between columns.
     pub gap: (u16, u16),
     pub children: Vec<Node>,
     /// Its children's borders collapsed into one frame, when on.
     pub collapse: Collapse,
+}
+
+impl Grid {
+    pub(crate) fn column_count(&self, width: u16) -> usize {
+        match self.adaptive {
+            Some((min, max)) => crate::layout::adaptive_columns(
+                width,
+                min,
+                if self.collapse.on { 0 } else { self.gap.1 },
+                max.max(1),
+            ),
+            None => self.columns.len().max(1),
+        }
+    }
 }
 
 impl Widget for Grid {
@@ -640,6 +656,7 @@ impl Widget for Grid {
     }
 
     fn layout(&mut self, cx: &MeasureCx, rect: Rect) -> Vec<Rect> {
+        self.placed_columns = self.column_count(rect.width);
         mark_collapsed(&self.children, self.collapse.on);
         let areas = grid_areas(cx, self, rect, Axis::Vertical);
         if !self.collapse.on {
@@ -688,7 +705,7 @@ fn shown_areas(
     rect: Rect,
     axis: Axis,
 ) -> Vec<Rect> {
-    let columns = grid.columns.len().max(1);
+    let columns = grid.column_count(rect.width);
     let spans: Vec<(u16, u16)> = children.iter().map(|c| c.span).collect();
     let (places, rows) = place(columns, &spans);
     // Collapsed, neighbouring boxes share their lines: no gaps, and each
@@ -734,7 +751,11 @@ fn shown_areas(
     // Columns.
     let mut column_tracks: Vec<Track> = (0..columns)
         .map(|c| {
-            let size = grid.columns.get(c).copied().unwrap_or(Size::Flex(1));
+            let size = if grid.adaptive.is_some() {
+                Size::Flex(1)
+            } else {
+                grid.columns.get(c).copied().unwrap_or(Size::Flex(1))
+            };
             let mut track = Track::new(size);
             let content = matches!(size, Size::Auto)
                 || (axis == Axis::Horizontal && matches!(size, Size::Flex(_)));

@@ -415,8 +415,8 @@ pub struct Media {
     /// worker: what the projection and reader mode draw. An animated GIF
     /// carries its frames.
     pub picture: Option<rich_intuituive::Picture>,
-    /// Whether the page captions it (a `<figure>` with a `<figcaption>`):
-    /// then it gets no `Image:` line of ours.
+    /// Whether a source figure caption supplies the complete normalized alt.
+    /// Reader view always retains the original alternative text.
     pub captioned: bool,
     /// A video's or an audio's playback, read from the element.
     pub playback: Option<crate::engine::Playback>,
@@ -1519,9 +1519,14 @@ fn svg_content(dom: &Dom, svg: usize) -> (u64, String, String) {
     (hasher.finish(), clean(&words.join(" ")), title)
 }
 
-/// Whether node `i` is inside a `<figure>` (up to three levels up) that
-/// has a `<figcaption>`.
-fn captioned(dom: &Dom, i: usize) -> bool {
+/// Whether a source figure caption (up to three ancestors) supplies all
+/// of the alternative text. Mere proximity or a partial title is insufficient.
+fn captioned(dom: &Dom, i: usize, alt: &str) -> bool {
+    let normalize = |s: &str| s.split_whitespace().collect::<Vec<_>>().join(" ");
+    let alt = normalize(alt);
+    if alt.is_empty() {
+        return false;
+    }
     let mut at = i;
     for _ in 0..3 {
         let Some(parent) = usize::try_from(dom.parent[at])
@@ -1534,7 +1539,16 @@ fn captioned(dom: &Dom, i: usize) -> bool {
             return dom
                 .descendants(parent)
                 .into_iter()
-                .any(|d| dom.name[d] == "FIGCAPTION");
+                .filter(|&d| dom.name[d] == "FIGCAPTION")
+                .any(|d| {
+                    let text: String = dom
+                        .descendants(d)
+                        .into_iter()
+                        .filter(|&t| dom.kind[t] == 3)
+                        .map(|t| dom.value[t].as_str())
+                        .collect();
+                    normalize(&text) == alt
+                });
         }
         at = parent;
     }
@@ -2144,7 +2158,7 @@ impl Walker<'_> {
             src: truncate(&src, 2000),
             still: None,
             picture: None,
-            captioned: captioned(dom, i),
+            captioned: captioned(dom, i, &alt),
             playback: None,
             poster: truncate(&poster, 2000),
             controls,

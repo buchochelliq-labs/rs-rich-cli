@@ -867,7 +867,7 @@ impl Node {
         self.widget_ref(|grid: &Grid| {
             let shown: Vec<&Node> = grid.children.iter().filter(|c| !c.hidden()).collect();
             let spans: Vec<(u16, u16)> = shown.iter().map(|c| c.span).collect();
-            let (places, _) = crate::layout::place(grid.columns.len().max(1), &spans);
+            let (places, _) = crate::layout::place(grid.placed_columns, &spans);
             shown
                 .iter()
                 .position(|c| c.id == id)
@@ -1092,6 +1092,21 @@ impl Node {
     /// In a [`grid`]: span `columns` columns and `rows` rows.
     pub fn span(mut self, columns: u16, rows: u16) -> Node {
         self.span = (columns.max(1), rows.max(1));
+        self
+    }
+
+    /// For a [`grid`]: choose equal flexible columns from its actual content
+    /// width (after padding), retaining its children across resize.
+    ///
+    /// Overrides constructor and stylesheet columns; rows, spans and gaps keep
+    /// their usual meaning. `min_track` and `max_tracks` normalize to at least
+    /// one. Collapsed borders use zero gap for the fit calculation, conservatively
+    /// ignoring shared border cells. Use `.rows([Size::Auto]).auto()` for measured
+    /// wrapping content. Ignored on other nodes; fixed grids remain unchanged.
+    pub fn adaptive_columns(self, min_track: u16, max_tracks: usize) -> Node {
+        self.widget_mut(|grid: &mut Grid| {
+            grid.adaptive = Some((min_track.max(1), max_tracks.max(1)))
+        });
         self
     }
 
@@ -4766,6 +4781,8 @@ pub fn grid(
     Node::from_widget(
         Box::new(Grid {
             code_columns: !columns.is_empty(),
+            placed_columns: columns.len().max(1),
+            adaptive: None,
             columns,
             rows: Vec::new(),
             gap: (0, 0),
