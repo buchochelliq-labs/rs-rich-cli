@@ -7347,17 +7347,10 @@ fn draw_graphics(
     screen: &Screen,
     painter: &mut Painter,
 ) -> String {
-    use rich::Segment;
-    use rich_ext::frame::{Change, Frame};
-    let mut segments = Vec::new();
-    for line in screen.lines() {
-        segments.extend(line);
-        segments.push(Segment::line());
-    }
-    let frame = Frame::from_segments(&segments);
-    let height = frame.height();
+    use rich_ext::frame::Change;
+    let height = usize::from(screen.area().height);
     let next: Vec<_> = source
-        .placements_with_metrics(&frame, cell_pixels)
+        .placements_from_screen(screen, cell_pixels)
         .into_iter()
         .filter(|p| p.row + p.rows <= height)
         .collect();

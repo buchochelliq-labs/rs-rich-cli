@@ -116,6 +116,23 @@ pub trait PlacementSource: Send + Sync {
         self.placements(frame)
     }
 
+    /// Placements on an already composed screen, with measured cell dimensions.
+    /// The default preserves the Frame adapter used by existing painters.
+    /// Sources may override this to borrow surviving cells and styles directly.
+    fn placements_from_screen(
+        &self,
+        screen: &crate::surface::Screen,
+        cell_pixels: Option<(u16, u16)>,
+    ) -> Vec<Placement> {
+        let mut segments = Vec::new();
+        for line in screen.lines() {
+            segments.extend(line);
+            segments.push(Segment::line());
+        }
+        let frame = Frame::from_segments(&segments);
+        self.placements_with_metrics(&frame, cell_pixels)
+    }
+
     /// How long until an animation among the placements shows another frame,
     /// so an event loop knows when to repaint. `None` when nothing moves.
     fn next_change(&self) -> Option<Duration> {
@@ -264,6 +281,46 @@ fn media_trace_enabled() -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn screen_default_preserves_frame_rows_styles_and_metrics() {
+        use crate::surface::Screen;
+        use std::sync::Mutex;
+        struct Legacy(Mutex<Vec<(String, Vec<usize>, Option<(u16, u16)>)>>);
+        impl PlacementSource for Legacy {
+            fn placements(&self, frame: &Frame) -> Vec<Placement> {
+                self.placements_with_metrics(frame, None)
+            }
+            fn placements_with_metrics(
+                &self,
+                frame: &Frame,
+                metrics: Option<(u16, u16)>,
+            ) -> Vec<Placement> {
+                assert!(frame.styles().get(frame.row(0)[0].style()).unwrap().bold() == Some(true));
+                self.0.lock().unwrap().push((
+                    frame.plain(),
+                    (0..frame.height()).map(|r| frame.row_width(r)).collect(),
+                    metrics,
+                ));
+                vec![at(0, 1, 7, 0)]
+            }
+        }
+        let source = Legacy(Mutex::new(Vec::new()));
+        let mut screen = Screen::new(5, 2);
+        screen.write_lines(
+            screen.area(),
+            &[vec![Segment::new(
+                "漢x",
+                Some(rich::Style::parse("bold").unwrap()),
+            )]],
+        );
+        let placements = source.placements_from_screen(&screen, Some((9, 18)));
+        assert!(placements[0].same(&at(0, 1, 7, 0)));
+        assert_eq!(
+            *source.0.lock().unwrap(),
+            [("漢x  \n     \n".into(), vec![5, 5], Some((9, 18)))]
+        );
+    }
 
     #[derive(Debug)]
     struct Image(u64, bool);
