@@ -52,7 +52,7 @@ pub(crate) struct SourceNode {
     pub node: NodeId,
     pub parent: Option<usize>,
     pub rect: Option<Rect>,
-    /// Position in the captured DOM's source order is this record's index.
+    /// Records preserve DOM source order; opaque live-log contents are omitted.
     pub ordinary: bool,
 }
 #[derive(Clone, Debug, PartialEq)]
@@ -125,6 +125,42 @@ impl SourceRelations {
             node = parent;
         }
     }
+    /// A live log is one fixed layout slot. Its entry tree is replaced by
+    /// incremental live reads with no snapshot node provenance; retaining that
+    /// stale tree would both misattribute text and invalidate unrelated layout.
+    fn retain_log_slots(&mut self, page: &Page) {
+        if page.logs.is_empty() { return; }
+        let roots: HashSet<_> = page.logs.iter().map(|l| l.node).collect();
+        let mut inside = vec![false; self.nodes.len()];
+        let mut indices = vec![None; self.nodes.len()];
+        let mut next = 0;
+        for (i, node) in self.nodes.iter().enumerate() {
+            inside[i] = node.parent.is_some_and(|p| inside[p] || roots.contains(&self.nodes[p].node));
+            if !inside[i] { indices[i] = Some(next); next += 1; }
+        }
+        self.nodes = std::mem::take(&mut self.nodes).into_iter().enumerate().filter_map(|(i, mut node)| {
+            indices[i]?;
+            node.parent = node.parent.and_then(|p| indices[p]);
+            Some(node)
+        }).collect();
+        for piece in &mut self.blocks { piece.node = indices[piece.node].expect("log contents have no outer blocks"); }
+        for piece in &mut self.runs { piece.node = indices[piece.node].expect("log contents have no outer runs"); }
+        self.grids.retain_mut(|grid| {
+            let Some(node) = indices[grid.node] else { return false; };
+            grid.node = node;
+            grid.items = grid.items.iter().filter_map(|&i| indices[i]).collect();
+            true
+        });
+        self.figures.retain_mut(|figure| {
+            let Some(node) = indices[figure.node] else { return false; };
+            figure.node = node;
+            figure.parent = figure.parent.and_then(|p| indices[p]);
+            figure.captions = figure.captions.iter().filter_map(|&i| indices[i]).collect();
+            true
+        });
+        self.twins = self.twins.iter().filter_map(|&(a, b)| Some((indices[a]?, indices[b]?))).collect();
+    }
+
 }
 
 // Transient character origins follow the Walker's actual merges and whitespace
@@ -216,6 +252,7 @@ impl Extraction {
         }).collect();
         relations.twins = dom.twins.iter().filter_map(|(&i, &(kind, other))| (kind == Twin::Spoken).then_some((i, other))).collect();
         relations.twins.sort_unstable();
+        relations.retain_log_slots(page);
         relations
     }
 }

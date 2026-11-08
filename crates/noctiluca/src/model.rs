@@ -34,7 +34,7 @@ use std::sync::Arc;
 
 use serde_json::Value;
 
-mod source;
+pub(crate) mod source;
 pub use source::SourcePage;
 use source::{Extraction, Origins, RunLocation};
 
@@ -3067,6 +3067,7 @@ impl Walker<'_> {
     /// The text runs of node `i`, its blocks run together: a cell's.
     fn inline(&mut self, i: usize, context: &Context) -> (Vec<Run>, Option<Origins>) {
         let saved_runs = std::mem::take(&mut self.runs);
+        let saved_cells = self.source.as_ref().map_or(0, |s| s.cells.len());
         let saved_origins = self.source.as_mut().map(|s| std::mem::take(&mut s.runs));
         let mut origins = self.source.as_ref().map(|_| Origins::new());
         let saved_rect = self.rect.take();
@@ -3124,6 +3125,8 @@ impl Walker<'_> {
         if let Some(source) = &mut self.source {
             origins.as_mut().unwrap().append(&mut source.runs);
             source.runs = saved_origins.unwrap();
+            // Nested tables folded into inline text have no final table address.
+            source.cells.truncate(saved_cells);
         }
         runs.append(&mut self.runs);
         self.runs = saved_runs;
@@ -4871,6 +4874,8 @@ mod tests {
         let row = f.el(second, "TR", &[], "table-row");
         let cell = f.el(row, "TD", &[], "table-cell");
         f.text(cell, "Another cell");
+        let sibling = f.el(log, "DIV", &[], "block");
+        f.text(sibling, "An ordinary entry");
         let snapshot = PageSnapshot { dom: f.snapshot(), ax: Value::Null };
         let source = build_source(&snapshot, &mut Revisions::new());
         assert_eq!(source.page().as_ref(), &build(&snapshot, &mut Revisions::new()));
