@@ -64,7 +64,15 @@ pub struct Cells {
 }
 
 /// A picture's frame, its size in cells and its protocol.
-type CellsKey = (u32, u32, usize, usize, Pixels);
+type CellsKey = (
+    u32,
+    u32,
+    usize,
+    usize,
+    Pixels,
+    Option<(u16, u16)>,
+    Option<rich::ColorSystem>,
+);
 
 impl Cells {
     /// `picture`'s cells at `cols` x `rows` through `pixels`.
@@ -76,7 +84,28 @@ impl Cells {
         cols: usize,
         rows: usize,
     ) -> Rc<Vec<Vec<Segment>>> {
-        let key = (picture.id(), picture.version(), cols, rows, pixels);
+        self.of_with_metrics(console, picture, pixels, cols, rows, None)
+    }
+
+    /// Cells drawn using the physical terminal cell dimensions, when known.
+    pub fn of_with_metrics(
+        &self,
+        console: &rich::Console,
+        picture: &Picture,
+        pixels: Pixels,
+        cols: usize,
+        rows: usize,
+        metrics: Option<(u16, u16)>,
+    ) -> Rc<Vec<Vec<Segment>>> {
+        let key = (
+            picture.id(),
+            picture.version(),
+            cols,
+            rows,
+            pixels,
+            metrics,
+            console.color_system(),
+        );
         if let Some(lines) = self.made.borrow().get(&key) {
             return lines.clone();
         }
@@ -87,7 +116,12 @@ impl Cells {
         } else {
             view(pixels)
         };
-        let lines = Rc::new(picture.lines(console, view, cols as u16, rows as u16));
+        let cell = metrics
+            .filter(|&(w, h)| w > 0 && h > 0)
+            .map(|(w, h)| rich_art::graphics::CellPixels::new(w.into(), h.into()))
+            .unwrap_or_default();
+        let lines =
+            Rc::new(picture.lines_with_metrics(console, view, cols as u16, rows as u16, cell));
         let mut made = self.made.borrow_mut();
         // Old frames go; what is on screen is made again at once.
         if made.len() > 512 {
@@ -112,6 +146,20 @@ pub fn splice(
     regions: &[Region],
     picture: impl Fn(&Region) -> Option<(Picture, Pixels)>,
 ) -> Vec<Segment> {
+    splice_with_metrics(console, cells, line, width, row, regions, picture, None)
+}
+
+/// Splice picture cells using measured physical cell dimensions.
+pub fn splice_with_metrics(
+    console: &rich::Console,
+    cells: &Cells,
+    line: Vec<Segment>,
+    width: usize,
+    row: usize,
+    regions: &[Region],
+    picture: impl Fn(&Region) -> Option<(Picture, Pixels)>,
+    metrics: Option<(u16, u16)>,
+) -> Vec<Segment> {
     let mut line = Segment::adjust_line_length(&line, width, None);
     let mut on: Vec<&Region> = regions
         .iter()
@@ -123,7 +171,8 @@ pub fn splice(
             continue;
         };
         let cols = region.cols.min(width - region.column);
-        let lines = cells.of(console, &shown, pixels, region.cols, region.rows);
+        let lines =
+            cells.of_with_metrics(console, &shown, pixels, region.cols, region.rows, metrics);
         let Some(part) = lines.get(row - region.row) else {
             continue;
         };
@@ -180,6 +229,7 @@ pub struct Motion {
     playing: HashMap<NodeId, Moving>,
     /// Frozen animations' still frames for Kitty, by node.
     stills: HashMap<NodeId, (Picture, Picture)>,
+    cell: rich_art::graphics::CellPixels,
 }
 
 struct Moving {
@@ -205,6 +255,7 @@ impl Motion {
             moving: 0,
             playing: HashMap::new(),
             stills: HashMap::new(),
+            cell: rich_art::graphics::CellPixels::DEFAULT,
         }
     }
 
@@ -218,6 +269,11 @@ impl Motion {
     pub fn share_with(&mut self, budget: ByteBudget, others: usize) {
         self.budget = budget;
         self.others = others;
+    }
+
+    /// Select the physical cell size used to estimate animated frame costs.
+    pub fn set_cell_pixels(&mut self, cell: rich_art::graphics::CellPixels) {
+        self.cell = rich_art::graphics::CellPixels::new(cell.width, cell.height);
     }
 
     /// How many animations it stepped at its last look: what it takes of
@@ -259,6 +315,7 @@ impl Motion {
         };
         let share = 1.0 / (self.moving + self.others).max(1) as f64;
         let budget = self.budget;
+        let cell = self.cell;
         let mut seen = Vec::new();
         for region in in_view {
             let media = &page.media[region.media];
@@ -277,6 +334,7 @@ impl Motion {
                 continue;
             }
             let moving = self.moving(media.node, &animation, region, pixels, now);
+            let metrics_changed = moving.pacer.set_cell_pixels(cell);
             // Short of bytes from the start (its estimate under the floor):
             // step down before sending a frame at all.
             while moving.pacer.settle(&budget, share) {}
@@ -288,8 +346,9 @@ impl Motion {
                 // sends: the pacer's estimate stands for them. In pixels,
                 // its escape, and the half blocks under it, which change
                 // with each frame too.
-                let measured = (moving.pacer.pixels() != Pixels::Cells && spent > 0)
-                    .then(|| spent + (region.cols * region.rows) as u64 * UNDERLAY);
+                let measured =
+                    (moving.pacer.pixels() != Pixels::Cells && spent > 0 && !metrics_changed)
+                        .then(|| spent + (region.cols * region.rows) as u64 * UNDERLAY);
                 moving.pacer.sent(now, measured);
                 moving.player.advance(now);
                 moving.pacer.settle(&budget, share);
@@ -352,6 +411,21 @@ mod tests {
     use rich_art::graphics::AnimationFrame;
     use rich_art::image::{Rgba, RgbaImage};
     use std::time::Duration;
+
+    #[test]
+    fn cells_reuse_matching_metrics_and_rebuild_for_changed_aspect() {
+        let picture = Picture::new(rich_art::image::DynamicImage::ImageRgba8(
+            RgbaImage::from_fn(12, 8, |x, _| Rgba([(x * 20) as u8, 0, 0, 255])),
+        ));
+        let console = rich::Console::builder().width(4).build();
+        let cache = Cells::default();
+        let normal = cache.of_with_metrics(&console, &picture, Pixels::Cells, 4, 4, Some((8, 16)));
+        let same = cache.of_with_metrics(&console, &picture, Pixels::Cells, 4, 4, Some((8, 16)));
+        let square = cache.of_with_metrics(&console, &picture, Pixels::Cells, 4, 4, Some((12, 12)));
+        assert!(Rc::ptr_eq(&normal, &same));
+        assert!(!Rc::ptr_eq(&normal, &square));
+        assert_ne!(*normal, *square);
+    }
 
     fn gif() -> Picture {
         Picture::animated(
@@ -426,6 +500,26 @@ mod tests {
             motion
                 .step(&page, &[REGION], 20..30, Pixels::Sixel, false, start)
                 .is_empty()
+        );
+    }
+
+    #[test]
+    fn animated_picture_budget_uses_selected_metrics() {
+        let page = page_with(gif());
+        let mut motion = Motion::new(ByteBudget::new(10_000_000));
+        let cell = rich_art::graphics::CellPixels::new(12, 24);
+        motion.set_cell_pixels(cell);
+        motion.step(
+            &page,
+            &[REGION],
+            0..10,
+            Pixels::Sixel,
+            false,
+            Instant::now(),
+        );
+        assert_eq!(
+            motion.playing[&7].pacer.bytes_per_frame() as u64,
+            Pacer::estimate_with_metrics(Pixels::Sixel, REGION.cols, REGION.rows, cell)
         );
     }
 

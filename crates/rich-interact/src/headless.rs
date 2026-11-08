@@ -168,6 +168,7 @@ pub struct Headless {
     script: VecDeque<Step>,
     clock: Duration,
     size: (u16, u16),
+    cell_pixels: Option<(u16, u16)>,
     record: Rc<RefCell<Record>>,
     /// Exit code each hand-off reports.
     pub handoff_code: Option<i32>,
@@ -207,6 +208,7 @@ impl Headless {
             script: script.0,
             clock: Duration::ZERO,
             size: (columns, rows),
+            cell_pixels: None,
             record: Rc::new(RefCell::new(Record::default())),
             handoff_code: Some(0),
             suspendable: false,
@@ -216,6 +218,11 @@ impl Headless {
             queued: false,
             releases: crate::Releases::None,
         }
+    }
+
+    /// Set the initially reported physical cell size. Zero dimensions mean unknown.
+    pub fn set_cell_pixels(&mut self, pixels: Option<(u16, u16)>) {
+        self.cell_pixels = pixels.filter(|&(w, h)| w > 0 && h > 0);
     }
 
     /// A key event as this terminal reports it.
@@ -241,6 +248,10 @@ impl Headless {
 }
 
 impl Backend for Headless {
+    fn cell_pixels(&self) -> Option<(u16, u16)> {
+        self.cell_pixels
+    }
+
     fn size(&self) -> (u16, u16) {
         self.size
     }
@@ -371,6 +382,19 @@ pub fn run<C: Component>(
 mod tests {
     use super::*;
     use crate::event::KeyCode;
+
+    #[test]
+    fn physical_cell_metrics_can_change_without_resizing() {
+        let mut backend = Headless::new(Script::new(), 40, 10);
+        assert_eq!(backend.cell_pixels(), None);
+        backend.set_cell_pixels(Some((10, 20)));
+        assert_eq!(backend.cell_pixels(), Some((10, 20)));
+        backend.set_cell_pixels(Some((12, 24)));
+        assert_eq!(backend.cell_pixels(), Some((12, 24)));
+        assert_eq!(backend.size(), (40, 10));
+        backend.set_cell_pixels(Some((0, 24)));
+        assert_eq!(backend.cell_pixels(), None);
+    }
 
     #[test]
     fn frames_are_written_whole_or_not_at_all() {

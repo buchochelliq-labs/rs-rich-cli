@@ -108,6 +108,7 @@ pub(crate) struct Runtime {
     pub(crate) watchers: crate::widget::Watchers,
     /// The slot of the app's [`viewport`], once made.
     viewport: Cell<Option<usize>>,
+    cell_pixels: Cell<Option<usize>>,
     /// Where each slot's signal was made, for the inspector's trace.
     sites: RefCell<Vec<Option<&'static Location<'static>>>>,
     /// Where each watch was made.
@@ -188,6 +189,7 @@ impl Runtime {
                 queued: RefCell::new(Vec::new()),
                 watchers: Default::default(),
                 viewport: Cell::new(None),
+                cell_pixels: Cell::new(None),
                 sites: RefCell::new(Vec::new()),
                 watch_sites: RefCell::new(HashMap::new()),
                 tracer: Default::default(),
@@ -255,6 +257,23 @@ impl Runtime {
                 let slot = self.insert(Box::new((0u16, 0u16)), None);
                 self.viewport.set(Some(slot));
                 // A resize says so in the trace already.
+                self.tracer.quiet(slot);
+                slot
+            }
+        };
+        Signal {
+            runtime: self.id,
+            slot,
+            _type: PhantomData,
+        }
+    }
+
+    pub(crate) fn cell_pixels(&self) -> Signal<Option<(u16, u16)>> {
+        let slot = match self.cell_pixels.get() {
+            Some(slot) => slot,
+            None => {
+                let slot = self.insert(Box::new(None::<(u16, u16)>), None);
+                self.cell_pixels.set(Some(slot));
                 self.tracer.quiet(slot);
                 slot
             }
@@ -868,6 +887,14 @@ impl<T> Copy for Memo<T> {}
 pub fn viewport() -> Memo<(u16, u16)> {
     Memo {
         inner: Runtime::current_for("viewport()").viewport(),
+    }
+}
+
+/// The measured physical cell size, reactive like [`viewport`]. `None`
+/// means the backend did not report a valid size.
+pub fn cell_pixels() -> Memo<Option<(u16, u16)>> {
+    Memo {
+        inner: Runtime::current_for("cell_pixels()").cell_pixels(),
     }
 }
 

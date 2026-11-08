@@ -250,3 +250,7 @@ required-features = ["audio"]
 [[test]]
 name = "audio_record_env"
 required-features = ["audio"]
+
+[[example]]
+name = "metric_pictures"
+required-features = ["art"]

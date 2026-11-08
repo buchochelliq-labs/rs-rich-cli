@@ -98,6 +98,17 @@ pub trait PlacementSource: Send + Sync {
     /// The placements on `frame`'s cells.
     fn placements(&self, frame: &Frame) -> Vec<Placement>;
 
+    /// Placements using measured physical cell dimensions, if known. Existing
+    /// sources may ignore these metrics and implement only `placements`.
+    fn placements_with_metrics(
+        &self,
+        frame: &Frame,
+        cell_pixels: Option<(u16, u16)>,
+    ) -> Vec<Placement> {
+        let _ = cell_pixels;
+        self.placements(frame)
+    }
+
     /// How long until an animation among the placements shows another frame,
     /// so an event loop knows when to repaint. `None` when nothing moves.
     fn next_change(&self) -> Option<Duration> {

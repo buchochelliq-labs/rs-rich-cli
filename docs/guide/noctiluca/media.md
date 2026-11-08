@@ -178,7 +178,7 @@ name its protocol. A site's table can turn pictures off there with
 
 ## The pixel view
 
-In a terminal with Kitty graphics (kitty, WezTerm, Ghostty), `Alt+X`
+In a terminal with Kitty graphics and Unicode placeholders, `Alt+X`
 (`view.pixels`), `--pixels` or `--view pixels` shows the page as Chrome
 paints it, pixel for pixel, instead of the projection: a canvas, a map, a
 page whose layout the projection gets wrong. `Alt+X` again goes back. The
@@ -215,3 +215,17 @@ Scrolling moves every row, so nearly every tile changes and tiles save
 only a quarter; a page that holds still while something small moves costs
 next to nothing. Scrolling in the projection, which sends text, stays far
 cheaper.
+
+Terminal cell dimensions are measured at session startup and on resize when
+reported by the terminal. If they are unavailable, picture rendering uses
+8×16 pixels per cell. Physical cell dimensions affect raster fitting, while
+Noctiluca's separate CSS-to-cell projection calibration remains 8×18.
+
+Framework users can run the independent `metric_pictures` example with
+`cargo run -p rs-rich-intuituive --features art --example metric_pictures --
+kitty 8x16 cover left change`. It changes metrics with the same picture and
+cell grid; `clip` shows a scrolled portion, and `cells`, `iterm`, and `sixel`
+select the fallback or another protocol. For programmatic use,
+`Driver::set_cell_pixels` updates metrics and `intuituive::cell_pixels()`
+provides the reactive value. Existing placement sources can ignore metrics;
+`PlacementSource::placements_with_metrics` lets sources use them.

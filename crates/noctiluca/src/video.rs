@@ -263,6 +263,7 @@ pub struct Pacing {
     /// Other moving pictures sharing the budget (animated GIFs in view).
     pub others: usize,
     regions: HashMap<NodeId, Paced>,
+    cell: rich_art::graphics::CellPixels,
 }
 
 /// One region's pacing.
@@ -290,7 +291,13 @@ impl Pacing {
             start,
             others: 0,
             regions: HashMap::new(),
+            cell: rich_art::graphics::CellPixels::DEFAULT,
         }
+    }
+
+    /// Select the physical cell size used to estimate new frame costs.
+    pub fn set_cell_pixels(&mut self, cell: rich_art::graphics::CellPixels) {
+        self.cell = rich_art::graphics::CellPixels::new(cell.width, cell.height);
     }
 
     /// The protocol to start video at: character art over SSH unless the
@@ -363,6 +370,7 @@ impl Pacing {
             let spent = counted(region.picture.id()).saturating_sub(before);
             region.pacer.sent(at, (spent > 0).then_some(spent));
         }
+        region.pacer.set_cell_pixels(self.cell);
         while region.pacer.settle(&budget, share) {}
         if region.seq > 0 && !region.pacer.due(now, &budget, share) {
             return None;
@@ -460,7 +468,7 @@ pub struct Encoder {
 
 #[derive(Default)]
 struct Queue {
-    waiting: Vec<Job>,
+    waiting: Vec<(Job, Option<(u16, u16)>)>,
     closed: bool,
 }
 
@@ -475,7 +483,7 @@ impl Encoder {
         let shared = queue.clone();
         std::thread::spawn(move || {
             loop {
-                let job = {
+                let (job, metrics) = {
                     let (lock, ready) = &*shared;
                     let mut queue = lock.lock().unwrap_or_else(|e| e.into_inner());
                     while queue.waiting.is_empty() && !queue.closed {
@@ -486,8 +494,16 @@ impl Encoder {
                     }
                     queue.waiting.remove(0)
                 };
-                job.picture
-                    .prepare(crate::pictures::view(job.pixels), job.cols, job.rows);
+                let cell = metrics
+                    .filter(|&(w, h)| w > 0 && h > 0)
+                    .map(|(w, h)| rich_art::graphics::CellPixels::new(w.into(), h.into()))
+                    .unwrap_or_default();
+                job.picture.prepare_with_metrics(
+                    crate::pictures::view(job.pixels),
+                    job.cols,
+                    job.rows,
+                    cell,
+                );
                 done(job);
             }
         });
@@ -496,10 +512,17 @@ impl Encoder {
 
     /// Encode `job`, in place of any frame of its region still waiting.
     pub fn encode(&self, job: Job) {
+        self.encode_with_metrics(job, None);
+    }
+
+    /// Prepare with the terminal's measured physical cell dimensions.
+    pub fn encode_with_metrics(&self, job: Job, metrics: Option<(u16, u16)>) {
         let (lock, ready) = &*self.queue;
         let mut queue = lock.lock().unwrap_or_else(|e| e.into_inner());
-        queue.waiting.retain(|waiting| waiting.node != job.node);
-        queue.waiting.push(job);
+        queue
+            .waiting
+            .retain(|(waiting, _)| waiting.node != job.node);
+        queue.waiting.push((job, metrics));
         ready.notify_one();
     }
 }
@@ -560,6 +583,43 @@ mod tests {
             on_screen,
             interval: None,
         }
+    }
+
+    #[test]
+    fn video_budget_uses_selected_metrics_before_the_first_write() {
+        let mut pacing = Pacing::new(ByteBudget::new(10_000_000), Pixels::Kitty);
+        let cell = rich_art::graphics::CellPixels::new(12, 24);
+        pacing.set_cell_pixels(cell);
+        let frame = VideoFrame {
+            node: 1,
+            seq: 1,
+            pixels: Rgb::new(4, 4, vec![255; 48]).unwrap(),
+        };
+        let picture = pacing.offer(&frame, 4, 3, Instant::now(), |_| 0).unwrap();
+        assert_eq!(
+            pacing.regions[&1].pacer.bytes_per_frame() as u64,
+            Pacer::estimate_with_metrics(Pixels::Kitty, 4, 3, cell)
+        );
+        let view = crate::pictures::view(Pixels::Kitty);
+        assert!(picture.prepare_with_metrics(view, 4, 3, cell));
+        let tag = rich_art::picture::PictureTag {
+            id: picture.id(),
+            version: picture.version(),
+            cols: 4,
+            rows: 3,
+            row: 0,
+            pixels: Pixels::Kitty,
+            fit: view.fit,
+            anchor: view.anchor,
+        };
+        let bytes = picture
+            .encode_tag_with_metrics(&tag, 0, 3, cell)
+            .unwrap()
+            .len() as u64;
+        let pacer = &mut pacing.regions.get_mut(&1).unwrap().pacer;
+        pacer.sent(Instant::now(), Some(bytes));
+        assert_eq!(pacer.bytes_per_frame() as u64, bytes);
+        assert!(picture.is_prepared_with_metrics(view, 4, 3, cell));
     }
 
     #[test]
@@ -652,6 +712,31 @@ mod tests {
         let (cut, missing) = frames.cut(&regions[..1], Some(&frame(20.0)), now);
         assert!(cut.is_empty());
         assert_eq!(missing.len(), 1);
+    }
+
+    #[test]
+    fn encoder_prepares_at_the_measured_cell_size() {
+        let (send, done) = std::sync::mpsc::channel();
+        let encoder = Encoder::spawn(move |job| drop(send.send(job)));
+        let picture = Picture::from_rgba(8, 8, vec![255; 8 * 8 * 4]).unwrap();
+        let view = crate::pictures::view(Pixels::Kitty);
+        encoder.encode_with_metrics(
+            Job {
+                node: 1,
+                picture: picture.clone(),
+                pixels: Pixels::Kitty,
+                cols: 4,
+                rows: 2,
+            },
+            Some((10, 20)),
+        );
+        done.recv_timeout(Duration::from_secs(10)).unwrap();
+        assert!(picture.is_prepared_with_metrics(
+            view,
+            4,
+            2,
+            rich_art::graphics::CellPixels::new(10, 20)
+        ));
     }
 
     #[test]

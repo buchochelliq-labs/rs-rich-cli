@@ -86,7 +86,15 @@ pub fn image_with(path: impl AsRef<Path>, view: ImageView) -> Node {
 }
 
 /// The lines last drawn, with the picture and the size they were for.
-type Drawn = (Picture, u16, u16, Vec<Vec<Segment>>);
+type Drawn = (
+    Picture,
+    u16,
+    u16,
+    ImageView,
+    Option<(u16, u16)>,
+    Option<rich::ColorSystem>,
+    Vec<Vec<Segment>>,
+);
 
 /// An image node following `path`, a closure that may read signals: when
 /// the path it returns changes, the new file is decoded in the background
@@ -203,14 +211,29 @@ fn draw_cached(
     width: u16,
     height: u16,
 ) -> Vec<Vec<Segment>> {
-    if let Some((last, w, h, lines)) = drawn.borrow().as_ref()
+    let pixels = crate::cell_pixels().get();
+    if let Some((last, w, h, old_view, old_pixels, color, lines)) = drawn.borrow().as_ref()
         && last == picture
         && (*w, *h) == (width, height)
+        && *old_view == view
+        && *old_pixels == pixels
+        && *color == console.color_system()
     {
         return lines.clone();
     }
-    let lines = picture.lines(console, view, width, height);
-    *drawn.borrow_mut() = Some((picture.clone(), width, height, lines.clone()));
+    let cell = pixels
+        .map(|(w, h)| rich_art::graphics::CellPixels::new(w.into(), h.into()))
+        .unwrap_or_default();
+    let lines = picture.lines_with_metrics(console, view, width, height, cell);
+    *drawn.borrow_mut() = Some((
+        picture.clone(),
+        width,
+        height,
+        view,
+        pixels,
+        console.color_system(),
+        lines.clone(),
+    ));
     lines
 }
 
@@ -244,7 +267,14 @@ pub fn picture_of(picture: impl Fn() -> Option<Picture> + 'static, view: ImageVi
 }
 
 /// A tile's picture version and the lines drawn of it.
-type TileLines = (u32, Vec<Vec<Segment>>);
+type TileLines = (
+    u32,
+    usize,
+    usize,
+    Option<(u16, u16)>,
+    Option<rich::ColorSystem>,
+    Vec<Vec<Segment>>,
+);
 
 /// A node over a whole frame cut into tiles (#818): `tiles` returns them
 /// (a closure that may read signals; [`rich_art::tiles::Tiler::tiles`]),
@@ -274,6 +304,10 @@ pub fn tiles_of(tiles: impl Fn() -> Vec<rich_art::tiles::Tile> + 'static, pixels
     let drawn: RefCell<HashMap<u32, TileLines>> = RefCell::new(HashMap::new());
     leaf(move |console, width, height| {
         let (width, height) = (width as usize, height as usize);
+        let metrics = crate::cell_pixels().get();
+        let cell = metrics
+            .map(|(w, h)| rich_art::graphics::CellPixels::new(w.into(), h.into()))
+            .unwrap_or_default();
         let mut tiles: Vec<_> = tiles()
             .into_iter()
             .filter(|t| t.col + t.cols <= width && t.row + t.rows <= height)
@@ -286,14 +320,35 @@ pub fn tiles_of(tiles: impl Fn() -> Vec<rich_art::tiles::Tile> + 'static, pixels
         let mut filled = vec![0usize; height];
         for tile in &tiles {
             let picture = &tile.picture;
-            let fresh = drawn
-                .get(&picture.id())
-                .is_none_or(|(version, _)| *version != picture.version());
+            let fresh = drawn.get(&picture.id()).is_none_or(
+                |(version, cols, rows, previous_metrics, color, _)| {
+                    *version != picture.version()
+                        || (*cols, *rows) != (tile.cols, tile.rows)
+                        || *previous_metrics != metrics
+                        || *color != console.color_system()
+                },
+            );
             if fresh {
-                let lines = picture.lines(console, view, tile.cols as u16, tile.rows as u16);
-                drawn.insert(picture.id(), (picture.version(), lines));
+                let lines = picture.lines_with_metrics(
+                    console,
+                    view,
+                    tile.cols as u16,
+                    tile.rows as u16,
+                    cell,
+                );
+                drawn.insert(
+                    picture.id(),
+                    (
+                        picture.version(),
+                        tile.cols,
+                        tile.rows,
+                        metrics,
+                        console.color_system(),
+                        lines,
+                    ),
+                );
             }
-            let (_, lines) = &drawn[&picture.id()];
+            let (_, _, _, _, _, lines) = &drawn[&picture.id()];
             for (k, line) in lines.iter().enumerate().take(tile.rows) {
                 let row = tile.row + k;
                 if filled[row] < tile.col {
@@ -364,6 +419,7 @@ type GraphicKey = (
     usize,
     Option<ImageFit>,
     ImageAnchor,
+    rich_art::graphics::CellPixels,
 );
 
 /// [`image_graphics`]'s source.
@@ -376,6 +432,18 @@ struct ImageGraphics {
 
 impl PlacementSource for ImageGraphics {
     fn placements(&self, frame: &Frame) -> Vec<Placement> {
+        self.placements_with_metrics(frame, None)
+    }
+
+    fn placements_with_metrics(
+        &self,
+        frame: &Frame,
+        metrics: Option<(u16, u16)>,
+    ) -> Vec<Placement> {
+        let cell = metrics
+            .filter(|&(w, h)| w > 0 && h > 0)
+            .map(|(w, h)| rich_art::graphics::CellPixels::new(w.into(), h.into()))
+            .unwrap_or_default();
         // Each tagged run whole (cells written over a picture, a modal's,
         // cut its runs short): its row, column and tag.
         let mut found: Vec<(usize, usize, PictureTag)> = Vec::new();
@@ -431,7 +499,7 @@ impl PlacementSource for ImageGraphics {
             } else {
                 (tag.row, shown)
             };
-            if let Some(graphic) = self.graphic(tag, first, rows) {
+            if let Some(graphic) = self.graphic(tag, first, rows, cell) {
                 out.push(Placement {
                     row: *row,
                     column: *column,
@@ -456,7 +524,13 @@ impl PlacementSource for ImageGraphics {
 impl ImageGraphics {
     /// The graphic of `tag`'s frame at its size, its rows `first` to
     /// `first + shown` only, made once.
-    fn graphic(&self, tag: &PictureTag, first: usize, shown: usize) -> Option<Arc<dyn Graphic>> {
+    fn graphic(
+        &self,
+        tag: &PictureTag,
+        first: usize,
+        shown: usize,
+        cell: rich_art::graphics::CellPixels,
+    ) -> Option<Arc<dyn Graphic>> {
         let key = (
             tag.id,
             tag.version,
@@ -467,13 +541,14 @@ impl ImageGraphics {
             shown,
             tag.fit,
             tag.anchor,
+            cell,
         );
         let mut made = self.made.lock().unwrap_or_else(|e| e.into_inner());
         if let Some(graphic) = made.get(&key) {
             return Some(graphic.clone());
         }
         let picture = tag.picture()?;
-        let escape = picture.encode_tag(tag, first, shown)?;
+        let escape = picture.encode_tag_with_metrics(tag, first, shown, cell)?;
         if tag.pixels == Pixels::Kitty {
             let mut uploaded = self.uploaded.lock().unwrap_or_else(|e| e.into_inner());
             if !uploaded.contains(&tag.id) {
@@ -876,6 +951,125 @@ mod tests {
     }
 
     #[test]
+    fn driver_reuploads_picture_when_only_cell_pixels_change() {
+        let picture = Picture::from_rgba(4, 4, vec![255; 64]).unwrap();
+        let shown = picture.clone();
+        let app = App::new(move || {
+            picture_of(
+                move || Some(shown.clone()),
+                ImageView::new()
+                    .fit(ImageFit::Stretch)
+                    .pixels(Pixels::Kitty),
+            )
+            .fixed(2)
+        })
+        .graphics(image_graphics());
+        let mut driver = app.driver(4, 2);
+        let first = written(&mut driver, "a=T", 5);
+        assert!(first.contains("s=32,v=32"), "{first:?}");
+        driver.set_cell_pixels(Some((12, 24)));
+        let changed = written(&mut driver, "a=T", 5);
+        assert!(changed.contains("s=48,v=48"), "{changed:?}");
+        assert!(changed.contains(&format!("i={},", picture.id())));
+    }
+
+    #[test]
+    fn graphics_uploads_are_inside_synchronized_frame_when_enabled() {
+        use rich_interact::headless::{Headless, Script};
+        for synchronized in [false, true] {
+            let picture = Picture::from_rgba(4, 4, vec![255; 64]).unwrap();
+            let app = App::new(move || {
+                picture_of(
+                    {
+                        let picture = picture.clone();
+                        move || Some(picture.clone())
+                    },
+                    ImageView::new().pixels(Pixels::Kitty),
+                )
+                .fixed(2)
+                .on_key("q", |cx| cx.quit())
+            })
+            .graphics(image_graphics());
+            let mut backend = Headless::new(Script::new().keys("q"), 4, 2);
+            backend.synchronized_output = synchronized;
+            let record = backend.record();
+            app.run_on(&mut backend).unwrap();
+            let writes = &record.borrow().writes;
+            let frame = writes.iter().find(|text| text.contains("a=T")).unwrap();
+            assert_eq!(frame.starts_with("\x1b[?2026h"), synchronized);
+            assert_eq!(frame.ends_with("\x1b[?2026l"), synchronized);
+        }
+    }
+
+    #[test]
+    fn headless_propagates_metric_changes_without_a_cell_resize() {
+        use rich_interact::headless::{Headless, Script};
+        let picture = Picture::from_rgba(4, 4, vec![255; 64]).unwrap();
+        let shown = picture.clone();
+        let app = App::new(move || {
+            picture_of(
+                move || Some(shown.clone()),
+                ImageView::new()
+                    .fit(ImageFit::Stretch)
+                    .pixels(Pixels::Kitty),
+            )
+            .fixed(2)
+            .on_key("q", |cx| cx.quit())
+        })
+        .graphics(image_graphics());
+        use rich_interact::{Backend, Event};
+        struct MetricBackend {
+            inner: Headless,
+            next: std::collections::VecDeque<(u16, u16)>,
+        }
+        impl Backend for MetricBackend {
+            fn size(&self) -> (u16, u16) {
+                self.inner.size()
+            }
+            fn cell_pixels(&self) -> Option<(u16, u16)> {
+                self.inner.cell_pixels()
+            }
+            fn read(
+                &mut self,
+                timeout: Option<std::time::Duration>,
+            ) -> std::io::Result<Option<Event>> {
+                let event = self.inner.read(timeout)?;
+                if matches!(event, Some(Event::Resize { .. })) {
+                    self.inner.set_cell_pixels(self.next.pop_front());
+                }
+                Ok(event)
+            }
+            fn write(&mut self, text: &str) -> std::io::Result<()> {
+                self.inner.write(text)
+            }
+            fn elapsed(&self) -> std::time::Duration {
+                self.inner.elapsed()
+            }
+            fn handoff(
+                &mut self,
+                command: &mut std::process::Command,
+            ) -> std::io::Result<Option<i32>> {
+                self.inner.handoff(command)
+            }
+            fn alternate_screen(&self) -> bool {
+                self.inner.alternate_screen()
+            }
+        }
+        let script = Script::new().resize(4, 2).resize(4, 2).keys("q");
+        let inner = Headless::new(script, 4, 2);
+        let record = inner.record();
+        let mut backend = MetricBackend {
+            inner,
+            next: [(10, 20), (12, 24)].into(),
+        };
+        app.run_on(&mut backend).unwrap();
+        let output = record.borrow().output();
+        assert!(output.contains("s=32,v=32"));
+        assert!(output.contains("s=40,v=40"));
+        assert!(output.contains("s=48,v=48"));
+    }
+
+    #[test]
     fn live_frames_keep_one_kitty_id_and_are_freed_once() {
         let first = Picture::new(solid(255, 0, 0));
         let id = first.id();
@@ -906,6 +1100,43 @@ mod tests {
         assert!(picture_bytes(id) > 0);
         let finished = driver.finish();
         assert_eq!(finished.matches("a=d").count(), 1, "{finished:?}");
+    }
+
+    #[test]
+    fn tile_cache_rebuilds_when_cell_geometry_changes() {
+        let mut tiler = rich_art::tiles::Tiler::new(2, 1);
+        tiler.update(&RgbaImage::from_pixel(16, 16, Rgba([255, 0, 0, 255])), 2, 1);
+        let mut wider = tiler.tiles()[0].clone();
+        let first = wider.clone();
+        wider.cols = 4;
+        let handle = std::rc::Rc::new(std::cell::Cell::new(None));
+        let seen = handle.clone();
+        let app = App::new(move || {
+            let tile = signal(first.clone());
+            seen.set(Some(tile));
+            tiles_of(move || vec![tile.get()], Pixels::Kitty).fixed(1)
+        })
+        .graphics(image_graphics());
+        let mut driver = app.driver(4, 1);
+        driver.update(std::time::Duration::ZERO);
+        let _ = driver.render();
+        assert_eq!(
+            driver.screen().plain()[0]
+                .chars()
+                .filter(|&c| c == rich_art::kitty::PLACEHOLDER)
+                .count(),
+            2
+        );
+        handle.get().unwrap().set(wider);
+        driver.update(std::time::Duration::ZERO);
+        let _ = driver.render();
+        assert_eq!(
+            driver.screen().plain()[0]
+                .chars()
+                .filter(|&c| c == rich_art::kitty::PLACEHOLDER)
+                .count(),
+            4
+        );
     }
 
     #[test]

@@ -358,6 +358,11 @@ fn step_motion(b: Browser, motion: &mut pictures::Motion) {
         pacing.moving()
     });
     motion.share_with(budget, videos);
+    let cell = rich_intuituive::cell_pixels()
+        .get_untracked()
+        .map(|(w, h)| rich_art::graphics::CellPixels::new(w.into(), h.into()))
+        .unwrap_or_default();
+    motion.set_cell_pixels(cell);
     let page = b.page.get_untracked();
     let images = b.images.get_untracked();
     let next = match page {
@@ -848,8 +853,14 @@ fn video_frame(b: Browser, frame: &VideoFrame) {
     };
     let cols = ((rect.width / CELL.0 as f64).ceil() as usize).clamp(1, 400);
     let rows = ((rect.height / CELL.1 as f64).ceil() as usize).clamp(1, 200);
+    let (cols, rows) = drawn_cells(b, frame.node).unwrap_or((cols, rows));
+    let metrics = rich_intuituive::cell_pixels().get_untracked();
+    let cell = metrics
+        .map(|(w, h)| rich_art::graphics::CellPixels::new(w.into(), h.into()))
+        .unwrap_or_default();
     let (picture, pixels) = b.pacing.with_untracked(|p| {
         let mut pacing = p.borrow_mut();
+        pacing.set_cell_pixels(cell);
         let picture = pacing.offer(frame, cols, rows, Instant::now(), picture_bytes);
         (picture, pacing.pixels(frame.node))
     });
@@ -861,15 +872,17 @@ fn video_frame(b: Browser, frame: &VideoFrame) {
         // Pixels are encoded on the encoder's thread first, in the cells
         // the region is drawn in, so the painter finds the escape made.
         Some(picture) => {
-            let (cols, rows) = drawn_cells(b, frame.node).unwrap_or((cols, rows));
             b.encoder.with_untracked(|e| {
-                e.encode(Job {
-                    node: frame.node,
-                    picture,
-                    pixels,
-                    cols,
-                    rows,
-                })
+                e.encode_with_metrics(
+                    Job {
+                        node: frame.node,
+                        picture,
+                        pixels,
+                        cols,
+                        rows,
+                    },
+                    metrics,
+                )
             });
         }
         None => {}
@@ -2417,13 +2430,23 @@ fn draw_row(
             .with(|p| p.as_ref()?.inline_pictures.get(src).cloned())?;
         Some((picture, pixels))
     };
-    let mut spliced = pictures::splice(console, cells, segments, width, row, &on_row, |region| {
-        if region.media == usize::MAX {
-            return small(region);
-        }
-        let at = l.regions.iter().position(|r| r == region)?;
-        shown_picture(b, nodes.get(at).copied().flatten()?)
-    });
+    let metrics = rich_intuituive::cell_pixels().get();
+    let mut spliced = pictures::splice_with_metrics(
+        console,
+        cells,
+        segments,
+        width,
+        row,
+        &on_row,
+        |region| {
+            if region.media == usize::MAX {
+                return small(region);
+            }
+            let at = l.regions.iter().position(|r| r == region)?;
+            shown_picture(b, nodes.get(at).copied().flatten()?)
+        },
+        metrics,
+    );
     // A badge over a picture stays on it: its cells are text again.
     for (_, column, over) in l.overlays.iter().filter(|(r, _, _)| *r == row) {
         let drawn = render(over, &Marks::default());

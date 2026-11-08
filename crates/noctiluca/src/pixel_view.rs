@@ -37,7 +37,7 @@ use crate::cdp::CELL;
 use crate::tab::Command;
 
 /// Why the pixel view cannot show.
-pub const NEEDS_KITTY: &str = "The pixel view needs Kitty graphics (kitty, WezTerm, Ghostty, or --images kitty): \
+pub const NEEDS_KITTY: &str = "The pixel view needs Kitty graphics and Unicode placeholders: \
      showing the projection.";
 
 /// What the pixel view has sent, for the status bar and tests.
@@ -192,6 +192,12 @@ mod tests {
     use super::*;
     use rich_art::image::Rgba;
     use std::time::Duration;
+
+    #[test]
+    fn unavailable_hint_names_the_required_placeholder_support() {
+        assert!(NEEDS_KITTY.contains("Unicode placeholders"));
+        assert!(!NEEDS_KITTY.contains("WezTerm"));
+    }
 
     #[test]
     fn a_frame_the_budget_has_no_room_for_is_dropped_not_queued() {

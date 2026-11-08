@@ -3891,6 +3891,7 @@ impl App {
         let frame_time = self.frame_time;
         let mut last_frame: Option<Duration> = None;
         let mut driver = self.driver(width, height);
+        driver.set_cell_pixels(backend.cell_pixels());
         driver.set_clipboard(backend.clipboard().is_ok());
         driver.set_releases(backend.releases_reported());
         // A value from another thread ends the wait on the terminal.
@@ -3993,6 +3994,7 @@ impl App {
             if inline {
                 driver.set_origin(backend.origin());
             }
+            driver.set_cell_pixels(backend.cell_pixels());
             driver.event(event);
             copy_all(driver, backend);
             hand_off(driver, backend, linear, inline)
@@ -4158,6 +4160,7 @@ impl App {
             console,
             screen,
             rows: height,
+            cell_pixels: None,
             first: true,
             started: false,
             origin: 0,
@@ -7188,6 +7191,7 @@ impl App {
 /// `Surface` draws them. `placements` is what the last frame drew.
 fn draw_graphics(
     source: &dyn rich_ext::frame::PlacementSource,
+    cell_pixels: Option<(u16, u16)>,
     placements: &mut Vec<rich_ext::frame::Placement>,
     screen: &Screen,
     painter: &mut Painter,
@@ -7202,7 +7206,7 @@ fn draw_graphics(
     let frame = Frame::from_segments(&segments);
     let height = frame.height();
     let next: Vec<_> = source
-        .placements(&frame)
+        .placements_with_metrics(&frame, cell_pixels)
         .into_iter()
         .filter(|p| p.row + p.rows <= height)
         .collect();
@@ -7284,6 +7288,7 @@ pub struct Driver {
     screen: Screen,
     /// The terminal's rows.
     rows: u16,
+    cell_pixels: Option<(u16, u16)>,
     /// Draw everything next time.
     first: bool,
     /// The cursor was hidden by the first frame.
@@ -7322,6 +7327,18 @@ const LAYOUT_ROUNDS: usize = 4;
 const DRAIN_EVENTS: usize = 64;
 
 impl Driver {
+    /// Set measured physical cell dimensions. A change repaints even when
+    /// the terminal's columns and rows are unchanged. Zero dimensions are unknown.
+    pub fn set_cell_pixels(&mut self, pixels: Option<(u16, u16)>) {
+        let pixels = pixels.filter(|&(w, h)| w > 0 && h > 0);
+        if self.cell_pixels != pixels {
+            self.cell_pixels = pixels;
+            self.app.runtime.cell_pixels().set(pixels);
+            self.first = true;
+            self.painter.invalidate();
+        }
+    }
+
     /// Bring the app up to `now` (the time since it started): run the
     /// timers that are due, move animations, deliver results from other
     /// threads and run the watches they set off, and drop toasts that are
@@ -8873,6 +8890,7 @@ impl Driver {
         if let Some(source) = app.graphics.clone() {
             out.push_str(&draw_graphics(
                 &*source,
+                self.cell_pixels,
                 &mut app.placements,
                 screen,
                 &mut self.painter,

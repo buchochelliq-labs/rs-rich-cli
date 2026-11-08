@@ -16,7 +16,7 @@ Updated: 2026-11-08.
 - Formatting passed. Rust 1.91 whole-workspace clippy failed on existing `clippy::nonminimal_bool` diagnostics in `crates/rich/src/markdown_url.rs:197` and `crates/rich/src/pretty.rs:258` (three diagnostics). No unrelated source fixes were applied. Whole-workspace tests exhausted disk space while linking, before running.
 - Documentation milestone `6f91ea8` and partial Task 1 corpus/baseline milestone `81648e2` are committed. Whole-workspace checks remain incomplete or failing as described above.
 - Independent specification review: no important unanswered questions; component API audit incorporated (public struct compatibility, physical/CSS metrics distinction, full cache invalidation and browser playback authority).
-- Task 1 baseline added fixture controls and browser-free tests; the first review requested corrections to intrinsic sizing and keyed chat edits. Product fixes, new widgets and native-terminal acceptance are not yet implemented or verified.
+- Task 1 baseline added fixture controls and browser-free tests; reviewed corrections addressed intrinsic sizing and keyed chat edits. Task 2 metrics and capability changes are in progress and require review; native-terminal acceptance remains outstanding.
 
 ## Next
 

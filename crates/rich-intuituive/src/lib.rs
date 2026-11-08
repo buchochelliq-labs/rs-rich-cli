@@ -269,7 +269,9 @@ pub use parity::{
 pub use place::{Offset, Origin, RectHandle};
 pub use preview::{PreviewOfOptions, preview_of, preview_of_with};
 pub use rating::{rating, rating_input};
-pub use reactive::{Memo, Proxy, Signal, memo, on_write, on_write_ref, signal, viewport, watch};
+pub use reactive::{
+    Memo, Proxy, Signal, cell_pixels, memo, on_write, on_write_ref, signal, viewport, watch,
+};
 /// What a text does with what does not fit a line: rich's.
 pub use rich::Overflow;
 pub use rule::rule;
