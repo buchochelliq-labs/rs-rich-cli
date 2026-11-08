@@ -1603,6 +1603,22 @@ impl Node {
         self.controlled_modal
     }
 
+    /// An allocation-free fast path for the common tree without a visible
+    /// controlled scope. Apply the same visibility rules as walk_accessible.
+    pub(crate) fn has_controlled_modal(&self) -> bool {
+        if self.hidden() || self.access_hidden || self.sheet.borrow().layout.invisible {
+            return false;
+        }
+        self.controlled_modal
+            || self
+                .body
+                .borrow()
+                .widget
+                .children()
+                .iter()
+                .any(Node::has_controlled_modal)
+    }
+
     /// Make this node a [focus scope](Self::focus_scope) that
     /// [`Ctx::focus_next_scope`](crate::Ctx::focus_next_scope) and
     /// [`focus_previous_scope`](crate::Ctx::focus_previous_scope) visit even

@@ -403,3 +403,40 @@ fn controlled_modal_slider_drag_left_keeps_direction_and_releases() {
         "released slider continued dragging"
     );
 }
+
+#[test]
+fn a_dynamically_created_controlled_scope_is_discovered_and_removed() {
+    use std::{cell::Cell, rc::Rc};
+    let state = Rc::new(Cell::new(None));
+    let handle = state.clone();
+    let app = App::new(move || {
+        let open = signal(false);
+        handle.set(Some(open));
+        layers([
+            label("base").focusable().name("base"),
+            keyed(
+                move || open.get(),
+                move |visible| {
+                    if visible {
+                        label("dynamic modal")
+                            .controlled_modal()
+                            .on_key("esc", move |_| open.set(false))
+                            .inset(1, 2, 1, 2)
+                    } else {
+                        label("")
+                    }
+                },
+            )
+            .children_cover_only(),
+        ])
+    });
+    let mut d = shown(app, 20, 5);
+    d.assert_focused("base");
+    state.get().unwrap().set(true);
+    d.settle();
+    assert!(d.find_text("dynamic modal").is_some());
+    d.press("esc");
+    d.settle();
+    assert!(!state.get().unwrap().get_untracked());
+    d.assert_focused("base");
+}
