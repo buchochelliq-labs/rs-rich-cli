@@ -43,7 +43,7 @@ pub const NEEDS_KITTY: &str = "The pixel view needs Kitty graphics and Unicode p
 /// What the pixel view has sent, for the status bar and tests.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct ScreenStats {
-    /// Frames shown.
+    /// Source frames accepted by the tiler (not native displayed frames).
     pub frames: u64,
     /// Frames dropped: the byte budget had no room for them.
     pub dropped: u64,

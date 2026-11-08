@@ -443,7 +443,7 @@ struct Worker<'a> {
     inline: HashMap<String, Picture>,
     inline_asked: HashSet<String>,
     inline_loader: Option<crate::inline_resources::InlineResources>,
-    decode_inline: Sender<((u64, String), Arc<[u8]>)>,
+    decode_inline: ToDecode<(u64, String)>,
     decoded_inline: Receiver<((u64, String), Picture)>,
     /// Where Chrome's view was last seen: images near it are captured
     /// first.
@@ -1641,7 +1641,10 @@ fn run(
     update: &dyn Fn(Update),
 ) {
     let (decode, decoded) = decoder();
-    let (decode_inline, decoded_inline) = decoder();
+    // The optional worker owns actual inline decoding. These channels keep
+    // the controlled completion seam used by the document-lifecycle tests.
+    let (decode_inline, _unused_inline_jobs) = mpsc::channel();
+    let (_unused_inline_done, decoded_inline) = mpsc::channel();
     let inline_loader =
         crate::inline_resources::InlineResources::spawn(engine.optional_resources());
     let mut worker = Worker {
@@ -2147,6 +2150,30 @@ mod tests {
                 "new document inline completion missing"
             );
             std::thread::yield_now();
+        }
+        // A long sequence of unique emotes must not turn the asked/source
+        // maps into a history of every URL the document has ever used.
+        worker.inline_loader = Some(crate::inline_resources::InlineResources::spawn(None));
+        let mut page = (**worker.page.as_ref().unwrap()).clone();
+        for n in 0..1024 {
+            let next = format!("https://example.test/emote-{n}.png");
+            for run in page.blocks.iter_mut().flat_map(|b| &mut b.runs).chain(
+                page.logs
+                    .iter_mut()
+                    .flat_map(|l| l.entries.iter_mut().flat_map(|e| &mut e.runs)),
+            ) {
+                if let Some(picture) = &mut run.picture {
+                    picture.src = next.clone();
+                }
+            }
+            worker.dress_inline(&mut page);
+            assert!(worker.inline.len() <= 1);
+            assert!(worker.inline_asked.len() <= 1);
+            assert!(worker.inline.keys().all(|src| src == &next));
+            worker.inline.insert(
+                next,
+                Picture::from_rgba(1, 1, vec![0, 255, 0, 255]).unwrap(),
+            );
         }
     }
 

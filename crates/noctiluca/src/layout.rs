@@ -540,6 +540,8 @@ fn table_lines(table: &Table, width: usize, page: &Page, marks: &Marks) -> Vec<L
 /// The page in reader mode at `width` cells: pieces of text, media and
 /// controls, in reading order.
 pub fn reader(page: &Page, width: u16, marks: &Marks) -> Vec<Piece> {
+    #[cfg(test)]
+    crate::app::TEST_READER_LAYOUTS.with(|n| n.set(n.get() + 1));
     let width = width.max(10) as usize;
     let mut pieces: Vec<Piece> = Vec::new();
     let mut text: Vec<Line> = Vec::new();
@@ -2422,6 +2424,14 @@ pub fn inside(left: f64, top: f64, right: f64, bottom: f64, x: f64, y: f64) -> (
     (keep(left, right, x), keep(top, bottom, y))
 }
 
+/// Cell rectangle overlap, including rows shared by adjacent boxes.
+pub(crate) fn rectangles_overlap(a: Region, b: Region) -> bool {
+    a.row < b.row + b.rows
+        && b.row < a.row + a.rows
+        && a.column < b.column + b.cols
+        && b.column < a.column + a.cols
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -2533,12 +2543,4 @@ mod tests {
         assert_eq!(point_in(0.0, 0.0, 30, 8, (3.0, 3.0)), (0.0, 0.0));
         assert_eq!(inside(10.0, 20.0, 110.0, 70.0, 50.0, 25.0), (60.0, 45.0));
     }
-}
-
-/// Cell rectangle overlap, including rows shared by adjacent boxes.
-pub(crate) fn rectangles_overlap(a: Region, b: Region) -> bool {
-    a.row < b.row + b.rows
-        && b.row < a.row + a.rows
-        && a.column < b.column + b.cols
-        && b.column < a.column + a.cols
 }

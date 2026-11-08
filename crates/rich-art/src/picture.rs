@@ -1563,6 +1563,11 @@ impl Pacer {
     }
 }
 
+fn media_trace_enabled() -> bool {
+    static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *ON.get_or_init(|| std::env::var_os("RICH_MEDIA_TRACE").is_some())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -2187,9 +2192,4 @@ mod tests {
         assert!(sent.len() >= 8, "{sent:?}");
         assert!(pacer.recent_bytes() <= 800_000);
     }
-}
-
-fn media_trace_enabled() -> bool {
-    static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
-    *ON.get_or_init(|| std::env::var_os("RICH_MEDIA_TRACE").is_some())
 }

@@ -1274,7 +1274,10 @@ impl Proxy {
 
     /// Run `f` on the app's thread with a [`Ctx`], so it can also move the
     /// focus, open a screen or quit. Returns `false` if the app has
-    /// finished.
+    /// finished. A default Driver update consumes a bounded initial inbox
+    /// batch; jobs queued by a running job wait for another turn. Callbacks
+    /// themselves must return promptly: an executing callback is not preempted.
+    /// Apps configured to wait for tasks continue settling successive batches.
     #[track_caller]
     pub fn run_with(&self, f: impl FnOnce(&mut Ctx) + Send + 'static) -> bool {
         let at = Location::caller();

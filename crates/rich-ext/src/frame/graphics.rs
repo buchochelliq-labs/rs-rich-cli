@@ -223,6 +223,11 @@ impl Frame {
     }
 }
 
+fn media_trace_enabled() -> bool {
+    static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *ON.get_or_init(|| std::env::var_os("RICH_MEDIA_TRACE").is_some())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -313,9 +318,4 @@ mod tests {
         assert!(again.is_empty());
         assert!(plan(std::slice::from_ref(&kitty), &[], &[]).is_empty());
     }
-}
-
-fn media_trace_enabled() -> bool {
-    static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
-    *ON.get_or_init(|| std::env::var_os("RICH_MEDIA_TRACE").is_some())
 }

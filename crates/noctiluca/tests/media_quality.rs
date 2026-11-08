@@ -169,12 +169,12 @@ fn navigation_queued_during_resource_load_keeps_new_document() {
     let deadline = Instant::now() + Duration::from_secs(10);
     let mut reached = false;
     while Instant::now() < deadline {
-        if let Ok(Update::Page(p)) = rx.recv_timeout(Duration::from_millis(50)) {
-            if p.url.contains("echo.html") {
-                assert!(p.media.is_empty(), "new document has unexpected media");
-                reached = true;
-                break;
-            }
+        if let Ok(Update::Page(p)) = rx.recv_timeout(Duration::from_millis(50))
+            && p.url.contains("echo.html")
+        {
+            assert!(p.media.is_empty(), "new document has unexpected media");
+            reached = true;
+            break;
         }
     }
     assert!(reached, "new document was not published");
@@ -268,11 +268,11 @@ fn slow_optional_inline_load_allows_text_and_navigation_before_completion() {
     let until = Instant::now() + Duration::from_secs(2);
     let mut text = false;
     while Instant::now() < until {
-        if let Ok(Update::Page(p)) = receive.recv_timeout(Duration::from_millis(20)) {
-            if !p.logs.is_empty() {
-                text = true;
-                break;
-            }
+        if let Ok(Update::Page(p)) = receive.recv_timeout(Duration::from_millis(20))
+            && !p.logs.is_empty()
+        {
+            text = true;
+            break;
         }
     }
     assert!(text, "useful text was held behind optional resource");
@@ -280,11 +280,11 @@ fn slow_optional_inline_load_allows_text_and_navigation_before_completion() {
     let until = Instant::now() + Duration::from_secs(2);
     let mut navigated = false;
     while Instant::now() < until {
-        if let Ok(Update::Page(p)) = receive.recv_timeout(Duration::from_millis(20)) {
-            if p.url.contains("echo.html") {
-                navigated = true;
-                break;
-            }
+        if let Ok(Update::Page(p)) = receive.recv_timeout(Duration::from_millis(20))
+            && p.url.contains("echo.html")
+        {
+            navigated = true;
+            break;
         }
     }
     release.send(()).unwrap();

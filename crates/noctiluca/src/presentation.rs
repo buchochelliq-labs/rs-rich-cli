@@ -4,10 +4,12 @@ use crate::config::View;
 use crate::layout::{self, Line, LogSlot, Marks, Part, Projection, Region, Span};
 use crate::model::Page;
 use std::rc::Rc;
+use std::sync::Arc;
 
 #[derive(Default)]
 pub(crate) struct Presentation {
-    previous: Option<(Page, View, u16, Marks)>,
+    previous: Option<(Arc<Page>, View, u16, Marks)>,
+    dependencies: Option<Page>,
     projection: Rc<Projection>,
     slots: Vec<LogSlot>,
 }
@@ -30,8 +32,35 @@ fn dependencies(page: &Page, logs: bool) -> Page {
     key
 }
 
+#[derive(Default)]
+pub(crate) struct Reading {
+    previous: Option<(Page, u16, Marks)>,
+    pieces: Vec<layout::Piece>,
+}
+impl Reading {
+    pub fn update(&mut self, page: &Page, width: u16, marks: &Marks) -> Vec<layout::Piece> {
+        let key = (dependencies(page, false), width, marks.clone());
+        if self.previous.as_ref() != Some(&key) {
+            self.pieces = layout::reader(page, width, marks);
+            self.previous = Some(key);
+        }
+        self.pieces.clone()
+    }
+}
+
 impl Presentation {
+    #[cfg(test)]
     pub fn update(&mut self, page: &Page, view: View, width: u16, marks: &Marks) -> Rc<Projection> {
+        self.update_shared(&Arc::new(page.clone()), view, width, marks)
+    }
+    pub fn update_shared(
+        &mut self,
+        page: &Arc<Page>,
+        view: View,
+        width: u16,
+        marks: &Marks,
+    ) -> Rc<Projection> {
+        let key = dependencies(page, true);
         if let Some((old, old_view, old_width, old_marks)) = &self.previous {
             let mut outer_marks = marks.clone();
             outer_marks.logs = old_marks.logs.clone();
@@ -52,7 +81,7 @@ impl Presentation {
                     .all(|node| self.slots.iter().any(|s| s.node == *node));
             if same
                 && (changed.is_empty() || patch_logs)
-                && dependencies(old, patch_logs) == dependencies(page, patch_logs)
+                && self.dependencies.as_ref() == Some(&key)
             {
                 let playback_changed = old.media.iter().zip(&page.media).any(|(a, b)| {
                     a.playback.is_some_and(|p| p.playing())
@@ -74,6 +103,7 @@ impl Presentation {
                         refresh_media(output, page, width as usize);
                     }
                 }
+                self.dependencies = Some(key);
                 self.previous = Some((page.clone(), view, width, marks.clone()));
                 return self.projection.clone();
             }
@@ -86,6 +116,7 @@ impl Presentation {
             marks,
             &mut self.slots,
         ));
+        self.dependencies = Some(key);
         self.previous = Some((page.clone(), view, width, marks.clone()));
         self.projection.clone()
     }
@@ -99,10 +130,18 @@ fn part_mut(p: &mut Projection, part: Part) -> &mut Projection {
     }
 }
 
-type Cell = (String, String, Option<usize>);
-fn cells(line: &Line, width: usize) -> Vec<Cell> {
+type Cell = (String, usize);
+type CellStyle = (String, Option<usize>);
+fn cells(line: &Line, width: usize, styles: &mut Vec<CellStyle>) -> Vec<Cell> {
     let mut out = Vec::new();
     for span in &line.spans {
+        let style = styles
+            .iter()
+            .position(|(s, control)| s == &span.style && *control == span.control)
+            .unwrap_or_else(|| {
+                styles.push((span.style.clone(), span.control));
+                styles.len() - 1
+            });
         for ch in span.text.chars() {
             let w = rich::cells::cell_len(&ch.to_string());
             if w == 0 {
@@ -114,42 +153,44 @@ fn cells(line: &Line, width: usize) -> Vec<Cell> {
             if out.len() + w > width {
                 break;
             }
-            out.push((ch.to_string(), span.style.clone(), span.control));
+            out.push((ch.to_string(), style));
             for _ in 1..w {
-                out.push((String::new(), span.style.clone(), span.control));
+                out.push((String::new(), style));
             }
         }
     }
-    out.resize(width, (" ".into(), String::new(), None));
+    out.resize(width, (" ".into(), 0));
     out
 }
-fn line(cells: Vec<Cell>) -> Line {
+fn line(cells: Vec<Cell>, styles: &[CellStyle]) -> Line {
     let mut out = Line::default();
-    for (text, style, control) in cells {
+    for (text, style) in cells {
+        let (style, control) = &styles[style];
         if text.is_empty() {
             continue;
         }
         match out.spans.last_mut() {
-            Some(last) if last.style == style && last.control == control => {
+            Some(last) if last.style == *style && last.control == *control => {
                 last.text.push_str(&text)
             }
             _ => out.spans.push(Span {
                 text,
-                style,
-                control,
+                style: style.clone(),
+                control: *control,
                 picture: None,
             }),
         }
     }
-    if let Some(last) = out.spans.last_mut() {
-        if last.style.is_empty() {
-            last.text.truncate(last.text.trim_end().len());
-        }
+    if let Some(last) = out.spans.last_mut()
+        && last.style.is_empty()
+    {
+        last.text.truncate(last.text.trim_end().len());
     }
     out.spans.retain(|s| !s.text.is_empty());
     out
 }
 fn patch(p: &mut Projection, r: Region, lines: &[Line], width: usize) {
+    let width = width.max(10); // The projection uses the same minimum.
     p.inline
         .retain(|(at, _)| !layout::rectangles_overlap(*at, r));
     for (k, replacement) in lines.iter().enumerate().take(r.rows) {
@@ -157,28 +198,35 @@ fn patch(p: &mut Projection, r: Region, lines: &[Line], width: usize) {
         let Some(existing) = p.lines.get_mut(row) else {
             continue;
         };
-        let mut all = cells(existing, width);
-        let replacement_cells = cells(replacement, r.cols);
+        let mut styles = vec![(String::new(), None)];
+        let mut all = cells(existing, width, &mut styles);
+        let replacement_cells = cells(replacement, r.cols, &mut styles);
         let end = (r.column + r.cols).min(width);
         all[r.column..end].clone_from_slice(&replacement_cells[..end - r.column]);
-        *existing = line(all);
+        *existing = line(all, &styles);
         let mut x = r.column;
         for span in &replacement.spans {
             let start = x;
-            x = (x + rich::cells::cell_len(&span.text)).min(end);
-            if let Some(src) = &span.picture {
-                if x > start {
-                    p.inline.push((
-                        Region {
-                            row,
-                            column: start,
-                            cols: x - start,
-                            rows: 1,
-                            media: usize::MAX,
-                        },
-                        src.clone(),
-                    ));
+            for ch in span.text.chars() {
+                let w = rich::cells::cell_len(&ch.to_string());
+                if x + w > end {
+                    break;
                 }
+                x += w;
+            }
+            if let Some(src) = &span.picture
+                && x > start
+            {
+                p.inline.push((
+                    Region {
+                        row,
+                        column: start,
+                        cols: x - start,
+                        rows: 1,
+                        media: usize::MAX,
+                    },
+                    src.clone(),
+                ));
             }
         }
     }
