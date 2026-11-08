@@ -23,6 +23,8 @@ A later native preview at source `c4ebaf62bc7ff94738ee801aca902a2ea5046ab0` (bin
 
 Source dialogs now use shared intuiTUIve layers and owner-controlled modal focus. Complete Noctiluca `Page` literals must add `overlays: Vec::new()` or use `..Page::default()`; `Page::dialogs()` exposes declared source dialogs. See the [layout guide](../guide/intuituive/layout.md#owner-controlled-overlays) and the [design addendum](../superpowers/specs/2026-11-08-noctiluca-media-quality-design.md#addendum-source-dialogs-observed-during-native-review).
 
+A source-neutral 40×24 Noctiluca Driver check at `250cfb0` proves the existing nonmodal popup keyboard route: `Tab` from the page into the popup scroll, `PageDown` to reveal its controls, then `f` and a visible hint. `Shift+Tab` returns to the page; both panes keep independent scroll positions and local source actions occur once. This adds a regression and [reading guidance](../guide/noctiluca/reading.md#top-bars-bottom-bars-and-layers), with no production change. A targeted native check of that route on the live Speedtest popup remains pending; earlier six/24-Tab captures without PageDown at known popup focus did not establish that the route was unavailable.
+
 ## Remaining gates
 
 Matched release-profile timings and their numeric acceptance, remaining full-workspace checks, Task 6 review and whole-branch review are open. Fresh Rust 1.91 workspace clippy failed on existing faithful-rich `nonminimal_bool` diagnostics. Prior full-workspace attempts either stopped on issues since corrected or were interrupted during review; the final frozen-source run is in progress and is not yet a pass. Keep unavailable matrix rows and performance limitations explicit, and do not merge or publish implicitly.

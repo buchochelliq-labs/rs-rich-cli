@@ -1510,6 +1510,259 @@ fn source_nonmodal_dialog_is_shown_as_an_interactive_layer() {
 }
 
 #[test]
+fn oversized_nonmodal_popup_has_a_keyboard_scroll_route() {
+    use noctiluca::{
+        app::{Options, app},
+        bookmarks::Bookmarks,
+        config::{Config, Images, View},
+        engine::{PageAction, Rect},
+        testing::{FakeEngine, PageBuilder},
+    };
+    use std::time::{Duration, Instant};
+
+    let mut p = PageBuilder::new(
+        "https://example.test/keyboard.html",
+        "Keyboard",
+        960.0,
+        4000.0,
+    );
+    p.view(0.0, 720.0);
+    let body = p.body();
+    let outside = p.element(
+        body,
+        "BUTTON",
+        &[],
+        &[],
+        Some(Rect::new(0.0, 0.0, 140.0, 18.0)),
+    );
+    p.text(outside, "Outside", Rect::new(0.0, 0.0, 120.0, 18.0));
+    for i in 0..80 {
+        let y = 36.0 + f64::from(i) * 36.0;
+        let row = p.element(body, "P", &[], &[], Some(Rect::new(0.0, y, 160.0, 18.0)));
+        p.text(
+            row,
+            &format!("Underlay {i:02}"),
+            Rect::new(0.0, y, 150.0, 18.0),
+        );
+    }
+    let panel = p.element(
+        body,
+        "DIV",
+        &[("role", "dialog"), ("aria-label", "Keyboard popup")],
+        &[
+            ("position", "fixed"),
+            ("background-color", "rgb(55, 57, 82)"),
+        ],
+        Some(Rect::new(24.0, 72.0, 296.0, 288.0)),
+    );
+    p.paint(panel, 100);
+    for i in 0..45 {
+        let y = 90.0 + f64::from(i) * 18.0;
+        let row = p.element(panel, "P", &[], &[], Some(Rect::new(32.0, y, 240.0, 18.0)));
+        p.text(
+            row,
+            &format!("Popup paragraph {i:02}"),
+            Rect::new(32.0, y, 230.0, 18.0),
+        );
+    }
+    let action = p.element(
+        panel,
+        "BUTTON",
+        &[],
+        &[],
+        Some(Rect::new(32.0, 1000.0, 150.0, 30.0)),
+    );
+    p.text(action, "Deep action", Rect::new(32.0, 1000.0, 130.0, 18.0));
+    let model = build(&p.snapshot(), &mut Revisions::new());
+    assert_eq!(model.overlays.len(), 1);
+    assert!(!model.overlays[0].modal);
+    let deep_node = model.find("button", "Deep action")[0].node;
+    let outside_node = model.find("button", "Outside")[0].node;
+    let controls = model
+        .controls
+        .iter()
+        .filter(|c| !c.disabled && !c.hover_only)
+        .collect::<Vec<_>>();
+    let hints = noctiluca::layout::hint_labels(controls.len());
+    let hint_for = |node| hints[controls.iter().position(|c| c.node == node).unwrap()].clone();
+    let deep_hint = hint_for(deep_node);
+    let outside_hint = hint_for(outside_node);
+    let engine = FakeEngine::from_dir(
+        &std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/snapshots"),
+    )
+    .unwrap();
+    let state = engine.state.clone();
+    state
+        .lock()
+        .unwrap()
+        .pages
+        .insert("keyboard".into(), p.snapshot());
+    let mut driver = app(
+        Box::new(engine),
+        Options {
+            config: Config::default(),
+            bookmarks: Bookmarks::default(),
+            url: Some("keyboard.html".into()),
+            view: Some(View::Projection),
+            images: Some(Images::None),
+            tunnel: None,
+            control: None,
+        },
+    )
+    .driver(40, 24);
+    let deadline = Instant::now() + Duration::from_secs(5);
+    while driver.find_text("Popup paragraph 00").is_none() {
+        driver.settle();
+        assert!(
+            Instant::now() < deadline,
+            "popup not shown: {:?}",
+            driver.screen().plain()
+        );
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    assert!(driver.find_text("Deep action").is_none());
+    driver.assert_focused("page");
+    let page_focus = driver.focused();
+    let status = driver.screen().plain()[22].clone();
+    // The first ordinary Tab enters the popup's scroll pane, before any
+    // of its controls have been materialized. Tab counts alone cannot
+    // reveal those controls: PageDown must go to this focused pane.
+    driver.press("tab");
+    let popup_focus = driver.focused();
+    assert!(popup_focus.is_some());
+    assert_ne!(popup_focus, page_focus);
+    for _ in 0..3 {
+        driver.press("pagedown");
+        assert_eq!(driver.focused(), popup_focus);
+        assert_eq!(
+            driver.screen().plain()[22],
+            status,
+            "popup scroll moved the underlay"
+        );
+        assert!(driver.find_text("Underlay 00").is_some());
+    }
+    assert!(driver.find_text("Popup paragraph 00").is_none());
+    assert!(
+        driver.find_text("Deep action").is_some(),
+        "{:?}",
+        driver.screen().plain()
+    );
+    driver.press("f");
+    driver
+        .find_text(&format!("[{deep_hint}]"))
+        .expect("deep control hint must be visible before use");
+    driver.type_text(&deep_hint);
+    let deadline = Instant::now() + Duration::from_secs(5);
+    loop {
+        driver.settle();
+        if state
+            .lock()
+            .unwrap()
+            .actions
+            .iter()
+            .any(|a| matches!(a, PageAction::Click(node) if *node == deep_node))
+        {
+            break;
+        }
+        assert!(
+            Instant::now() < deadline,
+            "visible deep hint did not activate its control"
+        );
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    assert_eq!(
+        state
+            .lock()
+            .unwrap()
+            .actions
+            .iter()
+            .filter(|a| matches!(a, PageAction::Click(node) if *node == deep_node))
+            .count(),
+        1
+    );
+    assert!(
+        driver.find_text("Deep action").is_some(),
+        "source popup was dismissed without a source update"
+    );
+    // Nonmodal focus can leave the popup. Its scroll stays put while the
+    // page pane acts on a visible outside control and then scrolls itself.
+    driver.press("shift+tab");
+    driver.assert_focused("page");
+    driver.press("f");
+    driver
+        .find_text(&format!("[{outside_hint}]"))
+        .expect("outside control hint must be visible before use");
+    driver.type_text(&outside_hint);
+    let deadline = Instant::now() + Duration::from_secs(5);
+    loop {
+        driver.settle();
+        if state
+            .lock()
+            .unwrap()
+            .actions
+            .iter()
+            .any(|a| matches!(a, PageAction::Click(node) if *node == outside_node))
+        {
+            break;
+        }
+        assert!(
+            Instant::now() < deadline,
+            "nonmodal outside control was not usable"
+        );
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    assert_eq!(
+        state
+            .lock()
+            .unwrap()
+            .actions
+            .iter()
+            .filter(|a| matches!(a, PageAction::Click(node) if *node == outside_node))
+            .count(),
+        1
+    );
+    let popup_rows = |d: &rich_intuituive::Driver| {
+        d.screen().plain()[6..22]
+            .iter()
+            .map(|row| row.chars().skip(3).collect::<String>())
+            .collect::<Vec<_>>()
+    };
+    let popup_before = popup_rows(&driver);
+    let status_before = driver.screen().plain()[22].clone();
+    driver.press("pagedown");
+    driver.assert_focused("page");
+    assert_ne!(
+        driver.screen().plain()[22],
+        status_before,
+        "page pane did not scroll"
+    );
+    assert_eq!(
+        popup_rows(&driver),
+        popup_before,
+        "underlay scrolling moved the popup"
+    );
+    assert!(driver.find_text("Deep action").is_some());
+    let scrolled_status = driver.screen().plain()[22].clone();
+    driver.press("tab pageup");
+    assert_eq!(driver.focused(), popup_focus);
+    assert_eq!(driver.screen().plain()[22], scrolled_status);
+    assert_ne!(popup_rows(&driver), popup_before);
+    for target in [deep_node, outside_node] {
+        assert_eq!(
+            state
+                .lock()
+                .unwrap()
+                .actions
+                .iter()
+                .filter(|a| matches!(a, PageAction::Click(node) if *node == target))
+                .count(),
+            1,
+            "source control was activated more than once"
+        );
+    }
+}
+
+#[test]
 fn source_modal_dialog_blocks_outside_and_keeps_its_actions() {
     source_dialog_layer(true, false);
 }
