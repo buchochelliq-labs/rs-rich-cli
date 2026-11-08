@@ -349,3 +349,14 @@ fragments Iterm grid=8x9 accepted=0 cold_p50p95_ns=(631, 650) warm_p50p95_ns=(63
 fragments Sixel grid=8x8 accepted=0 cold_p50p95_ns=(574, 582) warm_p50p95_ns=(566, 593) initial_bytes=0 unchanged_draws=0
 fragments Sixel grid=8x9 accepted=0 cold_p50p95_ns=(631, 660) warm_p50p95_ns=(629, 651) initial_bytes=0 unchanged_draws=0
 ```
+
+## Final rebuild provenance
+
+A final `cargo build -p noctiluca --locked` after the test-helper lint cleanup
+passed (`build-noctiluca-final.log`). It relinked the CLI with SHA-256
+`ca623b26735dd4d808d2bc086fa5030afd694fa0e89462a672ef93d9c8597b7d`, preserved
+separately at `/workspace/work/bin/noctiluca-task3b-8f06af9`. Native captures above
+remain tied to the earlier immutable `e2ca7c...` binary; they are not relabeled
+as captures of this second build. `git diff d13c45a..8f06af9` contains only this
+report and the test-helper type alias, with no production changes. The distinct
+linked hashes are retained explicitly; no byte-identical build claim is made.
