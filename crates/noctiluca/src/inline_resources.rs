@@ -14,7 +14,7 @@ struct Queue {
 }
 pub(crate) struct InlineResources {
     queue: Arc<(Mutex<Queue>, Condvar)>,
-    done: mpsc::Receiver<(Request, Picture)>,
+    done: mpsc::Receiver<(Request, Option<Picture>)>,
     legacy: mpsc::Receiver<LegacyRequest>,
 }
 impl InlineResources {
@@ -62,32 +62,29 @@ impl InlineResources {
                         }
                     }
                 };
-                let Some(bytes) = bytes.filter(|b| b.len() <= 16 << 20) else {
-                    continue;
-                };
-                // Inline resources need bounded decoded storage as well as a
-                // bounded queue. Reject enormous source dimensions before decode.
-                let Some((w, h)) = image::ImageReader::new(std::io::Cursor::new(&bytes))
-                    .with_guessed_format()
-                    .ok()
-                    .and_then(|r| r.into_dimensions().ok())
-                else {
-                    continue;
-                };
-                if u64::from(w) * u64::from(h) > 4 * 1024 * 1024 {
-                    continue;
-                }
-                if let Some(start) = measured {
-                    eprintln!(
-                        "RICH_MEDIA {{\"stage\":\"inline_resource\",\"document\":{},\"ns\":{},\"source_bytes\":{}}}",
-                        request.0,
-                        start.elapsed().as_nanos(),
-                        bytes.len()
-                    );
-                }
-                if let Ok(picture) = Picture::decode_animated(&bytes) {
+                let picture = (|| {
+                    let bytes = bytes.filter(|b| b.len() <= 16 << 20)?;
+                    // Inline resources need bounded decoded storage as well as a
+                    // bounded queue. Reject enormous source dimensions before decode.
+                    let (w, h) = image::ImageReader::new(std::io::Cursor::new(&bytes))
+                        .with_guessed_format()
+                        .ok()?
+                        .into_dimensions()
+                        .ok()?;
+                    if u64::from(w) * u64::from(h) > 4 * 1024 * 1024 {
+                        return None;
+                    }
+                    if let Some(start) = measured {
+                        eprintln!(
+                            "RICH_MEDIA {{\"stage\":\"inline_resource\",\"document\":{},\"ns\":{},\"source_bytes\":{}}}",
+                            request.0,
+                            start.elapsed().as_nanos(),
+                            bytes.len()
+                        );
+                    }
+                    let picture = Picture::decode_animated(&bytes).ok()?;
                     if retained_bytes(&picture) > 16 << 20 {
-                        continue;
+                        return None;
                     }
                     if crate::diagnostics::enabled() {
                         eprintln!(
@@ -96,9 +93,13 @@ impl InlineResources {
                             retained_bytes(&picture)
                         );
                     }
-                    if send.send((request, picture)).is_err() {
-                        return;
-                    }
+                    Some(picture)
+                })();
+                // Failed attempts release capacity too. Keep their document/source
+                // identity and bounded completion backpressure so the owner can
+                // admit unattempted sources without retrying failed URLs.
+                if send.send((request, picture)).is_err() {
+                    return;
                 }
             }
         });
@@ -140,7 +141,7 @@ impl InlineResources {
     pub fn take_resource_request(&self) -> Option<LegacyRequest> {
         self.legacy.try_recv().ok()
     }
-    pub fn take(&self) -> Option<(Request, Picture)> {
+    pub fn take(&self) -> Option<(Request, Option<Picture>)> {
         self.done.try_recv().ok()
     }
 }
@@ -160,6 +161,51 @@ pub(crate) fn retained_bytes(p: &Picture) -> usize {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn rejected_optional_resources_complete_and_waiting_count_stays_bounded() {
+        let (start, started) = mpsc::sync_channel(1);
+        let (release, gate) = mpsc::sync_channel(1);
+        let mut first = true;
+        let loader = InlineResources::spawn(Some(Box::new(move |_| {
+            if first {
+                first = false;
+                start.send(()).unwrap();
+                gate.recv().unwrap();
+            }
+            Err(std::io::Error::other("fixture"))
+        })));
+        assert!(loader.submit(7, "first".into()));
+        started
+            .recv_timeout(std::time::Duration::from_secs(2))
+            .unwrap();
+        for n in 0..128 {
+            assert!(loader.submit(7, n.to_string()));
+        }
+        assert!(!loader.submit(7, "not admitted".into()));
+        assert_eq!(loader.queue.0.lock().unwrap().waiting.len(), 128);
+        release.send(()).unwrap();
+        for n in 0..129 {
+            let completion = loader
+                .done
+                .recv_timeout(std::time::Duration::from_secs(2))
+                .expect("failed attempts must report completion");
+            assert!(completion.1.is_none());
+            assert_eq!(
+                completion.0,
+                (
+                    7,
+                    if n == 0 {
+                        "first".into()
+                    } else {
+                        (n - 1).to_string()
+                    }
+                )
+            );
+        }
+        assert!(loader.queue.0.lock().unwrap().waiting.is_empty());
+        assert!(loader.take().is_none());
+    }
+
     #[test]
     fn optional_waiting_urls_have_a_byte_budget_and_can_be_pruned() {
         let (start, started) = mpsc::sync_channel(1);

@@ -992,6 +992,7 @@ impl Worker<'_> {
     /// publish it again.
     fn take_decoded(&mut self) {
         let mut any = false;
+        let mut inline_progress = false;
         while let Ok(((document, key), picture)) = self.decoded.try_recv() {
             if self.page.as_ref().map(|p| p.document) != Some(document) {
                 continue;
@@ -1015,15 +1016,24 @@ impl Worker<'_> {
                 .inline_loader
                 .as_ref()
                 .and_then(|loader| loader.take())
-                .or_else(|| self.decoded_inline.try_recv().ok());
+                .or_else(|| {
+                    self.decoded_inline
+                        .try_recv()
+                        .ok()
+                        .map(|(key, picture)| (key, Some(picture)))
+                });
             let Some(((document, src), picture)) = decoded else {
                 break;
             };
+            inline_progress = true;
             if self.page.as_ref().map(|p| p.document) != Some(document)
                 || !self.inline_asked.contains(&src)
             {
                 continue;
             }
+            let Some(picture) = picture else {
+                continue;
+            };
             let used: usize = self
                 .inline
                 .values()
@@ -1035,7 +1045,10 @@ impl Worker<'_> {
             self.inline.insert(src, picture);
             any = true;
         }
-        let Some(page) = self.page.clone().filter(|_| any) else {
+        // Refill admission after every completed attempt, including failures,
+        // stale results and pictures rejected by the cache budget. dress_inline
+        // retains attempted URLs; progress never makes failures retry in a loop.
+        let Some(page) = self.page.clone().filter(|_| any || inline_progress) else {
             return;
         };
         let mut next = (*page).clone();
@@ -2191,6 +2204,195 @@ mod tests {
                 Picture::from_rgba(1, 1, vec![0, 255, 0, 255]).unwrap(),
             );
         }
+    }
+
+    #[test]
+    fn failed_inline_attempts_refill_unadmitted_sources_without_a_page_refresh() {
+        assert_failed_inline_attempts_refill(false);
+    }
+
+    #[test]
+    fn failed_legacy_inline_attempts_refill_unadmitted_sources_without_a_page_refresh() {
+        assert_failed_inline_attempts_refill(true);
+    }
+
+    fn assert_failed_inline_attempts_refill(legacy: bool) {
+        use crate::testing::PageBuilder;
+        let dir = std::env::temp_dir().join(format!("tab-inline-refill-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let engine = FakeEngine::from_dir(&dir).unwrap();
+        let mut builder = PageBuilder::new("https://example.test/static", "test", 400.0, 400.0);
+        let log = builder.element(
+            builder.body(),
+            "DIV",
+            &[("role", "log")],
+            &[],
+            Some(Rect::new(0.0, 0.0, 100.0, 100.0)),
+        );
+        for n in 0..200 {
+            let entry =
+                builder.element(log, "DIV", &[], &[], Some(Rect::new(0.0, 0.0, 100.0, 20.0)));
+            builder.image(
+                entry,
+                &format!("https://example.test/{n}"),
+                "emote",
+                Rect::new(0.0, 0.0, 16.0, 16.0),
+            );
+        }
+        {
+            let mut state = engine.state.lock().unwrap();
+            state.pages.insert("static".into(), builder.snapshot());
+            state.current = Some("static".into());
+        }
+        let mut png = std::io::Cursor::new(Vec::new());
+        image::DynamicImage::ImageRgba8(image::RgbaImage::from_pixel(
+            2,
+            2,
+            image::Rgba([1, 2, 3, 255]),
+        ))
+        .write_to(&mut png, image::ImageFormat::Png)
+        .unwrap();
+        let png = png.into_inner();
+        // IHDR and the IDAT header expose dimensions without pixel data.
+        let truncated = png[..41].to_vec();
+        assert!(
+            image::ImageReader::new(std::io::Cursor::new(&truncated))
+                .with_guessed_format()
+                .unwrap()
+                .into_dimensions()
+                .is_ok()
+        );
+        assert!(Picture::decode_animated(&truncated).is_err());
+        let attempts = Arc::new(Mutex::new(HashMap::<String, usize>::new()));
+        let observed = attempts.clone();
+        let (started, entered) = mpsc::sync_channel(1);
+        let (release, gate) = mpsc::sync_channel(1);
+        let mut first = true;
+        let mut read: Option<crate::engine::ResourceReader> = Some(Box::new(move |src| {
+            *observed.lock().unwrap().entry(src.into()).or_default() += 1;
+            if first && !legacy {
+                first = false;
+                started.send(()).unwrap();
+                gate.recv().unwrap();
+            }
+            let n: usize = src.rsplit('/').next().unwrap().parse().unwrap();
+            match n {
+                199 => Ok(png.clone()),
+                n if n % 3 == 0 => Err(std::io::Error::other("missing fixture")),
+                n if n % 3 == 1 => Ok(b"invalid image format".to_vec()),
+                _ => Ok(truncated.clone()),
+            }
+        }));
+        let loader = crate::inline_resources::InlineResources::spawn(if legacy {
+            None
+        } else {
+            read.take()
+        });
+        let engine: Box<dyn Engine> = Box::new(engine);
+        let published = Mutex::new(Vec::new());
+        let update = |update| {
+            if let Update::Page(page) = update {
+                published.lock().unwrap().push(page);
+            }
+        };
+        let (decode, _jobs) = mpsc::channel();
+        let (_done, decoded) = mpsc::channel();
+        let (decode_inline, _inline_jobs) = mpsc::channel();
+        let (_inline_done, decoded_inline) = mpsc::channel();
+        let mut worker = Worker {
+            engine,
+            update: &update,
+            revisions: Revisions::new(),
+            page: None,
+            state: PageState::default(),
+            dirty: None,
+            stills: HashMap::new(),
+            pictures: HashMap::new(),
+            decode,
+            decoded,
+            inline: HashMap::new(),
+            inline_asked: HashSet::new(),
+            inline_loader: Some(loader),
+            decode_inline,
+            decoded_inline,
+            metrics: None,
+            frames: Frames::default(),
+            on_screen: HashSet::new(),
+            intervals: HashMap::new(),
+            last_frame: None,
+            starved: false,
+            scale: 1.0,
+            scale_given: 1.0,
+            shown_time: HashMap::new(),
+            live: HashMap::new(),
+            appended: HashSet::new(),
+            settle: None,
+            stills_pending: false,
+            pixels: false,
+            pixels_cast: false,
+            screen_at: None,
+            latest: HashMap::new(),
+            drawn: HashMap::new(),
+            stale: HashSet::new(),
+            canvases: HashMap::new(),
+            asked: None,
+        };
+        worker.read().unwrap();
+        if !legacy {
+            entered.recv_timeout(Duration::from_secs(2)).unwrap();
+        }
+        let last = "https://example.test/199";
+        assert!((128..=129).contains(&worker.inline_asked.len()));
+        assert!(
+            !worker.inline_asked.contains(last),
+            "last source must initially be rejected"
+        );
+        assert_eq!(worker.page.as_ref().unwrap().logs[0].entries.len(), 200);
+        let initial_publications = published.lock().unwrap().len();
+        if !legacy {
+            release.send(()).unwrap();
+        }
+        let end = Instant::now() + Duration::from_secs(3);
+        loop {
+            // Like run(), service one legacy request on the owner. No read(),
+            // live log refresh, settling pass or other decode can refill here.
+            if let Some(((document, src), reply)) = worker
+                .inline_loader
+                .as_ref()
+                .unwrap()
+                .take_resource_request()
+            {
+                assert_eq!(document, worker.page.as_ref().unwrap().document);
+                assert!(worker.inline_asked.contains(&src));
+                reply.send(read.as_mut().unwrap()(&src).ok()).unwrap();
+            }
+            worker.take_decoded();
+            if let Some(picture) = worker.page.as_ref().unwrap().inline_pictures.get(last) {
+                assert_eq!(picture.image().to_rgba8().get_pixel(0, 0).0, [1, 2, 3, 255]);
+                break;
+            }
+            assert!(
+                Instant::now() < end,
+                "unadmitted valid source stranded (legacy={legacy}); attempts={}",
+                attempts.lock().unwrap().len()
+            );
+            thread::yield_now();
+        }
+        assert_eq!(worker.inline_asked.len(), 200);
+        let attempts = attempts.lock().unwrap();
+        assert_eq!(attempts.len(), 200);
+        assert!(
+            attempts.values().all(|&n| n == 1),
+            "failed sources are not retried"
+        );
+        let pages = published.lock().unwrap();
+        assert_eq!(
+            pages.len(),
+            initial_publications + 1,
+            "failure progress must not publish unchanged pages"
+        );
+        assert!(pages.last().unwrap().inline_pictures.contains_key(last));
+        assert_eq!(pages.last().unwrap().logs[0].entries.len(), 200);
     }
 
     #[test]
