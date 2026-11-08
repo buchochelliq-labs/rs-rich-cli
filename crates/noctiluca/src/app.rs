@@ -3223,17 +3223,6 @@ pub fn app_with_presentation(
             b.view.set(View::Projection);
             b.say(format!("[yellow]{}[/]", crate::pixel_view::NEEDS_KITTY));
         }
-        // The tab runs the screencast for the pixel view while it shows.
-        if b.view.get_untracked() == View::Pixels {
-            b.send(Command::Pixels(true));
-        }
-        watch(
-            move || b.view.get() == View::Pixels,
-            move |on, _| {
-                crate::pixel_view::invalidate(b);
-                b.send(Command::Pixels(on));
-            },
-        );
         watch(
             move || b.view.get() == View::Projection,
             move |projection, _| {
@@ -3263,15 +3252,19 @@ pub fn app_with_presentation(
         // Moving pictures in view step within the byte budget.
         let motion = Rc::new(std::cell::RefCell::new(pictures::Motion::with_presentation(byte_budget(b), media_presentation)));
         every(MOTION, move |_| step_motion(b, &mut motion.borrow_mut()));
-        // One source-size policy for terminal, view, adaptation and site changes.
+        // Queue the desired source viewport BEFORE enabling pixel forwarding.
+        // The engine keeps scoped reads blocked until Chrome applies its metrics.
         watch(
-            move || source_viewport(b),
-            move |(columns, rows), _| {
+            move || (source_viewport(b), b.view.get() == View::Pixels),
+            move |((columns, rows), pixels), _| {
+                crate::pixel_view::invalidate(b);
                 b.send(Command::Resize(columns, rows));
+                b.send(Command::Pixels(pixels));
             },
         );
         let (columns, rows) = source_viewport(b);
         b.send(Command::Resize(columns, rows));
+        b.send(Command::Pixels(b.view.get_untracked() == View::Pixels));
         b.send(Command::Open(start.clone()));
         b.start.set(start_page);
         // The tab hears which video regions the view shows, so only those
@@ -3361,6 +3354,150 @@ pub fn app_with_presentation(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn producer_frame_taken_before_resize_cannot_enter_new_pixel_coordinates() {
+        use crate::engine::{Format, Frame, HistoryStep, PageAction, PageSnapshot, TabId};
+        use rich_embed::{FrameMeta, ScreencastFrame};
+        use std::io;
+        struct Gated {
+            inner: crate::testing::FakeEngine,
+            taken: mpsc::Sender<()>,
+            resume: mpsc::Receiver<()>,
+            first: bool,
+        }
+        impl Engine for Gated {
+            fn resize(&mut self, c: u16, r: u16) -> io::Result<()> {
+                self.inner.resize(c, r)
+            }
+            fn open(&mut self, t: TabId, u: &str) -> io::Result<()> {
+                self.inner.open(t, u)
+            }
+            fn history(&mut self, t: TabId, h: HistoryStep) -> io::Result<()> {
+                self.inner.history(t, h)
+            }
+            fn state(&self, t: TabId) -> PageState {
+                self.inner.state(t)
+            }
+            fn snapshot(&mut self, t: TabId) -> io::Result<PageSnapshot> {
+                self.inner.snapshot(t)
+            }
+            fn capture(
+                &mut self,
+                t: TabId,
+                r: crate::engine::Rect,
+                f: Format,
+            ) -> io::Result<Frame> {
+                self.inner.capture(t, r, f)
+            }
+            fn act(&mut self, t: TabId, a: &PageAction) -> io::Result<()> {
+                self.inner.act(t, a)
+            }
+            fn events(&mut self) -> Vec<crate::engine::EngineEvent> {
+                self.inner.events()
+            }
+            fn set_screencast(&mut self, t: TabId, on: bool) -> io::Result<()> {
+                self.inner.set_screencast(t, on)
+            }
+            fn screencast_frame(&mut self, t: TabId) -> Option<ScreencastFrame> {
+                let frame = self.inner.screencast_frame(t)?;
+                if std::mem::take(&mut self.first) {
+                    self.taken.send(()).unwrap();
+                    self.resume.recv_timeout(Duration::from_secs(5)).unwrap();
+                }
+                Some(frame)
+            }
+        }
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/snapshots");
+        let inner = crate::testing::FakeEngine::from_dir(&root).unwrap();
+        let state = inner.state.clone();
+        let make_frame = |width, height| ScreencastFrame {
+            pixels: rich_embed::Pixels::new(
+                width,
+                height,
+                [10, 70, 200].repeat(width as usize * height as usize),
+            )
+            .unwrap(),
+            meta: FrameMeta {
+                device_width: f64::from(width),
+                device_height: f64::from(height),
+                page_scale: 1.0,
+                ..FrameMeta::default()
+            },
+        };
+        state.lock().unwrap().frames.push(make_frame(120 * crate::cdp::CELL.0, 36 * crate::cdp::CELL.1));
+        let (taken, receive) = mpsc::channel();
+        let (resume, gate) = mpsc::channel();
+        let engine = Gated {
+            inner,
+            taken,
+            resume: gate,
+            first: true,
+        };
+        let policy = rich_intuituive::ImagePresentation::new(
+            Pixels::Kitty,
+            rich_intuituive::KittyFeatures {
+                unicode_placeholders: true,
+                native_animation: false,
+            },
+            rich_intuituive::PixelFormats::cells().with(Pixels::Kitty),
+        );
+        let options = Options {
+            url: Some("https://example.test/stream-with-log.html".into()),
+            view: Some(View::Pixels),
+            images: Some(Images::Kitty),
+            config: Config::default(),
+            bookmarks: Bookmarks::default(),
+            tunnel: None,
+            control: None,
+        };
+        let app = app_with_presentation(Box::new(engine), options, policy);
+        let mut driver = app.driver(120, 40);
+        let deadline = Instant::now() + Duration::from_secs(3);
+        loop {
+            driver.update(Duration::ZERO);
+            driver.render();
+            driver.output_written();
+            if receive.try_recv().is_ok() {
+                break;
+            }
+            assert!(
+                Instant::now() < deadline,
+                "producer never reached the capture gate"
+            );
+            std::thread::sleep(Duration::from_millis(2));
+        }
+        let b = TEST_BROWSER.with(|slot| slot.get().unwrap());
+        driver.resize(40, 24);
+        driver.render();
+        driver.output_written();
+        assert_eq!(b.viewport.get_untracked(), (40, 24));
+        resume.send(()).unwrap();
+        for _ in 0..40 {
+            driver.update(Duration::ZERO);
+            driver.render();
+            driver.output_written();
+            std::thread::sleep(Duration::from_millis(2));
+        }
+        assert_eq!(
+            b.screen_stats.get_untracked().frames,
+            0,
+            "old-width producer frame was squeezed into new coordinates"
+        );
+        state.lock().unwrap().frames.push(make_frame(40 * crate::cdp::CELL.0, 20 * crate::cdp::CELL.1));
+        let deadline = Instant::now() + Duration::from_secs(2);
+        while b.screen_stats.get_untracked().frames == 0 {
+            driver.update(Duration::ZERO);
+            driver.render();
+            driver.output_written();
+            assert!(
+                Instant::now() < deadline,
+                "matching fresh frame never reached the pixel view"
+            );
+            std::thread::sleep(Duration::from_millis(2));
+        }
+        assert_eq!(b.screen_stats.get_untracked().frames, 1);
+    }
 
     #[test]
     fn old_encoder_completion_cannot_replace_recreated_region() {

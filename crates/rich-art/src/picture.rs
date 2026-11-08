@@ -164,6 +164,7 @@ impl PixelFormats {
         self.0 & (1 << pixels.code()) != 0
     }
 
+    #[cfg(feature = "frames")]
     fn supported(self, mut pixels: Pixels) -> Pixels {
         while !self.contains(pixels) {
             pixels = pixels.lower().unwrap_or(Pixels::Cells);
@@ -983,7 +984,7 @@ impl Picture {
         context.cell_pixels =
             CellPixels::new(context.cell_pixels.width, context.cell_pixels.height);
         if let Some(native) = self.bound {
-            context.native_kitty_animation = native;
+            context.native_kitty_animation &= native;
         }
         let id = if view.pixels == Pixels::Kitty {
             let Some(resource) = self.kitty_resource(view, cols, rows, true) else {
@@ -1014,7 +1015,7 @@ impl Picture {
         let cell = CellPixels::new(context.cell_pixels.width, context.cell_pixels.height);
         let context = PictureEncoding {
             cell_pixels: cell,
-            native_kitty_animation: self.bound.unwrap_or(context.native_kitty_animation),
+            native_kitty_animation: self.bound.unwrap_or(true) && context.native_kitty_animation,
         };
         if !raster_fits(cols, rows, cell) {
             return None;
@@ -2136,6 +2137,122 @@ mod tests {
         let mut legacy = Pacer::new(Pixels::Kitty, 40, 10);
         while legacy.settle(&ByteBudget::new(60_000), 1.0) {}
         assert_eq!(legacy.pixels(), Pixels::Sixel);
+    }
+
+    #[test]
+    fn bounded_namespace_wraps_without_reusing_live_or_unrepresentable_ids() {
+        let mut ids = Namespace {
+            next: 254,
+            ..Namespace::default()
+        };
+        assert_eq!(ids.allocate(16, 255), Some(254));
+        assert_eq!(ids.allocate(16, 255), Some(255));
+        assert_eq!(ids.allocate(16, 255), Some(16));
+        for _ in 0..237 {
+            assert!((16..=255).contains(&ids.allocate(16, 255).unwrap()));
+        }
+        assert_eq!(ids.allocate(16, 255), None);
+        ids.live.remove(&17);
+        assert_eq!(ids.allocate(16, 255), Some(17));
+        assert_eq!(ids.live.len(), 240);
+    }
+
+    #[test]
+    fn bound_view_capacity_falls_back_before_placeholder_generation() {
+        let picture = Picture::new(solid(200)).bound(false);
+        let view = ImageView::new()
+            .pixels(Pixels::Kitty)
+            .fit(ImageFit::Stretch);
+        for cols in 1..=128 {
+            assert!(picture.kitty_resource(view, cols, 1, true).is_some());
+        }
+        assert!(picture.kitty_resource(view, 129, 1, true).is_none());
+        let console = rich::Console::builder()
+            .width(129)
+            .color_system(Some(rich::ColorSystem::Truecolor))
+            .build();
+        let lines = picture.lines(&console, view, 129, 1);
+        assert!(!lines.is_empty());
+        assert!(
+            lines
+                .iter()
+                .flatten()
+                .all(|s| !s.text.contains(crate::kitty::PLACEHOLDER))
+        );
+        assert!(
+            lines
+                .iter()
+                .flatten()
+                .all(|s| s.style.as_ref().and_then(PictureTag::of).is_none())
+        );
+        assert_eq!(picture.shown.bindings.lock().unwrap().len(), 128);
+    }
+
+    #[test]
+    fn bound_indexed_lines_are_representable_or_ordinary_cells() {
+        let picture = Picture::new(solid(200)).bound(false);
+        let view = ImageView::new()
+            .pixels(Pixels::Kitty)
+            .fit(ImageFit::Stretch);
+        let console = rich::Console::builder()
+            .width(2)
+            .color_system(Some(rich::ColorSystem::EightBit))
+            .build();
+        let lines = picture.lines(&console, view, 2, 1);
+        if let Some(resource) = picture.kitty_resource(view, 2, 1, false) {
+            assert!((16..=255).contains(&resource.id()));
+            assert_eq!(
+                lines[0][0].style.as_ref().unwrap().color(),
+                crate::kitty::id_color(resource.id(), false).as_ref()
+            );
+        } else {
+            assert!(
+                lines
+                    .iter()
+                    .flatten()
+                    .all(|s| !s.text.contains(crate::kitty::PLACEHOLDER))
+            );
+        }
+    }
+
+    #[test]
+    fn bound_prepare_and_prebuilt_lines_share_identity_across_metrics() {
+        let original = Picture::new(solid(200));
+        let picture = original.bound(false);
+        let view = ImageView::new()
+            .pixels(Pixels::Kitty)
+            .fit(ImageFit::Stretch);
+        let console = rich::Console::builder()
+            .width(2)
+            .color_system(Some(rich::ColorSystem::Truecolor))
+            .build();
+        let lines = picture.lines(&console, view, 2, 2);
+        let tag = PictureTag::of(lines[0][0].style.as_ref().unwrap()).unwrap();
+        let resource = picture.kitty_resource(view, 2, 2, true).unwrap();
+        for cell in [
+            CellPixels::DEFAULT,
+            CellPixels::new(12, 24),
+            CellPixels::DEFAULT,
+        ] {
+            assert!(picture.prepare_with_metrics(view, 2, 2, cell));
+            let before = picture_bytes(original.id());
+            assert!(picture.is_prepared_with_metrics(view, 2, 2, cell));
+            let out = picture.encode_tag_with_metrics(&tag, 0, 2, cell).unwrap();
+            assert!(out.contains(&format!("i={},", resource.id())));
+            assert_eq!(
+                lines[0][0].style.as_ref().unwrap().color(),
+                crate::kitty::id_color(resource.id(), true).as_ref()
+            );
+            assert_eq!(
+                picture_bytes(original.id()),
+                before,
+                "preparation is not a write"
+            );
+        }
+        let legacy = original.encode(Pixels::Kitty, 2, 2).unwrap();
+        assert!(legacy.contains(&format!("i={},", original.id())));
+        assert_ne!(resource.id(), original.id());
+        assert_eq!(picture.id(), original.id());
     }
 
     #[test]

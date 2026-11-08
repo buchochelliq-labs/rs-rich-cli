@@ -546,6 +546,24 @@ fn layout_key(page: &Page) -> u64 {
 }
 
 impl Worker<'_> {
+    fn poll_events(&mut self, read_now: &mut bool, live_due: &mut bool) {
+        for event in self.engine.events() {
+            match event {
+                EngineEvent::Changed => {
+                    self.dirty.get_or_insert_with(Instant::now);
+                }
+                EngineEvent::Live => *live_due = true,
+                EngineEvent::Navigated(_) | EngineEvent::Loaded => *read_now = true,
+                EngineEvent::DownloadBegan { guid, name, url } => {
+                    (self.update)(Update::Download { guid, name, url })
+                }
+                EngineEvent::DownloadDone { guid, path } => {
+                    (self.update)(Update::DownloadDone { guid, path })
+                }
+            }
+        }
+    }
+
     /// Read the page and publish it; `None` if the engine refused (a
     /// navigation swapping the page's process, say).
     fn read(&mut self) -> Option<Arc<Page>> {
@@ -1718,6 +1736,7 @@ fn run(
                         | Command::Point { .. }
                         | Command::Key(_)
                         | Command::Type(_)
+                        | Command::Resize(_, _)
                 );
                 let result = worker.run_command(command);
                 update(Update::Done(id, result));
@@ -1727,21 +1746,7 @@ fn run(
             Err(RecvTimeoutError::Timeout) => {}
             Err(RecvTimeoutError::Disconnected) => return,
         }
-        for event in worker.engine.events() {
-            match event {
-                EngineEvent::Changed => {
-                    worker.dirty.get_or_insert_with(Instant::now);
-                }
-                EngineEvent::Live => live_due = true,
-                EngineEvent::Navigated(_) | EngineEvent::Loaded => read_now = true,
-                EngineEvent::DownloadBegan { guid, name, url } => {
-                    update(Update::Download { guid, name, url })
-                }
-                EngineEvent::DownloadDone { guid, path } => {
-                    update(Update::DownloadDone { guid, path })
-                }
-            }
-        }
+        worker.poll_events(&mut read_now, &mut live_due);
         let mut state = worker.engine.state(TabId(0));
         if let Some(address) = worker.error_address(&state.url) {
             state.url = address;
@@ -1784,6 +1789,9 @@ fn run(
         } else if worker.stills_pending {
             worker.capture_stills();
         }
+        // Events can arrive during the synchronous model read too. Backends
+        // also guard the final frame take atomically against their model scope.
+        worker.poll_events(&mut read_now, &mut live_due);
         // A sole fresh frame belongs to the model published for its document.
         // Keep it in the engine while an initial/navigation snapshot is refused.
         if worker.pixels && !read_now && worker.page.is_some() {
@@ -1827,6 +1835,7 @@ mod tests {
             on: bool,
             frame: Option<ScreencastFrame>,
             navigation: bool,
+            during_read: bool,
         }
         impl Engine for Source {
             fn resize(&mut self, _: u16, _: u16) -> io::Result<()> {
@@ -1842,6 +1851,10 @@ mod tests {
                 PageState::default()
             }
             fn snapshot(&mut self, _: TabId) -> io::Result<PageSnapshot> {
+                if std::mem::take(&mut self.during_read) {
+                    self.navigation = true;
+                    return Ok(feed_snapshot("https://a.test", 1));
+                }
                 if self.old && !self.on {
                     return Ok(feed_snapshot("https://a.test", 1));
                 }
@@ -1873,13 +1886,14 @@ mod tests {
                 }
             }
         }
-        for old in [false, true] {
+        for (old, during_read) in [(false, false), (true, false), (false, true)] {
             for refused in [false, true] {
                 let engine = Source {
                     old,
                     refused,
                     on: false,
                     navigation: false,
+                    during_read,
                     frame: Some(ScreencastFrame {
                         pixels: Pixels::new(1, 1, vec![0, 0, 255]).unwrap(),
                         meta: Default::default(),
@@ -1905,12 +1919,15 @@ mod tests {
                     _ => {}
                 });
                 let updates = updates.into_inner().unwrap();
-                let expected = if old {
+                let expected = if old || during_read {
                     vec!["https://a.test", "https://b.test", "screen B"]
                 } else {
                     vec!["https://b.test", "screen B"]
                 };
-                assert_eq!(updates, expected, "old={old}, refused={refused}");
+                assert_eq!(
+                    updates, expected,
+                    "old={old}, refused={refused}, during_read={during_read}"
+                );
             }
         }
     }

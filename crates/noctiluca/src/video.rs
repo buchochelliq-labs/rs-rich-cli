@@ -663,6 +663,97 @@ mod tests {
     }
 
     #[test]
+    fn restricted_video_fallback_keeps_advancing_without_unavailable_codecs() {
+        let formats = PixelFormats::cells().with(Pixels::Kitty);
+        let mut pacing = Pacing::with_formats(ByteBudget::new(66_667), Pixels::Kitty, formats);
+        let start = Instant::now();
+        let mut last = None;
+        for seq in 1..=5 {
+            let frame = VideoFrame {
+                node: 1,
+                seq,
+                pixels: Rgb::new(2, 2, vec![seq as u8; 12]).unwrap(),
+            };
+            let picture = pacing
+                .offer(&frame, 40, 10, start + Duration::from_secs(seq), |_| 0)
+                .unwrap();
+            assert_eq!(pacing.pixels(1), Pixels::Cells);
+            assert_eq!(picture.image().to_rgb8().get_pixel(0, 0).0, [seq as u8; 3]);
+            assert_ne!(last, Some(picture.version()));
+            last = Some(picture.version());
+        }
+    }
+
+    #[test]
+    fn bound_encoder_prepares_the_exact_public_view_resource() {
+        let policy = rich_intuituive::ImagePresentation::new(
+            Pixels::Kitty,
+            rich_intuituive::KittyFeatures {
+                unicode_placeholders: true,
+                native_animation: false,
+            },
+            PixelFormats::cells().with(Pixels::Kitty),
+        );
+        let (send, receive) = std::sync::mpsc::channel();
+        let encoder = Encoder::spawn_with_presentation(policy, move |job| {
+            send.send(job).unwrap();
+        });
+        let picture = Picture::from_rgba(2, 2, vec![255; 16]).unwrap();
+        let id = picture.id();
+        let cell = rich_art::graphics::CellPixels::new(10, 20);
+        encoder.encode_with_metrics(
+            Job {
+                node: 1,
+                picture,
+                pixels: Pixels::Kitty,
+                cols: 2,
+                rows: 2,
+            },
+            Some((10, 20)),
+        );
+        let job = receive.recv_timeout(Duration::from_secs(5)).unwrap();
+        let view = crate::pictures::view(Pixels::Kitty);
+        assert!(
+            job.picture
+                .is_prepared_with_context(view, 2, 2, policy.encoding(cell))
+        );
+        let resource = job.picture.kitty_resource(view, 2, 2, true).unwrap();
+        assert_ne!(resource.id(), id);
+        let console = rich::Console::builder()
+            .width(2)
+            .color_system(Some(rich::ColorSystem::Truecolor))
+            .build();
+        let lines = job.picture.lines_with_metrics(&console, view, 2, 2, cell);
+        assert_eq!(
+            lines[0][0].style.as_ref().unwrap().color(),
+            rich_art::kitty::id_color(resource.id(), true).as_ref()
+        );
+        let before = rich_art::picture::picture_bytes(id);
+        let mut segments = Vec::new();
+        for line in lines {
+            segments.extend(line);
+            segments.push(rich::Segment::line());
+        }
+        let source = policy.graphics();
+        let placed = source.placements_with_metrics(
+            &rich_ext::frame::Frame::from_segments(&segments),
+            Some((10, 20)),
+        );
+        assert_eq!(placed.len(), 1);
+        assert!(
+            job.picture
+                .is_prepared_with_context(view, 2, 2, policy.encoding(cell))
+        );
+        assert_eq!(rich_art::picture::picture_bytes(id), before);
+        let output = placed[0].graphic.draw(0);
+        assert!(output.contains(&format!("i={},", resource.id())));
+        assert_eq!(
+            rich_art::picture::picture_bytes(id) - before,
+            output.len() as u64
+        );
+    }
+
+    #[test]
     fn video_budget_uses_selected_metrics_before_the_first_write() {
         let mut pacing = Pacing::new(ByteBudget::new(10_000_000), Pixels::Kitty);
         let cell = rich_art::graphics::CellPixels::new(12, 24);

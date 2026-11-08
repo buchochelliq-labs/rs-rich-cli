@@ -19,7 +19,8 @@ use std::sync::mpsc::Receiver;
 use std::time::Duration;
 
 use rich_embed::{
-    ChromeEngine, DevTools, DevToolsEvent, Downloads, PageState, ScreencastFrame, WebEngine,
+    ChromeEngine, DevTools, DevToolsEvent, Downloads, PageState, ScreencastFrame, ScreencastScope,
+    WebEngine,
 };
 use serde_json::{Value, json};
 
@@ -335,6 +336,7 @@ pub fn find_chrome() -> Option<PathBuf> {
 
 /// The [`Engine`] over a headless Chrome, sandboxed, through rs-rich-embed.
 pub struct ChromeBackend {
+    model_scope: Option<ScreencastScope>,
     engine: ChromeEngine,
     devtools: DevTools,
     events: Receiver<DevToolsEvent>,
@@ -404,6 +406,7 @@ impl ChromeBackend {
             )?;
         }
         Ok(ChromeBackend {
+            model_scope: None,
             engine,
             devtools,
             events,
@@ -624,6 +627,9 @@ impl Engine for ChromeBackend {
     }
 
     fn snapshot(&mut self, _tab: TabId) -> io::Result<PageSnapshot> {
+        let scope = self.engine.screencast_scope().ok_or_else(|| {
+            io::Error::new(ErrorKind::WouldBlock, "viewport metrics not applied yet")
+        })?;
         let dom = self.call(
             "DOMSnapshot.captureSnapshot",
             json!({"computedStyles": SNAPSHOT_STYLES, "includeDOMRects": true,
@@ -633,6 +639,13 @@ impl Engine for ChromeBackend {
         let ax = self
             .call("Accessibility.getFullAXTree", json!({}))
             .unwrap_or(Value::Null);
+        if !self.engine.screencast_scope_is_current(&scope) {
+            return Err(io::Error::new(
+                ErrorKind::WouldBlock,
+                "document or viewport changed during model read",
+            ));
+        }
+        self.model_scope = Some(scope);
         Ok(PageSnapshot { dom, ax })
     }
 
@@ -941,7 +954,7 @@ impl Engine for ChromeBackend {
     }
 
     fn screencast_frame(&mut self, _tab: TabId) -> Option<ScreencastFrame> {
-        self.engine.take_screencast()
+        self.engine.take_screencast_for(self.model_scope.as_ref()?)
     }
 
     fn can_play(&mut self, _tab: TabId, types: &[&str]) -> io::Result<Vec<String>> {

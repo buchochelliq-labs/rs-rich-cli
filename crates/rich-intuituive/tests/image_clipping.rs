@@ -658,3 +658,151 @@ fn concurrent_fitted_and_versioned_views_have_matching_distinct_upload_ids() {
         assert_eq!(color, rich_art::kitty::id_color(id, true));
     }
 }
+
+fn bound_policy() -> intuituive::ImagePresentation {
+    intuituive::ImagePresentation::new(
+        Pixels::Kitty,
+        intuituive::KittyFeatures {
+            unicode_placeholders: true,
+            native_animation: false,
+        },
+        intuituive::PixelFormats::cells().with(Pixels::Kitty),
+    )
+}
+
+#[test]
+fn bound_public_widget_updates_pixels_and_retires_resources_each_frame() {
+    use rich_record::{screen::Theme, terminal::Terminal};
+    use std::{cell::Cell, rc::Rc, time::Duration};
+    let policy = bound_policy();
+    let source = policy.graphics();
+    let original = Picture::from_rgba(2, 2, vec![255; 16]).unwrap();
+    let logical = original.id();
+    let handle = Rc::new(Cell::new(None));
+    let copy = handle.clone();
+    let start = policy.picture(&original);
+    let app = intuituive::App::new(move || {
+        let frame = intuituive::signal(Some(start.clone()));
+        copy.set(Some(frame));
+        intuituive::picture_of(
+            move || frame.get(),
+            ImageView::new()
+                .pixels(Pixels::Kitty)
+                .fit(ImageFit::Stretch),
+        )
+    })
+    .graphics(source.clone());
+    let mut driver = app.driver(2, 2);
+    driver.set_cell_pixels(Some((8, 16)));
+    let mut terminal = Terminal::new(2, 2);
+    let mut previous = original;
+    let mut live_ids = std::collections::BTreeSet::new();
+    let initial_bytes = intuituive::picture_bytes(logical);
+    for seq in 0..160u8 {
+        let rgb = [seq, 70, 200];
+        let next = previous.next(DynamicImage::ImageRgba8(RgbaImage::from_pixel(
+            2,
+            2,
+            Rgba([rgb[0], rgb[1], rgb[2], 255]),
+        )));
+        handle.get().unwrap().set(Some(policy.picture(&next)));
+        previous = next;
+        driver.update(Duration::from_millis(u64::from(seq) * 100));
+        let output = driver.render().unwrap();
+        for command in output.split("\x1b_G").skip(1) {
+            if let Some(id) = command
+                .split("i=")
+                .nth(1)
+                .and_then(|s| s.split([',', ';', '\x1b']).next())
+                .and_then(|s| s.parse::<u32>().ok())
+            {
+                if command.starts_with("a=T,") {
+                    live_ids.insert(id);
+                }
+                if command.starts_with("a=d,") {
+                    live_ids.remove(&id);
+                }
+            }
+        }
+        assert_eq!(
+            live_ids.len(),
+            1,
+            "terminal resources accumulated at frame {seq}"
+        );
+        terminal.process(output.as_bytes()).unwrap();
+        driver.output_written();
+        let shown = terminal.snapshot(&Theme::default());
+        assert!(!shown.images.is_empty());
+        assert!(shown.images.iter().all(|tile| {
+            tile.image
+                .pixels()
+                .unwrap()
+                .chunks_exact(4)
+                .all(|p| p[..3] == rgb)
+        }));
+    }
+    assert!(intuituive::picture_bytes(logical) > initial_bytes);
+    handle.get().unwrap().set(None);
+    driver.update(Duration::from_secs(20));
+    let removed = driver.render().unwrap();
+    assert!(removed.contains("a=d,"));
+    terminal.process(removed.as_bytes()).unwrap();
+    driver.output_written();
+    assert!(terminal.snapshot(&Theme::default()).images.is_empty());
+    assert!(source.release(&[]).is_empty());
+}
+
+#[test]
+fn bound_prebuilt_lines_and_held_placements_survive_eviction_and_release() {
+    let policy = bound_policy();
+    let picture = policy.picture(&picture());
+    let source = policy.graphics();
+    let frame = scene(&picture, Pixels::Kitty, |_, _| false);
+    let held = source.placements(&frame);
+    let original = held[0].graphic.draw(0);
+    let id = original
+        .split("i=")
+        .nth(1)
+        .unwrap()
+        .split(',')
+        .next()
+        .unwrap()
+        .parse::<u32>()
+        .unwrap();
+    for n in 0..140 {
+        let other = policy.picture(
+            &picture.next(DynamicImage::ImageRgba8(RgbaImage::from_pixel(
+                2,
+                2,
+                Rgba([n, 0, 0, 255]),
+            ))),
+        );
+        let current = source.placements(&scene(&other, Pixels::Kitty, |_, _| false));
+        let mut retained = current;
+        retained.extend(held.clone());
+        let freed = source.reconcile(&retained);
+        assert!(!freed.contains(&format!("i={id},")));
+        source.output_written();
+    }
+    let restored = source.placements(&frame);
+    assert!(restored[0].graphic.draw(0).contains(&format!("i={id},")));
+    let delete = source.release(&[]);
+    assert!(delete.contains(&format!("i={id},")));
+    assert_eq!(
+        plan(&held, &held, &[]).draw.len(),
+        1,
+        "old placement cannot prove data survived deletion"
+    );
+    source.output_written();
+    let restored = source.placements(&frame);
+    assert!(restored[0].graphic.draw(0).contains(&format!("i={id},")));
+    drop(picture);
+    assert!(
+        !source.placements(&frame).is_empty(),
+        "a cached/held Graphic may still render its immutable bytes"
+    );
+    assert!(
+        policy.graphics().placements(&frame).is_empty(),
+        "a fresh source cannot upgrade the expired weak picture"
+    );
+}

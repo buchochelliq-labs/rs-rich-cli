@@ -525,7 +525,7 @@ struct ImageGraphics {
     /// The graphics made, by picture, size and protocol.
     made: Mutex<HashMap<GraphicKey, Arc<PixelGraphic>>>,
     /// The Kitty pictures uploaded, to free.
-    uploaded: Mutex<Vec<(Arc<rich_art::picture::KittyResource>, bool)>>,
+    uploaded: Mutex<Vec<(Arc<rich_art::picture::KittyResource>, bool, u32)>>,
     /// Weak identities of Kitty graphics, including graphics evicted from the cache.
     owners: Mutex<Vec<(u32, std::sync::Weak<PixelGraphic>)>>,
 }
@@ -799,8 +799,8 @@ impl ImageGraphics {
             .collect();
         let released: Vec<_> = uploaded
             .iter()
-            .filter(|(r, bound)| (!managed_only || *bound) && !kept.contains(&r.id()))
-            .map(|(r, _)| r.id())
+            .filter(|(r, bound, _)| (!managed_only || *bound) && !kept.contains(&r.id()))
+            .map(|(r, _, _)| r.id())
             .collect();
         // A caller may still hold previous placements after release. They no
         // longer prove that data is present; invalidate their reuse eligibility,
@@ -815,8 +815,12 @@ impl ImageGraphics {
             }
         }
         let mut retired = self.retired.lock().unwrap_or_else(|e| e.into_inner());
-        uploaded.retain(|(resource, _)| {
+        let mut cleanup = String::new();
+        uploaded.retain(|(resource, _, logical_id)| {
             if released.contains(&resource.id()) {
+                let delete = Picture::release(resource.id());
+                count_picture_bytes(*logical_id, delete.len() as u64);
+                cleanup.push_str(&delete);
                 retired.push(resource.clone());
                 false
             } else {
@@ -830,7 +834,7 @@ impl ImageGraphics {
                 .as_ref()
                 .is_some_and(|r| released.contains(&r.id()))
         });
-        released.into_iter().map(Picture::release).collect()
+        cleanup
     }
 }
 
@@ -909,8 +913,8 @@ impl ImageGraphics {
         if tag.pixels == Pixels::Kitty {
             let mut uploaded = self.uploaded.lock().unwrap_or_else(|e| e.into_inner());
             let resource = resource.as_ref().unwrap();
-            if !uploaded.iter().any(|(r, _)| r.id() == resource.id()) {
-                uploaded.push((resource.clone(), bound.is_some()));
+            if !uploaded.iter().any(|(r, _, _)| r.id() == resource.id()) {
+                uploaded.push((resource.clone(), bound.is_some(), tag.id));
             }
         }
         let graphic = Arc::new(PixelGraphic {
@@ -1033,6 +1037,35 @@ mod tests {
     }
 
     #[test]
+    fn managed_cleanup_counts_logical_bytes_and_waits_for_write_confirmation() {
+        let source = tracked_source();
+        let first = Picture::from_rgba(4, 4, vec![255; 64]).unwrap().bound(false);
+        let id = first.id();
+        let old = kitty_placements(&source, &first);
+        assert_eq!(picture_bytes(id), 0, "placement/encoding is side-effect free");
+        let upload = old[0].graphic.draw(0);
+        assert_eq!(picture_bytes(id), upload.len() as u64);
+        let second = first.next_rgba(4, 4, vec![60; 64]).unwrap();
+        let next = kitty_placements(&source, &second);
+        let next_upload = next[0].graphic.draw(0);
+        let cleanup = source.reconcile(&next);
+        assert!(cleanup.contains("a=d"));
+        assert_eq!(picture_bytes(id), (upload.len() + next_upload.len() + cleanup.len()) as u64);
+        assert_eq!(source.uploaded.lock().unwrap().len(), 1);
+        assert_eq!(source.retired.lock().unwrap().len(), 1);
+        assert!(!old[0].graphic.can_reuse_data());
+        assert!(source.reconcile(&next).is_empty());
+        assert_eq!(source.retired.lock().unwrap().len(), 1, "unconfirmed write must retain the reservation");
+        source.output_written();
+        assert!(source.retired.lock().unwrap().is_empty());
+        let finish = source.release(&[]);
+        assert_eq!(picture_bytes(id), (upload.len() + next_upload.len() + cleanup.len() + finish.len()) as u64);
+        assert_eq!(source.retired.lock().unwrap().len(), 1);
+        source.output_written();
+        assert!(source.retired.lock().unwrap().is_empty());
+    }
+
+    #[test]
     fn encoded_cache_byte_budget_evicts_before_entry_budget() {
         let source = tracked_source();
         let picture = Picture::from_rgba(4, 4, vec![255; 64]).unwrap();
@@ -1053,6 +1086,7 @@ mod tests {
                     0..cols,
                     0..64,
                     rich_art::graphics::CellPixels::DEFAULT,
+                    None,
                     None,
                 )
                 .unwrap();
@@ -1094,7 +1128,8 @@ mod tests {
                             column..column + 1,
                             row..row + 1,
                             rich_art::graphics::CellPixels::DEFAULT,
-                            None
+                            None,
+                            None,
                         )
                         .is_some()
                 );

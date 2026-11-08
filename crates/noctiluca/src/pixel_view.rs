@@ -184,6 +184,18 @@ pub fn frame(b: Browser, frame: &rich_embed::ScreencastFrame) {
     }
     let (cols, rows) = b.viewport.get_untracked();
     let rows = rows.saturating_sub(CHROME_ROWS);
+    // A frame can already be in the producer/UI queue when the view resizes.
+    // Known source dimensions must match the new pixel-coordinate viewport;
+    // legacy engines with unknown metadata retain their existing behavior.
+    let expected = (
+        u32::from(cols.max(20)) * CELL.0,
+        u32::from(rows.max(5)) * CELL.1,
+    );
+    if (frame.meta.device_width > 0.0 && frame.meta.device_width != f64::from(expected.0))
+        || (frame.meta.device_height > 0.0 && frame.meta.device_height != f64::from(expected.1))
+    {
+        return;
+    }
     let budget = byte_budget(b);
     let screen = b.screen.get_untracked();
     let mut screen = screen.borrow_mut();
