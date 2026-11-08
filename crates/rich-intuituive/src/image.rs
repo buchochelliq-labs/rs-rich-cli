@@ -459,12 +459,15 @@ impl ImageRect {
     }
 }
 
-// Kitty already embeds source coordinates in every placeholder. Decode that
-// existing provenance without adding one new metadata style per cell.
-fn kitty_column(text: &str, tag: &PictureTag) -> Option<usize> {
+// Kitty already embeds source coordinates in every placeholder. A composed
+// screen can coalesce adjacent copies into one style run, so a column restart
+// begins another instance. Validate the entire run before accepting any spans;
+// malformed Kitty provenance must not become a legacy whole-width fallback.
+fn kitty_spans(text: &str, tag: &PictureTag, cells: usize) -> Option<Vec<std::ops::Range<usize>>> {
     use rich_art::kitty::{DIACRITICS, PLACEHOLDER};
     let mut chars = text.chars();
-    if chars.next()? != PLACEHOLDER || chars.next()? != *DIACRITICS.get(tag.row)? {
+    let row = *DIACRITICS.get(tag.row)?;
+    if cells == 0 || chars.next()? != PLACEHOLDER || chars.next()? != row {
         return None;
     }
     let column = chars.next()?;
@@ -472,18 +475,27 @@ fn kitty_column(text: &str, tag: &PictureTag) -> Option<usize> {
     if first >= tag.cols {
         return None;
     }
-    let mut next = first + 1;
+    let mut spans = Vec::new();
+    spans.push(first..first + 1);
+    let mut count = 1;
     while let Some(c) = chars.next() {
-        if c != PLACEHOLDER
-            || chars.next()? != *DIACRITICS.get(tag.row)?
-            || chars.next()? != *DIACRITICS.get(next)?
-            || next >= tag.cols
-        {
+        if count >= cells || c != PLACEHOLDER || chars.next()? != row {
             return None;
         }
-        next += 1;
+        let column = chars.next()?;
+        let span = spans.last_mut()?;
+        if span.end < tag.cols && DIACRITICS.get(span.end) == Some(&column) {
+            span.end += 1;
+        } else if column == DIACRITICS[0] {
+            spans.push(0..1);
+        } else {
+            return None;
+        }
+        count += 1;
     }
-    Some(first)
+    // At most one span per actual composed cell, with one linear scan and no
+    // per-cell style or encoded resource. All spans retain the full-view key.
+    (count == cells).then_some(spans)
 }
 
 impl PlacementSource for ImageGraphics {
@@ -515,17 +527,8 @@ impl PlacementSource for ImageGraphics {
                 let style = frame.styles().get(run.style());
                 let tag = style.and_then(PictureTag::of);
                 if let Some(tag) = tag.filter(|t| t.cols > 0 && t.rows > t.row) {
-                    let x = if tag.pixels == Pixels::Kitty {
-                        kitty_column(frame.run_text(run), &tag)
-                    } else {
-                        style.and_then(PictureTag::column_of)
-                    };
-                    let known = x.is_some();
                     let background = style.and_then(PictureTag::background_of);
-                    if (!known || run.cells() == 1 || tag.pixels == Pixels::Kitty)
-                        && run.cells() <= tag.cols
-                    {
-                        let x = x.unwrap_or(0);
+                    let mut append = |column, x, cols, known| {
                         if let Some(last) = spans.last_mut()
                             && last.tag == tag
                             && last.known == known
@@ -533,19 +536,41 @@ impl PlacementSource for ImageGraphics {
                             && last.column + last.cols == column
                             && (if known { last.x + last.cols == x } else { true })
                         {
-                            last.cols += run.cells();
+                            last.cols += cols;
                         } else {
                             spans.push(ImageRect {
                                 row,
                                 column,
                                 x,
-                                cols: run.cells(),
+                                cols,
                                 rows: 1,
                                 tag,
                                 known,
                                 background,
                             });
                         }
+                    };
+                    if tag.pixels == Pixels::Kitty {
+                        if let Some(ranges) = kitty_spans(frame.run_text(run), &tag, run.cells()) {
+                            let mut offset = 0;
+                            for range in ranges {
+                                let cols = range.end - range.start;
+                                append(column + offset, range.start, cols, true);
+                                offset += cols;
+                            }
+                        }
+                    } else if let Some(x) = style.and_then(PictureTag::column_of) {
+                        // Native-overlay provenance names the source column
+                        // of each cell. Equal columns can coalesce across
+                        // adjacent copies (notably 1x1 views), so each cell
+                        // starts its own span until contiguous sources merge.
+                        if x < tag.cols {
+                            for offset in 0..run.cells() {
+                                append(column + offset, x, 1, true);
+                            }
+                        }
+                    } else if run.cells() <= tag.cols {
+                        append(column, 0, run.cells(), false);
                     }
                 }
                 column += run.cells();

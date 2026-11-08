@@ -285,4 +285,113 @@ mod scenes {
             }
         }
     }
+    #[test]
+    fn adjacent_driver_copies_share_upload_and_restore_after_boundary_overlay() {
+        let picture = Picture::new(DynamicImage::ImageRgba8(RgbaImage::from_fn(
+            32,
+            32,
+            |x, y| Rgba([(x * 7) as u8, (y * 7) as u8, (x + y) as u8, 255]),
+        )));
+        for (cols, rows) in [(1u16, 1u16), (4, 2)] {
+            for pixels in [Pixels::Kitty, Pixels::Iterm, Pixels::Sixel] {
+                let make = |covered| {
+                    let handle = Rc::new(Cell::new(None));
+                    let copy = handle.clone();
+                    let image = picture.clone();
+                    let app = App::new(move || {
+                        let cover = signal(covered);
+                        copy.set(Some(cover));
+                        let image = image.clone();
+                        intuituive::node::leaf(move |console, _, _| {
+                            let lines = image.lines(
+                                console,
+                                ImageView::new()
+                                    .fit(ImageFit::Stretch)
+                                    .pixels(pixels)
+                                    .background([17, 35, 61]),
+                                cols,
+                                rows,
+                            );
+                            let mut repeated: Vec<Vec<Segment>> = lines
+                                .iter()
+                                .map(|line| (0..3).flat_map(|_| line.clone()).collect())
+                                .collect();
+                            if cover.get() {
+                                let parts = Segment::divide(
+                                    &repeated[0],
+                                    &[
+                                        usize::from(cols - 1),
+                                        usize::from(cols + 1),
+                                        usize::from(cols * 3),
+                                    ],
+                                );
+                                repeated[0] = parts[0].clone();
+                                repeated[0].push(Segment::new("DD", None));
+                                repeated[0].extend(parts[2].clone());
+                            }
+                            repeated
+                        })
+                    })
+                    .graphics(image_graphics());
+                    let mut driver = app.driver(cols * 3, rows);
+                    driver.set_cell_pixels(Some((8, 16)));
+                    (driver, handle)
+                };
+                let (mut driver, cover) = make(false);
+                let mut terminal = Terminal::new(rows, cols * 3);
+                for (step, covered) in [false, true, false].into_iter().enumerate() {
+                    if step > 0 {
+                        cover.get().unwrap().set(covered);
+                    }
+                    driver.update(Duration::ZERO);
+                    let output = driver.render().unwrap_or_default();
+
+                    if pixels == Pixels::Kitty {
+                        assert_eq!(
+                            output.matches("a=T,").count(),
+                            usize::from(step == 0),
+                            "one shared initial upload, retained through overlay: {cols}x{rows} step={step}"
+                        );
+                    }
+                    if pixels != Pixels::Kitty && step == 0 {
+                        let marker = if pixels == Pixels::Iterm {
+                            "]1337;"
+                        } else {
+                            "\x1bP"
+                        };
+                        assert_eq!(
+                            output.matches(marker).count(),
+                            3,
+                            "each adjacent overlay is drawn"
+                        );
+                    }
+                    terminal.process(output.as_bytes()).unwrap();
+                    let snapshot = terminal.snapshot(&Theme::default());
+                    assert_eq!(
+                        snapshot
+                            .images
+                            .iter()
+                            .map(|tile| usize::from(tile.columns) * usize::from(tile.rows))
+                            .sum::<usize>(),
+                        usize::from(cols * 3 * rows) - if covered { 2 } else { 0 },
+                        "visible {pixels:?} {cols}x{rows} step={step}"
+                    );
+                    if covered {
+                        assert_eq!(snapshot.rows[0][usize::from(cols - 1)].text, "D");
+                        assert_eq!(snapshot.rows[0][usize::from(cols)].text, "D");
+                    }
+                    let (mut fresh, _) = make(covered);
+                    fresh.update(Duration::ZERO);
+                    let mut expected = Terminal::new(rows, cols * 3);
+                    expected
+                        .process(fresh.render().unwrap_or_default().as_bytes())
+                        .unwrap();
+                    assert!(
+                        render(&terminal) == render(&expected),
+                        "{pixels:?} {cols}x{rows} step={step} differs from fresh scene"
+                    );
+                }
+            }
+        }
+    }
 }
