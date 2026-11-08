@@ -54,7 +54,7 @@ A page's own layers are kept apart from its flow:
   that needs more cells than it has moves left, then shortens its faces
   (`[Sign…]`), rather than being cut by the screen.
 
-Source popups have their own scroll pane. `Tab` and `Shift+Tab` move focus
+Nonmodal source popups have their own scroll pane. `Tab` and `Shift+Tab` move focus
 between the page, the popup pane and its visible controls. Starting with
 the page focused and one popup whose controls are below the screen, press
 `Tab` once, then `PageDown` until the controls appear. `Tab` alone changes
