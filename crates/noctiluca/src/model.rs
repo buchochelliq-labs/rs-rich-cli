@@ -4915,6 +4915,18 @@ mod tests {
             &mut Revisions::new(),
         );
         assert!(source.relations.nodes[ordinary as usize].ordinary);
+        assert_eq!(
+            source.relations.nodes[grid as usize].position,
+            source::SourcePosition::Flow
+        );
+        assert_eq!(
+            source.relations.nodes[positioned as usize].position,
+            source::SourcePosition::Positioned
+        );
+        assert_eq!(
+            source.relations.nodes[unknown_position as usize].position,
+            source::SourcePosition::Unknown
+        );
         for node in [positioned, grid, flex, boxless, unknown_position] {
             assert!(
                 !source.relations.nodes[node as usize].ordinary,

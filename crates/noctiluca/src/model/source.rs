@@ -59,12 +59,21 @@ impl SourcePage {
     }
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum SourcePosition {
+    Flow,
+    Positioned,
+    Unknown,
+}
+
+/// Records preserve DOM source order; opaque live-log contents are omitted.
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct SourceNode {
     pub node: NodeId,
     pub parent: Option<usize>,
     pub rect: Option<Rect>,
-    /// Records preserve DOM source order; opaque live-log contents are omitted.
+    /// Static/relative, absolute/fixed/sticky, or absent/unsupported source facts.
+    pub position: SourcePosition,
     /// Proven ordinary block flow; absent/unknown styles are ineligible.
     pub ordinary: bool,
 }
@@ -271,6 +280,11 @@ impl Extraction {
                 node,
                 parent: usize::try_from(dom.parent[i]).ok().filter(|&p| p < i),
                 rect: dom.rect(i),
+                position: match dom.style(i, 14) {
+                    "static" | "relative" => SourcePosition::Flow,
+                    "absolute" | "fixed" | "sticky" => SourcePosition::Positioned,
+                    _ => SourcePosition::Unknown,
+                },
                 ordinary: matches!(dom.style(i, 0), "block" | "flow-root" | "list-item")
                     && matches!(dom.style(i, 14), "static" | "relative")
                     && !dom.concealed[i],
