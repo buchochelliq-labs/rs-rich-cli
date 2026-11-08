@@ -35,6 +35,7 @@ fn page_key(page: &Page) -> impl PartialEq + '_ {
         indicators,
         shelves,
         layers,
+        overlays,
         scroll_y,
         view_height,
     } = page;
@@ -49,7 +50,7 @@ fn page_key(page: &Page) -> impl PartialEq + '_ {
             scroll_y,
             view_height,
         ),
-        (regions, grids, indicators, shelves, layers),
+        (regions, grids, indicators, shelves, layers, overlays),
     )
 }
 fn media_key(media: &Media) -> impl PartialEq + '_ {
@@ -214,6 +215,7 @@ fn part_mut(p: &mut Projection, part: Part) -> &mut Projection {
         Part::Flow => p,
         Part::Pinned => p.pinned.as_deref_mut().unwrap(),
         Part::Docked => p.docked.as_deref_mut().unwrap(),
+        Part::Overlay(_) => unreachable!("dialog projections use independent slots"),
     }
 }
 

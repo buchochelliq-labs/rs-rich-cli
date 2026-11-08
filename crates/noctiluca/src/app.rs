@@ -322,7 +322,22 @@ pub(crate) fn lay_out_with_logs(
                 ..Projection::default()
             }
         }
-        _ => layout::project_with_logs(page, width, (CELL.0 as f64, CELL.1 as f64), marks, slots),
+        _ => {
+            // Fixed source dialogs use source-positioned underlay while visible;
+            // otherwise adaptive gap collapse can move covered content outside
+            // the source rectangle. Restore the configured rules on close.
+            let mut underlay = marks.clone();
+            if !page.overlays.is_empty() {
+                underlay.adapt = crate::adapt::Adapt::none();
+            }
+            layout::project_with_logs(
+                page,
+                width,
+                (CELL.0 as f64, CELL.1 as f64),
+                &underlay,
+                slots,
+            )
+        }
     }
 }
 
@@ -2752,6 +2767,285 @@ fn strip_view(b: Browser, docked: bool) -> Node {
     .name(if docked { "docked" } else { "pinned" })
 }
 
+fn segment_columns(segments: Vec<rich::Segment>, start: usize, width: usize) -> Vec<rich::Segment> {
+    let mut out = Vec::new();
+    let mut at = 0usize;
+    let end = start.saturating_add(width);
+    for segment in segments {
+        let next = at.saturating_add(segment.cell_length());
+        if next > start && at < end {
+            let (_, right) = segment.split_cells(start.saturating_sub(at));
+            let (part, _) = right.split_cells(end.min(next).saturating_sub(start.max(at)));
+            out.push(part);
+        }
+        at = next;
+        if at >= end {
+            break;
+        }
+    }
+    out
+}
+
+// Source-controlled fixed dialogs compose over the page without changing
+// the source's dismiss behavior or inferring modality from geometry.
+fn source_dialogs(b: Browser) -> Node {
+    type Spec = (
+        NodeId,
+        u16,
+        u16,
+        u16,
+        u16,
+        bool,
+        bool,
+        String,
+        Option<String>,
+    );
+    keyed(
+        move || {
+            let (columns, height) = b.viewport.get();
+            let rows = height.saturating_sub(CHROME_ROWS).max(1);
+            b.page.with(|page| {
+                page.as_ref()
+                    .map(|page| {
+                        page.overlays
+                            .iter()
+                            .filter_map(|dialog| {
+                                let layer = page.layers.get(dialog.layer)?;
+                                let left = ((layer.rect.x / f64::from(CELL.0)).round().max(0.0)
+                                    as u16)
+                                    .min(columns.saturating_sub(1));
+                                let top = ((layer.top / f64::from(CELL.1)).round().max(0.0) as u16)
+                                    .min(rows.saturating_sub(1));
+                                let width = ((layer.rect.width / f64::from(CELL.0)).ceil().max(1.0)
+                                    as u16)
+                                    .min(columns.saturating_sub(left).max(1));
+                                let height = ((layer.rect.height / f64::from(CELL.1))
+                                    .ceil()
+                                    .max(1.0) as u16)
+                                    .min(rows.saturating_sub(top).max(1));
+                                Some((
+                                    dialog.node,
+                                    left,
+                                    top,
+                                    columns.saturating_sub(left + width),
+                                    rows.saturating_sub(top + height),
+                                    dialog.dialog,
+                                    dialog.modal,
+                                    dialog.name.clone(),
+                                    dialog.background.clone(),
+                                ))
+                            })
+                            .collect::<Vec<Spec>>()
+                    })
+                    .unwrap_or_default()
+            })
+        },
+        move |specs| {
+            layers(specs.into_iter().map(
+                move |(node, left, top, right, bottom, is_dialog, modal, name, background)| {
+                    let width = b
+                        .viewport
+                        .get_untracked()
+                        .0
+                        .saturating_sub(left + right)
+                        .max(1);
+                    let projection = memo(move || {
+                        b.page.with(|page| {
+                            page.as_ref()
+                                .and_then(|page| {
+                                    let index = page
+                                        .overlays
+                                        .iter()
+                                        .position(|dialog| dialog.node == node)?;
+                                    layout::project_overlay(
+                                        page,
+                                        index,
+                                        width,
+                                        (CELL.0 as f64, CELL.1 as f64),
+                                        &Marks::default(),
+                                    )
+                                })
+                                .unwrap_or_default()
+                        })
+                    });
+                    let offset = signal(0u64);
+                    let cells = Rc::new(pictures::Cells::with_presentation(b.presentation));
+                    let rows = scroll_virtual_with(
+                        move || projection.with(|p| p.lines.len()),
+                        |_| 1,
+                        move |i| {
+                            let cells = cells.clone();
+                            let zone_cells = cells.clone();
+                            let line = leaf(move |console, width, _| {
+                                projection.with(|p| {
+                                    if i >= p.lines.len() {
+                                        return vec![Vec::new()];
+                                    }
+                                    vec![draw_row(
+                                        b,
+                                        console,
+                                        &cells,
+                                        p,
+                                        i,
+                                        usize::from(width.max(1)),
+                                        &Marks::default(),
+                                    )]
+                                })
+                            })
+                            .on_click_at(move |cx, column, _| {
+                                if let Some(index) = projection.with_untracked(|p| {
+                                    p.lines.get(i).and_then(|line| {
+                                        layout::control_at(line, usize::from(column))
+                                    })
+                                }) {
+                                    click_control(b, index, cx);
+                                }
+                                true
+                            });
+                            let targets = keyed(
+                                move || {
+                                    projection.with(|p| {
+                                        b.page.with(|page| {
+                                            let Some(line) = p.lines.get(i) else {
+                                                return Vec::new();
+                                            };
+                                            let Some(page) = page.as_ref() else {
+                                                return Vec::new();
+                                            };
+                                            let mut zones = Vec::new();
+                                            let mut x = 0usize;
+                                            while x < usize::from(width) {
+                                                let Some(index) = layout::control_at(line, x)
+                                                else {
+                                                    x += 1;
+                                                    continue;
+                                                };
+                                                let start = x;
+                                                while x < usize::from(width)
+                                                    && layout::control_at(line, x) == Some(index)
+                                                {
+                                                    x += 1;
+                                                }
+                                                if let Some(control) = page.controls.get(index) {
+                                                    zones.push((
+                                                        index,
+                                                        control.node,
+                                                        start as u16,
+                                                        x as u16,
+                                                        control.name.clone(),
+                                                        control.disabled,
+                                                        control.role.clone(),
+                                                    ));
+                                                }
+                                            }
+                                            zones
+                                        })
+                                    })
+                                },
+                                move |zones| {
+                                    let zone_cells = zone_cells.clone();
+                                    layers(zones.into_iter().map(
+                                        move |(
+                                            index,
+                                            target,
+                                            left,
+                                            right,
+                                            name,
+                                            disabled,
+                                            role,
+                                        )| {
+                                            use crate::model::Role as SourceRole;
+                                            use rich_intuituive::a11y::Role as AccessRole;
+                                            let role = match role {
+                                                SourceRole::TextBox
+                                                | SourceRole::SearchBox
+                                                | SourceRole::Password => AccessRole::TextBox,
+                                                SourceRole::CheckBox => AccessRole::CheckBox,
+                                                SourceRole::Switch => AccessRole::Switch,
+                                                SourceRole::Radio => AccessRole::RadioGroup,
+                                                SourceRole::ComboBox | SourceRole::ListBox => {
+                                                    AccessRole::ComboBox
+                                                }
+                                                SourceRole::Slider | SourceRole::SpinButton => {
+                                                    AccessRole::Slider
+                                                }
+                                                SourceRole::Tab => AccessRole::Tab,
+                                                SourceRole::MenuItem => AccessRole::MenuItem,
+                                                _ => AccessRole::Button,
+                                            };
+                                            let cells = zone_cells.clone();
+                                            leaf(move |console, _, _| {
+                                                projection.with(|p| {
+                                                    if i >= p.lines.len() {
+                                                        return vec![Vec::new()];
+                                                    }
+                                                    let line = draw_row(
+                                                        b,
+                                                        console,
+                                                        &cells,
+                                                        p,
+                                                        i,
+                                                        usize::from(width),
+                                                        &Marks::default(),
+                                                    );
+                                                    vec![segment_columns(
+                                                        line,
+                                                        usize::from(left),
+                                                        usize::from(right.saturating_sub(left)),
+                                                    )]
+                                                })
+                                            })
+                                            .focusable()
+                                            .focus_style("reverse")
+                                            .name(&format!("popup-control-{target}"))
+                                            .label(name)
+                                            .role(role)
+                                            .disabled_when(move || disabled)
+                                            .on_key("enter", move |cx| click_control(b, index, cx))
+                                            .on_click(move |cx| click_control(b, index, cx))
+                                            .inset(
+                                                0,
+                                                width.saturating_sub(right),
+                                                0,
+                                                left,
+                                            )
+                                        },
+                                    ))
+                                    .children_cover_only()
+                                },
+                            )
+                            .children_cover_only();
+                            layers([line, targets]).fixed(1)
+                        },
+                        offset,
+                    );
+                    let mut children = Vec::new();
+                    if let Some(background) = background {
+                        let colour = background.replace(' ', "");
+                        children.push(fill(" ", &format!("on {colour}")).on_click(|_| {}));
+                    }
+                    children.push(rows);
+                    let popup = layers(children)
+                        .label(&name)
+                        .inset(top, right, bottom, left);
+                    let popup = if is_dialog {
+                        popup.role(rich_intuituive::a11y::Role::Dialog)
+                    } else {
+                        popup
+                    };
+                    if modal {
+                        popup.controlled_modal()
+                    } else {
+                        popup
+                    }
+                },
+            ))
+            .children_cover_only()
+        },
+    )
+    .children_cover_only()
+}
+
 fn projection_view(b: Browser) -> Node {
     // The pictures' cells, made once per frame and size, shared by rows.
     let cells = Rc::new(pictures::Cells::with_presentation(b.presentation));
@@ -2842,7 +3136,10 @@ fn projection_view(b: Browser) -> Node {
     .autofocus()
     .name("page")
     .flex(1);
-    column([strip_view(b, false), page, strip_view(b, true)])
+    layers([
+        column([strip_view(b, false), page, strip_view(b, true)]),
+        source_dialogs(b),
+    ])
 }
 
 /// The rows the header and the status bar take.
@@ -3334,6 +3631,16 @@ pub fn app_with_presentation(
                 // The pixel view passes keys to the page, but for those
                 // with Ctrl or Alt and the F keys.
                 if b.view.with_untracked(|v| *v == View::Pixels) && crate::pixel_view::passes(key) {
+                    b.send(Command::Key(key));
+                    return true;
+                }
+                // Source-owned projection dialogs decide whether Escape closes
+                // them. Hints and pushed editors/actions consume it first.
+                if key.code == KeyCode::Escape
+                    && !key.modifiers.ctrl && !key.modifiers.alt
+                    && b.view.with_untracked(|v| *v == View::Projection)
+                    && b.page.with_untracked(|p| p.as_ref().is_some_and(|page| page.dialogs().next().is_some()))
+                {
                     b.send(Command::Key(key));
                     return true;
                 }

@@ -225,6 +225,7 @@ pub struct Node {
     /// Whether it was last drawn in its focus style.
     highlit: Cell<bool>,
     pub(crate) focusable: bool,
+    children_cover_only: bool,
     /// Takes the focus when its screen opens, before the first focusable
     /// node does.
     pub(crate) autofocus: bool,
@@ -235,6 +236,7 @@ pub struct Node {
     /// A [focus scope](Node::focus_scope), and the node inside it that had
     /// the focus last.
     focus_scope: bool,
+    controlled_modal: bool,
     scope_last: Cell<Option<NodeId>>,
     /// Shows it when scope cycling reaches it hidden
     /// ([`focus_scope_reveal`](Self::focus_scope_reveal)).
@@ -541,9 +543,11 @@ impl Node {
             drawn: Cell::new(None),
             highlit: Cell::new(false),
             focusable: false,
+            children_cover_only: false,
             autofocus: false,
             focus_passes: false,
             focus_scope: false,
+            controlled_modal: false,
             scope_last: Cell::new(None),
             scope_reveal: None,
             focus_handlers: RefCell::new(Vec::new()),
@@ -1584,6 +1588,19 @@ impl Node {
     pub fn focus_scope(mut self) -> Node {
         self.focus_scope = true;
         self
+    }
+
+    /// Make this visible subtree an owner-controlled modal focus scope.
+    /// Tab stays inside, outside pointer events are ignored, and closing the
+    /// subtree restores the previous focus. The owner controls visibility and
+    /// dismissal; Escape does not close it implicitly.
+    pub fn controlled_modal(mut self) -> Node {
+        self.controlled_modal = true;
+        self
+    }
+
+    pub(crate) fn is_controlled_modal(&self) -> bool {
+        self.controlled_modal
     }
 
     /// Make this node a [focus scope](Self::focus_scope) that
@@ -2734,6 +2751,16 @@ impl Node {
     /// elsewhere.
     pub fn inset(mut self, top: u16, right: u16, bottom: u16, left: u16) -> Node {
         self.inset = Some([top, right, bottom, left]);
+        self
+    }
+
+    /// Treat this layout wrapper as covering only its visible children for
+    /// pointer hit testing and text exposed to accessibility. Use on a
+    /// full-size dynamic wrapper around a smaller controlled layer. Handlers
+    /// on the wrapper still receive events bubbling from its children.
+    #[must_use]
+    pub fn children_cover_only(mut self) -> Node {
+        self.children_cover_only = true;
         self
     }
 
@@ -4929,7 +4956,7 @@ pub(crate) fn hit_path(root: &Node, column: u16, row: u16) -> Vec<(NodeId, (i32,
             overlapping.insert(node.id);
         }
         let shown = translate(node.rect(), shift).intersection(clip);
-        if !shown.contains(column, row) {
+        if node.children_cover_only || !shown.contains(column, row) {
             return;
         }
         // Where this path leaves the one found: under a node whose
@@ -4957,6 +4984,24 @@ pub(crate) fn hit_path(root: &Node, column: u16, row: u16) -> Vec<(NodeId, (i32,
 /// For each node under a later layer ([`layers`]), where those layers are
 /// on the screen: what reading its text from the screen leaves out.
 pub(crate) fn covered(root: &Node) -> HashMap<NodeId, Vec<Rect>> {
+    // A transparent wrapper contributes the bounds of its visible
+    // descendants, rather than its own full layout rectangle.
+    let mut child_bounds: HashMap<NodeId, Vec<Rect>> = HashMap::new();
+    let mut wrappers = HashSet::new();
+    walk_screen(root, &mut |node, path, shift, clip| {
+        if node.children_cover_only {
+            wrappers.insert(node.id);
+            return;
+        }
+        let shown = translate(node.rect(), shift).intersection(clip);
+        if !shown.is_empty() {
+            for id in path.iter().take(path.len().saturating_sub(1)) {
+                if wrappers.contains(id) {
+                    child_bounds.entry(*id).or_default().push(shown);
+                }
+            }
+        }
+    });
     // Each child of a node whose children overlap: its later siblings.
     let mut over: HashMap<NodeId, Vec<Rect>> = HashMap::new();
     let mut out = HashMap::new();
@@ -4964,12 +5009,18 @@ pub(crate) fn covered(root: &Node) -> HashMap<NodeId, Vec<Rect>> {
         let body = node.body.borrow();
         if body.widget.overlapping() {
             let children = body.widget.children();
-            let rects: Vec<Rect> = children
+            let rects: Vec<Vec<Rect>> = children
                 .iter()
-                .map(|child| translate(child.rect(), shift).intersection(clip))
+                .map(|child| {
+                    if child.children_cover_only {
+                        child_bounds.get(&child.id).cloned().unwrap_or_default()
+                    } else {
+                        vec![translate(child.rect(), shift).intersection(clip)]
+                    }
+                })
                 .collect();
             for (i, child) in children.iter().enumerate() {
-                over.insert(child.id, rects[i + 1..].to_vec());
+                over.insert(child.id, rects[i + 1..].iter().flatten().copied().collect());
             }
         }
         let mine: Vec<Rect> = path

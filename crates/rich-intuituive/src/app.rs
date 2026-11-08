@@ -2088,6 +2088,7 @@ struct Animation {
 struct Layer {
     root: Node,
     focus: Option<NodeId>,
+    controlled_scopes: Vec<(NodeId, Option<NodeId>)>,
     /// A modal's width and height; `None` for a full screen.
     modal: Option<(Size, Size)>,
     /// A modal's shadow and backdrop.
@@ -2782,6 +2783,7 @@ impl App {
             layers: vec![Layer {
                 root,
                 focus: None,
+                controlled_scopes: Vec::new(),
                 modal: None,
                 look: ModalOptions::default(),
                 drawn: None,
@@ -5704,6 +5706,7 @@ impl App {
         self.layers.push(Layer {
             root,
             focus: None,
+            controlled_scopes: Vec::new(),
             modal,
             look: ModalOptions::default(),
             drawn: None,
@@ -5863,14 +5866,37 @@ impl App {
         found
     }
 
+    fn controlled_scopes(&self) -> Vec<NodeId> {
+        let mut known = std::collections::HashSet::new();
+        let mut selected = Vec::new();
+        self.top().root.walk_accessible(&mut |node, path| {
+            if node.is_controlled_modal() {
+                known.insert(node.id());
+                selected = path
+                    .iter()
+                    .filter(|id| known.contains(id))
+                    .copied()
+                    .collect();
+            }
+        });
+        selected
+    }
+
+    fn controlled_scope(&self) -> Option<NodeId> {
+        self.controlled_scopes().last().copied()
+    }
+
     /// The Tab order: nodes that can take the focus, less those
     /// [hidden](crate::Node::access_hidden) from assistive technology.
     fn focusable(&self) -> Vec<NodeId> {
         let mut ids = Vec::new();
         // While a node is maximized, only what is inside it.
         let maximized = self.top().maximized;
+        let controlled = self.controlled_scope();
         self.top().root.walk_accessible(&mut |node, path| {
-            if maximized.is_some_and(|m| !path.contains(&m)) {
+            if controlled.is_some_and(|m| !path.contains(&m))
+                || maximized.is_some_and(|m| !path.contains(&m))
+            {
                 return;
             }
             // A wrapper whose focus passes inside is not a stop of its own.
@@ -5887,6 +5913,32 @@ impl App {
     /// the one before it if it was last; with nothing focused, to the
     /// first focusable node.
     fn keep_focus(&mut self) {
+        let scopes = self.controlled_scopes();
+        let previous = self.top().controlled_scopes.clone();
+        let common = previous
+            .iter()
+            .map(|(id, _)| *id)
+            .zip(&scopes)
+            .take_while(|(a, b)| a == *b)
+            .count();
+        if common != previous.len() || common != scopes.len() {
+            let restore = previous.get(common).and_then(|(_, saved)| *saved);
+            self.top_mut().controlled_scopes.truncate(common);
+            for &scope in &scopes[common..] {
+                let saved = self.focus();
+                self.top_mut().controlled_scopes.push((scope, saved));
+            }
+            if let Some(saved) = restore.filter(|id| self.focusable().contains(id)) {
+                self.set_focus(Some(saved));
+            }
+            if !scopes.is_empty()
+                && !self
+                    .focus()
+                    .is_some_and(|id| self.focusable().contains(&id))
+            {
+                self.set_focus(self.focusable().first().copied());
+            }
+        }
         // A container asked to take the focus, once it is built.
         if let Some(id) = self.runtime.focus_later.get() {
             self.focus_inside(id);
@@ -5993,9 +6045,11 @@ impl App {
     /// [hidden](crate::Node::access_hidden) from assistive technology.
     fn autofocused(&self) -> Option<NodeId> {
         let mut chosen = None;
+        let allowed = self.focusable();
         self.top().root.walk_accessible(&mut |node, _| {
-            if node.autofocus && chosen.is_none() && !node.disabled() {
-                chosen = Some(node.focus_target().unwrap_or(node.id));
+            let target = node.focus_target().unwrap_or(node.id);
+            if node.autofocus && chosen.is_none() && !node.disabled() && allowed.contains(&target) {
+                chosen = Some(target);
             }
         });
         chosen
@@ -6142,6 +6196,11 @@ impl App {
     }
 
     fn set_focus(&mut self, id: Option<NodeId>) {
+        if let (Some(scope), Some(target)) = (self.controlled_scope(), id)
+            && !self.path_to(target).contains(&scope)
+        {
+            return;
+        }
         // Against the node last told, whichever screen it is on: opening a
         // modal takes the focus from the screen below, and closing it gives
         // the focus back.
@@ -6838,6 +6897,12 @@ impl App {
     /// until one uses it. A press first focuses the deepest focusable node
     /// under the pointer. Whether to quit.
     fn mouse_event(&mut self, mouse: rich_interact::Mouse) -> Option<bool> {
+        if let Some(scope) = self.controlled_scope()
+            && !node_rect(&self.layers, scope)
+                .is_some_and(|rect| rect.contains(mouse.column, mouse.row))
+        {
+            return Some(false);
+        }
         // A press ends a key sequence under way.
         if matches!(mouse.kind, MouseKind::Down(_)) && self.pending.take().is_some() {
             self.which_key_changed();

@@ -11,6 +11,13 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ### Noctiluca and shared media presentation
 
+- **Noctiluca model migration:** `Page` now includes `overlays` for visible
+  source dialogs and large opaque fixed layers. Existing complete `Page { ... }`
+  literals must add `overlays: Vec::new()` (or use `..Page::default()`). Use
+  `Page::dialogs()` to inspect source-declared dialogs; fixed geometry alone
+  does not make an overlay modal. Source dialogs formerly exposed as docked
+  strips are now projected independently.
+
 - Projection, media pacing and capture handling use measured terminal geometry,
   feature-aware graphics fallbacks and document/viewport scoped frames. Adaptive
   layouts retain readable video and chat at narrow widths.

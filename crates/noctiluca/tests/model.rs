@@ -754,3 +754,92 @@ fn an_app_shells_bars_above_and_under_its_scrolling_main_box_are_layers() {
     assert_eq!(place("Side"), None);
     assert_eq!(place("Channel 12"), None);
 }
+
+#[test]
+fn source_dialog_semantics_are_preserved_without_inference_from_geometry() {
+    use noctiluca::engine::Rect;
+    use noctiluca::testing::PageBuilder;
+    for (role, modal, expected) in [
+        ("dialog", false, true),
+        ("dialog", true, true),
+        ("", false, false),
+    ] {
+        let mut p = PageBuilder::new("https://example.test/", "Layers", 960.0, 720.0);
+        p.view(0.0, 720.0);
+        let panel = p.element(
+            p.body(),
+            "DIV",
+            &[],
+            &[("position", "fixed")],
+            Some(Rect::new(196.0, 72.0, 567.0, 532.0)),
+        );
+        let attrs = if modal {
+            vec![("role", role), ("aria-modal", "true")]
+        } else {
+            vec![("role", role)]
+        };
+        let dialog = p.element(
+            panel,
+            "DIV",
+            &attrs,
+            &[],
+            Some(Rect::new(196.0, 72.0, 567.0, 532.0)),
+        );
+        p.text(dialog, "Panel", Rect::new(210.0, 200.0, 100.0, 18.0));
+        let page = build(&p.snapshot(), &mut Revisions::new());
+        assert_eq!(!page.overlays.is_empty(), expected, "role={role:?}");
+        if expected {
+            assert_eq!(page.overlays[0].modal, modal);
+        }
+    }
+}
+
+#[test]
+fn visual_fixed_overlays_respect_opacity_paint_order_and_size_without_implying_dialog() {
+    use noctiluca::engine::Rect;
+    use noctiluca::testing::PageBuilder;
+    for (position, height, colour, opacity, order, expected) in [
+        ("fixed", 532.0, "rgb(55, 57, 82)", "1", 100, true),
+        ("fixed", 900.0, "rgb(55, 57, 82)", "1", 100, true),
+        ("fixed", 80.0, "rgb(55, 57, 82)", "1", 100, false),
+        ("sticky", 532.0, "rgb(55, 57, 82)", "1", 100, false),
+        ("fixed", 532.0, "rgba(55, 57, 82, 0.5)", "1", 100, false),
+        ("fixed", 532.0, "rgb(55, 57, 82)", "0.5", 100, false),
+        ("fixed", 532.0, "rgb(55, 57, 82)", "1", 5, false),
+    ] {
+        let mut p = PageBuilder::new("https://example.test/", "Layers", 960.0, 720.0);
+        p.view(0.0, 720.0);
+        let under = p.element(
+            p.body(),
+            "P",
+            &[],
+            &[],
+            Some(Rect::new(220.0, 100.0, 100.0, 18.0)),
+        );
+        p.paint(under, 10);
+        p.text(under, "Underlay", Rect::new(220.0, 100.0, 100.0, 18.0));
+        let panel = p.element(
+            p.body(),
+            "DIV",
+            &[],
+            &[
+                ("position", position),
+                ("background-color", colour),
+                ("opacity", opacity),
+            ],
+            Some(Rect::new(196.0, 72.0, 567.0, height)),
+        );
+        p.paint(panel, order);
+        p.text(panel, "Visual layer", Rect::new(210.0, 100.0, 120.0, 18.0));
+        let page = build(&p.snapshot(), &mut Revisions::new());
+        assert_eq!(
+            !page.overlays.is_empty(),
+            expected,
+            "{position}, height={height}, colour={colour}, opacity={opacity}, order={order}"
+        );
+        assert!(
+            page.dialogs().next().is_none(),
+            "geometry inferred dialog semantics"
+        );
+    }
+}

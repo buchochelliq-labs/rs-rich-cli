@@ -998,12 +998,21 @@ pub(crate) enum Part {
     Flow,
     Pinned,
     Docked,
+    Overlay(usize),
 }
 
 /// How far down `part` moves `block`'s boxes, in CSS pixels; `None` when
 /// it is not in `part`. `docked` is the top of the highest docked layer.
 fn shift(page: &Page, block: &Block, part: Part, pinned: f64, docked: f64) -> Option<f64> {
-    let Some(layer) = block.stack.layer.and_then(|l| page.layers.get(l)) else {
+    let layer_index = block.stack.layer;
+    if let Part::Overlay(index) = part {
+        let dialog = page.overlays.get(index)?;
+        return (layer_index == Some(dialog.layer)).then(|| -page.layers[dialog.layer].rect.y);
+    }
+    if layer_index.is_some_and(|index| page.overlays.iter().any(|d| d.layer == index)) {
+        return None;
+    }
+    let Some(layer) = layer_index.and_then(|l| page.layers.get(l)) else {
         return (part == Part::Flow).then_some(0.0);
     };
     let base = match (layer.place, part) {
@@ -1031,6 +1040,26 @@ impl Projection {
 /// page's pinned and docked strips.
 pub fn project(page: &Page, columns: u16, cell: (f64, f64), marks: &Marks) -> Projection {
     project_with_logs(page, columns, cell, marks, &mut Vec::new())
+}
+
+/// Project one source-declared fixed dialog independently of the page flow.
+/// Its control indices continue to refer to the original page.
+pub fn project_overlay(
+    page: &Page,
+    index: usize,
+    columns: u16,
+    cell: (f64, f64),
+    marks: &Marks,
+) -> Option<Projection> {
+    page.overlays.get(index)?;
+    Some(project_part(
+        page,
+        columns,
+        cell,
+        marks,
+        Part::Overlay(index),
+        &mut Vec::new(),
+    ))
 }
 
 #[derive(Clone, Debug)]
@@ -1104,6 +1133,14 @@ fn project_part(
 ) -> Projection {
     let columns = columns.max(10) as usize;
     let (cw, ch) = (cell.0.max(1.0), cell.1.max(1.0));
+    let origin_x = match part {
+        Part::Overlay(index) => page
+            .overlays
+            .get(index)
+            .and_then(|d| page.layers.get(d.layer))
+            .map_or(0.0, |layer| layer.rect.x),
+        _ => 0.0,
+    };
     /// A box to place: where Chrome put it, and what it holds.
     struct Item {
         top: f64,
@@ -1169,17 +1206,17 @@ fn project_part(
     // cells once it has its place.
     let mut overlaid: Vec<(usize, Item)> = Vec::new();
     let source_snap = |left: f64, right: f64| -> (usize, usize) {
-        let start = ((left / cw).round().max(0.0) as usize).min(usize::MAX - 1);
+        let start = (((left - origin_x) / cw).round().max(0.0) as usize).min(usize::MAX - 1);
         (
             start,
-            ((right / cw).round().max(0.0) as usize).max(start + 1),
+            (((right - origin_x) / cw).round().max(0.0) as usize).max(start + 1),
         )
     };
     let snap = |left: f64, right: f64| -> (usize, usize) {
         // Both edges round, so boxes that touch in Chrome touch here and
         // never share a column.
-        let x0 = ((left / cw).round().max(0.0) as usize).min(columns - 1);
-        let x1 = ((right / cw).round() as usize).clamp(x0 + 1, columns);
+        let x0 = (((left - origin_x) / cw).round().max(0.0) as usize).min(columns - 1);
+        let x1 = (((right - origin_x) / cw).round() as usize).clamp(x0 + 1, columns);
         (x0, x1)
     };
     let text_item = |node: crate::engine::NodeId,

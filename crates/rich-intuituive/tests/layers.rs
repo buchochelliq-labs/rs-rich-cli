@@ -118,3 +118,128 @@ fn a_layer_placed_by_its_content_sits_where_it_says() {
     let rows = shown(app, 7, 3).screen().plain();
     assert_eq!(rows, ["tl·····", "···c···", "·····br"]);
 }
+
+#[test]
+fn dynamic_layer_wrapper_can_leave_outside_pointer_hits_to_underlay() {
+    let hits = std::rc::Rc::new(std::cell::Cell::new(0));
+    let h = hits.clone();
+    let app = App::new(move || {
+        let h = h.clone();
+        layers([
+            label("under").on_click(move |_| h.set(h.get() + 1)),
+            keyed(
+                || true,
+                |_| {
+                    layers([label("dialog").on_click(|_| {}).inset(1, 4, 1, 4)])
+                        .children_cover_only()
+                },
+            )
+            .children_cover_only(),
+        ])
+    });
+    let mut d = shown(app, 20, 5);
+    let names = d
+        .accessibility()
+        .iter()
+        .map(|node| node.name.clone())
+        .collect::<Vec<_>>();
+    assert!(
+        names.iter().any(|name| name.contains("under")),
+        "outside content lost from accessibility: {names:?}"
+    );
+    click(&mut d, 0, 0);
+    assert_eq!(hits.get(), 1, "the wrapper blocked a hit outside its child");
+}
+
+#[test]
+fn owner_controlled_modal_scope_traps_focus_and_restores_it() {
+    use std::{cell::Cell, rc::Rc};
+    let state = Rc::new(Cell::new(None));
+    let handle = state.clone();
+    let hits = Rc::new(Cell::new(0));
+    let h = hits.clone();
+    let app = App::new(move || {
+        let h = h.clone();
+        let open = signal(false);
+        handle.set(Some(open));
+        layers([
+            label("under")
+                .focusable()
+                .name("under")
+                .on_click(move |_| h.set(h.get() + 1)),
+            column([
+                label("first").focusable().name("first"),
+                label("second").focusable().name("second"),
+            ])
+            .controlled_modal()
+            .inset(1, 2, 1, 2)
+            .shown_when(move || open.get()),
+        ])
+    });
+    let mut driver = shown(app, 20, 5);
+    driver.assert_focused("under");
+    state.get().unwrap().set(true);
+    driver.settle();
+    driver.assert_focused("first");
+    click(&mut driver, 0, 0);
+    assert_eq!(hits.get(), 0, "modal allowed an outside pointer action");
+    driver.press("tab");
+    driver.assert_focused("second");
+    driver.press("tab");
+    driver.assert_focused("first");
+    driver.press("escape");
+    assert!(driver.screen().plain().join("\n").contains("first"));
+    state.get().unwrap().set(false);
+    driver.settle();
+    driver.assert_focused("under");
+    click(&mut driver, 0, 0);
+    assert_eq!(hits.get(), 1);
+}
+
+#[test]
+fn nested_owner_modals_restore_each_focus_and_preserve_a_live_draft() {
+    use std::{cell::Cell, rc::Rc};
+    let states = Rc::new(Cell::new(None));
+    let handles = states.clone();
+    let app = App::new(move || {
+        let outer = signal(false);
+        let inner = signal(false);
+        let draft = signal(String::new());
+        handles.set(Some((outer, inner, draft)));
+        layers([
+            label("base").focusable().name("base"),
+            layers([
+                input(draft).name("draft"),
+                label("inner")
+                    .focusable()
+                    .name("inner")
+                    .controlled_modal()
+                    .inset(1, 2, 1, 2)
+                    .shown_when(move || inner.get()),
+            ])
+            .controlled_modal()
+            .inset(1, 60, 1, 60)
+            .shown_when(move || outer.get()),
+        ])
+    });
+    let mut driver = shown(app, 160, 12);
+    let (outer, inner, draft) = states.get().unwrap();
+    driver.assert_focused("base");
+    outer.set(true);
+    driver.settle();
+    driver.assert_focused("draft");
+    driver.press("x");
+    assert_eq!(draft.get_untracked(), "x");
+    inner.set(true);
+    driver.settle();
+    driver.assert_focused("inner");
+    driver.press("tab");
+    driver.assert_focused("inner");
+    inner.set(false);
+    driver.settle();
+    driver.assert_focused("draft");
+    assert_eq!(draft.get_untracked(), "x");
+    outer.set(false);
+    driver.settle();
+    driver.assert_focused("base");
+}

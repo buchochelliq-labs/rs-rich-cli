@@ -227,6 +227,21 @@ pub struct Layer {
     pub place: Place,
 }
 
+/// A source-declared dialog or an opaque, large fixed visual layer.
+/// `dialog` and `modal` reflect source semantics, never geometry alone.
+#[derive(Clone, Debug, PartialEq)]
+pub struct SourceOverlay {
+    pub node: NodeId,
+    pub layer: usize,
+    pub dialog: bool,
+    pub modal: bool,
+    pub name: String,
+    /// Fixed layer background when it is fully opaque.
+    pub background: Option<String>,
+    /// Chrome paint order for compositing sibling dialogs.
+    pub paint_order: i64,
+}
+
 impl Block {
     /// Its text, without styles.
     pub fn text(&self) -> String {
@@ -782,6 +797,8 @@ pub struct Page {
     pub shelves: Vec<Shelf>,
     /// Its fixed and sticky boxes ([`Stack::layer`]).
     pub layers: Vec<Layer>,
+    /// Visible source dialogs and opaque large fixed layers.
+    pub overlays: Vec<SourceOverlay>,
     /// How far down the page Chrome was scrolled when it was read, in CSS
     /// pixels.
     pub scroll_y: f64,
@@ -791,6 +808,11 @@ pub struct Page {
 }
 
 impl Page {
+    /// Source-declared dialogs, distinct from purely visual fixed layers.
+    pub fn dialogs(&self) -> impl Iterator<Item = &SourceOverlay> {
+        self.overlays.iter().filter(|overlay| overlay.dialog)
+    }
+
     /// The control on `node`, if the page has one.
     pub fn control(&self, node: NodeId) -> Option<&Control> {
         self.controls.iter().find(|c| c.node == node)
@@ -1358,6 +1380,22 @@ fn opaque(css: &str) -> bool {
             .next()
             .and_then(|a| a.trim().parse::<f64>().ok())
             .is_none_or(|a| a > 0.0),
+        None => true,
+    }
+}
+
+/// Whether a computed colour is fully opaque, for occlusion rather than
+/// merely checking whether it paints anything.
+fn fully_opaque_color(css: &str) -> bool {
+    if !opaque(css) {
+        return false;
+    }
+    match css.strip_prefix("rgba(").and_then(|c| c.strip_suffix(')')) {
+        Some(inner) => inner
+            .rsplit([',', '/'])
+            .next()
+            .and_then(|a| a.trim().parse::<f64>().ok())
+            .is_some_and(|alpha| alpha >= 1.0),
         None => true,
     }
 }
@@ -3285,7 +3323,7 @@ fn holds(outer: Rect, inner: Rect) -> bool {
 ///   ancestors or descendants, nor a fixed or sticky one (they move);
 /// - a block wholly inside a picture's box and painted above it is
 ///   `over` it.
-fn stack(dom: &Dom, page: &mut Page) {
+fn stack(dom: &Dom, ax: &Ax<'_>, page: &mut Page) {
     page.scroll_y = dom.scroll_y;
     page.view_height = dom.view_height;
     let n = dom.parent.len();
@@ -3362,6 +3400,132 @@ fn stack(dom: &Dom, page: &mut Page) {
             place,
         });
     }
+    // A role belongs to source semantics, never inferred from a rectangle.
+    // Keep the fixed root as the composited surface, including descendants
+    // around a nested dialog, and avoid duplicate surfaces for one root.
+    let mut dialog_roots = HashSet::new();
+    for i in 0..n {
+        if !dom.is_element(i) || dom.concealed[i] || !dom.shows(i) {
+            continue;
+        }
+        let role = dom.attr(i, "role").unwrap_or_default();
+        let ax_node = ax.get(dom.backend[i]);
+        let ax_role = ax_node
+            .and_then(|n| n["role"]["value"].as_str())
+            .unwrap_or_default();
+        let declared = role
+            .split_whitespace()
+            .any(|r| r.eq_ignore_ascii_case("dialog") || r.eq_ignore_ascii_case("alertdialog"))
+            || matches!(ax_role, "dialog" | "alertdialog")
+            || (dom.name[i] == "DIALOG" && dom.attr(i, "open").is_some());
+        let Some(r) = root[i] else { continue };
+        let Some(&layer) = layer_of.get(&r) else {
+            continue;
+        };
+        if !declared
+            || !fixed_at(r)
+            || page.layers[layer].place == Place::Off
+            || !dialog_roots.insert(r)
+        {
+            continue;
+        }
+        let modal = dom
+            .attr(i, "aria-modal")
+            .is_some_and(|v| v.eq_ignore_ascii_case("true"))
+            || ax_node
+                .and_then(|n| property(n, "modal"))
+                .and_then(Value::as_bool)
+                == Some(true);
+        let name = ax_node
+            .and_then(|n| ax_string(n, "name"))
+            .or_else(|| dom.attr(i, "aria-label").map(clean))
+            .unwrap_or_default();
+        let colour = dom.style(r, 3).trim().to_ascii_lowercase();
+        let mut node = Some(r);
+        let mut solid = fully_opaque_color(&colour);
+        while let Some(at) = node {
+            if number(Some(dom.style(at, 8))).is_some_and(|alpha| alpha < 1.0) {
+                solid = false;
+            }
+            node = parent(at);
+        }
+        let background = solid.then_some(colour);
+        let paint_order = dom.layout[r]
+            .and_then(|k| dom.paint.get(k))
+            .copied()
+            .unwrap_or_default();
+        page.overlays.push(SourceOverlay {
+            node: dom.backend[i],
+            layer,
+            dialog: true,
+            modal,
+            name,
+            background,
+            paint_order,
+        });
+    }
+
+    let is_descendant = |ancestor: usize, mut node: usize| {
+        while let Some(next) = parent(node) {
+            if next == ancestor {
+                return true;
+            }
+            node = next;
+        }
+        false
+    };
+    // Large opaque fixed boxes without dialog semantics are visual layers,
+    // but never gain modal focus or a dialog accessibility role from geometry.
+    for (&r, &layer) in &layer_of {
+        if dialog_roots.contains(&r) || !fixed_at(r) || page.layers[layer].place != Place::Flow {
+            continue;
+        }
+        let colour = dom.style(r, 3).trim().to_ascii_lowercase();
+        let mut solid = fully_opaque_color(&colour);
+        let mut node = Some(r);
+        while let Some(at) = node {
+            if number(Some(dom.style(at, 8))).is_some_and(|alpha| alpha < 1.0) {
+                solid = false;
+            }
+            node = parent(at);
+        }
+        if !solid {
+            continue;
+        }
+        let paint_order = dom.layout[r]
+            .and_then(|k| dom.paint.get(k))
+            .copied()
+            .unwrap_or_default();
+        let rect = page.layers[layer].rect;
+        let overlaps_lower = page.blocks.iter().any(|block| {
+            let Some(&i) = index.get(&block.node) else {
+                return false;
+            };
+            let Some(order) = dom.layout[i].and_then(|k| dom.paint.get(k)).copied() else {
+                return false;
+            };
+            !is_descendant(r, i)
+                && !is_descendant(i, r)
+                && order < paint_order
+                && block.rect.x < rect.right()
+                && rect.x < block.rect.right()
+                && block.rect.y < rect.bottom()
+                && rect.y < block.rect.bottom()
+        });
+        if !overlaps_lower {
+            continue;
+        }
+        page.overlays.push(SourceOverlay {
+            node: dom.backend[r],
+            layer,
+            dialog: false,
+            modal: false,
+            name: String::new(),
+            background: Some(colour),
+            paint_order,
+        });
+    }
+    page.overlays.sort_by_key(|dialog| dialog.paint_order);
     let order = |i: usize| dom.layout[i].and_then(|k| dom.paint.get(k)).copied();
     let under = |a: usize, mut i: usize| {
         while let Some(p) = parent(i) {
@@ -3590,7 +3754,7 @@ pub fn build_with(
     }
     walker.flush(&top);
     let mut page = walker.page;
-    stack(&dom, &mut page);
+    stack(&dom, &ax, &mut page);
     // A landmark with a field or a live log in it is not only links: it
     // never collapses.
     for block in &page.blocks {

@@ -662,15 +662,44 @@ fn a_sticky_header_read_while_scrolled_is_pinned_not_mid_page() {
 }
 
 #[test]
-fn a_cookie_banner_fixed_to_the_bottom_is_docked_and_the_shops_header_pinned() {
-    let (lines, pinned, docked) = strips("product-grid-scrolled", 100);
-    let all = |l: &[String]| l.join("\n");
-    assert!(all(&docked).contains("We use cookies"), "{docked:#?}");
-    assert!(all(&docked).contains("[Accept]"), "{docked:#?}");
-    assert!(!all(&lines).contains("We use cookies"), "{lines:#?}");
-    assert!(all(&pinned).contains("Search the shop"), "{pinned:#?}");
-    assert!(!all(&lines).contains("Search the shop"), "{lines:#?}");
-    assert!(lines.iter().any(|l| l.contains("1-3 of over 2,000")));
+fn a_source_dialog_at_the_bottom_is_projected_separately_and_header_stays_pinned() {
+    let page = page("product-grid-scrolled");
+    let projection = noctiluca::layout::project(&page, 100, (8.0, 18.0), &Marks::default());
+    let lines = projection
+        .lines
+        .iter()
+        .map(Line::plain)
+        .collect::<Vec<_>>()
+        .join("\n");
+    let pinned = projection
+        .pinned
+        .as_ref()
+        .unwrap()
+        .lines
+        .iter()
+        .map(Line::plain)
+        .collect::<Vec<_>>()
+        .join("\n");
+    let popup = page
+        .overlays
+        .iter()
+        .enumerate()
+        .filter_map(|(index, _)| {
+            noctiluca::layout::project_overlay(&page, index, 100, (8.0, 18.0), &Marks::default())
+        })
+        .map(|p| {
+            p.lines
+                .iter()
+                .map(Line::plain)
+                .collect::<Vec<_>>()
+                .join("\n")
+        })
+        .find(|text| text.contains("We use cookies"))
+        .expect("source dialog was not projected separately");
+    assert!(popup.contains("[Accept]"), "{popup}");
+    assert!(!lines.contains("We use cookies"), "{lines}");
+    assert!(pinned.contains("Search the shop"), "{pinned}");
+    assert!(lines.contains("1-3 of over 2,000"), "{lines}");
 }
 
 #[test]
@@ -802,4 +831,323 @@ fn two_runs_that_touch_in_cells_keep_a_space_between_them() {
         .map(Line::plain)
         .collect();
     assert!(lines.iter().any(|l| l.contains("16 13y ago")), "{lines:#?}");
+}
+
+#[test]
+fn opaque_tall_fixed_dialog_does_not_mix_covered_underlay() {
+    use noctiluca::engine::Rect;
+    use noctiluca::layout::project;
+    use noctiluca::testing::PageBuilder;
+    let mut p = PageBuilder::new("https://example.test/layers", "Layers", 960.0, 720.0);
+    p.view(0.0, 720.0);
+    let body = p.body();
+    let under = p.element(
+        body,
+        "BUTTON",
+        &[],
+        &[],
+        Some(Rect::new(384.0, 272.0, 176.0, 40.0)),
+    );
+    p.paint(under, 10);
+    p.text(
+        under,
+        "Underlying action",
+        Rect::new(390.0, 278.0, 150.0, 18.0),
+    );
+    let panel = p.element(
+        body,
+        "DIV",
+        &[],
+        &[
+            ("position", "fixed"),
+            ("background-color", "rgb(55, 57, 82)"),
+        ],
+        Some(Rect::new(196.0, 72.0, 567.0, 532.0)),
+    );
+    p.paint(panel, 100);
+    let dialog = p.element(
+        panel,
+        "DIV",
+        &[("role", "dialog")],
+        &[],
+        Some(Rect::new(196.0, 72.0, 567.0, 532.0)),
+    );
+    let text = p.element(
+        dialog,
+        "P",
+        &[],
+        &[],
+        Some(Rect::new(210.0, 272.0, 220.0, 18.0)),
+    );
+    p.paint(text, 101);
+    p.text(text, "Dialog content", Rect::new(210.0, 272.0, 200.0, 18.0));
+    let page = build(&p.snapshot(), &mut Revisions::new());
+    let projection = project(&page, 120, (8.0, 18.0), &Marks::default());
+    let text = projection
+        .lines
+        .iter()
+        .map(Line::plain)
+        .collect::<Vec<_>>()
+        .join("\n");
+    assert_eq!(page.overlays.len(), 1);
+    assert!(!page.overlays[0].modal);
+    assert!(
+        text.contains("Underlying action"),
+        "source underlay must remain in the page projection: {text}"
+    );
+    assert!(
+        !text.contains("Dialog content"),
+        "dialog remained in page flow: {text}"
+    );
+    let popup =
+        noctiluca::layout::project_overlay(&page, 0, 70, (8.0, 18.0), &Marks::default()).unwrap();
+    let popup_text = popup
+        .lines
+        .iter()
+        .map(Line::plain)
+        .collect::<Vec<_>>()
+        .join("\n");
+    assert!(popup_text.contains("Dialog content"), "{popup_text}");
+    assert!(!popup_text.contains("Underlying action"), "{popup_text}");
+}
+
+fn source_dialog_layer(modal: bool) {
+    use noctiluca::{
+        app::{Options, app},
+        bookmarks::Bookmarks,
+        config::{Config, Images, View},
+        engine::{PageAction, Rect},
+        testing::{FakeEngine, PageBuilder},
+    };
+    use std::time::{Duration, Instant};
+    let mut p = PageBuilder::new("https://example.test/popup.html", "Popup", 960.0, 720.0);
+    p.view(0.0, 720.0);
+    let body = p.body();
+    let outside = p.element(
+        body,
+        "BUTTON",
+        &[],
+        &[],
+        Some(Rect::new(0.0, 0.0, 160.0, 30.0)),
+    );
+    p.text(outside, "Outside", Rect::new(4.0, 4.0, 100.0, 18.0));
+    let behind = p.element(
+        body,
+        "BUTTON",
+        &[],
+        &[],
+        Some(Rect::new(384.0, 272.0, 176.0, 40.0)),
+    );
+    p.paint(behind, 10);
+    p.text(
+        behind,
+        "Underlying action",
+        Rect::new(390.0, 278.0, 150.0, 18.0),
+    );
+    let panel = p.element(
+        body,
+        "DIV",
+        &[],
+        &[
+            ("position", "fixed"),
+            ("background-color", "rgb(55, 57, 82)"),
+        ],
+        Some(Rect::new(196.0, 72.0, 567.0, 532.0)),
+    );
+    p.paint(panel, 100);
+    let attrs = if modal {
+        vec![("role", "dialog"), ("aria-modal", "true")]
+    } else {
+        vec![("role", "dialog")]
+    };
+    let dialog = p.element(
+        panel,
+        "DIV",
+        &attrs,
+        &[],
+        Some(Rect::new(196.0, 72.0, 567.0, 532.0)),
+    );
+    let text = p.element(
+        dialog,
+        "P",
+        &[],
+        &[],
+        Some(Rect::new(210.0, 100.0, 220.0, 18.0)),
+    );
+    p.text(text, "Dialog content", Rect::new(210.0, 100.0, 200.0, 18.0));
+    let action = p.element(
+        dialog,
+        "BUTTON",
+        &[],
+        &[],
+        Some(Rect::new(210.0, 140.0, 160.0, 30.0)),
+    );
+    p.text(action, "Choose", Rect::new(215.0, 145.0, 80.0, 18.0));
+    let other = p.element(
+        dialog,
+        "BUTTON",
+        &[],
+        &[],
+        Some(Rect::new(410.0, 140.0, 160.0, 30.0)),
+    );
+    p.text(other, "Second", Rect::new(415.0, 145.0, 80.0, 18.0));
+    let model = build(&p.snapshot(), &mut Revisions::new());
+    let expected = model.find("button", "Second")[0].node;
+    let choose = model.find("button", "Choose")[0].node;
+    let outside_node = model.find("button", "Outside")[0].node;
+    let visible = p.snapshot();
+    p.set_style(panel, "opacity", "0");
+    let hidden = p.snapshot();
+    assert!(
+        build(&hidden, &mut Revisions::new()).overlays.is_empty(),
+        "hidden source still declared a dialog"
+    );
+    let engine = FakeEngine::from_dir(
+        &std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/snapshots"),
+    )
+    .unwrap();
+    let state = engine.state.clone();
+    state
+        .lock()
+        .unwrap()
+        .pages
+        .insert("popup".into(), visible.clone());
+    let mut driver = app(
+        Box::new(engine),
+        Options {
+            config: Config::default(),
+            bookmarks: Bookmarks::default(),
+            url: Some("popup.html".into()),
+            view: Some(View::Projection),
+            images: Some(Images::None),
+            tunnel: None,
+            control: None,
+        },
+    )
+    .driver(120, 40);
+    let deadline = Instant::now() + Duration::from_secs(5);
+    loop {
+        driver.settle();
+        if driver.find_text("Choose").is_some() {
+            break;
+        }
+        assert!(
+            Instant::now() < deadline,
+            "popup not shown: {}",
+            driver.screen().plain().join("\n")
+        );
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    assert!(driver.find_text("Dialog content").is_some());
+    assert!(driver.find_text("Underlying action").is_none());
+    let (outside_x, outside_y) = driver.find_text("Outside").unwrap();
+    driver.click(outside_x, outside_y);
+    let until = Instant::now() + Duration::from_millis(250);
+    while Instant::now() < until {
+        driver.settle();
+        std::thread::sleep(Duration::from_millis(5));
+    }
+    let outside_clicked = state
+        .lock()
+        .unwrap()
+        .actions
+        .iter()
+        .any(|a| matches!(a, PageAction::Click(node) if *node == outside_node));
+    assert_eq!(
+        outside_clicked, !modal,
+        "modal policy incorrectly routed outside click"
+    );
+    let target = format!("popup-control-{expected}");
+    for _ in 0..12 {
+        if driver.focused_name().as_deref() == Some(target.as_str()) {
+            break;
+        }
+        driver.press("tab");
+    }
+    assert_eq!(
+        driver.focused_name().as_deref(),
+        Some(target.as_str()),
+        "second control was not keyboard reachable"
+    );
+    driver.press("enter");
+    let deadline = Instant::now() + Duration::from_secs(5);
+    loop {
+        driver.settle();
+        if state
+            .lock()
+            .unwrap()
+            .actions
+            .iter()
+            .any(|a| matches!(a, PageAction::Click(node) if *node == expected))
+        {
+            break;
+        }
+        assert!(
+            Instant::now() < deadline,
+            "keyboard action did not reach second source control"
+        );
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    let (x, y) = driver.find_text("Choose").unwrap();
+    driver.click(x, y);
+    let deadline = Instant::now() + Duration::from_secs(5);
+    loop {
+        driver.settle();
+        if state
+            .lock()
+            .unwrap()
+            .actions
+            .iter()
+            .any(|a| matches!(a, PageAction::Click(node) if *node == choose))
+        {
+            break;
+        }
+        assert!(Instant::now() < deadline, "popup action was not forwarded");
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    driver.press("esc");
+    let deadline = Instant::now() + Duration::from_secs(5);
+    loop {
+        driver.settle();
+        if state.lock().unwrap().actions.iter().any(|a| matches!(a, PageAction::Key(key) if *key == rich_intuituive::interact::Key::parse("esc").unwrap())) { break; }
+        assert!(
+            Instant::now() < deadline,
+            "Escape was not forwarded to the source"
+        );
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    assert!(
+        driver.find_text("Choose").is_some(),
+        "Escape hid a source-owned dialog without source change"
+    );
+    for (snapshot, should_show) in [(hidden, false), (visible, true)] {
+        {
+            let mut state = state.lock().unwrap();
+            state.pages.insert("popup".into(), snapshot);
+            state.events.push(noctiluca::engine::EngineEvent::Changed);
+        }
+        let deadline = Instant::now() + Duration::from_secs(5);
+        loop {
+            driver.settle();
+            if driver.find_text("Choose").is_some() == should_show {
+                break;
+            }
+            assert!(
+                Instant::now() < deadline,
+                "popup visibility did not update to {should_show}: {}",
+                driver.screen().plain().join("\n")
+            );
+            std::thread::sleep(Duration::from_millis(10));
+        }
+    }
+}
+
+#[test]
+fn source_nonmodal_dialog_is_shown_as_an_interactive_layer() {
+    source_dialog_layer(false);
+}
+
+#[test]
+fn source_modal_dialog_blocks_outside_and_keeps_its_actions() {
+    source_dialog_layer(true);
 }
