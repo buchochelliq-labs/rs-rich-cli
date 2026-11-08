@@ -328,7 +328,10 @@ pub(crate) fn lay_out_with_logs(
             // the source rectangle. Restore the configured rules on close.
             let mut underlay = marks.clone();
             if !page.overlays.is_empty() {
-                underlay.adapt = crate::adapt::Adapt::none();
+                underlay.adapt = crate::adapt::Adapt::none().with(
+                    crate::adapt::Rule::Shelves,
+                    marks.adapt.on(crate::adapt::Rule::Shelves),
+                );
             }
             layout::project_with_logs(
                 page,
@@ -2814,8 +2817,18 @@ fn source_dialogs(b: Browser) -> Node {
                                 let left = ((layer.rect.x / f64::from(CELL.0)).round().max(0.0)
                                     as u16)
                                     .min(columns.saturating_sub(1));
-                                let top = ((layer.top / f64::from(CELL.1)).round().max(0.0) as u16)
-                                    .min(rows.saturating_sub(1));
+                                let top = if layer.place == crate::model::Place::Docked
+                                    && page.view_height > 0.0
+                                {
+                                    let from_bottom = ((page.view_height - layer.top).max(0.0)
+                                        / f64::from(CELL.1))
+                                    .round()
+                                        as u16;
+                                    rows.saturating_sub(from_bottom)
+                                } else {
+                                    ((layer.top / f64::from(CELL.1)).round().max(0.0) as u16)
+                                        .min(rows.saturating_sub(1))
+                                };
                                 let width = ((layer.rect.width / f64::from(CELL.0)).ceil().max(1.0)
                                     as u16)
                                     .min(columns.saturating_sub(left).max(1));
