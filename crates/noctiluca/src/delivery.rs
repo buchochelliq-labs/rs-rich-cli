@@ -80,6 +80,22 @@ mod tests {
         }))
     }
     #[test]
+    fn source_envelope_keeps_the_exact_page_across_navigation_and_legacy_updates() {
+        let snapshot = crate::testing::PageBuilder::new("https://example.test/", "pair", 400.0, 400.0).snapshot();
+        let source = crate::model::build_source(&snapshot, &mut crate::model::Revisions::new());
+        let mut q = Mailbox::default();
+        q.push_source(Update::Page(source.page().clone()), Some(source.clone()));
+        q.push(Update::Page(Arc::new(crate::model::Page { document: 50, ..Default::default() })));
+        let (_, first) = q.pop_envelope().unwrap();
+        let Update::Page(page) = first.update else { panic!("page expected") };
+        assert!(Arc::ptr_eq(&page, first.source.unwrap().page()));
+        assert!(Arc::ptr_eq(&page, source.page()));
+        let (document, legacy) = q.pop_envelope().unwrap();
+        assert_eq!(document, 50);
+        assert!(legacy.source.is_none());
+    }
+
+    #[test]
     fn frames_are_bounded_and_semantic_updates_are_lossless() {
         let mut q = Mailbox::default();
         for n in 0..100 {

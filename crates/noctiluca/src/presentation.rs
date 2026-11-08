@@ -463,3 +463,33 @@ mod narrow_source_tests {
         assert_eq!(shown.slots[0].region, slot);
     }
 }
+
+#[cfg(test)]
+mod source_tests {
+    use super::*;
+    use crate::model::{Revisions, build_source};
+    use crate::testing::PageBuilder;
+    #[test]
+    fn source_dependencies_reuse_equal_relations_but_invalidate_changed_ancestry() {
+        let mut builder = PageBuilder::new("https://example.test/", "source", 400.0, 400.0);
+        let left = builder.element(builder.body(), "DIV", &[], &[], None);
+        let right = builder.element(builder.body(), "DIV", &[], &[], None);
+        builder.text(left, "Same words", crate::engine::Rect::new(0.0, 0.0, 120.0, 18.0));
+        let mut snapshot = builder.snapshot();
+        let a = build_source(&snapshot, &mut Revisions::new());
+        let equal = build_source(&snapshot, &mut Revisions::new());
+        let mut presentation = Presentation::default();
+        let first = presentation.update_source(&a, View::Projection, 40, &Marks::default());
+        let same = presentation.update_source(&equal, View::Projection, 40, &Marks::default());
+        assert!(Rc::ptr_eq(&first, &same));
+        let parents = snapshot.dom["documents"][0]["nodes"]["parentIndex"].as_array_mut().unwrap();
+        for parent in parents { if parent.as_u64() == Some(left as u64) { *parent = serde_json::json!(right); } }
+        let changed = build_source(&snapshot, &mut Revisions::new());
+        assert_eq!(a.page(), changed.page());
+        let next = presentation.update_source(&changed, View::Projection, 40, &Marks::default());
+        assert!(!Rc::ptr_eq(&same, &next));
+        assert_eq!(same.lines, next.lines);
+        let legacy = presentation.update_shared(changed.page(), View::Projection, 40, &Marks::default());
+        assert!(!Rc::ptr_eq(&next, &legacy));
+    }
+}

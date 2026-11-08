@@ -34,6 +34,10 @@ use std::sync::Arc;
 
 use serde_json::Value;
 
+mod source;
+pub use source::SourcePage;
+use source::{Extraction, Origins, RunLocation};
+
 use crate::clean::{clean, clean_inline, clean_pre, truncate};
 use crate::engine::{NodeId, PageSnapshot, Rect};
 
@@ -959,7 +963,7 @@ struct Dom {
     /// Never inherited: positioned descendants can escape that clip.
     overflow_clipped: Vec<bool>,
     /// The [screen-reader twins](Twin): each element of a pair.
-    twins: HashMap<usize, Twin>,
+    twins: HashMap<usize, (Twin, usize)>,
     /// Elements by their `id`, the first of each.
     ids: HashMap<String, usize>,
     /// Each layout object's paint order (`paintOrders`): boxes painted
@@ -1388,7 +1392,7 @@ fn digits(text: &str) -> String {
 /// marked `aria-hidden="true"` that shows, whose texts have the same
 /// digits, at least one. A hidden hint has no digits its sibling shows,
 /// so it stays hidden.
-fn twins(dom: &Dom) -> HashMap<usize, Twin> {
+fn twins(dom: &Dom) -> HashMap<usize, (Twin, usize)> {
     let mut out = HashMap::new();
     let hidden = |n: usize| {
         dom.attr(n, "aria-hidden")
@@ -1420,8 +1424,8 @@ fn twins(dom: &Dom) -> HashMap<usize, Twin> {
                 && digits(&dom.raw_text(s)) == said
         });
         if let Some(shown) = shown {
-            out.insert(i, Twin::Spoken);
-            out.insert(shown, Twin::Shown);
+            out.insert(i, (Twin::Spoken, shown));
+            out.insert(shown, (Twin::Shown, i));
         }
     }
     out
@@ -1816,6 +1820,7 @@ const SKIPPED: &[&str] = &[
 ];
 
 struct Walker<'a> {
+    source: Option<Extraction>,
     dom: &'a Dom,
     ax: &'a Ax<'a>,
     page: Page,
@@ -1831,7 +1836,7 @@ struct Walker<'a> {
 }
 
 impl Walker<'_> {
-    fn push(&mut self, run: Run, rect: Option<Rect>) {
+    fn push(&mut self, run: Run, rect: Option<Rect>, node: usize) {
         // A box with no area (Chrome gives some text, an empty inline or
         // an icon's pseudo-element one at the page's origin) says nothing
         // about where the text is: in the union it would stretch the block
@@ -1852,6 +1857,7 @@ impl Walker<'_> {
                     && !run.text.starts_with(char::is_whitespace)
                 {
                     self.runs.push(Run::plain(" "));
+                    if let Some(source) = &mut self.source { source.runs.push(vec![None]); }
                 }
             }
             self.last = Some(rect);
@@ -1868,19 +1874,26 @@ impl Walker<'_> {
                     && last.picture.is_none()
                     && run.picture.is_none() =>
             {
-                last.text.push_str(&run.text)
+                last.text.push_str(&run.text);
+                if let Some(source) = &mut self.source {
+                    source.runs.last_mut().unwrap().extend(run.text.chars().map(|_| Some(node)));
+                }
             }
-            _ => self.runs.push(run),
+            _ => {
+                if let Some(source) = &mut self.source { source.runs.push(run.text.chars().map(|_| Some(node)).collect()); }
+                self.runs.push(run);
+            },
         }
     }
 
     /// End the block being gathered, as `context` says what it is.
     fn flush(&mut self, context: &Context) {
         let mut runs = std::mem::take(&mut self.runs);
+        let mut origins = self.source.as_mut().map(|s| std::mem::take(&mut s.runs));
         let rect = self.rect.take();
         self.last = None;
         if !context.pre {
-            tidy(&mut runs);
+            tidy_origins(&mut runs, origins.as_mut());
         }
         if runs.iter().all(|r| r.text.trim().is_empty()) {
             return;
@@ -1897,6 +1910,9 @@ impl Walker<'_> {
             other => other.clone(),
         };
         let rect = rect.unwrap_or(context.frame);
+        if let (Some(source), Some(origins)) = (&mut self.source, origins) {
+            source.blocks.insert(self.page.blocks.len(), origins);
+        }
         self.page.blocks.push(Block {
             kind,
             runs,
@@ -1972,7 +1988,7 @@ impl Walker<'_> {
                     picture: None,
                     twin: context.twin,
                 };
-                self.push(run, dom.rect(i));
+                self.push(run, dom.rect(i), i);
             }
             1 => self.element(i, context),
             // The document, shadow roots, and anything else with children.
@@ -2008,6 +2024,7 @@ impl Walker<'_> {
                         ..Run::default()
                     },
                     None,
+                    i,
                 );
             }
             return;
@@ -2129,7 +2146,7 @@ impl Walker<'_> {
         }
         let mut inner = context.clone();
         if let Some(twin) = dom.twins.get(&i) {
-            inner.twin = Some(*twin);
+            inner.twin = Some(twin.0);
         }
         let role_attr = dom.attr(i, "role").unwrap_or_default().to_ascii_lowercase();
         if dom
@@ -2763,7 +2780,7 @@ impl Walker<'_> {
                 silent: false,
                 ..context.clone()
             };
-            let mut runs = self.inline(child, &inner);
+            let (mut runs, _) = self.inline(child, &inner);
             tidy(&mut runs);
             if runs.is_empty() {
                 continue;
@@ -2999,18 +3016,20 @@ impl Walker<'_> {
     fn table(&mut self, i: usize, context: &Context) -> Option<Table> {
         let dom = self.dom;
         let mut table = Table::default();
+        let block = self.page.blocks.len();
+        let mut cells = Vec::new();
         let mut stack: Vec<usize> = dom.children[i].iter().rev().copied().collect();
         while let Some(n) = stack.pop() {
             match dom.name[n].as_str() {
                 "TABLE" => continue,
                 "CAPTION" => {
-                    table.caption = self
-                        .inline(n, context)
-                        .iter()
-                        .map(|r| r.text.as_str())
-                        .collect::<String>()
-                        .trim()
-                        .to_string()
+                    let (runs, origins) = self.inline(n, context);
+                    let text: String = runs.iter().map(|r| r.text.as_str()).collect();
+                    let start = text.chars().take_while(|c| c.is_whitespace()).count();
+                    table.caption = text.trim().to_string();
+                    if let Some(origins) = origins {
+                        cells.push((RunLocation::Caption { block }, origins.into_iter().flatten().skip(start).take(table.caption.chars().count()).collect()));
+                    }
                 }
                 "TR" => {
                     let mut row = Vec::new();
@@ -3019,8 +3038,13 @@ impl Walker<'_> {
                         if !(header || dom.name[cell] == "TD") || dom.layout[cell].is_none() {
                             continue;
                         }
-                        let mut runs = self.inline(cell, context);
-                        tidy(&mut runs);
+                        let (mut runs, mut origins) = self.inline(cell, context);
+                        tidy_origins(&mut runs, origins.as_mut());
+                        if let Some(origins) = origins {
+                            for (run, origins) in origins.into_iter().enumerate() {
+                                cells.push((RunLocation::Cell { block, row: table.rows.len(), cell: row.len(), run }, origins));
+                            }
+                        }
                         row.push(Cell {
                             runs,
                             header,
@@ -3034,12 +3058,17 @@ impl Walker<'_> {
                 _ => stack.extend(dom.children[n].iter().rev()),
             }
         }
-        (!table.rows.is_empty()).then_some(table)
+        if !table.rows.is_empty() {
+            if let Some(source) = &mut self.source { source.cells.extend(cells); }
+            Some(table)
+        } else { None }
     }
 
     /// The text runs of node `i`, its blocks run together: a cell's.
-    fn inline(&mut self, i: usize, context: &Context) -> Vec<Run> {
+    fn inline(&mut self, i: usize, context: &Context) -> (Vec<Run>, Option<Origins>) {
         let saved_runs = std::mem::take(&mut self.runs);
+        let saved_origins = self.source.as_mut().map(|s| std::mem::take(&mut s.runs));
+        let mut origins = self.source.as_ref().map(|_| Origins::new());
         let saved_rect = self.rect.take();
         let blocks = self.page.blocks.len();
         let inner = Context {
@@ -3053,7 +3082,10 @@ impl Walker<'_> {
         // its text.
         let made: Vec<Block> = self.page.blocks.drain(blocks..).collect();
         let mut runs = Vec::new();
-        for block in made {
+        for (index, block) in made.into_iter().enumerate() {
+            let original = self.source.as_mut().and_then(|s| s.blocks.remove(&(blocks + index)));
+            let start = runs.len();
+            let node = self.dom.backend.iter().position(|&n| n == block.node);
             match block.kind {
                 BlockKind::Control(index) => runs.push(Run {
                     text: format!("[{}] ", self.page.controls[index].name),
@@ -3080,11 +3112,23 @@ impl Walker<'_> {
                     runs.push(Run::plain(" "));
                 }
             }
+            if let Some(origins) = &mut origins {
+                if let Some(original) = original {
+                    origins.extend(original);
+                    origins.push(vec![None]);
+                } else {
+                    origins.extend(runs[start..].iter().map(|r| r.text.chars().map(|_| node).collect()));
+                }
+            }
+        }
+        if let Some(source) = &mut self.source {
+            origins.as_mut().unwrap().append(&mut source.runs);
+            source.runs = saved_origins.unwrap();
         }
         runs.append(&mut self.runs);
         self.runs = saved_runs;
         self.rect = saved_rect;
-        runs
+        (runs, origins)
     }
 }
 
@@ -3387,40 +3431,54 @@ fn dom_role(dom: &Dom, i: usize) -> Option<Role> {
 /// Collapse whitespace across runs as a browser does: one space between
 /// words, none at the ends; line breaks of the page stay.
 fn tidy(runs: &mut Vec<Run>) {
+    tidy_origins(runs, None);
+}
+
+fn tidy_origins(runs: &mut Vec<Run>, mut origins: Option<&mut Origins>) {
     let mut space = true;
-    for run in runs.iter_mut() {
+    for (index, run) in runs.iter_mut().enumerate() {
         let mut text = String::with_capacity(run.text.len());
-        for c in run.text.chars() {
+        let mut kept = origins.as_ref().map(|_| Vec::new());
+        for (character, c) in run.text.chars().enumerate() {
             if c == '\n' {
                 while text.ends_with(' ') {
                     text.pop();
+                    if let Some(kept) = &mut kept { kept.pop(); }
                 }
                 text.push('\n');
                 space = true;
             } else if c == ' ' {
-                if !space {
-                    text.push(' ');
-                    space = true;
-                }
+                if space { continue; }
+                text.push(' ');
+                space = true;
             } else {
                 text.push(c);
                 space = false;
             }
+            if let (Some(kept), Some(origins)) = (&mut kept, &origins) { kept.push(origins[index][character]); }
         }
         run.text = text;
+        if let (Some(origins), Some(kept)) = (&mut origins, kept) { origins[index] = kept; }
     }
     while let Some(last) = runs.last_mut() {
         let trimmed = last.text.trim_end_matches([' ', '\n']).len();
         last.text.truncate(trimmed);
+        if let Some(origins) = &mut origins { origins.last_mut().unwrap().truncate(last.text.chars().count()); }
         if last.text.is_empty() {
             runs.pop();
-        } else {
-            break;
+            if let Some(origins) = &mut origins { origins.pop(); }
+        } else { break; }
+    }
+    for i in (0..runs.len()).rev() {
+        if runs[i].text.is_empty() {
+            runs.remove(i);
+            if let Some(origins) = &mut origins { origins.remove(i); }
         }
     }
-    runs.retain(|r| !r.text.is_empty());
     if let Some(first) = runs.first_mut() {
+        let count = first.text.chars().take_while(|&c| c == '\n').count();
         first.text = first.text.trim_start_matches(['\n']).to_string();
+        if let Some(origins) = &mut origins { origins[0].drain(..count); }
     }
 }
 
@@ -3878,11 +3936,27 @@ pub fn build_with(
     revisions: &mut Revisions,
     appended: &HashSet<NodeId>,
 ) -> Page {
+    build_parts(snapshot, revisions, appended, false).0
+}
+
+/// Build an immutable page paired with its exact source relationships.
+pub fn build_source(snapshot: &PageSnapshot, revisions: &mut Revisions) -> SourcePage {
+    build_source_with(snapshot, revisions, &HashSet::new())
+}
+
+/// [`build_source`], recognizing the engine's appended scroll boxes as live logs.
+pub fn build_source_with(snapshot: &PageSnapshot, revisions: &mut Revisions, appended: &HashSet<NodeId>) -> SourcePage {
+    let (page, relations) = build_parts(snapshot, revisions, appended, true);
+    SourcePage { page: Arc::new(page), relations: Arc::new(relations.unwrap()) }
+}
+
+fn build_parts(snapshot: &PageSnapshot, revisions: &mut Revisions, appended: &HashSet<NodeId>, source: bool) -> (Page, Option<source::SourceRelations>) {
     let dom = Dom::parse(&snapshot.dom);
     let ax = Ax::parse(&snapshot.ax);
     let root = dom.backend.first().copied().unwrap_or(-1);
     let document = revisions.document(&dom.url, root);
     let mut walker = Walker {
+        source: source.then(Extraction::default),
         dom: &dom,
         ax: &ax,
         page: Page {
@@ -3938,7 +4012,8 @@ pub fn build_with(
             page.regions[r].collapsible = false;
         }
     }
-    page
+    let relations = walker.source.map(|s| s.finish(&dom, &page));
+    (page, relations)
 }
 
 #[cfg(test)]
