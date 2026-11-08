@@ -7,3 +7,23 @@
 # them (without their file locations), and why; `items = ["*"]` takes every
 # item of the lint. Once the version is on crates.io the entries are spent:
 # the script says so, and they are removed.
+
+# Documentation-only breaks not represented by a cargo-semver-checks lint.
+# These are not lint allowances: known_breaks() reads only [[break]]. The
+# exact public API snapshots and CHANGELOG migration note expose this change.
+# 0.1.0 is already Cargo-incompatible with the published 0.0.x versions.
+[[manual_break]]
+crate = "rs-rich-ext"
+version = "0.1.0"
+item = "rich_ext::surface::Cell::width"
+from = "u8"
+to = "u16"
+reason = "Caller-measured atoms may occupy more than 255 columns; migrate width variables/conversions to u16. Cell::new retains its u8 argument."
+
+[[manual_break]]
+crate = "rs-rich-intuituive"
+version = "0.1.0"
+item = "intuituive::screen::Cell::width"
+from = "u8"
+to = "u16"
+reason = "The re-exported surface Cell width widens; migrate width variables/conversions to u16."

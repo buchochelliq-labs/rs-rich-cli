@@ -11,4 +11,7 @@
 //! a plain [`Surface`](rich_ext::surface::Surface) user gets, and the
 //! benchmark gate measures it.
 
-pub use rich_ext::surface::{Cell, PaintStats, PaintStrategy, Painter, Rect, Screen};
+pub use rich_ext::surface::{
+    Cell, PaintStats, PaintStrategy, Painter, PremeasuredCell, PremeasuredCellError,
+    PremeasuredError, Rect, Screen,
+};

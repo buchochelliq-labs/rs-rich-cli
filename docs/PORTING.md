@@ -431,6 +431,14 @@ far it is, and what tests it. Status, here: 🟢 shipped and tested ·
 | renderables | charts, tables, badges, workflows, diffs and test reports, KPIs, QR codes, `inspect` | 🟢 | `charts*.rs`, `tables.rs`, `virtual_tables.rs`, `badges.rs`, `workflow.rs`, `diff.rs`, `kpi.rs`, `qr.rs`, `inspect.rs` |
 | QA and accessibility | snapshots, the conformance kit, capabilities and fidelity, accessibility checks, ANSI explain | 🟢 | `qa.rs`, `snapshots.rs`, `conformance.rs`, `capabilities.rs`, `a11y.rs`, `ansi_explain.rs` |
 
+The surface also accepts external premeasured cell grids (0.1.0): atomic
+validation, opaque text and `u16` spans, complete-atom clipping, and fullscreen
+painting with DECAWM/CUP. This separate import does not alter native Draw parity
+or the faithful core. `surface/screen/premeasured_tests.rs` covers storage,
+provenance, damage, cursor certainty and inline rejection; `surface.rs` tests
+writer-error, panic and teardown restoration. Text/segment/SVG exports remain
+lossy for imported geometry.
+
 Each area has its page in [the guide](guide/ext/index.md).
 
 ### rs-rich-marketplace
@@ -472,7 +480,7 @@ Each area has its page in [the guide](guide/ext/index.md).
 | area | what it offers | status | tests |
 |---|---|:---:|---|
 | components and drivers | `Component`, blocking `run` and the `EventLoop`; the non-terminal policy | 🟢 | `event_loop.rs`, `compose.rs`, `push.rs` |
-| the session | raw mode, alternate screen, mouse (SGR-Pixels, 0.0.24), paste and hand-off, restored on every exit; crossterm, termion or termwiz | 🟢 | `pty*.rs` (on a real PTY), `mouse_actions.rs`, `host.rs` |
+| the session | raw mode, alternate screen, mouse (SGR-Pixels, 0.0.24), paste and hand-off, restored on every exit; fullscreen autowrap restoration and frame write/flush serialized with suspend/leave (0.1.0); crossterm, termion or termwiz | 🟢 | `pty*.rs` (on a real PTY), `mouse_actions.rs`, `host.rs` |
 | the components | pickers, inputs, forms, pagers, explorers, approval queues, overlays | 🟢 | `pickers.rs`, `select.rs`, `input_confirm.rs`, `form_*.rs`, `explore*.rs`, `overlays.rs`, `approve_jump.rs`, `wide_tables.rs` |
 | keys and editing | keymaps and rebinding, the text buffer, vim keys | 🟢 | `rebind*.rs`, `edit_under_load.rs` |
 
@@ -480,7 +488,7 @@ Each area has its page in [the guide](guide/ext/index.md).
 
 | area | what it offers | status | tests |
 |---|---|:---:|---|
-| the framework | signals, the retained tree, layout, focus, the cell screen and its paint strategies, screens and pop-ups, tasks | 🟢 | 131 test files under `tests/`, among them `app.rs`, `layout.rs`, `flex*.rs`, `driver.rs`; the `versus_ratatui` and `paint_bench` gates |
+| the framework | signals, the retained tree, layout, focus, the cell screen and its paint strategies, screens and pop-ups, tasks; full-canvas premeasured import and fallible Driver painting (0.1.0; fullscreen only) | 🟢 | 131 test files under `tests/`, among them `app.rs`, `layout.rs`, `flex*.rs`, `driver.rs`, `premeasured.rs`; the `versus_ratatui` and `paint_bench` gates |
 | widgets | the [widget index](guide/intuituive/widget-index.md): lists, tables, trees, tabs, inputs, text editing, controls, charts, Markdown, logs, a diff view (#799) | 🟡 the audit's prioritised gaps all shipped in 0.0.24 (#797 to #815); what it still names: `DataTable` row labels and cells that hold renderables, separators in an option list, and highlighting state carried into a `TextArea`'s view from above it ([the audit](design/textual-parity.md)) | per widget, e.g. `components.rs`, `controls.rs`, `list_*.rs`, `table*.rs`, `markdown_stream.rs`, `log_view.rs` |
 | themes and keymaps | stylesheets, a semantic theme with Textual's palettes (#801), user keymaps (#806) | 🟡 #812's first three slices shipped in 0.0.24 (child combinators, `&` nesting, `$variables`; structural and theme pseudo-classes; `margin`, `visibility`, scrollbar colours); still missing: `offset`, `opacity` and `tint`, `outline`, `hatch`, `keyline`, the scrollbar's hover colour and size, `:inline` and `:first-of-type` ([the audit](design/textual-parity.md#framework-features)) | `colors.rs`, `bindings.rs`, `keys.rs`, `keymap.rs`, `stylesheet.rs`, `stylesheet_bounds.rs`, `theme_styles.rs` |
 | plugins | `art`, `pcm`/`audio`, `wav`, `watch`, `files`, `archive`, `viz`, `micro` | 🟢 | `files*.rs`, `audio_*.rs`, `charts*.rs`, `music.rs` |
