@@ -226,6 +226,16 @@ moved, on another animation frame or written over are drawn again, and an
 overlay that went away has its cells repainted. The cells under a
 placement are what a terminal without graphics shows.
 
+Graphics sources receive the composed `Screen` through
+`PlacementSource::placements_from_screen(&screen, cell_pixels)`. The stock
+`image_graphics()` source borrows surviving cells and their styles to find
+placements, including clipping and overlays. Manual painters can call this
+method too. Existing sources need no changes: its provided implementation
+exports the screen to a `Frame` and calls `placements_with_metrics`, which
+continues to default to the required `placements` method. Frame-based callers
+remain supported. As before, manual painters must call `output_written()` only
+after successfully writing the ordered drawing and cleanup output.
+
 A file manager's other parts are in rs-rich-ext: `rich_ext::filetype`
 (Yazi's icons and type colours, MIME types, a Nerd Font check) and
 `rich_ext::fs` (local times, owner and group names); see

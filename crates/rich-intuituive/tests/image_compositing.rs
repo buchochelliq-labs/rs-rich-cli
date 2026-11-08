@@ -146,6 +146,21 @@ mod scenes {
     };
     use std::{cell::Cell, rc::Rc, time::Duration};
 
+    // Required Frame methods only: the provided Screen adapter is the reference.
+    struct FrameSource(std::sync::Arc<dyn rich_ext::frame::PlacementSource>);
+    impl rich_ext::frame::PlacementSource for FrameSource {
+        fn placements(&self, frame: &rich_ext::frame::Frame) -> Vec<rich_ext::frame::Placement> {
+            self.0.placements(frame)
+        }
+        fn placements_with_metrics(
+            &self,
+            frame: &rich_ext::frame::Frame,
+            metrics: Option<(u16, u16)>,
+        ) -> Vec<rich_ext::frame::Placement> {
+            self.0.placements_with_metrics(frame, metrics)
+        }
+    }
+
     type SceneState = (bool, usize, bool);
     type SceneHandle = Rc<Cell<Option<intuituive::Signal<SceneState>>>>;
 
@@ -153,6 +168,7 @@ mod scenes {
         picture: Picture,
         pixels: Pixels,
         state: SceneState,
+        frame_reference: bool,
     ) -> (intuituive::Driver, SceneHandle) {
         let handle = Rc::new(Cell::new(None));
         let copy = handle.clone();
@@ -181,7 +197,11 @@ mod scenes {
                 lines.into_iter().skip(scroll).collect()
             })
         })
-        .graphics(image_graphics());
+        .graphics(if frame_reference {
+            std::sync::Arc::new(FrameSource(image_graphics()))
+        } else {
+            image_graphics()
+        });
         let mut driver = app.driver(8, 4);
         driver.set_cell_pixels(Some((8, 16)));
         (driver, handle)
@@ -213,7 +233,7 @@ mod scenes {
             |x, y| Rgba([(x * 3) as u8, (y * 3) as u8, 20, 255]),
         )));
         for pixels in [Pixels::Cells, Pixels::Kitty, Pixels::Sixel, Pixels::Iterm] {
-            let (mut driver, state) = make(picture.clone(), pixels, (false, 0, true));
+            let (mut driver, state) = make(picture.clone(), pixels, (false, 0, true), false);
             let mut terminal = Terminal::new(4, 8);
             for (step, shown) in [
                 (false, 0, true),
@@ -239,7 +259,7 @@ mod scenes {
                 terminal
                     .process(driver.render().unwrap_or_default().as_bytes())
                     .unwrap();
-                let (mut fresh, _) = make(picture.clone(), pixels, shown);
+                let (mut fresh, _) = make(picture.clone(), pixels, shown, true);
                 fresh.resize(width, height);
                 fresh.update(Duration::ZERO);
                 let mut expected = Terminal::new(height, width);

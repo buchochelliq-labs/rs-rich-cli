@@ -157,6 +157,23 @@ fn checkerboard_fragment_budget_preserves_cells_without_native_overlay() {
         }
         let frame = Frame::from_segments(&segments);
         assert!(image_graphics().placements(&frame).is_empty());
+        let mut screen = rich_ext::surface::Screen::new(32, 8);
+        let rows: Vec<Vec<_>> = (0..frame.height())
+            .map(|row| {
+                frame
+                    .row(row)
+                    .iter()
+                    .map(|run| {
+                        Segment::new(
+                            frame.run_text(run),
+                            frame.styles().get(run.style()).cloned(),
+                        )
+                    })
+                    .collect()
+            })
+            .collect();
+        screen.write_lines(screen.area(), &rows);
+        assert!(assert_screen_parity(image_graphics().as_ref(), &screen, None).is_empty());
         assert_eq!(frame.height(), 8);
     }
 }
@@ -317,6 +334,7 @@ fn adjacent_same_view_instances_survive_screen_line_coalescing() {
                     assert_eq!(frame.row(0)[0].cells(), usize::from(cols) * 3);
                 }
                 let placements = source.placements(&frame);
+                assert_screen_parity(source.as_ref(), &screen, None);
                 assert_eq!(placements.len(), 3, "{pixels:?} {cols}x{rows}");
                 for (index, p) in placements.iter().enumerate() {
                     assert_eq!(
@@ -834,6 +852,13 @@ fn final_output_retains_resources_until_successful_write() {
         ) -> Vec<rich_ext::frame::graphics::Placement> {
             self.inner.placements_with_metrics(frame, cell)
         }
+        fn placements_from_screen(
+            &self,
+            screen: &rich_ext::surface::Screen,
+            cell: Option<(u16, u16)>,
+        ) -> Vec<rich_ext::frame::graphics::Placement> {
+            self.inner.placements_from_screen(screen, cell)
+        }
         fn reconcile(&self, retained: &[rich_ext::frame::graphics::Placement]) -> String {
             self.inner.reconcile(retained)
         }
@@ -1001,7 +1026,9 @@ fn compact_and_legacy_provenance_survive_two_dimensional_viewport_blits_and_move
                     segments.extend(line);
                     segments.push(Segment::line());
                 }
-                let placements = image_graphics().placements(&Frame::from_segments(&segments));
+                let source = image_graphics();
+                let placements = source.placements(&Frame::from_segments(&segments));
+                assert_screen_parity(source.as_ref(), &screen, None);
                 let geometry = placements
                     .iter()
                     .map(|p| (p.column, p.row, p.cols, p.rows))
@@ -1033,5 +1060,135 @@ fn compact_and_legacy_provenance_survive_two_dimensional_viewport_blits_and_move
                 reference = Some((geometry, raster));
             }
         }
+    }
+}
+
+// The Frame adapter is an independent transport reference for the same composed
+// cells. Compare encoded crops as well as identity and coverage.
+fn assert_screen_parity(
+    source: &dyn rich_ext::frame::PlacementSource,
+    screen: &rich_ext::surface::Screen,
+    metrics: Option<(u16, u16)>,
+) -> Vec<rich_ext::frame::Placement> {
+    let segments: Vec<_> = screen
+        .lines()
+        .into_iter()
+        .flat_map(|line| line.into_iter().chain([Segment::line()]))
+        .collect();
+    let expected = source.placements_with_metrics(&Frame::from_segments(&segments), metrics);
+    let actual = source.placements_from_screen(screen, metrics);
+    assert_eq!(actual.len(), expected.len());
+    for (a, b) in actual.iter().zip(&expected) {
+        assert!(a.same(b), "borrowed {a:?}, Frame {b:?}");
+        assert_eq!(a.graphic.in_cells(), b.graphic.in_cells());
+        assert_eq!(a.graphic.can_reuse_data(), b.graphic.can_reuse_data());
+        assert_eq!(a.graphic.draw(a.frame), b.graphic.draw(b.frame));
+    }
+    actual
+}
+
+#[test]
+fn borrowed_screen_tracks_composition_mutation_compaction_and_metrics() {
+    use rich_ext::surface::{Rect, Screen};
+    for picture in [picture(), picture().bound(false)] {
+        for pixels in [Pixels::Kitty, Pixels::Iterm, Pixels::Sixel] {
+            let source = image_graphics();
+            let console = rich::Console::builder()
+                .width(32)
+                .color_system(Some(rich::ColorSystem::Truecolor))
+                .build();
+            let lines = picture.lines(
+                &console,
+                ImageView::new().fit(ImageFit::Stretch).pixels(pixels),
+                8,
+                4,
+            );
+            let mut original = Screen::new(8, 4);
+            original.write_lines(original.area(), &lines);
+            let mut screen = Screen::new(16, 6);
+            for crop in [
+                Rect::new(0, 0, 8, 4),
+                Rect::new(2, 1, 5, 2),
+                Rect::new(0, 1, 8, 3),
+                Rect::new(1, 0, 7, 4),
+            ] {
+                screen.clear(screen.area());
+                screen.blit(&original, crop, 1, 1);
+                screen.blit(&original, crop, 1 + crop.width, 1);
+                for metrics in [None, Some((8, 16)), Some((10, 20)), Some((0, 16)), None] {
+                    assert!(
+                        !assert_screen_parity(source.as_ref(), &screen, metrics).is_empty(),
+                        "{pixels:?} {crop:?} {metrics:?}"
+                    );
+                    screen.compact_styles();
+                    assert_screen_parity(source.as_ref(), &screen, metrics);
+                }
+                screen.clear(Rect::new(3, 2, 3, 2));
+                assert_screen_parity(source.as_ref(), &screen, None);
+                // Reuse the same table and cells after overwriting image metadata.
+                screen.write_lines(
+                    Rect::new(0, 0, 8, 2),
+                    &[vec![
+                        Segment::new("漢x\n界", lines[0][0].style.clone()),
+                        Segment::control("ignored"),
+                    ]],
+                );
+                assert_screen_parity(source.as_ref(), &screen, Some((8, 16)));
+                screen.clear(screen.area());
+                screen.compact_styles();
+                assert!(assert_screen_parity(source.as_ref(), &screen, None).is_empty());
+            }
+        }
+    }
+}
+
+#[test]
+fn borrowed_legacy_runs_keep_full_width_and_missing_provenance_fallback() {
+    use rich_art::picture::PictureTag;
+    use rich_ext::surface::{Rect, Screen};
+    let picture = picture();
+    let source = image_graphics();
+    for pixels in [Pixels::Iterm, Pixels::Sixel] {
+        let tag = PictureTag {
+            id: picture.id(),
+            version: picture.version(),
+            cols: 8,
+            rows: 2,
+            row: 0,
+            pixels,
+            fit: Some(ImageFit::Stretch),
+            anchor: intuituive::ImageAnchor::Center,
+        };
+        let mut screen = Screen::new(8, 2);
+        for text in ["abcdefgh", "漢字abcd"] {
+            screen.write_lines(
+                screen.area(),
+                &[vec![Segment::new(text, Some(tag.style()))]],
+            );
+            let placements = assert_screen_parity(source.as_ref(), &screen, None);
+            assert_eq!(placements.len(), 1);
+            assert_eq!(placements[0].cols, 8);
+            screen.clear(Rect::new(2, 0, 1, 1));
+            assert!(assert_screen_parity(source.as_ref(), &screen, None).is_empty());
+        }
+        // Separate writes can leave a joiner at a cell boundary. Frame measures
+        // the exported run as a whole, rather than adding stored cell widths.
+        screen.write_lines(
+            screen.area(),
+            &[vec![
+                Segment::new("a\u{200d}", Some(tag.style())),
+                Segment::new("bcdefgh", Some(tag.style())),
+            ]],
+        );
+        assert!(assert_screen_parity(source.as_ref(), &screen, None).is_empty());
+        let missing = PictureTag {
+            version: u32::MAX,
+            ..tag
+        };
+        screen.write_lines(
+            screen.area(),
+            &[vec![Segment::new("abcdefgh", Some(missing.style()))]],
+        );
+        assert!(assert_screen_parity(source.as_ref(), &screen, None).is_empty());
     }
 }

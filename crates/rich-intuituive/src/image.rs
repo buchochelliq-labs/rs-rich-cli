@@ -561,9 +561,12 @@ impl ImageRect {
 // screen can coalesce adjacent copies into one style run, so a column restart
 // begins another instance. Validate the entire run before accepting any spans;
 // malformed Kitty provenance must not become a legacy whole-width fallback.
-fn kitty_spans(text: &str, tag: &PictureTag, cells: usize) -> Option<Vec<std::ops::Range<usize>>> {
+fn kitty_spans(
+    mut chars: impl Iterator<Item = char>,
+    tag: &PictureTag,
+    cells: usize,
+) -> Option<Vec<std::ops::Range<usize>>> {
     use rich_art::kitty::{DIACRITICS, PLACEHOLDER};
-    let mut chars = text.chars();
     let row = *DIACRITICS.get(tag.row)?;
     if cells == 0 || chars.next()? != PLACEHOLDER || chars.next()? != row {
         return None;
@@ -611,6 +614,114 @@ impl PlacementSource for ImageGraphics {
         frame: &Frame,
         metrics: Option<(u16, u16)>,
     ) -> Vec<Placement> {
+        self.placements_from_rows(
+            (0..frame.height()).map(|row| {
+                frame.row(row).iter().map(|run| ImageRun {
+                    style: frame.styles().get(run.style()),
+                    cells: run.cells(),
+                    chars: frame.run_text(run).chars(),
+                })
+            }),
+            metrics,
+        )
+    }
+
+    fn placements_from_screen(
+        &self,
+        screen: &rich_ext::surface::Screen,
+        metrics: Option<(u16, u16)>,
+    ) -> Vec<Placement> {
+        self.placements_from_rows(
+            (0..screen.area().height).map(|row| screen_runs(screen, row)),
+            metrics,
+        )
+    }
+
+    fn reconcile(&self, retained: &[Placement]) -> String {
+        self.release_images(retained, true)
+    }
+
+    fn output_written(&self) {
+        self.retired
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clear();
+    }
+
+    fn release(&self, retained: &[Placement]) -> String {
+        self.release_images(retained, false)
+    }
+}
+
+// Both transports expose the same equal-style row runs. Character iterators
+// keep Kitty's source-coordinate validation independent of owned text storage.
+struct ImageRun<'a, C> {
+    style: Option<&'a rich::Style>,
+    cells: usize,
+    chars: C,
+}
+
+fn screen_runs(
+    screen: &rich_ext::surface::Screen,
+    row: u16,
+) -> impl Iterator<Item = ImageRun<'_, impl Iterator<Item = char>>> {
+    let mut x = 0;
+    std::iter::from_fn(move || {
+        let width = screen.area().width;
+        while x < width && screen.cell(x, row).is_continuation() {
+            x += 1;
+        }
+        if x == width {
+            return None;
+        }
+        let start = x;
+        let id = screen.cell(x, row).style;
+        let mut cells = 0;
+        let mut joined = false;
+        while x < width {
+            let cell = screen.cell(x, row);
+            if !cell.is_continuation() {
+                if cell.style != id {
+                    break;
+                }
+                cells += usize::from(cell.width);
+                joined |= cell.text().contains(['\u{200d}', '\u{fe0f}']);
+            }
+            x += 1;
+        }
+        let end = x;
+        let chars = move || {
+            (start..end)
+                .filter_map(move |column| {
+                    let cell = screen.cell(column, row);
+                    (!cell.is_continuation()).then_some(cell.text())
+                })
+                .flat_map(str::chars)
+        };
+        // A joiner or selector may cross a cell boundary after composition.
+        // Match Frame's width of the complete exported run in that rare case.
+        if joined {
+            cells = rich::cells::cell_len(&chars().collect::<String>());
+        }
+        Some(ImageRun {
+            style: screen.style(id),
+            cells,
+            chars: chars(),
+        })
+    })
+}
+
+impl ImageGraphics {
+    fn placements_from_rows<'a, Rows, Runs, Chars>(
+        &self,
+        rows: Rows,
+        metrics: Option<(u16, u16)>,
+    ) -> Vec<Placement>
+    where
+        Rows: IntoIterator<Item = Runs>,
+        Runs: IntoIterator<Item = ImageRun<'a, Chars>>,
+        Chars: Iterator<Item = char>,
+    {
         let cell = metrics
             .filter(|&(w, h)| w > 0 && h > 0)
             .map(|(w, h)| rich_art::graphics::CellPixels::new(w.into(), h.into()))
@@ -623,11 +734,11 @@ impl PlacementSource for ImageGraphics {
         let mut rejected = std::collections::HashSet::new();
         let mut overlay_count = 0;
         let mut overlay_overflow = false;
-        for row in 0..frame.height() {
+        for (row, runs) in rows.into_iter().enumerate() {
             let mut spans: Vec<ImageRect> = Vec::new();
             let mut column = 0;
-            for run in frame.row(row) {
-                let style = frame.styles().get(run.style());
+            for run in runs {
+                let style = run.style;
                 let tag = style.and_then(PictureTag::of);
                 if let Some(tag) = tag.filter(|t| t.cols > 0 && t.rows > t.row) {
                     let background = style.and_then(PictureTag::background_of);
@@ -657,7 +768,7 @@ impl PlacementSource for ImageGraphics {
                         }
                     };
                     if tag.pixels == Pixels::Kitty {
-                        if let Some(ranges) = kitty_spans(frame.run_text(run), &tag, run.cells()) {
+                        if let Some(ranges) = kitty_spans(run.chars, &tag, run.cells) {
                             let mut offset = 0;
                             for range in ranges {
                                 let cols = range.end - range.start;
@@ -671,15 +782,15 @@ impl PlacementSource for ImageGraphics {
                         // adjacent copies (notably 1x1 views), so each cell
                         // starts its own span until contiguous sources merge.
                         if x < tag.cols {
-                            for offset in 0..run.cells() {
+                            for offset in 0..run.cells {
                                 append(column + offset, x, 1, true);
                             }
                         }
-                    } else if run.cells() <= tag.cols {
-                        append(column, 0, run.cells(), false);
+                    } else if run.cells <= tag.cols {
+                        append(column, 0, run.cells, false);
                     }
                 }
-                column += run.cells();
+                column += run.cells;
             }
             let mut current = HashMap::new();
             for span in spans {
@@ -769,21 +880,6 @@ impl PlacementSource for ImageGraphics {
             }
         }
         out
-    }
-
-    fn reconcile(&self, retained: &[Placement]) -> String {
-        self.release_images(retained, true)
-    }
-
-    fn output_written(&self) {
-        self.retired
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .clear();
-    }
-
-    fn release(&self, retained: &[Placement]) -> String {
-        self.release_images(retained, false)
     }
 }
 
