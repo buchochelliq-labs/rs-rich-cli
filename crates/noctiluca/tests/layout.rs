@@ -1120,7 +1120,7 @@ fn source_dialog_layer(modal: bool) {
         driver.find_text("Choose").is_some(),
         "Escape hid a source-owned dialog without source change"
     );
-    for (snapshot, should_show) in [(hidden, false), (visible, true)] {
+    for (snapshot, should_show) in [(hidden, false), (visible.clone(), true)] {
         {
             let mut state = state.lock().unwrap();
             state.pages.insert("popup".into(), snapshot);
@@ -1140,6 +1140,54 @@ fn source_dialog_layer(modal: bool) {
             std::thread::sleep(Duration::from_millis(10));
         }
     }
+    if !modal {
+        let engine = FakeEngine::from_dir(
+            &std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/snapshots"),
+        )
+        .unwrap();
+        let state = engine.state.clone();
+        state.lock().unwrap().pages.insert("popup".into(), visible);
+        let policy = rich_intuituive::ImagePresentation::new(
+            rich_art::picture::Pixels::Kitty,
+            rich_intuituive::KittyFeatures {
+                unicode_placeholders: true,
+                native_animation: false,
+            },
+            rich_intuituive::PixelFormats::cells().with(rich_art::picture::Pixels::Kitty),
+        );
+        let mut pixels = noctiluca::app::app_with_presentation(
+            Box::new(engine),
+            Options {
+                config: Config::default(),
+                bookmarks: Bookmarks::default(),
+                url: Some("popup.html".into()),
+                view: Some(View::Pixels),
+                images: Some(Images::Kitty),
+                tunnel: None,
+                control: None,
+            },
+            policy,
+        )
+        .driver(120, 40);
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while !state.lock().unwrap().screencast {
+            pixels.settle();
+            assert!(Instant::now() < deadline, "pixel view did not start");
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        pixels.settle();
+        assert!(
+            pixels.find_text("Dialog content").is_none(),
+            "pixel view duplicated the projected dialog"
+        );
+        assert!(
+            !pixels
+                .accessibility()
+                .iter()
+                .any(|node| node.name.contains("Dialog content")),
+            "pixel view exposed a duplicate projected dialog"
+        );
+    }
 }
 
 #[test]
@@ -1150,4 +1198,109 @@ fn source_nonmodal_dialog_is_shown_as_an_interactive_layer() {
 #[test]
 fn source_modal_dialog_blocks_outside_and_keeps_its_actions() {
     source_dialog_layer(true);
+}
+
+#[test]
+fn opening_and_closing_a_fixed_dialog_keeps_the_underlay_scroll_anchor() {
+    use noctiluca::{
+        app::{Options, app},
+        bookmarks::Bookmarks,
+        config::{Config, Images, View},
+        engine::{EngineEvent, Rect},
+        testing::{FakeEngine, PageBuilder},
+    };
+    use std::time::{Duration, Instant};
+    let mut p = PageBuilder::new("https://example.test/anchor.html", "Anchor", 960.0, 4000.0);
+    p.view(0.0, 720.0);
+    let body = p.body();
+    for i in 0..80 {
+        let y = i as f64 * 40.0;
+        let block = p.element(body, "P", &[], &[], Some(Rect::new(0.0, y, 160.0, 18.0)));
+        p.text(
+            block,
+            &format!("Anchor item {i:02}"),
+            Rect::new(0.0, y, 150.0, 18.0),
+        );
+    }
+    let panel = p.element(
+        body,
+        "DIV",
+        &[("role", "dialog")],
+        &[
+            ("position", "fixed"),
+            ("background-color", "rgb(55, 57, 82)"),
+        ],
+        Some(Rect::new(400.0, 72.0, 400.0, 532.0)),
+    );
+    p.paint(panel, 100);
+    p.text(panel, "Popup visible", Rect::new(410.0, 100.0, 150.0, 18.0));
+    let visible = p.snapshot();
+    p.set_style(panel, "opacity", "0");
+    let hidden = p.snapshot();
+    let engine = FakeEngine::from_dir(
+        &std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/snapshots"),
+    )
+    .unwrap();
+    let state = engine.state.clone();
+    state
+        .lock()
+        .unwrap()
+        .pages
+        .insert("anchor".into(), hidden.clone());
+    let mut driver = app(
+        Box::new(engine),
+        Options {
+            config: Config::default(),
+            bookmarks: Bookmarks::default(),
+            url: Some("anchor.html".into()),
+            view: Some(View::Projection),
+            images: Some(Images::None),
+            tunnel: None,
+            control: None,
+        },
+    )
+    .driver(120, 40);
+    let deadline = Instant::now() + Duration::from_secs(5);
+    while driver.find_text("Anchor item 00").is_none() {
+        driver.settle();
+        assert!(Instant::now() < deadline);
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    for _ in 0..20 {
+        driver.press("j");
+    }
+    driver.settle();
+    let before = driver.screen().plain();
+    let marker = before
+        .iter()
+        .find_map(|line| {
+            line.split_whitespace()
+                .collect::<Vec<_>>()
+                .windows(3)
+                .find(|w| w[0] == "Anchor" && w[1] == "item")
+                .map(|w| w.join(" "))
+        })
+        .expect("scrolled anchor");
+    assert_ne!(marker, "Anchor item 00");
+    for (snapshot, popup) in [(visible, true), (hidden, false)] {
+        {
+            let mut state = state.lock().unwrap();
+            state.pages.insert("anchor".into(), snapshot);
+            state.events.push(EngineEvent::Changed);
+        }
+        let deadline = Instant::now() + Duration::from_secs(5);
+        loop {
+            driver.settle();
+            if driver.find_text("Popup visible").is_some() == popup {
+                break;
+            }
+            assert!(Instant::now() < deadline, "popup state did not change");
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        assert!(
+            driver.find_text(&marker).is_some(),
+            "lost {marker} on popup={popup}: {:?}",
+            driver.screen().plain()
+        );
+    }
 }

@@ -205,11 +205,13 @@ fn nested_owner_modals_restore_each_focus_and_preserve_a_live_draft() {
         let outer = signal(false);
         let inner = signal(false);
         let draft = signal(String::new());
-        handles.set(Some((outer, inner, draft)));
+        let caption = signal(String::from("before"));
+        handles.set(Some((outer, inner, draft, caption)));
         layers([
             label("base").focusable().name("base"),
             layers([
                 input(draft).name("draft"),
+                text(move || caption.get()),
                 label("inner")
                     .focusable()
                     .name("inner")
@@ -223,12 +225,16 @@ fn nested_owner_modals_restore_each_focus_and_preserve_a_live_draft() {
         ])
     });
     let mut driver = shown(app, 160, 12);
-    let (outer, inner, draft) = states.get().unwrap();
+    let (outer, inner, draft, caption) = states.get().unwrap();
     driver.assert_focused("base");
     outer.set(true);
     driver.settle();
     driver.assert_focused("draft");
     driver.press("x");
+    assert_eq!(draft.get_untracked(), "x");
+    caption.set("updated".into());
+    driver.settle();
+    driver.assert_focused("draft");
     assert_eq!(draft.get_untracked(), "x");
     inner.set(true);
     driver.settle();
