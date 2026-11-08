@@ -40,6 +40,21 @@ fn options(images: Images) -> Options {
     }
 }
 
+fn kitty_app(engine: FakeEngine) -> rich_intuituive::App {
+    noctiluca::app::app_with_presentation(
+        Box::new(engine),
+        options(Images::Kitty),
+        rich_intuituive::ImagePresentation::new(
+            Pixels::Kitty,
+            rich_intuituive::KittyFeatures {
+                unicode_placeholders: true,
+                native_animation: true,
+            },
+            rich_intuituive::PixelFormats::cells().with(Pixels::Kitty),
+        ),
+    )
+}
+
 /// A screencast frame of `image`.
 fn frame(image: &RgbImage) -> ScreencastFrame {
     ScreencastFrame {
@@ -87,7 +102,7 @@ fn screen(driver: &Driver) -> String {
 fn the_screencast_shows_as_tiles_and_one_change_sends_one_tile() {
     let engine = engine();
     let state = engine.state.clone();
-    let mut driver = app(Box::new(engine), options(Images::Kitty)).driver(COLUMNS, ROWS);
+    let mut driver = kitty_app(engine).driver(COLUMNS, ROWS);
     driver.settle();
     // The tab starts the screencast for the view.
     let start = Instant::now();
@@ -118,7 +133,7 @@ fn the_screencast_shows_as_tiles_and_one_change_sends_one_tile() {
 fn navigation_and_view_switch_discard_old_tiles_until_a_new_frame() {
     let engine = engine();
     let state = engine.state.clone();
-    let mut driver = app(Box::new(engine), options(Images::Kitty)).driver(80, 10);
+    let mut driver = kitty_app(engine).driver(80, 10);
     driver.settle();
     let start = Instant::now();
     while !state.lock().unwrap().screencast {
@@ -161,7 +176,7 @@ fn navigation_and_view_switch_discard_old_tiles_until_a_new_frame() {
 fn navigation_discards_old_tiles_until_a_new_frame() {
     let engine = engine();
     let state = engine.state.clone();
-    let mut driver = app(Box::new(engine), options(Images::Kitty)).driver(80, 10);
+    let mut driver = kitty_app(engine).driver(80, 10);
     driver.settle();
     let start = Instant::now();
     while !state.lock().unwrap().screencast {
@@ -195,7 +210,7 @@ fn navigation_discards_old_tiles_until_a_new_frame() {
 fn a_click_lands_at_its_point_and_keys_pass_through() {
     let engine = engine();
     let state = engine.state.clone();
-    let mut driver = app(Box::new(engine), options(Images::Kitty)).driver(COLUMNS, ROWS);
+    let mut driver = kitty_app(engine).driver(COLUMNS, ROWS);
     driver.settle();
     state
         .lock()

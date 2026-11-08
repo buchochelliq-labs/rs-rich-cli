@@ -47,8 +47,24 @@ fn news_with_gif(images: Images, bandwidth: u64) -> Driver {
         bandwidth: Some(bandwidth),
         ..Config::default()
     };
-    let mut driver =
-        app(Box::new(engine), options_with("news.html", images, config)).driver(100, 90);
+    let options = options_with("news.html", images, config);
+    let app = if images == Images::Kitty {
+        noctiluca::app::app_with_presentation(
+            Box::new(engine),
+            options,
+            rich_intuituive::ImagePresentation::new(
+                rich_intuituive::Pixels::Kitty,
+                rich_intuituive::KittyFeatures {
+                    unicode_placeholders: true,
+                    native_animation: true,
+                },
+                rich_intuituive::PixelFormats::cells().with(rich_intuituive::Pixels::Kitty),
+            ),
+        )
+    } else {
+        app(Box::new(engine), options)
+    };
+    let mut driver = app.driver(100, 90);
     // Every picture drawn, the GIF among them.
     let (_, ready) = run_until(&mut driver, Duration::from_secs(30), |_, screen| {
         screen.contains("Why the tides") && screen.contains("Image: Lightning")
