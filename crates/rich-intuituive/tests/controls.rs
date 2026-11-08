@@ -48,6 +48,80 @@ fn read(driver: &Driver) -> Vec<String> {
         .collect()
 }
 
+// Temporary RED adapter: the old button has no wrapping option. Removed when
+// the public builder lands, so the first failure exercises rendered behavior.
+trait PendingWrapLabel {
+    fn wrap_label(self, enabled: bool) -> Self;
+}
+impl PendingWrapLabel for Node {
+    fn wrap_label(self, _enabled: bool) -> Self {
+        self
+    }
+}
+
+#[test]
+fn wrapped_buttons_measure_full_labels_and_activate_from_every_row() {
+    let app = App::new(|| {
+        let presses = signal(0);
+        let locked = signal(false);
+        column([
+            button("Review complete suffix", move |_| {
+                presses.update(|n| *n += 1)
+            })
+            .wrap_label(true)
+            .name("wrapped")
+            .disabled_when(move || locked.get()),
+            button("Review complete suffix", |_| {}).name("compact"),
+            text!("{presses}").fixed(1),
+        ])
+        .on_key("l", move |_| locked.update(|v| *v = !*v))
+    });
+    let mut driver = app.driver(10, 6);
+    driver.settle();
+    assert_eq!(
+        rows(&driver)[..5],
+        ["  Review", " complete", "  suffix", "Review co…", "0"]
+    );
+    let nodes = driver.accessibility();
+    assert_eq!(nodes[0].rect.height, 3);
+    assert_eq!(nodes[1].rect.height, 1);
+    assert_eq!(nodes[0].describe(), "Review complete suffix, button");
+    driver.press("enter space");
+    for row in 0..3 {
+        click(&mut driver, 2, row);
+    }
+    assert_eq!(rows(&driver)[4], "5");
+    mouse(&mut driver, MouseKind::Down(Button::Left), 2, 2);
+    mouse(&mut driver, MouseKind::Up(Button::Left), 2, 4);
+    assert_eq!(rows(&driver)[4], "5");
+    driver.press("l enter space");
+    click(&mut driver, 2, 2);
+    assert_eq!(rows(&driver)[4], "5");
+    assert!(read(&driver)[0].ends_with("disabled"));
+    assert!(style_at(&driver, 2, 2).contains("dim"));
+}
+
+#[test]
+fn wrapped_button_text_uses_markup_unicode_and_long_word_folding() {
+    let app = App::new(|| {
+        column([
+            button("[b]\\[draft] 界界 e\u{301} abcdefghijk[/b]", |_| {}).wrap_label(true),
+            label("after").fixed(1),
+        ])
+    });
+    let mut driver = app.driver(10, 7);
+    driver.settle();
+    assert_eq!(
+        rows(&driver)[..5],
+        [" [draft]", " 界界 e\u{301}", " abcdefgh", "   ijk", "after"]
+    );
+    assert_eq!(
+        read(&driver)[0],
+        "[draft] 界界 e\u{301} abcdefghijk, button"
+    );
+    assert!(style_at(&driver, 1, 0).contains("bold"));
+}
+
 /// A button that counts its presses, beside another, over the count.
 fn buttons() -> App {
     App::new(|| {
