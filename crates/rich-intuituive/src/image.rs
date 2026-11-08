@@ -589,13 +589,12 @@ impl ImageGraphics {
             in_cells: tag.pixels == Pixels::Kitty,
             id: tag.id,
         });
-        if tag.pixels == Pixels::Kitty {
-            self.owners
-                .lock()
-                .unwrap_or_else(|e| e.into_inner())
-                .push((tag.id, Arc::downgrade(&graphic)));
-        }
         made.retain(|(id, version, ..), _| Picture::find(*id, *version).is_some());
+        if tag.pixels == Pixels::Kitty {
+            let mut owners = self.owners.lock().unwrap_or_else(|e| e.into_inner());
+            owners.retain(|(_, weak)| weak.strong_count() > 0);
+            owners.push((tag.id, Arc::downgrade(&graphic)));
+        }
         made.insert(key, graphic.clone());
         Some(graphic)
     }
@@ -646,6 +645,78 @@ mod tests {
         })
         .save(path)
         .unwrap();
+    }
+
+    fn tracked_source() -> ImageGraphics {
+        ImageGraphics {
+            made: Mutex::new(HashMap::new()),
+            uploaded: Mutex::new(Vec::new()),
+            owners: Mutex::new(Vec::new()),
+        }
+    }
+
+    fn kitty_placements(source: &ImageGraphics, picture: &Picture) -> Vec<Placement> {
+        let console = rich::Console::builder()
+            .width(2)
+            .color_system(Some(rich::color::ColorSystem::Truecolor))
+            .build();
+        let mut segments = Vec::new();
+        for line in picture.lines(&console, ImageView::new().pixels(Pixels::Kitty), 2, 2) {
+            segments.extend(line);
+            segments.push(Segment::line());
+        }
+        source.placements(&Frame::from_segments(&segments))
+    }
+
+    #[test]
+    fn kitty_owner_tracking_stays_bounded_as_old_versions_are_dropped() {
+        let source = tracked_source();
+        let mut picture = Picture::from_rgba(4, 4, vec![255; 64]).unwrap();
+        for version in 0..100u8 {
+            if version != 0 {
+                picture = picture.next_rgba(4, 4, vec![version; 64]).unwrap();
+            }
+            let placements = kitty_placements(&source, &picture);
+            assert_eq!(placements.len(), 1);
+            drop(placements);
+        }
+        assert_eq!(source.made.lock().unwrap().len(), 1);
+        assert_eq!(
+            source.owners.lock().unwrap().len(),
+            1,
+            "dead owner records accumulate"
+        );
+    }
+
+    #[test]
+    fn retained_evicted_kitty_graphic_still_prevents_deletion() {
+        let source = tracked_source();
+        let picture = Picture::from_rgba(4, 4, vec![255; 64]).unwrap();
+        let id = picture.id();
+        let old_version = picture.version();
+        let retained = kitty_placements(&source, &picture);
+        assert_eq!(retained.len(), 1);
+        let next = picture.next_rgba(4, 4, vec![1; 64]).unwrap();
+        drop(picture);
+        let mut picture = next;
+        for version in 2..6u8 {
+            let placements = kitty_placements(&source, &picture);
+            assert_eq!(placements.len(), 1);
+            drop(placements);
+            picture = picture.next_rgba(4, 4, vec![version; 64]).unwrap();
+        }
+        let current = kitty_placements(&source, &picture);
+        assert_eq!(current.len(), 1);
+        assert!(
+            !source
+                .made
+                .lock()
+                .unwrap()
+                .keys()
+                .any(|(key_id, version, ..)| *key_id == id && *version == old_version)
+        );
+        assert!(source.release(&retained).is_empty());
+        assert_eq!(source.release(&[]), Picture::release(id));
     }
 
     #[test]
