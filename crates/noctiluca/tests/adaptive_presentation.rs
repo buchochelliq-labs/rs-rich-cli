@@ -584,7 +584,7 @@ fn caption_equivalence_uses_visible_rendered_descendant_text() {
 #[test]
 fn adapted_source_width_floor_tracks_views_and_adaptation_without_changing_terminal() {
     use noctiluca::{
-        app::{Options, app},
+        app::{Options, app_with_presentation},
         bookmarks::Bookmarks,
         config::{Config, Images, View},
         testing::FakeEngine,
@@ -606,7 +606,7 @@ fn adapted_source_width_floor_tracks_views_and_adaptation_without_changing_termi
             adapt,
             ..Config::default()
         };
-        let mut d = app(
+        let mut d = app_with_presentation(
             Box::new(engine),
             Options {
                 config,
@@ -617,6 +617,14 @@ fn adapted_source_width_floor_tracks_views_and_adaptation_without_changing_termi
                 tunnel: None,
                 control: None,
             },
+            rich_intuituive::ImagePresentation::new(
+                rich_intuituive::Pixels::Kitty,
+                rich_intuituive::KittyFeatures {
+                    unicode_placeholders: true,
+                    native_animation: true,
+                },
+                rich_intuituive::PixelFormats::cells().with(rich_intuituive::Pixels::Kitty),
+            ),
         )
         .driver(40, 50);
         wait(&mut d, |d| d.find_text("Lanternfish").is_some());
