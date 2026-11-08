@@ -5870,9 +5870,16 @@ impl App {
         if !self.top().root.has_controlled_modal() {
             return Vec::new();
         }
+        let maximized = self.top().maximized;
+        let ancestors = maximized.map(|id| self.path_to(id)).unwrap_or_default();
         let mut known = std::collections::HashSet::new();
         let mut selected = Vec::new();
         self.top().root.walk_accessible(&mut |node, path| {
+            // Rectangles are unavailable before layout and for text-only scopes.
+            // Maximize defines the visible subtree; its modal ancestors still apply.
+            if maximized.is_some_and(|id| !path.contains(&id)) && !ancestors.contains(&node.id()) {
+                return;
+            }
             if node.is_controlled_modal() {
                 known.insert(node.id());
                 selected = path
@@ -5917,6 +5924,9 @@ impl App {
     /// first focusable node.
     fn keep_focus(&mut self) {
         let scopes = self.controlled_scopes();
+        if let Some(&scope) = scopes.last() {
+            self.confine_pointer(scope);
+        }
         let previous = self.top().controlled_scopes.clone();
         let common = previous
             .iter()
@@ -6919,28 +6929,27 @@ impl App {
     /// until one uses it. A press first focuses the deepest focusable node
     /// under the pointer. Whether to quit.
     fn mouse_event(&mut self, mouse: rich_interact::Mouse) -> Option<bool> {
-        if let Some(scope) = self.controlled_scope()
-            && self
-                .capture
-                .is_some_and(|(id, _)| !self.path_to(id).contains(&scope))
-        {
-            self.capture = None;
-        }
-        if let Some(scope) = self.controlled_scope()
-            && !node_rect(&self.layers, scope)
-                .is_some_and(|rect| rect.contains(mouse.column, mouse.row))
-            && !(matches!(mouse.kind, MouseKind::Drag(_) | MouseKind::Up(_))
-                && self
-                    .capture
-                    .is_some_and(|(id, _)| self.path_to(id).contains(&scope)))
-        {
-            return Some(false);
+        let scope = self.controlled_scope();
+        if let Some(scope) = scope {
+            self.confine_pointer(scope);
         }
         // A press ends a key sequence under way.
         if matches!(mouse.kind, MouseKind::Down(_)) && self.pending.take().is_some() {
             self.which_key_changed();
         }
-        let hits = crate::node::hit_path(&self.top().root, mouse.column, mouse.row);
+        let mut hits = crate::node::hit_path(&self.top().root, mouse.column, mouse.row);
+        if let Some(scope) = scope {
+            // Rectangle admission alone is insufficient for transparent containers
+            // and later siblings. No pointer action or hover may escape the subtree.
+            if node_rect(&self.layers, scope)
+                .is_some_and(|rect| rect.contains(mouse.column, mouse.row))
+                && let Some(at) = hits.iter().position(|(id, _)| *id == scope)
+            {
+                hits.drain(..at);
+            } else {
+                hits.clear();
+            }
+        }
         let path: Vec<NodeId> = hits.iter().map(|(id, _)| *id).collect();
         let old = self.hover_path.get_untracked();
         self.last_pointer = Some((mouse.column, mouse.row));
@@ -7015,7 +7024,38 @@ impl App {
             }
         }
         // A press that may start a drag is used: it starts no selection.
-        (self.drag.is_some() && matches!(mouse.kind, MouseKind::Down(_))).then_some(false)
+        (scope.is_some() || self.drag.is_some() && matches!(mouse.kind, MouseKind::Down(_)))
+            .then_some(false)
+    }
+
+    /// Cancel pointer state owned outside a newly active controlled scope.
+    fn confine_pointer(&mut self, scope: NodeId) {
+        let old = self.hover_path.get_untracked();
+        if !old.is_empty() && !old.contains(&scope) {
+            for &id in &old {
+                self.lifecycle.push((id, WidgetEvent::Hover(false)));
+                if self.runtime.watchers.hover.borrow().contains(&id) {
+                    self.runtime.mark_dirty(id);
+                }
+            }
+            let runtime = self.runtime.clone();
+            let hover = self.hover_path;
+            runtime.enter(|| hover.set(Vec::new()));
+        }
+        if self
+            .capture
+            .is_some_and(|(id, _)| !self.path_to(id).contains(&scope))
+        {
+            self.capture = None;
+        }
+        if self
+            .drag
+            .as_ref()
+            .is_some_and(|drag| !self.path_to(drag.source).contains(&scope))
+        {
+            self.drag = None;
+            self.restack = true;
+        }
     }
 
     /// The deepest node in `path` with a value to drag.

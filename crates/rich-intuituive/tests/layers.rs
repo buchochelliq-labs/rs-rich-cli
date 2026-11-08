@@ -440,3 +440,161 @@ fn a_dynamically_created_controlled_scope_is_discovered_and_removed() {
     assert!(!state.get().unwrap().get_untracked());
     d.assert_focused("base");
 }
+
+#[test]
+fn controlled_modal_blocks_holes_and_later_sibling_actions() {
+    use std::{cell::Cell, rc::Rc};
+    for later in [false, true] {
+        let hits = Rc::new(Cell::new(0));
+        let h = hits.clone();
+        let app = App::new(move || {
+            let h = h.clone();
+            let under = label("outside").on_click(move |_| h.set(h.get() + 1));
+            let scope = layers([label("inside").inset(1, 4, 1, 4)])
+                .children_cover_only()
+                .controlled_modal();
+            if later {
+                layers([scope, under])
+            } else {
+                layers([under, scope])
+            }
+        });
+        let mut d = shown(app, 20, 5);
+        click(&mut d, 0, 0);
+        assert_eq!(hits.get(), 0, "outside path dispatched (later={later})");
+    }
+}
+
+#[test]
+fn controlled_modal_cancels_underlay_drag_before_drop() {
+    use std::{cell::Cell, rc::Rc};
+    let state = Rc::new(Cell::new(None));
+    let handle = state.clone();
+    let drops = Rc::new(Cell::new(0));
+    let target = drops.clone();
+    let app = App::new(move || {
+        let open = signal(false);
+        handle.set(Some(open));
+        let target = target.clone();
+        layers([
+            label("source").draggable(1u8),
+            label("target")
+                .on_drop(move |_: &u8, _| target.set(target.get() + 1))
+                .controlled_modal()
+                .inset(1, 4, 1, 4)
+                .shown_when(move || open.get()),
+        ])
+    });
+    let mut d = shown(app, 20, 5);
+    d.event(Event::Mouse(Mouse::new(
+        MouseKind::Down(Button::Left),
+        0,
+        0,
+    )));
+    d.event(Event::Mouse(Mouse::new(
+        MouseKind::Drag(Button::Left),
+        1,
+        0,
+    )));
+    state.get().unwrap().set(true);
+    d.settle();
+    d.event(Event::Mouse(Mouse::new(
+        MouseKind::Drag(Button::Left),
+        6,
+        2,
+    )));
+    d.event(Event::Mouse(Mouse::new(MouseKind::Up(Button::Left), 6, 2)));
+    assert_eq!(drops.get(), 0, "old underlay drag entered the modal");
+}
+
+#[test]
+fn maximized_pane_ignores_sibling_modal_but_keeps_its_own_text_scope() {
+    use std::{cell::Cell, rc::Rc};
+    let state = Rc::new(Cell::new(None));
+    let handle = state.clone();
+    let app = App::new(move || {
+        let sibling = signal(false);
+        let inside = signal(false);
+        handle.set(Some((sibling, inside)));
+        row([
+            layers([
+                label("visible")
+                    .focusable()
+                    .name("visible")
+                    .on_key("i", move |_| inside.set(true)),
+                label("inside modal")
+                    .controlled_modal()
+                    .on_key("esc", move |_| inside.set(false))
+                    .shown_when(move || inside.get()),
+            ])
+            .maximizable(),
+            label("sibling modal")
+                .controlled_modal()
+                .on_key("esc", move |_| sibling.set(false))
+                .shown_when(move || sibling.get()),
+        ])
+    })
+    .maximize_key("ctrl+m");
+    let mut d = shown(app, 30, 4);
+    d.press("ctrl+m");
+    let (sibling, inside) = state.get().unwrap();
+    sibling.set(true);
+    d.settle();
+    d.press("tab");
+    d.assert_focused("visible");
+    d.press("i");
+    assert!(
+        inside.get_untracked(),
+        "hidden sibling intercepted visible pane key"
+    );
+    d.press("esc");
+    assert!(
+        !inside.get_untracked(),
+        "text-only modal did not receive owner Escape"
+    );
+    assert!(sibling.get_untracked());
+    d.press("esc"); // minimize; sibling is now the active scope
+    d.press("esc"); // source-owned close
+    assert!(!sibling.get_untracked());
+    d.assert_focused("visible");
+}
+
+#[test]
+fn controlled_scope_pointer_hits_follow_scrolled_clipped_content() {
+    use std::{cell::Cell, rc::Rc};
+    let hits = Rc::new(Cell::new((0, 0)));
+    let handles = hits.clone();
+    let app = App::new(move || {
+        let outside = handles.clone();
+        let inside = handles.clone();
+        layers([
+            label("under").on_click(move |_| {
+                let (a, b) = outside.get();
+                outside.set((a + 1, b));
+            }),
+            scroll_with(
+                column([
+                    label("spacer").fixed(3),
+                    label("modal")
+                        .on_click(move |_| {
+                            let (a, b) = inside.get();
+                            inside.set((a, b + 1));
+                        })
+                        .controlled_modal()
+                        .fixed(4),
+                ]),
+                signal(4),
+            )
+            .inset(1, 2, 1, 2),
+        ])
+    });
+    let mut d = shown(app, 20, 5);
+    click(&mut d, 3, 1);
+    click(&mut d, 0, 0);
+    click(&mut d, 3, 4);
+    assert_eq!(
+        hits.get(),
+        (0, 1),
+        "scope did not track viewport translation/clipping"
+    );
+}
