@@ -15396,6 +15396,58 @@ impl core::marker::Unpin for rich_ext::surface::PaintStrategy
 impl core::marker::UnsafeUnpin for rich_ext::surface::PaintStrategy
 impl core::panic::unwind_safe::RefUnwindSafe for rich_ext::surface::PaintStrategy
 impl core::panic::unwind_safe::UnwindSafe for rich_ext::surface::PaintStrategy
+pub enum rich_ext::surface::PremeasuredCellError
+pub rich_ext::surface::PremeasuredCellError::ContinuationStyle
+pub rich_ext::surface::PremeasuredCellError::EmptyLeader
+pub rich_ext::surface::PremeasuredCellError::LinkControl
+pub rich_ext::surface::PremeasuredCellError::MissingContinuation
+pub rich_ext::surface::PremeasuredCellError::NonemptyContinuation
+pub rich_ext::surface::PremeasuredCellError::OrphanContinuation
+pub rich_ext::surface::PremeasuredCellError::SpanCrossesRow
+pub rich_ext::surface::PremeasuredCellError::TextControl
+impl core::clone::Clone for rich_ext::surface::PremeasuredCellError
+pub fn rich_ext::surface::PremeasuredCellError::clone(&self) -> rich_ext::surface::PremeasuredCellError
+impl core::cmp::Eq for rich_ext::surface::PremeasuredCellError
+impl core::cmp::PartialEq for rich_ext::surface::PremeasuredCellError
+pub fn rich_ext::surface::PremeasuredCellError::eq(&self, &rich_ext::surface::PremeasuredCellError) -> bool
+impl core::fmt::Debug for rich_ext::surface::PremeasuredCellError
+pub fn rich_ext::surface::PremeasuredCellError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::fmt::Display for rich_ext::surface::PremeasuredCellError
+pub fn rich_ext::surface::PremeasuredCellError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Copy for rich_ext::surface::PremeasuredCellError
+impl core::marker::StructuralPartialEq for rich_ext::surface::PremeasuredCellError
+impl core::marker::Freeze for rich_ext::surface::PremeasuredCellError
+impl core::marker::Send for rich_ext::surface::PremeasuredCellError
+impl core::marker::Sync for rich_ext::surface::PremeasuredCellError
+impl core::marker::Unpin for rich_ext::surface::PremeasuredCellError
+impl core::marker::UnsafeUnpin for rich_ext::surface::PremeasuredCellError
+impl core::panic::unwind_safe::RefUnwindSafe for rich_ext::surface::PremeasuredCellError
+impl core::panic::unwind_safe::UnwindSafe for rich_ext::surface::PremeasuredCellError
+pub enum rich_ext::surface::PremeasuredError
+pub rich_ext::surface::PremeasuredError::Cell
+pub rich_ext::surface::PremeasuredError::Cell::index: usize
+pub rich_ext::surface::PremeasuredError::Cell::reason: rich_ext::surface::PremeasuredCellError
+pub rich_ext::surface::PremeasuredError::Shape
+pub rich_ext::surface::PremeasuredError::Shape::actual: usize
+pub rich_ext::surface::PremeasuredError::Shape::expected: usize
+impl core::clone::Clone for rich_ext::surface::PremeasuredError
+pub fn rich_ext::surface::PremeasuredError::clone(&self) -> rich_ext::surface::PremeasuredError
+impl core::cmp::Eq for rich_ext::surface::PremeasuredError
+impl core::cmp::PartialEq for rich_ext::surface::PremeasuredError
+pub fn rich_ext::surface::PremeasuredError::eq(&self, &rich_ext::surface::PremeasuredError) -> bool
+impl core::error::Error for rich_ext::surface::PremeasuredError
+impl core::fmt::Debug for rich_ext::surface::PremeasuredError
+pub fn rich_ext::surface::PremeasuredError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::fmt::Display for rich_ext::surface::PremeasuredError
+pub fn rich_ext::surface::PremeasuredError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for rich_ext::surface::PremeasuredError
+impl core::marker::Freeze for rich_ext::surface::PremeasuredError
+impl core::marker::Send for rich_ext::surface::PremeasuredError
+impl core::marker::Sync for rich_ext::surface::PremeasuredError
+impl core::marker::Unpin for rich_ext::surface::PremeasuredError
+impl core::marker::UnsafeUnpin for rich_ext::surface::PremeasuredError
+impl core::panic::unwind_safe::RefUnwindSafe for rich_ext::surface::PremeasuredError
+impl core::panic::unwind_safe::UnwindSafe for rich_ext::surface::PremeasuredError
 pub enum rich_ext::surface::Viewport
 pub rich_ext::surface::Viewport::Fullscreen
 pub rich_ext::surface::Viewport::Inline(u16)
@@ -15419,7 +15471,7 @@ impl core::panic::unwind_safe::RefUnwindSafe for rich_ext::surface::Viewport
 impl core::panic::unwind_safe::UnwindSafe for rich_ext::surface::Viewport
 pub struct rich_ext::surface::Cell
 pub rich_ext::surface::Cell::style: rich_ext::frame::StyleId
-pub rich_ext::surface::Cell::width: u8
+pub rich_ext::surface::Cell::width: u16
 impl rich_ext::surface::Cell
 pub fn rich_ext::surface::Cell::is_continuation(&self) -> bool
 pub fn rich_ext::surface::Cell::new(&str, u8, rich_ext::frame::StyleId) -> rich_ext::surface::Cell
@@ -15491,6 +15543,7 @@ impl core::panic::unwind_safe::RefUnwindSafe for rich_ext::surface::PaintStats
 impl core::panic::unwind_safe::UnwindSafe for rich_ext::surface::PaintStats
 pub struct rich_ext::surface::Painter
 impl rich_ext::surface::Painter
+pub fn rich_ext::surface::Painter::check_screen(&self, &rich_ext::surface::Screen) -> std::io::error::Result<()>
 pub fn rich_ext::surface::Painter::compact(&mut self, &mut rich_ext::surface::Screen) -> bool
 pub fn rich_ext::surface::Painter::finish(&mut self) -> alloc::string::String
 pub fn rich_ext::surface::Painter::inline(self) -> rich_ext::surface::Painter
@@ -15508,7 +15561,12 @@ pub fn rich_ext::surface::Painter::set_scroll(&mut self, bool)
 pub fn rich_ext::surface::Painter::set_strategy(&mut self, rich_ext::surface::PaintStrategy)
 pub fn rich_ext::surface::Painter::stats(&self) -> rich_ext::surface::PaintStats
 pub fn rich_ext::surface::Painter::strategy(&self) -> rich_ext::surface::PaintStrategy
+pub fn rich_ext::surface::Painter::try_paint(&mut self, &rich_ext::surface::Screen, &[rich_ext::surface::Rect]) -> std::io::error::Result<alloc::string::String>
+pub fn rich_ext::surface::Painter::try_paint_into(&mut self, &rich_ext::surface::Screen, &[rich_ext::surface::Rect], &mut alloc::string::String) -> std::io::error::Result<()>
+pub fn rich_ext::surface::Painter::try_repaint(&mut self, &rich_ext::surface::Screen, &[rich_ext::surface::Rect]) -> std::io::error::Result<alloc::string::String>
 pub fn rich_ext::surface::Painter::written(&self) -> &[rich_ext::surface::Rect]
+impl core::clone::Clone for rich_ext::surface::Painter
+pub fn rich_ext::surface::Painter::clone(&self) -> rich_ext::surface::Painter
 impl core::marker::Freeze for rich_ext::surface::Painter
 impl core::marker::Send for rich_ext::surface::Painter
 impl core::marker::Sync for rich_ext::surface::Painter
@@ -15516,6 +15574,22 @@ impl core::marker::Unpin for rich_ext::surface::Painter
 impl core::marker::UnsafeUnpin for rich_ext::surface::Painter
 impl core::panic::unwind_safe::RefUnwindSafe for rich_ext::surface::Painter
 impl core::panic::unwind_safe::UnwindSafe for rich_ext::surface::Painter
+pub struct rich_ext::surface::PremeasuredCell<'a>
+pub rich_ext::surface::PremeasuredCell::style: core::option::Option<&'a rich::style::Style>
+pub rich_ext::surface::PremeasuredCell::text: &'a str
+pub rich_ext::surface::PremeasuredCell::width: u16
+impl<'a> core::clone::Clone for rich_ext::surface::PremeasuredCell<'a>
+pub fn rich_ext::surface::PremeasuredCell<'a>::clone(&self) -> rich_ext::surface::PremeasuredCell<'a>
+impl<'a> core::fmt::Debug for rich_ext::surface::PremeasuredCell<'a>
+pub fn rich_ext::surface::PremeasuredCell<'a>::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl<'a> core::marker::Copy for rich_ext::surface::PremeasuredCell<'a>
+impl<'a> core::marker::Freeze for rich_ext::surface::PremeasuredCell<'a>
+impl<'a> core::marker::Send for rich_ext::surface::PremeasuredCell<'a>
+impl<'a> core::marker::Sync for rich_ext::surface::PremeasuredCell<'a>
+impl<'a> core::marker::Unpin for rich_ext::surface::PremeasuredCell<'a>
+impl<'a> core::marker::UnsafeUnpin for rich_ext::surface::PremeasuredCell<'a>
+impl<'a> core::panic::unwind_safe::RefUnwindSafe for rich_ext::surface::PremeasuredCell<'a>
+impl<'a> core::panic::unwind_safe::UnwindSafe for rich_ext::surface::PremeasuredCell<'a>
 pub struct rich_ext::surface::Rect
 pub rich_ext::surface::Rect::height: u16
 pub rich_ext::surface::Rect::width: u16
@@ -15580,6 +15654,7 @@ pub fn rich_ext::surface::Screen::styles_piled_up(&self) -> bool
 pub fn rich_ext::surface::Screen::to_svg(&self, &rich_ext::frame::SvgOptions<'_>) -> alloc::string::String
 pub fn rich_ext::surface::Screen::underlay(&mut self, u16, u16, &rich::style::Style)
 pub fn rich_ext::surface::Screen::write_lines(&mut self, rich_ext::surface::Rect, &[alloc::vec::Vec<rich::segment::Segment>])
+pub fn rich_ext::surface::Screen::write_premeasured(&mut self, rich_ext::surface::Rect, &[rich_ext::surface::PremeasuredCell<'_>]) -> core::result::Result<rich_ext::surface::Rect, rich_ext::surface::PremeasuredError>
 pub fn rich_ext::surface::Screen::write_runs<'t, L: core::convert::AsRef<[rich_ext::surface::TextRun<'t>]>>(&mut self, rich_ext::surface::Rect, &[L])
 impl core::clone::Clone for rich_ext::surface::Screen
 pub fn rich_ext::surface::Screen::clone(&self) -> rich_ext::surface::Screen

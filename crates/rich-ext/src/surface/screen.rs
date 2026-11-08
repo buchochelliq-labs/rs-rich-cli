@@ -2328,7 +2328,16 @@ impl Painter {
                 .filter(|r| !r.is_empty())
                 .collect()
         };
-        rects = self.normalize_damage(screen, &rects);
+        // Native cells keep their existing one-column halo. The wider
+        // closure is needed only while either grid contains imported atoms.
+        let close_spans = imported
+            || self
+                .previous
+                .as_ref()
+                .is_some_and(|previous| previous.cells.iter().any(Cell::premeasured));
+        if close_spans {
+            rects = self.normalize_damage(screen, &rects);
+        }
         // A true no-op must not toggle terminal modes, even with Full.
         if imported
             && !first
@@ -2385,10 +2394,12 @@ impl Painter {
                 .map(|r| Rect::new(0, r.y, screen.width, r.height))
                 .collect();
         }
-        rects = self.normalize_damage(screen, &rects);
+        if close_spans {
+            rects = self.normalize_damage(screen, &rects);
+        }
         for (y, spans) in row_spans(&rects, screen.height) {
             if strategy == PaintStrategy::Rows {
-                self.paint_row(screen, y, &mut pen, out);
+                self.paint_row(screen, y, close_spans, &mut pen, out);
                 continue;
             }
             for (start, end) in spans {
@@ -2509,7 +2520,14 @@ impl Painter {
 
     /// [`PaintStrategy::Rows`] on row `y`: when it differs from what was
     /// sent, every cell from its first change to its last.
-    fn paint_row(&mut self, screen: &Screen, y: u16, pen: &mut Pen, out: &mut String) {
+    fn paint_row(
+        &mut self,
+        screen: &Screen,
+        y: u16,
+        close_spans: bool,
+        pen: &mut Pen,
+        out: &mut String,
+    ) {
         let Some(previous) = &self.previous else {
             return;
         };
@@ -2520,11 +2538,18 @@ impl Painter {
             return;
         };
         let last = (0..width).rfind(|&x| sent[x] != now[x]).unwrap_or(first);
-        let bounds = self.normalize_damage(
-            screen,
-            &[Rect::new(first as u16, y, (last + 1 - first) as u16, 1)],
-        );
-        let (first, end) = (bounds[0].x, bounds[0].right());
+        let (first, end) = if close_spans {
+            let bounds = self.normalize_damage(
+                screen,
+                &[Rect::new(first as u16, y, (last + 1 - first) as u16, 1)],
+            );
+            (bounds[0].x, bounds[0].right())
+        } else {
+            // Keep the native painter's established end-column rule.
+            let end =
+                (last + 1 + usize::from(now.get(last).is_some_and(|c| c.width >= 2))).min(width);
+            (first as u16, end as u16)
+        };
         let forced = self.force;
         self.force = true;
         let compared = self.stats.compared;

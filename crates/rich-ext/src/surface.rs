@@ -890,7 +890,10 @@ mod tests {
         assert!(out.contains("\x1b[2J") && out.contains("hello"), "{out:?}");
         surface.finish().unwrap();
         let out = output(&mut surface);
-        assert!(out.ends_with("\x1b[0m\x1b[?25h\x1b[?1049l"), "{out:?}");
+        assert!(
+            out.ends_with("\x1b[0m\x1b[?25h\x1b[?7h\x1b[?1049l"),
+            "{out:?}"
+        );
     }
 
     #[test]
