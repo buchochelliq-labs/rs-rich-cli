@@ -29,7 +29,8 @@ Wait /PLAYING/
 Screenshot playing
 Type "G"
 Wait /^(?![\s\S]*░)[\s\S]*Harbour time-lapse/ 60s
-Sleep 2s
+# Wait for the decoded frame as well as its title before capturing the grid.
+Wait /▀{10}/ 60s
 Screenshot grid
 Type "q"
 Wait /❯\s*$/
