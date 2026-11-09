@@ -223,7 +223,7 @@ pub fn web_widget(browser: Browser, nodes: Vec<NodeId>) -> Node {
     let disabled = move || {
         browser
             .page
-            .with(|p| control_of(p, first).is_none_or(|c| c.disabled))
+            .with(|p| control_of(p, first).is_none_or(|c| c.disabled || c.readonly))
     };
     let name = markup(&control.name);
     let node = match control.role {

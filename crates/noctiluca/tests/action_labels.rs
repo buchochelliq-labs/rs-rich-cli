@@ -440,3 +440,104 @@ fn compact_details_follow_live_names_and_retire_with_the_source_owner() {
             .any(|a| matches!(a, PageAction::Click(_) | PageAction::Key(_)))
     );
 }
+
+#[test]
+fn popup_fields_preserve_readonly_text_and_exclude_password_values_from_details() {
+    let mut p = PageBuilder::new("https://example.test/fields.html", "Fields", 640.0, 630.0);
+    p.view(0.0, 630.0);
+    let panel = p.element(
+        p.body(),
+        "DIV",
+        &[("role", "dialog"), ("aria-modal", "true")],
+        &[("position", "fixed")],
+        Some(Rect::new(0.0, 0.0, 304.0, 270.0)),
+    );
+    p.paint(panel, 100);
+    let readonly = p.element(
+        panel,
+        "TEXTAREA",
+        &[("aria-label", "Record"), ("readonly", "")],
+        &[],
+        Some(Rect::new(8.0, 18.0, 280.0, 30.0)),
+    );
+    p.text(readonly, "kept", Rect::new(8.0, 18.0, 280.0, 18.0));
+    p.element(
+        panel,
+        "INPUT",
+        &[
+            ("type", "password"),
+            ("aria-label", "Password"),
+            ("value", "PRIVATE-PASSWORD-123"),
+        ],
+        &[],
+        Some(Rect::new(8.0, 72.0, 280.0, 30.0)),
+    );
+    let snapshot = p.snapshot();
+    let model = noctiluca::model::build(&snapshot, &mut noctiluca::model::Revisions::new());
+    let record = model
+        .controls
+        .iter()
+        .find(|control| control.name == "Record")
+        .expect("readonly field remains represented");
+    assert!(record.readonly);
+    let password = model
+        .controls
+        .iter()
+        .find(|control| control.name == "Password")
+        .expect("password field remains represented");
+    assert_eq!(password.value, None);
+    let engine = FakeEngine::from_dir(
+        &std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/snapshots"),
+    )
+    .unwrap();
+    let state = engine.state.clone();
+    state
+        .lock()
+        .unwrap()
+        .pages
+        .insert("fields".into(), snapshot);
+    let mut driver = app(
+        Box::new(engine),
+        Options {
+            config: Config::default(),
+            bookmarks: Bookmarks::default(),
+            url: Some("fields.html".into()),
+            view: Some(View::Projection),
+            images: Some(Images::None),
+            tunnel: None,
+            control: None,
+        },
+    )
+    .driver(40, 24);
+    let deadline = Instant::now() + Duration::from_secs(3);
+    let (x, y) = loop {
+        driver.settle();
+        if let Some(at) = driver.find_text("Record") {
+            break at;
+        }
+        assert!(Instant::now() < deadline, "{:?}", driver.screen().plain());
+        std::thread::sleep(Duration::from_millis(10));
+    };
+    driver.click(x, y);
+    driver.type_text("BAD");
+    driver.settle();
+    assert!(driver.find_text("BAD").is_none());
+    assert!(driver.find_text("Record").is_some());
+    driver.press("shift+f1");
+    driver.settle();
+    assert!(driver.find_text("Password").is_some());
+    assert!(
+        !driver
+            .screen()
+            .plain()
+            .join("\n")
+            .contains("PRIVATE-PASSWORD-123")
+    );
+    assert!(!driver.accessibility().iter().any(|n| {
+        n.name.contains("PRIVATE-PASSWORD-123")
+            || n.value
+                .as_ref()
+                .is_some_and(|v| v.contains("PRIVATE-PASSWORD-123"))
+    }));
+    assert!(state.lock().unwrap().actions.is_empty());
+}
