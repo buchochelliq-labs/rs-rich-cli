@@ -2233,7 +2233,7 @@ impl Walker<'_> {
                     if video {
                         dom.name[d] == "VIDEO"
                     } else {
-                        dom.attr(d, "role") == Some("log")
+                        self.log_kind(d).is_some()
                     }
                 })
             };

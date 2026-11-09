@@ -89,6 +89,57 @@ fn source_projection_nested_grids_follow_roots_despite_reversed_boxes_and_overha
 }
 
 #[test]
+fn source_projection_video_pairs_with_accessible_live_chat_logs_only() {
+    for has_entries in [true, false] {
+        let mut f = Fake::new();
+        let panes = f.el(0, "DIV", &[], "flex");
+        clip_bounds(&mut f, panes, [0.0, 0.0, 960.0, 720.0]);
+        clip_style(&mut f, panes, 11, "nowrap");
+        let video_section = f.el(
+            panes,
+            "SECTION",
+            &[("aria-label", "Video")],
+            "block",
+        );
+        clip_bounds(&mut f, video_section, [0.0, 0.0, 560.0, 720.0]);
+        let video = f.el(video_section, "VIDEO", &[], "block");
+        clip_bounds(&mut f, video, [0.0, 0.0, 560.0, 315.0]);
+        let chat_section = f.el(panes, "SECTION", &[("aria-label", "Chat")], "block");
+        clip_bounds(&mut f, chat_section, [560.0, 0.0, 400.0, 720.0]);
+        let live = f.el(chat_section, "DIV", &[("aria-live", "polite")], "block");
+        clip_bounds(&mut f, live, [560.0, 0.0, 400.0, 600.0]);
+        if has_entries {
+            for (n, message) in ["first chat message", "second chat message"]
+                .into_iter()
+                .enumerate()
+            {
+                let entry = f.el(live, "DIV", &[], "block");
+                clip_bounds(&mut f, entry, [560.0, n as f64 * 36.0, 400.0, 36.0]);
+                let text = f.text(entry, message);
+                clip_bounds(&mut f, text, [560.0, n as f64 * 36.0, 400.0, 18.0]);
+            }
+        } else {
+            let text = f.text(live, "Connection status");
+            clip_bounds(&mut f, text, [560.0, 0.0, 400.0, 18.0]);
+        }
+
+        let source = build_source(
+            &PageSnapshot {
+                dom: f.snapshot(),
+                ax: Value::Null,
+            },
+            &mut Revisions::new(),
+        );
+        assert_eq!(source.page().logs.len(), usize::from(has_entries));
+        assert_eq!(
+            source.page().grids.len(),
+            usize::from(has_entries),
+            "only a named video pane beside an actual accessible log is paired"
+        );
+    }
+}
+
+#[test]
 fn source_projection_nested_figure_units_measure_text_and_remove_internal_source_gaps() {
     let mut f = Fake::new();
     clip_bounds(&mut f, 0, [0.0, 0.0, 960.0, 2000.0]);
