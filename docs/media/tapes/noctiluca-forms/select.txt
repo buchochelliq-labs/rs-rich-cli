@@ -1,13 +1,13 @@
  NOCTILUCA   READER + CELLS   ◀ ▶ ↻   Form fixture
  https://fixture.example/form.html
 Sign up
-Name Ada Lovelace                                                           ● edited · Enter applies
+Name                             Ada Lovelace                     ● edited · Enter applies
 Secret
-[ ] Send news
+[ ][Send newsews
 
 Size
-( ) Small
-(•) Large
+( )[Small Small
+(•) Large Large
 Mirror First mirror                                                                                ▾
 Volume ╭──────────────────────────────────────────╮
  Send  │ First mirror                             │

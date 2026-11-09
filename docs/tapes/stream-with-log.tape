@@ -14,6 +14,9 @@ Set Size 110x32
 Set TypingDelay 40ms
 Mask /\d:\d\d \/ \d:\d\d/ "<time>"
 Mask /\d:\d\d \/ live/ "<time>-live"
+# Decoder-dependent frame pixels vary as the video advances; normalize them
+# only in text grids while retaining the image in the PNG and SVG captures.
+Mask /▀/ " "
 Hide
 Type "export NOCTILUCA_FAKE_ENGINE=$REPO/crates/noctiluca/tests/snapshots XDG_CONFIG_HOME=$PWD/config; clear"
 Enter
