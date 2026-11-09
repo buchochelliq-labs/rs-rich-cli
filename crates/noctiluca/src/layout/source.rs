@@ -44,12 +44,18 @@ pub(super) fn has_alias(source: &SourcePage, block: usize, marks: &Marks) -> boo
         })
 }
 
-fn boundary(rel: &SourceRelations, node: usize) -> Option<usize> {
+fn boundary(rel: &SourceRelations, node: usize, adapt: Adapt) -> Option<usize> {
     rel.grids
         .iter()
+        .filter(|_| adapt.on(Rule::SnapGrids))
         .flat_map(|g| &g.items)
         .copied()
-        .chain(rel.figures.iter().map(|f| f.node))
+        .chain(
+            rel.figures
+                .iter()
+                .filter(|_| adapt.on(Rule::FigureFlow))
+                .map(|f| f.node),
+        )
         .filter(|&root| rel.contains(root, node))
         .max()
 }
@@ -98,8 +104,10 @@ fn groups_at(
         && pieces
             .iter()
             .any(|p| alias(source, p.node, block).is_some());
-    let own_boundary = owner.and_then(|n| boundary(rel, n));
-    let mixed_owner = pieces.iter().any(|p| boundary(rel, p.node) != own_boundary);
+    let own_boundary = owner.and_then(|n| boundary(rel, n, marks.adapt));
+    let mixed_owner = pieces
+        .iter()
+        .any(|p| boundary(rel, p.node, marks.adapt) != own_boundary);
     if !mixed_alias && !mixed_owner {
         return vec![TextGroup {
             runs: runs.to_vec(),
@@ -144,9 +152,10 @@ fn groups_at(
             );
             let mut fragment = run.clone();
             fragment.text = run.text[piece.bytes.clone()].to_string();
-            let key = boundary(rel, at).unwrap_or(at);
+            let key = boundary(rel, at, marks.adapt).unwrap_or(at);
             if let Some(last) = groups.last_mut().filter(|g| {
-                g.rect == rect && g.owner.map(|n| boundary(rel, n).unwrap_or(n)) == Some(key)
+                g.rect == rect
+                    && g.owner.map(|n| boundary(rel, n, marks.adapt).unwrap_or(n)) == Some(key)
             }) {
                 last.runs.push(fragment);
             } else {

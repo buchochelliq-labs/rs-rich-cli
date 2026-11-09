@@ -578,3 +578,28 @@ fn source_projection_figure_does_not_flatten_a_descendant_source_grid() {
         );
     }
 }
+
+#[test]
+fn source_projection_faithful_keeps_mixed_boxless_figure_runs_in_their_original_block() {
+    let mut f = Fake::new();
+    clip_bounds(&mut f, 0, [0.0, 0.0, 640.0, 800.0]);
+    let p = f.el(0, "DIV", &[], "block");
+    clip_bounds(&mut f, p, [0.0, 0.0, 640.0, 18.0]);
+    let before = f.text(p, "Before ");
+    clip_bounds(&mut f, before, [0.0, 0.0, 80.0, 18.0]);
+    let figure = f.node(p, 1, "FIGURE", None, &[], None);
+    let middle = f.text(figure, "Middle ");
+    clip_bounds(&mut f, middle, [80.0, 0.0, 80.0, 18.0]);
+    let after = f.text(p, "After");
+    clip_bounds(&mut f, after, [160.0, 0.0, 80.0, 18.0]);
+    let marks = crate::layout::Marks {
+        adapt: crate::adapt::Adapt::none(),
+        ..Default::default()
+    };
+    let (source, result) = projected_source(&f, 80, &marks);
+    let legacy = crate::layout::project(source.page(), 80, (8.0, 18.0), &marks);
+    assert_eq!(
+        result.lines, legacy.lines,
+        "faithful must not split source run owners into new rows"
+    );
+}
