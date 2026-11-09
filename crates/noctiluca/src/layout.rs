@@ -1553,24 +1553,39 @@ fn project_part(
                     ));
                 }
                 for (r, row) in table.rows.iter().enumerate() {
-                    for cell in row {
+                    for (c, cell) in row.iter().enumerate() {
                         let base = if cell.header { "bold" } else { "" };
-                        let spans = spans(&cell.runs, base, page, marks);
-                        // An empty cell (a vote arrow's) holds no cells
-                        // a cell beside it could grow into.
-                        if spans.iter().all(|s| s.text.trim().is_empty()) {
-                            continue;
+                        let groups = match source {
+                            Some(source) => {
+                                source::cell_groups(source, block_index, r, c, &cell.runs, marks)
+                            }
+                            None => vec![source::TextGroup {
+                                runs: cell.runs.clone(),
+                                owner: None,
+                                rect: None,
+                            }],
+                        };
+                        for group in groups {
+                            let rect = group.rect.unwrap_or(cell.rect);
+                            if rect.bottom() < 0.0 || rect.right() < 0.0 {
+                                continue;
+                            }
+                            let spans = spans(&group.runs, base, page, marks);
+                            if spans.iter().all(|s| s.text.trim().is_empty()) {
+                                continue;
+                            }
+                            let mut item = text_item(
+                                block.node,
+                                rect,
+                                rect.x,
+                                rect.right(),
+                                spans,
+                                Vec::new(),
+                            );
+                            item.row = Some((block.node, r));
+                            item.source = group.owner;
+                            items.push(item);
                         }
-                        let mut item = text_item(
-                            block.node,
-                            cell.rect,
-                            cell.rect.x,
-                            cell.rect.right(),
-                            spans,
-                            Vec::new(),
-                        );
-                        item.row = Some((block.node, r));
-                        items.push(item);
                     }
                 }
             }

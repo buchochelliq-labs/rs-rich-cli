@@ -782,3 +782,77 @@ fn faithful_dark_source_page_keeps_neutral_text_readable_on_its_owned_backdrop()
         }
     }
 }
+
+#[test]
+fn source_linked_image_cells_dispatch_the_retained_ancestor_action() {
+    use noctiluca::{
+        app::{Options, app},
+        bookmarks::Bookmarks,
+        config::{Config, Images, View},
+        testing::FakeEngine,
+    };
+    let mut p = PageBuilder::new(
+        "https://fixture.example/image-link.html",
+        "Image link",
+        640.,
+        400.,
+    );
+    let link = p.element(
+        p.body(),
+        "A",
+        &[("href", "/original-story")],
+        &[],
+        Some(Rect::new(0., 0., 240., 36.)),
+    );
+    p.image(
+        link,
+        "photo.png",
+        "Photograph",
+        Rect::new(0., 0., 240., 36.),
+    );
+    let snapshot = p.snapshot();
+    let model = build(&snapshot, &mut Revisions::new());
+    let target = model
+        .controls
+        .iter()
+        .find(|c| {
+            c.href
+                .as_deref()
+                .is_some_and(|h| h.ends_with("/original-story"))
+        })
+        .unwrap()
+        .node;
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/snapshots");
+    let engine = FakeEngine::from_dir(&root).unwrap();
+    let state = engine.state.clone();
+    state
+        .lock()
+        .unwrap()
+        .pages
+        .insert("image-link".into(), snapshot);
+    let mut d = app(
+        Box::new(engine),
+        Options {
+            config: Config::default(),
+            bookmarks: Bookmarks::default(),
+            url: Some("https://fixture.example/image-link.html".into()),
+            view: Some(View::Projection),
+            images: Some(Images::None),
+            tunnel: None,
+            control: None,
+        },
+    )
+    .driver(40, 16);
+    wait(&mut d, |d| d.find_text("Photograph").is_some());
+    let (x, y) = d.find_text("Photograph").unwrap();
+    // The shaded placeholder cells, beyond the alt label, carry the same source link.
+    d.click(x + 20, y);
+    wait(&mut d, |_| {
+        state
+            .lock()
+            .unwrap()
+            .actions
+            .iter()
+            .any(|a| matches!(a, noctiluca::engine::PageAction::Click(node) if *node == target))
+    });
+}

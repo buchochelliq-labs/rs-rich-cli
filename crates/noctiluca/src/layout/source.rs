@@ -55,30 +55,64 @@ fn boundary(rel: &SourceRelations, node: usize) -> Option<usize> {
 }
 
 pub(super) fn text_groups(source: &SourcePage, block: usize, marks: &Marks) -> Vec<TextGroup> {
+    groups_at(
+        source,
+        block,
+        &source.page().blocks[block].runs,
+        marks,
+        |run| RunLocation::Block { block, run },
+    )
+}
+
+pub(super) fn cell_groups(
+    source: &SourcePage,
+    block: usize,
+    row: usize,
+    cell: usize,
+    runs: &[Run],
+    marks: &Marks,
+) -> Vec<TextGroup> {
+    groups_at(source, block, runs, marks, |run| RunLocation::Cell {
+        block,
+        row,
+        cell,
+        run,
+    })
+}
+
+fn groups_at(
+    source: &SourcePage,
+    block: usize,
+    runs: &[Run],
+    marks: &Marks,
+    location: impl Fn(usize) -> RunLocation,
+) -> Vec<TextGroup> {
     let rel = &source.relations;
-    let b = &source.page().blocks[block];
     let owner = rel.blocks.iter().find(|p| p.block == block).map(|p| p.node);
-    let mixed_alias = has_alias(source, block, marks);
     let pieces: Vec<_> = rel
         .runs
         .iter()
-        .filter(|p| matches!(p.location, RunLocation::Block { block: n, .. } if n == block))
+        .filter(|p| (0..runs.len()).any(|run| p.location == location(run)))
         .collect();
+    let mixed_alias = marks.adapt.on(Rule::ScreenReaderTwins)
+        && pieces
+            .iter()
+            .any(|p| alias(source, p.node, block).is_some());
     let own_boundary = owner.and_then(|n| boundary(rel, n));
     let mixed_owner = pieces.iter().any(|p| boundary(rel, p.node) != own_boundary);
     if !mixed_alias && !mixed_owner {
         return vec![TextGroup {
-            runs: b.runs.clone(),
+            runs: runs.to_vec(),
             owner,
             rect: None,
         }];
     }
     let mut groups: Vec<TextGroup> = Vec::new();
-    for (run_index, run) in b.runs.iter().enumerate() {
+    for (run_index, run) in runs.iter().enumerate() {
         let mut ranges: Vec<_> = pieces
             .iter()
             .copied()
-            .filter(|p| matches!(p.location, RunLocation::Block { run, .. } if run == run_index))
+            .filter(|p| p.location == location(run_index))
             .collect();
         ranges.sort_by_key(|p| p.bytes.start);
         let mut end = 0;
@@ -258,13 +292,31 @@ pub(super) fn allocate(
                 continue;
             };
             let Some(first) = boxes.first() else { continue };
+            // The established source-declared video/log pair keeps its wider minimum.
+            // Membership is actual ancestry, including a log's atomic retained slot.
+            let owns = |root, video| {
+                rel.blocks.iter().any(|piece| {
+                    rel.contains(root, piece.node)
+                        && match source.page().blocks[piece.block].kind {
+                            BlockKind::Media(m) => {
+                                video && source.page().media[m].kind == MediaKind::Video
+                            }
+                            BlockKind::Log(_) => !video,
+                            _ => false,
+                        }
+                })
+            };
+            let paired = grid.items.len() == 2
+                && ((owns(grid.items[0], true) && owns(grid.items[1], false))
+                    || (owns(grid.items[1], true) && owns(grid.items[0], false)));
             // Unequal spans, overlap and unknown/positioned items are not equal cards.
             if boxes.len() < 2
                 || first.width <= 0.0
                 || first.height <= 0.0
-                || boxes.iter().any(|r| {
-                    (r.width - first.width).abs() > 1.0 || (r.height - first.height).abs() > 1.0
-                })
+                || (!paired
+                    && boxes.iter().any(|r| {
+                        (r.width - first.width).abs() > 1.0 || (r.height - first.height).abs() > 1.0
+                    }))
                 || grid
                     .items
                     .iter()
@@ -298,7 +350,11 @@ pub(super) fn allocate(
             let x1 = ((target.right() / cw).round().max(0.0) as usize).clamp(x0 + 1, columns);
             let fit = adaptive_columns(
                 (x1 - x0) as u16,
-                crate::adapt::MIN_GRID_CELLS as u16,
+                if paired {
+                    32
+                } else {
+                    crate::adapt::MIN_GRID_CELLS as u16
+                },
                 1,
                 count,
             );

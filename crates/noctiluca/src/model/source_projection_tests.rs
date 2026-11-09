@@ -70,7 +70,14 @@ fn source_projection_nested_figure_units_measure_text_and_remove_internal_source
     let text = f.text(link, "Caption café 界 extraordinarylongunbrokenwordabcdefghijklmnopqrstuvwxyz");
     clip_bounds(&mut f, text, [400.0, 700.0, 560.0, 72.0]);
     let nested = f.node(figure, 1, "FIGURE", None, &[], None);
-    flow_text(&mut f, nested, "Nested", [400.0, 1000.0, 560.0, 18.0]);
+    let nested_image = f.el(nested, "IMG", &[("src", "/nested.png"), ("alt", "")], "block");
+    clip_bounds(&mut f, nested_image, [400.0, 900.0, 160.0, 36.0]);
+    let nested_caption = f.el(nested, "FIGCAPTION", &[], "block");
+    clip_bounds(&mut f, nested_caption, [400.0, 1000.0, 560.0, 18.0]);
+    let nested_link = f.el(nested_caption, "A", &[("href", "/nested-caption")], "inline");
+    clip_bounds(&mut f, nested_link, [400.0, 1000.0, 560.0, 18.0]);
+    let nested_text = f.text(nested_link, "Nested");
+    clip_bounds(&mut f, nested_text, [400.0, 1000.0, 560.0, 18.0]);
     flow_text(&mut f, article, "After", [0.0, 1600.0, 960.0, 18.0]);
     let mut marks = crate::layout::Marks::default();
     marks.adapt.set(crate::adapt::Rule::CollapseGaps, false);
@@ -81,6 +88,10 @@ fn source_projection_nested_figure_units_measure_text_and_remove_internal_source
         for word in ["Before", "Caption", "café", "界", "Nested", "After"] {
             assert_eq!(text.matches(word).count(), 1, "{width}: {text}");
         }
+        assert_eq!(p.regions.len(), 2, "nested media must be consumed once");
+        let joined: String = text.chars().filter(|c| !c.is_whitespace()).collect();
+        assert_eq!(joined.matches("extraordinarylongunbrokenwordabcdefghijklmnopqrstuvwxyz").count(), 1, "long word clipped at {width}: {text}");
+        assert!(p.lines.iter().flat_map(|l| &l.spans).any(|s| s.control == Some(1) && s.text.contains("Nested")));
         assert!(p.lines.len() < 18, "obsolete source gaps at {width}: {} rows", p.lines.len());
         let image = p.regions[0];
         let caption = lines.iter().position(|s| s.contains("Caption")).unwrap();
@@ -255,4 +266,31 @@ fn source_projection_figure_keeps_table_rows_as_measured_units() {
     let (_, p) = projected_source(&f, 40, &crate::layout::Marks::default());
     assert!(p.lines.iter().any(|l| l.plain().contains("Left") && l.plain().contains("Right")), "table row split: {:?}", p.lines);
     assert!(p.lines.len() < 5);
+}
+
+#[test]
+fn source_projection_table_canonical_ranges_use_exact_cell_addresses() {
+    let mut f = Fake::new();
+    clip_bounds(&mut f, 0, [0.0, 0.0, 640.0, 800.0]);
+    let table = f.el(0, "TABLE", &[], "table");
+    clip_bounds(&mut f, table, [0.0, 36.0, 640.0, 18.0]);
+    let row = f.el(table, "TR", &[], "table-row");
+    clip_bounds(&mut f, row, [0.0, 36.0, 640.0, 18.0]);
+    let cell = f.el(row, "TD", &[], "table-cell");
+    clip_bounds(&mut f, cell, [0.0, 36.0, 640.0, 18.0]);
+    let before = f.text(cell, "Before ");
+    clip_bounds(&mut f, before, [0.0, 36.0, 80.0, 18.0]);
+    let spoken = f.el(cell, "SPAN", &[], "inline");
+    clip_bounds(&mut f, spoken, [-10000.0, -10000.0, 80.0, 18.0]);
+    clip_style(&mut f, spoken, 8, "0");
+    let said = f.text(spoken, "$29.99");
+    clip_bounds(&mut f, said, [-10000.0, -10000.0, 80.0, 18.0]);
+    let shown = f.el(cell, "SPAN", &[("aria-hidden", "true")], "inline");
+    clip_bounds(&mut f, shown, [160.0, 36.0, 80.0, 18.0]);
+    let visual = f.text(shown, "$2999");
+    clip_bounds(&mut f, visual, [160.0, 36.0, 80.0, 18.0]);
+    let (_, p) = projected_source(&f, 80, &crate::layout::Marks::default());
+    let price = p.lines.iter().find(|l| l.plain().contains("$29.99")).unwrap().plain();
+    assert_eq!(price.find("$29.99"), Some(20), "exact cell alias: {price}");
+    assert!(price.contains("Before"));
 }
