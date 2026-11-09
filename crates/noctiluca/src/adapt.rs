@@ -330,8 +330,8 @@ pub const ICON_PX: f64 = 16.0;
 pub const MAX_PICTURE_ROWS: usize = 14;
 /// Below this many columns a terminal is narrow: navigation collapses.
 pub const NARROW_COLUMNS: u16 = 100;
-/// A grid's column is at least this many cells wide when grids snap.
-pub const MIN_GRID_CELLS: usize = 16;
+/// A grid card is at least this many cells wide when grids snap.
+pub const MIN_GRID_CELLS: usize = 32;
 /// A picture of text is a banner at least this many times wider than
 /// tall.
 pub const BANNER_RATIO: f64 = 4.0;

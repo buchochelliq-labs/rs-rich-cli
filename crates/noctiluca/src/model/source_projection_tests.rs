@@ -140,6 +140,65 @@ fn source_projection_video_pairs_with_accessible_live_chat_logs_only() {
 }
 
 #[test]
+fn source_projection_adaptive_card_grid_preserves_a_readable_minimum_width() {
+    let mut f = Fake::new();
+    let grid = f.el(0, "DIV", &[], "grid");
+    clip_bounds(&mut f, grid, [0.0, 0.0, 960.0, 144.0]);
+    for (index, x) in [0.0, 240.0, 480.0, 720.0].into_iter().enumerate() {
+        let card = f.el(grid, "DIV", &[], "block");
+        clip_bounds(&mut f, card, [x, 0.0, 240.0, 72.0]);
+        let title = f.text(card, &format!("grid-card-{index}"));
+        clip_bounds(&mut f, title, [x, 0.0, 240.0, 18.0]);
+    }
+
+    let (_, projection) = projected_source(&f, 120, &crate::layout::Marks::default());
+    let lines = projection
+        .lines
+        .iter()
+        .map(crate::layout::Line::plain)
+        .collect::<Vec<_>>();
+    let rows: Vec<_> = (0..4)
+        .map(|index| {
+            let label = format!("grid-card-{index}");
+            assert_eq!(lines.iter().filter(|line| line.contains(&label)).count(), 1);
+            lines.iter().position(|line| line.contains(&label)).unwrap()
+        })
+        .collect();
+    assert_eq!(rows[0], rows[1], "first two cards share the first row: {lines:?}");
+    assert_eq!(rows[0], rows[2], "third card fits the first row: {lines:?}");
+    assert!(rows[3] > rows[0], "fourth card moves to a new row: {lines:?}");
+    assert!(projection.lines.iter().all(|line| line.width() <= 120));
+}
+
+#[test]
+fn source_projection_stacks_unequal_grid_when_one_track_is_too_narrow() {
+    for (first_width, stacked) in [(240.0, true), (320.0, false)] {
+        let mut f = Fake::new();
+        let grid = f.el(0, "DIV", &[], "grid");
+        clip_bounds(&mut f, grid, [0.0, 0.0, 800.0, 180.0]);
+        for (x, width, label) in [
+            (0.0, first_width, "narrow track"),
+            (first_width, 800.0 - first_width, "wide track"),
+        ] {
+            let card = f.el(grid, "DIV", &[], "block");
+            clip_bounds(&mut f, card, [x, 0.0, width, 90.0]);
+            let title = f.text(card, label);
+            clip_bounds(&mut f, title, [x, 0.0, width, 18.0]);
+        }
+
+        let (_, projection) = projected_source(&f, 100, &crate::layout::Marks::default());
+        let lines: Vec<_> = projection
+            .lines
+            .iter()
+            .map(crate::layout::Line::plain)
+            .collect();
+        let first = lines.iter().position(|line| line.contains("narrow track")).unwrap();
+        let second = lines.iter().position(|line| line.contains("wide track")).unwrap();
+        assert_eq!(second > first, stacked, "source track width {first_width}: {lines:?}");
+    }
+}
+
+#[test]
 fn source_projection_nested_figure_units_measure_text_and_remove_internal_source_gaps() {
     let mut f = Fake::new();
     clip_bounds(&mut f, 0, [0.0, 0.0, 960.0, 2000.0]);
@@ -615,18 +674,17 @@ fn source_projection_figure_does_not_flatten_a_descendant_source_grid() {
             ..Default::default()
         };
         let (_, p) = projected_source(&f, width, &marks);
-        assert_eq!(
-            p.lines.len(),
-            3,
-            "the grid's measured height must stack with its neighbors"
-        );
-        assert!(
-            p.lines
-                .iter()
-                .any(|l| l.plain().contains("Leftpane") && l.plain().contains("Rightpane")),
-            "source grid must retain its lanes: {:?}",
-            p.lines
-        );
+        let same_row = p
+            .lines
+            .iter()
+            .any(|l| l.plain().contains("Leftpane") && l.plain().contains("Rightpane"));
+        if width == 40 {
+            assert_eq!(p.lines.len(), 4, "cards stack when 32 cells cannot fit");
+            assert!(!same_row, "source cards must not fall below their minimum width");
+        } else {
+            assert_eq!(p.lines.len(), 3, "the grid's measured height stacks with prose");
+            assert!(same_row, "source grid retains its lanes: {:?}", p.lines);
+        }
     }
 }
 

@@ -476,24 +476,21 @@ pub(super) fn allocate(
                 && boxes.iter().any(|r| {
                     (r.width - first.width).abs() > 1.0 || (r.height - first.height).abs() > 1.0
                 });
+            let minimum = if paired {
+                32
+            } else {
+                crate::adapt::MIN_GRID_CELLS
+            };
+            let narrow_track = boxes.iter().any(|r| r.width / cw < minimum as f64);
             // Spanning/unequal groups retain source columns when they fit. At a
             // narrower allocation each actual item is one vertical unit.
-            if unequal && target.width <= (x1 - x0) as f64 * cw + 1.0 {
+            if unequal && !narrow_track && target.width <= (x1 - x0) as f64 * cw + 1.0 {
                 continue;
             }
             let fit = if unequal {
                 1
             } else {
-                adaptive_columns(
-                    (x1 - x0) as u16,
-                    if paired {
-                        32
-                    } else {
-                        crate::adapt::MIN_GRID_CELLS as u16
-                    },
-                    1,
-                    count,
-                )
+                adaptive_columns((x1 - x0) as u16, minimum as u16, 1, count)
             };
             if fit == 1 {
                 stacked.push((grid.node, target.bottom()));

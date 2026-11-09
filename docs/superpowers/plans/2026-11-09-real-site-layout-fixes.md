@@ -34,10 +34,10 @@
 
 **Interfaces:** No public type or API changes. Reuse `Walker::log_kind` as the semantic classifier for descendant chat/log containers.
 
-- [ ] Add a neutral flex-container regression with named video and chat sections; the chat descendant uses `aria-live="polite"` with element entries. Assert source grid recognition and correct source items; include a non-log status control case.
-- [ ] Run the focused regression and confirm it fails because the current classifier only accepts a literal `role="log"` descendant.
-- [ ] Change paired-section detection to call the existing live-log classifier, retaining the exactly-two-named-pane and exclusive video/log conditions.
-- [ ] Re-run the focused case plus existing live-log and model tests; commit the task.
+- [x] Add a neutral flex-container regression with named video and chat sections; the chat descendant uses `aria-live="polite"` with element entries. Assert source grid recognition and correct source items; include a non-log status control case.
+- [x] Run the focused regression and confirm it fails because the current classifier only accepts a literal `role="log"` descendant.
+- [x] Change paired-section detection to call the existing live-log classifier, retaining the exactly-two-named-pane and exclusive video/log conditions.
+- [x] Re-run the focused case plus existing live-log and model tests; commit the task.
 
 ### Task 2: Reflow narrow cards and unequal columns
 
@@ -45,10 +45,10 @@
 
 **Interfaces:** Keep `Rule::SnapGrids`, `adaptive_columns`, `project_source`, and all public geometry unchanged. Set the generic Noctiluca minimum card width to 32 cells. Preserve unequal source grids when every track meets that width; stack an unequal grid as ordered source units when a track is narrower.
 
-- [ ] Add four equal cards in one source row at 120 columns. Assert that three fit the first row and the fourth moves below; assert every card label is present once and in source order. Confirm the current 16-cell minimum fails this oracle.
-- [ ] Add an unequal 30/70-cell source row at 100 columns. Assert the 30-cell track triggers ordered stacking; add a 40/60-cell control that remains side-by-side.
-- [ ] Implement the 32-cell minimum and narrow-track condition without changing the paired video/log minimum or unsupported/positioned-grid behavior.
-- [ ] Run focused grid, nested figure, source ordering, popup, and model/layout tests; inspect the diff and commit.
+- [x] Add four equal cards in one source row at 120 columns. Assert that three fit the first row and the fourth moves below; assert every card label is present once and in source order. Confirm the current 16-cell minimum fails this oracle.
+- [x] Add an unequal 30/70-cell source row at 100 columns. Assert the 30-cell track triggers ordered stacking; add a 40/60-cell control that remains side-by-side.
+- [x] Implement the 32-cell minimum and narrow-track condition without changing the paired video/log minimum or unsupported/positioned-grid behavior.
+- [x] Run focused grid, nested figure, source ordering, popup, and model/layout tests; inspect the diff and commit.
 
 ### Task 3: Verify and prepare review
 
