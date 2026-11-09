@@ -156,14 +156,22 @@ jobs:
         with:
           python-version: "3.9"
       - name: Install and import on Python 3.9
+        if: matrix.name != 'linux-aarch64'
         shell: bash
         run: python crates/rich-py/tests/smoke.py dist
       - uses: actions/setup-python@v7
         with:
           python-version: "3.13"
       - name: Install and import on Python 3.13
+        if: matrix.name != 'linux-aarch64'
         shell: bash
         run: python crates/rich-py/tests/smoke.py dist
+      - uses: actions/upload-artifact@v7
+        if: matrix.name == 'linux-aarch64'
+        with:
+          name: wheel-linux-aarch64
+          path: dist/*.whl
+          if-no-files-found: error
       # The Python site's pictures (docs/python/media) are rendered by the
       # scripts in crates/rich-py/examples/docs; a change that renders them
       # differently must regenerate them. One platform is enough: the SVGs
@@ -171,3 +179,24 @@ jobs:
       - name: Check the Python docs pictures
         if: matrix.name == 'linux-x86_64'
         run: python scripts/capture_python_docs.py --check
+
+  aarch64-wheel-smoke:
+    name: wheel (linux-aarch64, native smoke)
+    needs: wheels
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.9"
+      - uses: actions/download-artifact@v8
+        with:
+          name: wheel-linux-aarch64
+          path: dist
+      - name: Install and import on Python 3.9
+        run: python crates/rich-py/tests/smoke.py dist
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+      - name: Install and import on Python 3.13
+        run: python crates/rich-py/tests/smoke.py dist
