@@ -225,13 +225,12 @@ impl Presentation {
             }
         }
         self.slots.clear();
-        self.projection = Rc::new(crate::app::lay_out_with_logs(
-            page,
-            view,
-            width,
-            marks,
-            &mut self.slots,
-        ));
+        self.projection = Rc::new(match source {
+            Some(source) => {
+                crate::app::lay_out_source_with_logs(source, view, width, marks, &mut self.slots)
+            }
+            None => crate::app::lay_out_with_logs(page, view, width, marks, &mut self.slots),
+        });
         self.previous = Some((page.clone(), view, width, marks.clone()));
         self.projection.clone()
     }

@@ -300,6 +300,27 @@ pub(crate) fn lay_out_with_logs(
     marks: &Marks,
     slots: &mut Vec<layout::LogSlot>,
 ) -> Projection {
+    lay_out_pair(page, None, view, width, marks, slots)
+}
+
+pub(crate) fn lay_out_source_with_logs(
+    source: &crate::model::SourcePage,
+    view: View,
+    width: u16,
+    marks: &Marks,
+    slots: &mut Vec<layout::LogSlot>,
+) -> Projection {
+    lay_out_pair(source.page(), Some(source), view, width, marks, slots)
+}
+
+fn lay_out_pair(
+    page: &Page,
+    source: Option<&crate::model::SourcePage>,
+    view: View,
+    width: u16,
+    marks: &Marks,
+    slots: &mut Vec<layout::LogSlot>,
+) -> Projection {
     #[cfg(test)]
     TEST_LAYOUTS.with(|n| n.set(n.get() + 1));
     match view {
@@ -346,13 +367,22 @@ pub(crate) fn lay_out_with_logs(
                         marks.adapt.on(crate::adapt::Rule::ScreenReaderTwins),
                     );
             }
-            layout::project_with_logs(
-                page,
-                width,
-                (CELL.0 as f64, CELL.1 as f64),
-                &underlay,
-                slots,
-            )
+            match source {
+                Some(source) => layout::project_source_with_logs(
+                    source,
+                    width,
+                    (CELL.0 as f64, CELL.1 as f64),
+                    &underlay,
+                    slots,
+                ),
+                None => layout::project_with_logs(
+                    page,
+                    width,
+                    (CELL.0 as f64, CELL.1 as f64),
+                    &underlay,
+                    slots,
+                ),
+            }
         }
     }
 }

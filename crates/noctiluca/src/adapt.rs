@@ -78,6 +78,8 @@ pub enum Rule {
     /// and count, `‹ 1–3 of 6 ›`, and the shelf keys page it. Off, it
     /// shows the items in view, as Chrome does, with nothing to page it.
     Shelves,
+    /// Stack genuine source figures, captions and surrounding ordinary flow by measured terminal height.
+    FigureFlow,
 }
 
 /// What a rule is, for the config, the command line and the about page.
@@ -183,6 +185,12 @@ pub const RULES: &[RuleInfo] = &[
         rule: Rule::Bandwidth,
         name: "bandwidth",
         what: "lower frame rate and tier when the terminal is short of bandwidth",
+        default: true,
+    },
+    RuleInfo {
+        rule: Rule::FigureFlow,
+        name: "figure-flow",
+        what: "stack source figures and captions with surrounding ordinary flow",
         default: true,
     },
 ];
@@ -626,7 +634,7 @@ mod tests {
         assert!(adapt.on(Rule::DecorativeImages) && adapt.on(Rule::LiveTail));
         assert!(!adapt.on(Rule::TextOverPictures));
         assert!(Adapt::none().is_none());
-        assert_eq!(RULES.len(), 15);
+        assert_eq!(RULES.len(), 16);
         for info in RULES {
             assert_eq!(Rule::parse(info.name), Some(info.rule));
         }

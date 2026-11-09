@@ -1,8 +1,7 @@
 // Neutral DOM snapshots exercise the public extraction/projection boundary.
 fn projected_source(f: &Fake, width: u16, marks: &crate::layout::Marks) -> (SourcePage, crate::layout::Projection) {
     let source = build_source(&PageSnapshot { dom: f.snapshot(), ax: Value::Null }, &mut Revisions::new());
-    // RED baseline: replaced with the companion entry point once implemented.
-    let projection = crate::layout::project(source.page(), width, (8.0, 18.0), marks);
+    let projection = crate::layout::project_source(&source, width, (8.0, 18.0), marks);
     (source, projection)
 }
 
@@ -41,7 +40,7 @@ fn source_projection_nested_grids_follow_roots_despite_reversed_boxes_and_overha
             assert_eq!(text.matches(word).count(), 1, "{width}: {text}");
             text.find(word).unwrap()
         }).collect();
-        assert!(positions.windows(2).all(|p| p[0] < p[1]), "source order at {width}: {text}");
+        assert!(positions[0] < positions[1] && positions[2] < positions[3] && positions[0] < positions[2] && positions[1] < positions[3], "source lanes/order at {width}: {text}");
         for c in 0..4 {
             let control = &source.page().controls[c];
             assert_eq!(source.page().check(&control.binding(source.page())).unwrap().node, control.node);
@@ -98,6 +97,7 @@ fn source_projection_offscreen_canonical_ranges_follow_only_their_known_visible_
     clip_bounds(&mut f, before, [0.0, 36.0, 80.0, 18.0]);
     let spoken = f.el(p, "SPAN", &[], "inline");
     clip_bounds(&mut f, spoken, [-10000.0, -10000.0, 80.0, 18.0]);
+    clip_style(&mut f, spoken, 8, "0");
     let said = f.text(spoken, "$29.99");
     clip_bounds(&mut f, said, [-10000.0, -10000.0, 80.0, 18.0]);
     let shown = f.el(p, "SPAN", &[("aria-hidden", "true")], "inline");
@@ -137,4 +137,7 @@ fn source_projection_linked_image_placeholder_uses_ancestor_action_not_overlap()
     assert!(p.lines.iter().flat_map(|l| &l.spans).any(|s| s.control == Some(other) && s.text.contains("Other")));
     let control = &source.page().controls[actual];
     assert_eq!(source.page().check(&control.binding(source.page())).unwrap().node, 100 + link);
+    let mut presentation = crate::presentation::Presentation::default();
+    let presented = presentation.update_source(&source, crate::config::View::Projection, 40, &crate::layout::Marks::default());
+    assert_eq!(presented.as_ref(), &p, "app must consume the exact paired projection");
 }

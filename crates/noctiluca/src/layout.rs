@@ -26,8 +26,10 @@ use rich::cells::cell_len;
 use crate::adapt::{Adapt, Rule};
 use crate::engine::NodeId;
 use crate::model::{
-    Block, BlockKind, Check, Control, Log, MediaKind, Page, Place, Role, Run, Table,
+    Block, BlockKind, Check, Control, Log, MediaKind, Page, Place, Role, Run, SourcePage, Table,
 };
+
+mod source;
 
 /// A run of text on a line with one style (a rich style definition).
 #[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
@@ -1058,6 +1060,7 @@ pub fn project_overlay(
     page.overlays.get(index)?;
     Some(project_part(
         page,
+        None,
         columns,
         cell,
         marks,
@@ -1075,6 +1078,7 @@ pub(crate) fn project_foreground(
 ) -> Projection {
     project_part(
         page,
+        None,
         columns,
         cell,
         marks,
@@ -1097,12 +1101,43 @@ pub(crate) fn project_with_logs(
     marks: &Marks,
     slots: &mut Vec<LogSlot>,
 ) -> Projection {
-    let mut main = project_part(page, columns, cell, marks, Part::Flow, slots);
+    project_pair(page, None, columns, cell, marks, slots)
+}
+
+/// Project the exact source relationships paired with this page.
+pub fn project_source(
+    source: &SourcePage,
+    columns: u16,
+    cell: (f64, f64),
+    marks: &Marks,
+) -> Projection {
+    project_source_with_logs(source, columns, cell, marks, &mut Vec::new())
+}
+
+pub(crate) fn project_source_with_logs(
+    source: &SourcePage,
+    columns: u16,
+    cell: (f64, f64),
+    marks: &Marks,
+    slots: &mut Vec<LogSlot>,
+) -> Projection {
+    project_pair(source.page(), Some(source), columns, cell, marks, slots)
+}
+
+fn project_pair(
+    page: &Page,
+    source: Option<&SourcePage>,
+    columns: u16,
+    cell: (f64, f64),
+    marks: &Marks,
+    slots: &mut Vec<LogSlot>,
+) -> Projection {
+    let mut main = project_part(page, source, columns, cell, marks, Part::Flow, slots);
     for (place, part) in [(Place::Pinned, Part::Pinned), (Place::Docked, Part::Docked)] {
         if !page.layers.iter().any(|l| l.place == place) {
             continue;
         }
-        let strip = project_part(page, columns, cell, marks, part, slots);
+        let strip = project_part(page, source, columns, cell, marks, part, slots);
         if strip.lines.is_empty() {
             continue;
         }
@@ -1143,9 +1178,45 @@ fn cut_face(face: &str, width: usize) -> String {
     format!("{}…{close}", out.trim_end())
 }
 
+/// A box to place: where Chrome put it, and what it holds.
+struct Item {
+    source: Option<usize>,
+    anchor: Option<f64>,
+    allocation: Option<(usize, usize)>,
+    top: f64,
+    bottom: f64,
+    left: f64,
+    /// Unclipped source edges for a source-container transform. Terminal
+    /// clipping must not erase a pane to the right before it is stacked.
+    source_x: (usize, usize),
+    x0: usize,
+    x1: usize,
+    /// Text to wrap to the box's width, with a first-line prefix; or
+    /// lines kept as they are (code, media).
+    wrap: Option<(Vec<Span>, Vec<Span>)>,
+    lines: Vec<Line>,
+    /// The node it shows.
+    node: crate::engine::NodeId,
+    /// The live log it is.
+    log: Option<NodeId>,
+    /// A media region's index and its picture's rows (the lines after
+    /// are its caption).
+    media: Option<(usize, usize, usize)>,
+    /// Kept to one line, cut with `…` (a control's face).
+    one_line: bool,
+    /// A table cell's row (the table's node, the row's index): the
+    /// cells of a row start on one terminal row.
+    row: Option<(crate::engine::NodeId, usize)>,
+    /// A picture's `Image:` caption, wrapped under it to the box's
+    /// width once the box has its final columns (a snapped grid can
+    /// narrow it).
+    caption: Option<Vec<Span>>,
+}
+
 /// One part of the page projected ([`project`]).
 fn project_part(
     page: &Page,
+    source: Option<&SourcePage>,
     columns: u16,
     cell: (f64, f64),
     marks: &Marks,
@@ -1167,37 +1238,6 @@ fn project_part(
             .map_or(0.0, |layer| layer.rect.x),
         _ => 0.0,
     };
-    /// A box to place: where Chrome put it, and what it holds.
-    struct Item {
-        top: f64,
-        bottom: f64,
-        left: f64,
-        /// Unclipped source edges for a source-container transform. Terminal
-        /// clipping must not erase a pane to the right before it is stacked.
-        source_x: (usize, usize),
-        x0: usize,
-        x1: usize,
-        /// Text to wrap to the box's width, with a first-line prefix; or
-        /// lines kept as they are (code, media).
-        wrap: Option<(Vec<Span>, Vec<Span>)>,
-        lines: Vec<Line>,
-        /// The node it shows.
-        node: crate::engine::NodeId,
-        /// The live log it is.
-        log: Option<NodeId>,
-        /// A media region's index and its picture's rows (the lines after
-        /// are its caption).
-        media: Option<(usize, usize, usize)>,
-        /// Kept to one line, cut with `…` (a control's face).
-        one_line: bool,
-        /// A table cell's row (the table's node, the row's index): the
-        /// cells of a row start on one terminal row.
-        row: Option<(crate::engine::NodeId, usize)>,
-        /// A picture's `Image:` caption, wrapped under it to the box's
-        /// width once the box has its final columns (a snapped grid can
-        /// narrow it).
-        caption: Option<Vec<Span>>,
-    }
     let mut items: Vec<Item> = Vec::new();
     // The tops of the highest pinned and docked layers: each strip starts
     // at its first.
@@ -1253,6 +1293,9 @@ fn project_part(
                      first: Vec<Span>| {
         let (x0, x1) = snap(left, right);
         Item {
+            source: None,
+            anchor: None,
+            allocation: None,
             top: rect.y,
             bottom: rect.bottom(),
             left,
@@ -1357,6 +1400,9 @@ fn project_part(
         let mut rect = region.rect;
         rect.height = ch;
         items.push(Item {
+            source: None,
+            anchor: None,
+            allocation: None,
             top: rect.y,
             bottom: rect.y + ch,
             left: rect.x,
@@ -1383,6 +1429,9 @@ fn project_part(
             let (x0, x1) = snap(shelf.rect.x, shelf.rect.right());
             let top = shelf.rect.bottom();
             items.push(Item {
+                source: None,
+                anchor: None,
+                allocation: None,
                 top,
                 bottom: top + ch,
                 left: shelf.rect.x,
@@ -1403,7 +1452,7 @@ fn project_part(
             });
         }
     }
-    for block in &page.blocks {
+    for (block_index, block) in page.blocks.iter().enumerate() {
         if block.region.is_some_and(|r| collapsed[r]) || block.stack.covered {
             continue;
         }
@@ -1419,7 +1468,9 @@ fn project_part(
         // Wholly above or left of the page: text moved off screen for
         // screen readers only (Wikipedia's reference back-links sit
         // 100,000 pixels up), never shown.
-        if block.rect.bottom() < 0.0 || block.rect.right() < 0.0 {
+        if (block.rect.bottom() < 0.0 || block.rect.right() < 0.0)
+            && !source.is_some_and(|s| source::has_alias(s, block_index, marks))
+        {
             continue;
         }
         // Scrolled out of a shelf's box sideways: Chrome shows it only
@@ -1491,6 +1542,9 @@ fn project_part(
                 let (x0, x1) = snap(log.rect.x, log.rect.right());
                 let rows = ((log.rect.height / ch).round() as usize).clamp(1, MAX_MEDIA_ROWS);
                 items.push(Item {
+                    source: None,
+                    anchor: None,
+                    allocation: None,
                     top: log.rect.y,
                     bottom: log.rect.bottom(),
                     left: log.rect.x,
@@ -1539,6 +1593,9 @@ fn project_part(
                 } else {
                     let full = lines.len();
                     items.push(Item {
+                        source: None,
+                        anchor: None,
+                        allocation: None,
                         top: indicator.rect.y,
                         bottom: indicator.rect.y + full as f64 * ch,
                         left: indicator.rect.x,
@@ -1626,6 +1683,9 @@ fn project_part(
                 let caption =
                     captioned.then(|| vec![Span::new(format!("Image: {}", media.alt), "italic")]);
                 items.push(Item {
+                    source: None,
+                    anchor: None,
+                    allocation: None,
                     top: media.rect.y,
                     bottom: media.rect.y + rows as f64 * ch,
                     left: media.rect.x,
@@ -1693,6 +1753,9 @@ fn project_part(
                     .flat_map(|row| wrap_chars(&Span::new(row, "cyan"), x1 - x0, &[], &[]))
                     .collect();
                 items.push(Item {
+                    source: None,
+                    anchor: None,
+                    allocation: None,
                     top: block.rect.y,
                     bottom: block.rect.bottom(),
                     left,
@@ -1722,17 +1785,57 @@ fn project_part(
                 {
                     first.push(Span::new(format!("{marker} "), "bright_black"));
                 }
-                items.push(text_item(
-                    block.node,
-                    block.rect,
-                    left,
-                    right,
-                    spans(&block.runs, base, page, marks),
-                    first,
-                ));
+                if let Some(source) = source {
+                    for group in source::text_groups(source, block_index, marks) {
+                        let (rect, l, r) = match group.rect {
+                            Some(rect) => (rect, rect.x, rect.right()),
+                            None => (block.rect, left, right),
+                        };
+                        if rect.bottom() < 0.0 || rect.right() < 0.0 {
+                            continue;
+                        }
+                        let content = spans(&group.runs, base, page, marks);
+                        if content.iter().all(|s| s.text.is_empty()) {
+                            continue;
+                        }
+                        let mut item = text_item(block.node, rect, l, r, content, first.clone());
+                        item.source = group.owner;
+                        item.anchor = Some(rect.y);
+                        items.push(item);
+                    }
+                } else {
+                    items.push(text_item(
+                        block.node,
+                        block.rect,
+                        left,
+                        right,
+                        spans(&block.runs, base, page, marks),
+                        first,
+                    ));
+                }
             }
         }
         for item in &mut items[first_item..] {
+            if let Some(source) = source {
+                item.source = item.source.or_else(|| {
+                    source
+                        .relations
+                        .blocks
+                        .iter()
+                        .find(|p| p.block == block_index)
+                        .map(|p| p.node)
+                });
+                item.anchor.get_or_insert(item.top);
+                if let Some((media, _, _)) = item.media {
+                    if page.media[media].kind == MediaKind::Image {
+                        if let Some(control) = source.relations.media_controls[media] {
+                            for span in item.lines.iter_mut().flat_map(|l| &mut l.spans) {
+                                span.control = Some(control);
+                            }
+                        }
+                    }
+                }
+            }
             item.top += dy;
             item.bottom += dy;
         }
@@ -1750,7 +1853,11 @@ fn project_part(
         }
     }
     // A grid snaps first, on Chrome's own places.
-    if adapt.on(Rule::SnapGrids) {
+    if let Some(source) = source {
+        if part == Part::Flow {
+            source::allocate(source, &mut items, columns, (cw, ch), marks);
+        }
+    } else if adapt.on(Rule::SnapGrids) {
         for grid in &page.grids {
             // Named source panes need room for controls and log labels; their
             // state remains independently keyed by the original browser nodes.
@@ -1997,6 +2104,7 @@ fn project_part(
                 .map(|(_, (_, _, x0))| x0.saturating_sub(1))
                 .min()
                 .unwrap_or(columns);
+            let limit = item.allocation.map_or(limit, |(_, end)| end.min(limit));
             item.x1 = needed.min(limit).max(item.x1);
         }
     }
@@ -2026,6 +2134,9 @@ fn project_part(
             .map(|(_, (_, _, _, end))| end + 1)
             .max()
             .unwrap_or(0);
+        let limit = items[n]
+            .allocation
+            .map_or(limit, |(start, _)| start.max(limit));
         let start = x1.saturating_sub(want).max(limit).min(x0);
         items[n].x0 = start;
         placed[n].2 = start;
@@ -2064,6 +2175,11 @@ fn project_part(
                 }
                 _ => cut_line(first, spans, width),
             }];
+        }
+    }
+    if let Some(source) = source {
+        if part == Part::Flow {
+            source::stack_figures(source, &mut items, columns, (cw, ch), marks);
         }
     }
     // Reading order: top, then left. A table's rows keep their order, even
@@ -2105,6 +2221,7 @@ fn project_part(
     type Placed = (
         f64,
         f64,
+        f64,
         usize,
         usize,
         Vec<Line>,
@@ -2128,7 +2245,17 @@ fn project_part(
             if let Some(log) = i.log {
                 logs.push((log, i.lines.len()));
             }
-            (i.top, i.left, i.x0, i.x1, i.lines, i.node, i.media, i.row)
+            (
+                i.top,
+                i.anchor.unwrap_or(i.top),
+                i.left,
+                i.x0,
+                i.x1,
+                i.lines,
+                i.node,
+                i.media,
+                i.row,
+            )
         })
         .collect();
     let mut placed_logs = Vec::new();
@@ -2148,7 +2275,7 @@ fn project_part(
     // up by them, so what is beside it keeps its place.
     let collapse = adapt.on(Rule::CollapseGaps);
     let mut lifted = 0usize;
-    for (top, _, x0, x1, lines, node, media, table_row) in boxes {
+    for (top, anchor, _, x0, x1, lines, node, media, table_row) in boxes {
         // A page can place a block millions of pixels down: blank rows
         // past a few screens tell the reader nothing, so the gap is capped
         // and the grid grows with the content, not the coordinates.
@@ -2210,7 +2337,7 @@ fn project_part(
                 grid.push(vec![None; columns]);
                 owner.push(None);
             }
-            owner[row].get_or_insert((node, k, top + k as f64 * ch));
+            owner[row].get_or_insert((node, k, anchor + k as f64 * ch));
             let mut x = x0;
             for span in &line.spans {
                 let start = x;
