@@ -30,9 +30,10 @@
 //! - **Live regions**: a drawing the page changes is drawn again. An
 //!   inline `<svg>`'s still is kept by its content's revision
 //!   ([`Media::revision`](crate::model::Media::revision)), so a reading
-//!   that sees it changed captures it again; its last still shows until
-//!   the new one comes. A `<canvas>` changes no DOM: while the view shows
-//!   it, it is captured at a low rate ([`CANVAS_POLL`], [`CANVAS_IDLE`]
+//!   that sees it changed captures it again; already accepted SVG pixels
+//!   remain visible while the same drawing's new revision decodes. Late
+//!   old-revision completions cannot supply that fallback. A `<canvas>` changes
+//!   no DOM: while the view shows it, it is captured at a low rate ([`CANVAS_POLL`], [`CANVAS_IDLE`]
 //!   once it holds still), and each capture that changed goes out as a
 //!   frame, paced within the byte budget as a video's are. At most
 //!   [`MAX_LIVE_CANVASES`] are watched at once, nearest the view; one
@@ -458,6 +459,8 @@ struct Worker<'a> {
     decoded: Receiver<StillCompletion>,
     /// Bounded to live keys; transport IDs remain until stale jobs complete.
     recovery: HashMap<StillKey, StillRecovery>,
+    /// Already accepted SVG pixels, with their original owner, during revisions.
+    svg_accepted: HashMap<NodeId, AcceptedSvg>,
     outstanding: HashSet<u64>,
     next_attempt: u64,
     /// The small pictures in lines, decoded by source, and those asked for.
@@ -631,19 +634,32 @@ impl Worker<'_> {
             self.stills.clear();
             self.pictures.clear();
             self.recovery.clear();
+            self.svg_accepted.clear();
             self.inline.clear();
             self.inline_asked.clear();
             self.canvases.clear();
         }
-        let live: HashSet<_> = page.media.iter().map(key_of).collect();
-        self.recovery.retain(|key, _| live.contains(key));
-        self.stills.retain(|key, _| live.contains(key));
-        self.pictures.retain(|key, _| live.contains(key));
+        let live: HashMap<_, _> = page.media.iter().map(|m| (key_of(m), m.kind)).collect();
+        self.recovery
+            .retain(|key, state| live.get(key) == Some(&state.kind));
+        self.stills.retain(|key, _| self.recovery.contains_key(key));
+        self.pictures
+            .retain(|key, _| self.recovery.contains_key(key));
+        let drawings: HashMap<_, _> = page
+            .media
+            .iter()
+            .filter(|m| m.kind == MediaKind::Svg)
+            .map(|m| (m.node, key_of(m)))
+            .collect();
+        self.svg_accepted.retain(|node, accepted| {
+            drawings
+                .get(node)
+                .is_some_and(|key| same_svg_identity(&accepted.owner.1, key))
+        });
         self.follow_logs(&mut page);
         self.dress_inline(&mut page);
         for media in &mut page.media {
-            let key = key_of(media);
-            let (still, picture) = self.shown(&key);
+            let (still, picture) = self.shown(media);
             media.still = still;
             media.picture = picture;
         }
@@ -768,12 +784,22 @@ impl Worker<'_> {
         }
     }
 
-    /// Retain good pixels only for the exact current source, size and revision.
-    fn shown(&self, key: &StillKey) -> (Option<Arc<[u8]>>, Option<Picture>) {
-        (
-            self.stills.get(key).cloned(),
-            self.pictures.get(key).cloned(),
-        )
+    /// Current-key pixels, or an already accepted SVG drawing while a new
+    /// content revision decodes. The latter keeps its original ownership record.
+    fn shown(&self, media: &Media) -> (Option<Arc<[u8]>>, Option<Picture>) {
+        let key = key_of(media);
+        if let Some(picture) = self.pictures.get(&key) {
+            return (self.stills.get(&key).cloned(), Some(picture.clone()));
+        }
+        if media.kind == MediaKind::Svg
+            && let Some(accepted) = self
+                .svg_accepted
+                .get(&media.node)
+                .filter(|accepted| same_svg_identity(&accepted.owner.1, &key))
+        {
+            return (Some(accepted.bytes.clone()), Some(accepted.picture.clone()));
+        }
+        (self.stills.get(&key).cloned(), None)
     }
 
     /// Read the live logs' new and changed entries into `page`. An engine
@@ -983,7 +1009,10 @@ impl Worker<'_> {
             }
             admitted += 1;
             let key = key_of(media);
-            let mut state = self.recovery.remove(&key).unwrap_or_default();
+            let mut state = self
+                .recovery
+                .remove(&key)
+                .unwrap_or_else(|| StillRecovery::new(media.kind));
             let original = !state.started || state.original_due.is_some_and(|due| due <= now);
             state.started = true;
             let bytes = if original {
@@ -1040,7 +1069,9 @@ impl Worker<'_> {
         }
         let mut next = (*page).clone();
         for media in &mut next.media {
-            media.still = self.stills.get(&key_of(media)).cloned();
+            let (still, picture) = self.shown(media);
+            media.still = still;
+            media.picture = picture;
         }
         self.publish(Arc::new(next), None);
     }
@@ -1092,6 +1123,16 @@ impl Worker<'_> {
             }
             let (_, _, bytes) = state.pending.take().unwrap();
             if let Some(picture) = picture {
+                if state.kind == MediaKind::Svg {
+                    self.svg_accepted.insert(
+                        key.0,
+                        AcceptedSvg {
+                            owner: (document, key.clone(), attempt, origin),
+                            bytes: bytes.clone(),
+                            picture: picture.clone(),
+                        },
+                    );
+                }
                 self.stills.insert(key.clone(), bytes);
                 state.screenshot_due = None;
                 if origin == StillOrigin::Original {
@@ -1150,7 +1191,7 @@ impl Worker<'_> {
         };
         let mut next = (*page).clone();
         for media in &mut next.media {
-            let (still, picture) = self.shown(&key_of(media));
+            let (still, picture) = self.shown(media);
             media.still = still;
             media.picture = picture;
         }
@@ -1667,8 +1708,18 @@ enum StillOrigin {
     Screenshot,
 }
 
-#[derive(Default)]
+struct AcceptedSvg {
+    owner: StillAttempt,
+    bytes: Arc<[u8]>,
+    picture: Picture,
+}
+
+fn same_svg_identity(a: &StillKey, b: &StillKey) -> bool {
+    (a.0, &a.1, a.2, a.3) == (b.0, &b.1, b.2, b.3)
+}
+
 struct StillRecovery {
+    kind: MediaKind,
     started: bool,
     pending: Option<(u64, StillOrigin, Arc<[u8]>)>,
     original_due: Option<Instant>,
@@ -1678,6 +1729,18 @@ struct StillRecovery {
 }
 
 impl StillRecovery {
+    fn new(kind: MediaKind) -> Self {
+        Self {
+            kind,
+            started: false,
+            pending: None,
+            original_due: None,
+            screenshot_due: None,
+            original_failures: 0,
+            screenshot_failures: 0,
+        }
+    }
+
     fn due(&self, now: Instant) -> bool {
         self.pending.is_none()
             && (self.original_due.is_some_and(|due| due <= now)
@@ -1800,6 +1863,7 @@ fn run_with_source(
         decode,
         decoded,
         recovery: HashMap::new(),
+        svg_accepted: HashMap::new(),
         outstanding: HashSet::new(),
         next_attempt: 0,
         inline: HashMap::new(),
@@ -1958,6 +2022,7 @@ mod tests {
             decode,
             decoded,
             recovery: HashMap::new(),
+            svg_accepted: HashMap::new(),
             outstanding: HashSet::new(),
             next_attempt: 0,
             inline: HashMap::new(),
@@ -2431,20 +2496,190 @@ mod tests {
         assert_eq!(state.lock().unwrap().resource_reads.len(), 2);
     }
 
+    fn recovery_svg_snapshot(change: &str, fill: &str) -> crate::engine::PageSnapshot {
+        use crate::testing::PageBuilder;
+        let url = if change == "document" {
+            "https://other.test/page"
+        } else {
+            "https://example.test/recovery"
+        };
+        let mut builder = PageBuilder::new(url, "drawing", 400.0, 800.0);
+        if change == "node" {
+            builder.element(builder.body(), "BR", &[], &[], None);
+        }
+        if change != "removed" {
+            let src = if change == "source" {
+                "https://example.test/changed.png"
+            } else {
+                "https://example.test/drawing.png"
+            };
+            let kind = if change == "kind" { "IMG" } else { "SVG" };
+            builder.element(
+                builder.body(),
+                kind,
+                &[("src", src), ("fill", fill)],
+                &[],
+                Some(Rect::new(
+                    0.0,
+                    0.0,
+                    if change == "width" { 20.0 } else { 16.0 },
+                    if change == "height" { 20.0 } else { 16.0 },
+                )),
+            );
+        }
+        builder.snapshot()
+    }
+
+    #[test]
+    fn recovery_accepted_svg_continuity_is_pruned_on_every_identity_change() {
+        for change in [
+            "revision", "source", "width", "height", "kind", "node", "document", "removed",
+        ] {
+            let engine = recovery_engine(0);
+            let state = engine.state.clone();
+            {
+                let mut state = state.lock().unwrap();
+                state
+                    .pages
+                    .insert("recovery".into(), recovery_svg_snapshot("", "red"));
+                state
+                    .resources
+                    .insert("https://example.test/drawing.png".into(), recovery_png());
+            }
+            let update = |_: Update| {};
+            let (mut worker, jobs, done) = recovery_worker(engine, &update);
+            worker.read().unwrap();
+            let now = Instant::now();
+            worker.capture_stills_at(now);
+            let owner = complete_recovery(&jobs, &done);
+            worker.take_decoded_at(now);
+            let good = worker.page.clone().unwrap();
+            assert!(good.media[0].picture.is_some());
+            assert_eq!(worker.svg_accepted[&owner.1.0].owner, owner);
+            state
+                .lock()
+                .unwrap()
+                .pages
+                .insert("recovery".into(), recovery_svg_snapshot(change, "blue"));
+            let next = worker.read().unwrap();
+            if change == "revision" {
+                assert_eq!(next.media[0].picture, good.media[0].picture);
+                assert_eq!(next.media[0].still, good.media[0].still);
+                assert_eq!(
+                    worker.svg_accepted[&owner.1.0].owner, owner,
+                    "display continuity keeps original provenance, not new-key success"
+                );
+            } else {
+                assert!(
+                    next.media
+                        .iter()
+                        .all(|m| m.picture.is_none() && m.still.is_none()),
+                    "{change}"
+                );
+                assert!(worker.svg_accepted.is_empty(), "{change}");
+            }
+            assert!(worker.pictures.is_empty());
+            assert!(worker.recovery.is_empty());
+        }
+    }
+
+    #[test]
+    fn recovery_svg_late_revision_cannot_change_accepted_fallback_or_current_pending() {
+        let engine = recovery_engine(0);
+        let state = engine.state.clone();
+        {
+            let mut state = state.lock().unwrap();
+            state
+                .pages
+                .insert("recovery".into(), recovery_svg_snapshot("", "red"));
+            state
+                .resources
+                .insert("https://example.test/drawing.png".into(), recovery_png());
+        }
+        let update = |_: Update| {};
+        let (mut worker, jobs, done) = recovery_worker(engine, &update);
+        worker.read().unwrap();
+        let now = Instant::now();
+        worker.capture_stills_at(now);
+        let first = complete_recovery(&jobs, &done);
+        worker.take_decoded_at(now);
+        let good = worker.page.clone().unwrap();
+        state.lock().unwrap().pages.insert(
+            "recovery".into(),
+            recovery_svg_snapshot("revision", "green"),
+        );
+        worker.read().unwrap();
+        worker.capture_stills_at(now);
+        let (late, bytes) = jobs.try_recv().unwrap();
+        state
+            .lock()
+            .unwrap()
+            .pages
+            .insert("recovery".into(), recovery_svg_snapshot("revision", "blue"));
+        worker.read().unwrap();
+        worker.capture_stills_at(now);
+        let (current, current_bytes) = jobs.try_recv().unwrap();
+        done.send((late, Picture::decode_animated(&bytes).ok()))
+            .unwrap();
+        worker.take_decoded_at(now);
+        assert_eq!(
+            worker.page.as_ref().unwrap().media[0].picture,
+            good.media[0].picture
+        );
+        assert_eq!(
+            worker.page.as_ref().unwrap().media[0].still,
+            good.media[0].still
+        );
+        assert_eq!(worker.svg_accepted[&first.1.0].owner, first);
+        assert!(
+            worker.pictures.is_empty(),
+            "old data never becomes current-key success"
+        );
+        assert_eq!(
+            worker.recovery[&current.1].pending.as_ref().unwrap().0,
+            current.2
+        );
+        assert_eq!(worker.outstanding.len(), 1);
+        done.send((
+            current.clone(),
+            Picture::decode_animated(&current_bytes).ok(),
+        ))
+        .unwrap();
+        worker.take_decoded_at(now);
+        assert_eq!(worker.svg_accepted[&first.1.0].owner, current);
+        assert!(worker.pictures.contains_key(&current.1));
+        assert_eq!(worker.svg_accepted.len(), 1);
+    }
+
     #[test]
     fn recovery_late_same_key_completions_never_clear_a_new_attempt() {
         for newest_first in [false, true] {
             let engine = recovery_engine(1);
+            let state = engine.state.clone();
+            let original = state.lock().unwrap().pages["recovery"].clone();
             let update = |_: Update| {};
             let (mut worker, jobs, done) = recovery_worker(engine, &update);
             worker.read().unwrap();
             let now = Instant::now();
             worker.capture_stills_at(now);
             let (old, bytes) = jobs.try_recv().unwrap();
-            done.send((old.clone(), None)).unwrap();
-            worker.take_decoded_at(now);
-            worker.capture_stills_at(now + Duration::from_millis(500));
+            // The same key reappears while its pruned old attempt is still in flight.
+            state
+                .lock()
+                .unwrap()
+                .pages
+                .insert("recovery".into(), recovery_svg_snapshot("", "red"));
+            worker.read().unwrap();
+            state
+                .lock()
+                .unwrap()
+                .pages
+                .insert("recovery".into(), original);
+            worker.read().unwrap();
+            worker.capture_stills_at(now);
             let (new, _) = jobs.try_recv().unwrap();
+            assert_eq!(old.1, new.1);
+            assert_ne!(old.2, new.2);
             let picture = Picture::decode_animated(&bytes).unwrap();
             if newest_first {
                 done.send((new.clone(), Some(picture.clone()))).unwrap();
@@ -2552,7 +2787,15 @@ mod tests {
         }
         worker.take_decoded_at(now);
         assert!(worker.outstanding.is_empty());
-        let builder = PageBuilder::new("https://example.test/navigation", "empty", 400.0, 800.0);
+        state
+            .lock()
+            .unwrap()
+            .pages
+            .insert("recovery".into(), recovery_svg_snapshot("", "red"));
+        worker.read().unwrap();
+        worker.capture_stills_at(now);
+        let (removed, bytes) = jobs.try_recv().unwrap();
+        let builder = PageBuilder::new("https://example.test/recovery", "empty", 400.0, 800.0);
         state
             .lock()
             .unwrap()
@@ -2562,6 +2805,12 @@ mod tests {
         assert!(worker.recovery.is_empty());
         assert!(worker.stills.is_empty());
         assert!(worker.pictures.is_empty());
+        done.send((removed, Picture::decode_animated(&bytes).ok()))
+            .unwrap();
+        worker.take_decoded_at(now);
+        assert!(worker.outstanding.is_empty());
+        assert!(worker.page.as_ref().unwrap().media.is_empty());
+        assert!(worker.svg_accepted.is_empty());
     }
 
     #[test]
@@ -2694,6 +2943,7 @@ mod tests {
             decode,
             decoded,
             recovery: HashMap::new(),
+            svg_accepted: HashMap::new(),
             outstanding: HashSet::new(),
             next_attempt: 0,
             inline: HashMap::new(),
@@ -2935,6 +3185,7 @@ mod tests {
                 decode,
                 decoded,
                 recovery: HashMap::new(),
+                svg_accepted: HashMap::new(),
                 outstanding: HashSet::new(),
                 next_attempt: 0,
                 inline: HashMap::new(),
@@ -3275,6 +3526,7 @@ mod tests {
             decode,
             decoded,
             recovery: HashMap::new(),
+            svg_accepted: HashMap::new(),
             outstanding: HashSet::new(),
             next_attempt: 0,
             inline: HashMap::new(),
@@ -3324,7 +3576,7 @@ mod tests {
     }
 
     #[test]
-    fn same_document_still_revisions_reject_previous_key_pixels() {
+    fn same_document_svg_revisions_keep_only_previously_accepted_fallback() {
         use crate::testing::PageBuilder;
         for newest_first in [false, true] {
             let dir = std::env::temp_dir().join(format!("tab-revisions-{}", std::process::id()));
@@ -3367,6 +3619,7 @@ mod tests {
                 decode,
                 decoded,
                 recovery: HashMap::new(),
+                svg_accepted: HashMap::new(),
                 outstanding: HashSet::new(),
                 next_attempt: 0,
                 inline: HashMap::new(),
@@ -3426,9 +3679,10 @@ mod tests {
             );
             state.lock().unwrap().current = Some("three".into());
             let page_three = worker.read().unwrap();
-            assert!(
-                page_three.media[0].picture.is_none(),
-                "a changed revision must not inherit stale pixels"
+            assert_eq!(
+                page_three.media[0].picture.as_ref(),
+                Some(&two),
+                "accepted SVG pixels remain visible during a content revision"
             );
         }
     }
@@ -3497,6 +3751,7 @@ mod tests {
             decode,
             decoded,
             recovery: HashMap::new(),
+            svg_accepted: HashMap::new(),
             outstanding: HashSet::new(),
             next_attempt: 0,
             inline: HashMap::new(),
@@ -3741,6 +3996,7 @@ mod tests {
             decode,
             decoded,
             recovery: HashMap::new(),
+            svg_accepted: HashMap::new(),
             outstanding: HashSet::new(),
             next_attempt: 0,
             inline: HashMap::new(),

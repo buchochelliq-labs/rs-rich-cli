@@ -62,7 +62,10 @@ bytes are unavailable, unsupported or fail decoding, Noctiluca captures the
 current model's guarded Chrome pixels as a PNG fallback. A temporary network
 cache miss is retried after 500 ms, 2 s, 8 s, then 30 s per attempt (capped).
 The last successfully decoded picture stays visible while the same source,
-size and revision is replaced; a changed key or document starts fresh.
+size and revision is replaced. An already decoded SVG drawing also stays visible
+during a content revision of that same drawing; its old ownership is retained
+separately, and late old-revision results cannot replace it. Changed documents,
+nodes, sources, sizes or media kinds start fresh.
 
 Retries respect image readiness and pending document changes. Admission is
 limited to eight sources per batch and eight outstanding still decodes, with
