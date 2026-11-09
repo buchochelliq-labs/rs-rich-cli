@@ -41,7 +41,7 @@
 
 ### Task 2: Reflow narrow cards and unequal columns
 
-**Files:** Modify `crates/noctiluca/src/adapt.rs` and `crates/noctiluca/src/layout/source.rs`; test `crates/noctiluca/src/model/source_projection_tests.rs`.
+**Files:** Modify `crates/noctiluca/src/adapt.rs` and `crates/noctiluca/src/layout/source.rs`; test `crates/noctiluca/src/model/source_projection_tests.rs` and `crates/noctiluca/tests/adapt.rs`.
 
 **Interfaces:** Keep `Rule::SnapGrids`, `adaptive_columns`, `project_source`, and all public geometry unchanged. Set the generic Noctiluca minimum card width to 32 cells. Preserve unequal source grids when every track meets that width; stack an unequal grid as ordered source units when a track is narrower.
 
@@ -49,6 +49,7 @@
 - [x] Add an unequal 30/70-cell source row at 100 columns. Assert the 30-cell track triggers ordered stacking; add a 40/60-cell control that remains side-by-side.
 - [x] Implement the 32-cell minimum and narrow-track condition without changing the paired video/log minimum or unsupported/positioned-grid behavior.
 - [x] Run focused grid, nested figure, source ordering, popup, and model/layout tests; inspect the diff and commit.
+- [x] Update the existing 72-column adaptive-grid integration test to assert readable-width stacking in source order; the old test encoded the former 16-cell threshold.
 
 ### Task 3: Verify and prepare review
 
