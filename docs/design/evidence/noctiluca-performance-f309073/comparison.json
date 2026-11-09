@@ -1,0 +1,293 @@
+{
+  "source_commit": "f3090737be9d569fd29b0260ba18148b65caa57b",
+  "pr_head": "c3d667c4faf22317d5113b67a9e4a41cd47ddc2b (docs/evidence-only after f309073)",
+  "binary_sha256": "8b81bf72cc895711b899d0bb5d9e57a30b28476ae3df0331a0e155012d4c5406",
+  "original_thresholds": {
+    "iterm": {
+      "p95": 13.67,
+      "p99": 15.734,
+      "input_max": 5.417,
+      "cpu_s": 0.806
+    },
+    "kitty": {
+      "p95": 46.442,
+      "p99": 50.885,
+      "input_max": 16.178
+    },
+    "ansi": {
+      "p95": 14.857,
+      "p99": 15.494,
+      "input_max": 13.31
+    }
+  },
+  "status": {
+    "iterm": "FAIL",
+    "kitty": "PASS",
+    "ansi": "PASS",
+    "release_qualified": false
+  },
+  "runs": [
+    {
+      "run": "current-iterm-1",
+      "protocol": "iterm",
+      "p50_ms": 11.623149,
+      "p95_ms": 13.229958,
+      "p99_ms": 13.563829,
+      "input_max_ms": 4.596316,
+      "cpu_s": 0.839742,
+      "emitted": 59,
+      "censored": 1,
+      "applied_pages": 20,
+      "actual_layouts": 0,
+      "input_population": 8,
+      "input_censored": 0,
+      "recorded_outputs": 86,
+      "recorded_bytes": 330759,
+      "widget_draw_ms": 227.883992,
+      "paint_encode_ms": 59.311453,
+      "update_total_ms": 42.73197800000016,
+      "loadavg": [
+        1.41015625,
+        1.47509765625,
+        0.79541015625
+      ],
+      "sha256_before": "8b81bf72cc895711b899d0bb5d9e57a30b28476ae3df0331a0e155012d4c5406",
+      "sha256_after": "8b81bf72cc895711b899d0bb5d9e57a30b28476ae3df0331a0e155012d4c5406",
+      "gate_failures": [
+        "cpu"
+      ]
+    },
+    {
+      "run": "current-iterm-2",
+      "protocol": "iterm",
+      "p50_ms": 19.151472,
+      "p95_ms": 24.643065,
+      "p99_ms": 24.806189,
+      "input_max_ms": 6.438718000000001,
+      "cpu_s": 1.3524990000000001,
+      "emitted": 60,
+      "censored": 0,
+      "applied_pages": 20,
+      "actual_layouts": 0,
+      "input_population": 8,
+      "input_censored": 0,
+      "recorded_outputs": 88,
+      "recorded_bytes": 335428,
+      "widget_draw_ms": 345.171052,
+      "paint_encode_ms": 121.281025,
+      "update_total_ms": 58.24915400000008,
+      "loadavg": [
+        0.92822265625,
+        1.35546875,
+        0.7734375
+      ],
+      "sha256_before": "8b81bf72cc895711b899d0bb5d9e57a30b28476ae3df0331a0e155012d4c5406",
+      "sha256_after": "8b81bf72cc895711b899d0bb5d9e57a30b28476ae3df0331a0e155012d4c5406",
+      "gate_failures": [
+        "p95",
+        "p99",
+        "input_max",
+        "cpu"
+      ]
+    },
+    {
+      "run": "current-iterm-3",
+      "protocol": "iterm",
+      "p50_ms": 10.250251,
+      "p95_ms": 18.813692,
+      "p99_ms": 19.560418,
+      "input_max_ms": 2.1854750000000003,
+      "cpu_s": 0.791933,
+      "emitted": 60,
+      "censored": 0,
+      "applied_pages": 20,
+      "actual_layouts": 0,
+      "input_population": 8,
+      "input_censored": 0,
+      "recorded_outputs": 88,
+      "recorded_bytes": 335428,
+      "widget_draw_ms": 191.42811600000002,
+      "paint_encode_ms": 63.83887000000001,
+      "update_total_ms": 37.769872000000056,
+      "loadavg": [
+        0.853515625,
+        1.33251953125,
+        0.76904296875
+      ],
+      "sha256_before": "8b81bf72cc895711b899d0bb5d9e57a30b28476ae3df0331a0e155012d4c5406",
+      "sha256_after": "8b81bf72cc895711b899d0bb5d9e57a30b28476ae3df0331a0e155012d4c5406",
+      "gate_failures": [
+        "p95",
+        "p99"
+      ]
+    },
+    {
+      "run": "current-kitty-1",
+      "protocol": "kitty",
+      "p50_ms": 10.103526,
+      "p95_ms": 12.53301,
+      "p99_ms": 13.204201,
+      "input_max_ms": 3.498337,
+      "cpu_s": 0.388186,
+      "emitted": 25,
+      "censored": 35,
+      "applied_pages": 20,
+      "actual_layouts": 0,
+      "input_population": 8,
+      "input_censored": 0,
+      "recorded_outputs": 52,
+      "recorded_bytes": 7591495,
+      "widget_draw_ms": 73.85093099999999,
+      "paint_encode_ms": 13.604252,
+      "update_total_ms": 35.51116600000003,
+      "loadavg": [
+        0.853515625,
+        1.33251953125,
+        0.76904296875
+      ],
+      "sha256_before": "8b81bf72cc895711b899d0bb5d9e57a30b28476ae3df0331a0e155012d4c5406",
+      "sha256_after": "8b81bf72cc895711b899d0bb5d9e57a30b28476ae3df0331a0e155012d4c5406",
+      "gate_failures": []
+    },
+    {
+      "run": "current-ansi-1",
+      "protocol": "ansi",
+      "p50_ms": 3.069465,
+      "p95_ms": 4.384596,
+      "p99_ms": 4.965047,
+      "input_max_ms": 2.734222,
+      "cpu_s": 0.29670399999999997,
+      "emitted": 60,
+      "censored": 0,
+      "applied_pages": 20,
+      "actual_layouts": 0,
+      "input_population": 8,
+      "input_censored": 0,
+      "recorded_outputs": 66,
+      "recorded_bytes": 113297,
+      "widget_draw_ms": 115.157296,
+      "paint_encode_ms": 9.81809,
+      "update_total_ms": 34.719517999999965,
+      "loadavg": [
+        0.78515625,
+        1.31005859375,
+        0.7646484375
+      ],
+      "sha256_before": "8b81bf72cc895711b899d0bb5d9e57a30b28476ae3df0331a0e155012d4c5406",
+      "sha256_after": "8b81bf72cc895711b899d0bb5d9e57a30b28476ae3df0331a0e155012d4c5406",
+      "gate_failures": []
+    },
+    {
+      "run": "current-kitty-2",
+      "protocol": "kitty",
+      "p50_ms": 10.826382,
+      "p95_ms": 15.467211,
+      "p99_ms": 32.291952,
+      "input_max_ms": 1.9769610000000002,
+      "cpu_s": 0.457891,
+      "emitted": 25,
+      "censored": 35,
+      "applied_pages": 20,
+      "actual_layouts": 0,
+      "input_population": 8,
+      "input_censored": 0,
+      "recorded_outputs": 53,
+      "recorded_bytes": 7591407,
+      "widget_draw_ms": 85.504263,
+      "paint_encode_ms": 25.912333,
+      "update_total_ms": 35.932506000000004,
+      "loadavg": [
+        0.78515625,
+        1.31005859375,
+        0.7646484375
+      ],
+      "sha256_before": "8b81bf72cc895711b899d0bb5d9e57a30b28476ae3df0331a0e155012d4c5406",
+      "sha256_after": "8b81bf72cc895711b899d0bb5d9e57a30b28476ae3df0331a0e155012d4c5406",
+      "gate_failures": []
+    },
+    {
+      "run": "current-ansi-2",
+      "protocol": "ansi",
+      "p50_ms": 3.092461,
+      "p95_ms": 4.658857,
+      "p99_ms": 5.767341,
+      "input_max_ms": 3.981183,
+      "cpu_s": 0.261602,
+      "emitted": 60,
+      "censored": 0,
+      "applied_pages": 20,
+      "actual_layouts": 0,
+      "input_population": 8,
+      "input_censored": 0,
+      "recorded_outputs": 67,
+      "recorded_bytes": 112933,
+      "widget_draw_ms": 114.96232300000001,
+      "paint_encode_ms": 7.953992,
+      "update_total_ms": 34.10192800000004,
+      "loadavg": [
+        0.72216796875,
+        1.2880859375,
+        0.76025390625
+      ],
+      "sha256_before": "8b81bf72cc895711b899d0bb5d9e57a30b28476ae3df0331a0e155012d4c5406",
+      "sha256_after": "8b81bf72cc895711b899d0bb5d9e57a30b28476ae3df0331a0e155012d4c5406",
+      "gate_failures": []
+    },
+    {
+      "run": "current-kitty-3",
+      "protocol": "kitty",
+      "p50_ms": 9.719705,
+      "p95_ms": 11.903709,
+      "p99_ms": 12.100084,
+      "input_max_ms": 1.5617770000000002,
+      "cpu_s": 0.364525,
+      "emitted": 25,
+      "censored": 35,
+      "applied_pages": 20,
+      "actual_layouts": 0,
+      "input_population": 8,
+      "input_censored": 0,
+      "recorded_outputs": 53,
+      "recorded_bytes": 7591407,
+      "widget_draw_ms": 61.043890000000005,
+      "paint_encode_ms": 10.868819,
+      "update_total_ms": 29.787446999999936,
+      "loadavg": [
+        0.72216796875,
+        1.2880859375,
+        0.76025390625
+      ],
+      "sha256_before": "8b81bf72cc895711b899d0bb5d9e57a30b28476ae3df0331a0e155012d4c5406",
+      "sha256_after": "8b81bf72cc895711b899d0bb5d9e57a30b28476ae3df0331a0e155012d4c5406",
+      "gate_failures": []
+    },
+    {
+      "run": "current-ansi-3",
+      "protocol": "ansi",
+      "p50_ms": 2.629004,
+      "p95_ms": 3.520664,
+      "p99_ms": 4.771058,
+      "input_max_ms": 2.331823,
+      "cpu_s": 0.218103,
+      "emitted": 60,
+      "censored": 0,
+      "applied_pages": 20,
+      "actual_layouts": 0,
+      "input_population": 8,
+      "input_censored": 0,
+      "recorded_outputs": 66,
+      "recorded_bytes": 113115,
+      "widget_draw_ms": 89.713863,
+      "paint_encode_ms": 6.719582,
+      "update_total_ms": 28.964033000000004,
+      "loadavg": [
+        0.74462890625,
+        1.283203125,
+        0.76171875
+      ],
+      "sha256_before": "8b81bf72cc895711b899d0bb5d9e57a30b28476ae3df0331a0e155012d4c5406",
+      "sha256_after": "8b81bf72cc895711b899d0bb5d9e57a30b28476ae3df0331a0e155012d4c5406",
+      "gate_failures": []
+    }
+  ]
+}

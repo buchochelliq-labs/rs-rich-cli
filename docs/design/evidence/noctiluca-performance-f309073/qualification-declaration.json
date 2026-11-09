@@ -1,0 +1,61 @@
+{
+  "declared_utc": "2026-11-09T05:20:35Z",
+  "purpose": "Current PR source qualification against the unchanged original application performance gates; this is a new source (f309073), not a replacement or rebaseline for cbc7d93.",
+  "source_commit": "f3090737be9d569fd29b0260ba18148b65caa57b",
+  "pr_head": "c3d667c4faf22317d5113b67a9e4a41cd47ddc2b (documentation/evidence only after f309073; production code identical)",
+  "toolchain": "rustc 1.90.0 (1159e78c4 2025-09-14)",
+  "profile": "optimized release test harness; locked offline dependency graph",
+  "instrumented_test_executable": "/workspace/work/noctiluca-perf-current-f309073/noctiluca-f309073-tests-rust190",
+  "test_executable_sha256": "8b81bf72cc895711b899d0bb5d9e57a30b28476ae3df0331a0e155012d4c5406",
+  "temporary_test_harness_patch": "test-harness.patch",
+  "temporary_test_harness_patch_sha256": "04678c81028f7e35d715987c6348c9cb005e3857729edd75f3ab8ccab4198e83",
+  "original_gate_file": "/workspace/work/task6-final-release-measurements/iterm-numeric-gates.json",
+  "original_gate_file_sha256": "dc0806f4ecd40d1576e2d7ac4356b4f85134184ab2e455cdc347057e15545d16",
+  "gates": {
+    "iterm": {
+      "p95_ms": 13.67,
+      "p99_ms": 15.734,
+      "input_max_ms": 5.417,
+      "child_cpu_s": 0.806
+    },
+    "kitty": {
+      "p95_ms": 46.442,
+      "p99_ms": 50.885,
+      "input_max_ms": 16.178
+    },
+    "ansi": {
+      "p95_ms": 14.857,
+      "p99_ms": 15.494,
+      "input_max_ms": 13.31
+    }
+  },
+  "runner": "/workspace/work/task6-run-recorded.py",
+  "runner_sha256": "961ba6a26f87d703dbd40bb9f3650288614450cc36c17662a5ffed8855412654",
+  "oracle": "/workspace/work/task6-decode-recording.py",
+  "oracle_sha256": "914c1b36d407ef199c46ac6e1e5f60315ec671efd5dd2b76640cb7a836110a12",
+  "output_root": "/workspace/work/noctiluca-perf-current-f309073/runs",
+  "run_order": [
+    "current-iterm-1",
+    "current-iterm-2",
+    "current-iterm-3",
+    "current-kitty-1",
+    "current-ansi-1",
+    "current-kitty-2",
+    "current-ansi-2",
+    "current-kitty-3",
+    "current-ansi-3"
+  ],
+  "runs_per_protocol": 3,
+  "policy": "Use original thresholds, exact saved test body/configuration and independent image/identity decoder. Preserve every result, including failures/censored frames. No threshold changes, no new baseline, no tuning between runs. Serial runs, no concurrent Cargo/native workload.",
+  "workload": {
+    "source_frame_offers": 60,
+    "semantic_updates": 20,
+    "input_offers": 8,
+    "static_images": 18,
+    "terminal": "120x40",
+    "source_fps": 30,
+    "source_duration_s": 2,
+    "window_s": 2.4,
+    "quality_codec_budget": "unchanged saved harness fixture and production config"
+  }
+}
