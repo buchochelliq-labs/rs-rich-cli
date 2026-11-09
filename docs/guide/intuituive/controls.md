@@ -75,6 +75,10 @@ Enter, Space and releasing a click on any row activate the same button.
 `.wrap_label(false)` selects compact rendering again. Other node kinds
 ignore this builder.
 
+Inside ordinary `scroll`, a focused button is revealed again when its
+measured rectangle or viewport dimensions change. Wheel, page-key and
+offset updates with unchanged geometry keep the reader's chosen position.
+
 For dense compact layouts, compose `.tooltip(full_label)` for pointer
 access with a keyboard action that opens a read-only `scroll(label(full_label))`
 in a `Ctx::modal`. Close the local modal with `Ctx::pop` to restore the
