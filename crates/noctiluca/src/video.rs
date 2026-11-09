@@ -33,7 +33,9 @@
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
 
-use rich_art::picture::{ByteBudget, Pacer, Picture, Pixels, over_ssh};
+use rich_art::picture::{
+    ByteBudget, Pacer, Picture, PictureEncoding, PixelFormats, Pixels, over_ssh,
+};
 use rich_embed::ScreencastFrame;
 
 use crate::engine::{NodeId, Rect};
@@ -257,12 +259,14 @@ impl Frames {
 /// - When the share allows fewer than the budget's floor of frames a
 ///   second, the region steps down: Kitty, iTerm2, Sixel, then cells.
 pub struct Pacing {
+    formats: PixelFormats,
     pub budget: ByteBudget,
     /// The protocol a new region starts at.
     pub start: Pixels,
     /// Other moving pictures sharing the budget (animated GIFs in view).
     pub others: usize,
     regions: HashMap<NodeId, Paced>,
+    cell: rich_art::graphics::CellPixels,
 }
 
 /// One region's pacing.
@@ -285,12 +289,24 @@ pub type ByteCounter = fn(u32) -> u64;
 impl Pacing {
     /// Pacing within `budget`, starting regions at `start`.
     pub fn new(budget: ByteBudget, start: Pixels) -> Pacing {
+        Self::with_formats(budget, start, PixelFormats::all())
+    }
+
+    /// Pace only representations supported by this terminal.
+    pub fn with_formats(budget: ByteBudget, start: Pixels, formats: PixelFormats) -> Pacing {
         Pacing {
+            formats,
             budget,
             start,
             others: 0,
             regions: HashMap::new(),
+            cell: rich_art::graphics::CellPixels::DEFAULT,
         }
+    }
+
+    /// Select the physical cell size used to estimate new frame costs.
+    pub fn set_cell_pixels(&mut self, cell: rich_art::graphics::CellPixels) {
+        self.cell = rich_art::graphics::CellPixels::new(cell.width, cell.height);
     }
 
     /// The protocol to start video at: character art over SSH unless the
@@ -335,7 +351,7 @@ impl Pacing {
         let rgba = frame.pixels.to_rgba();
         if !self.regions.contains_key(&frame.node) {
             let picture = Picture::from_rgba(w, h, rgba.clone())?;
-            let pacer = Pacer::new(self.start, cols, rows);
+            let pacer = Pacer::with_formats(self.start, cols, rows, self.formats);
             self.regions.insert(
                 frame.node,
                 Paced {
@@ -363,6 +379,7 @@ impl Pacing {
             let spent = counted(region.picture.id()).saturating_sub(before);
             region.pacer.sent(at, (spent > 0).then_some(spent));
         }
+        region.pacer.set_cell_pixels(self.cell);
         while region.pacer.settle(&budget, share) {}
         if region.seq > 0 && !region.pacer.due(now, &budget, share) {
             return None;
@@ -391,10 +408,22 @@ impl Pacing {
         self.regions.remove(&node);
     }
 
+    /// Forget regions that no longer occur on the current page.
+    pub(crate) fn retain_regions(&mut self, nodes: &std::collections::HashSet<NodeId>) {
+        self.regions.retain(|node, _| nodes.contains(node));
+    }
+
     /// Whether `node` is a region it paces (it has had a frame since the
     /// document opened, and is not gone).
     pub fn has(&self, node: NodeId) -> bool {
         self.regions.contains_key(&node)
+    }
+
+    /// Whether this picture belongs to the current incarnation of a region.
+    pub(crate) fn owns_picture(&self, node: NodeId, picture: &Picture) -> bool {
+        self.regions
+            .get(&node)
+            .is_some_and(|region| region.picture.id() == picture.id())
     }
 
     /// The protocol `node`'s frames are drawn in now.
@@ -460,7 +489,7 @@ pub struct Encoder {
 
 #[derive(Default)]
 struct Queue {
-    waiting: Vec<Job>,
+    waiting: Vec<(Job, Option<(u16, u16)>)>,
     closed: bool,
 }
 
@@ -468,6 +497,35 @@ impl Encoder {
     /// An encoder whose thread hands each job, encoded, to `done`. The
     /// thread ends when the encoder is dropped.
     pub fn spawn(done: impl Fn(Job) + Send + 'static) -> Encoder {
+        Self::spawn_with_context(PictureEncoding::new(Default::default()), done)
+    }
+
+    /// Prepare with the same immutable encoding permissions as the painter.
+    /// Each job's measured cell dimensions replace the context's default metrics.
+    pub fn spawn_with_context(
+        context: PictureEncoding,
+        done: impl Fn(Job) + Send + 'static,
+    ) -> Encoder {
+        Self::spawn_encoding(context, None, done)
+    }
+
+    /// Prepare bound resources with exactly the presentation used by first paint.
+    pub fn spawn_with_presentation(
+        presentation: rich_intuituive::ImagePresentation,
+        done: impl Fn(Job) + Send + 'static,
+    ) -> Encoder {
+        Self::spawn_encoding(
+            presentation.encoding(Default::default()),
+            Some(presentation),
+            done,
+        )
+    }
+
+    fn spawn_encoding(
+        context: PictureEncoding,
+        presentation: Option<rich_intuituive::ImagePresentation>,
+        done: impl Fn(Job) + Send + 'static,
+    ) -> Encoder {
         let queue = std::sync::Arc::new((
             std::sync::Mutex::new(Queue::default()),
             std::sync::Condvar::new(),
@@ -475,7 +533,7 @@ impl Encoder {
         let shared = queue.clone();
         std::thread::spawn(move || {
             loop {
-                let job = {
+                let (mut job, metrics) = {
                     let (lock, ready) = &*shared;
                     let mut queue = lock.lock().unwrap_or_else(|e| e.into_inner());
                     while queue.waiting.is_empty() && !queue.closed {
@@ -486,20 +544,83 @@ impl Encoder {
                     }
                     queue.waiting.remove(0)
                 };
-                job.picture
-                    .prepare(crate::pictures::view(job.pixels), job.cols, job.rows);
+                if let Some(presentation) = presentation {
+                    job.picture = presentation.picture(&job.picture);
+                }
+                let tracing = crate::diagnostics::enabled();
+                if tracing {
+                    eprintln!(
+                        "RICH_MEDIA {{\"stage\":\"encoder_start\",\"decoded_bytes\":{}}}",
+                        job.picture.image().as_bytes().len()
+                    );
+                }
+                let cell = metrics
+                    .filter(|&(w, h)| w > 0 && h > 0)
+                    .map(|(w, h)| rich_art::graphics::CellPixels::new(w.into(), h.into()))
+                    .unwrap_or_default();
+                job.picture.prepare_with_context(
+                    crate::pictures::view(job.pixels),
+                    job.cols,
+                    job.rows,
+                    PictureEncoding {
+                        cell_pixels: cell,
+                        ..context
+                    },
+                );
+                if tracing {
+                    eprintln!("RICH_MEDIA {{\"stage\":\"encoder_done\"}}");
+                }
                 done(job);
             }
         });
         Encoder { queue }
     }
 
+    /// Discard frames still waiting after the owning document or view changes.
+    /// An encode already executing may finish; its owner still validates delivery.
+    pub fn clear_waiting(&self) {
+        self.queue
+            .0
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .waiting
+            .clear();
+    }
+
+    /// Keep waiting frames only for regions present in the current model.
+    pub fn retain_waiting(&self, nodes: &std::collections::HashSet<NodeId>) {
+        self.queue
+            .0
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .waiting
+            .retain(|(job, _)| nodes.contains(&job.node));
+    }
+
     /// Encode `job`, in place of any frame of its region still waiting.
     pub fn encode(&self, job: Job) {
+        self.encode_with_metrics(job, None);
+    }
+
+    /// Prepare with the terminal's measured physical cell dimensions.
+    pub fn encode_with_metrics(&self, job: Job, metrics: Option<(u16, u16)>) {
         let (lock, ready) = &*self.queue;
         let mut queue = lock.lock().unwrap_or_else(|e| e.into_inner());
-        queue.waiting.retain(|waiting| waiting.node != job.node);
-        queue.waiting.push(job);
+        queue
+            .waiting
+            .retain(|(waiting, _)| waiting.node != job.node);
+        queue.waiting.push((job, metrics));
+        if crate::diagnostics::enabled() {
+            eprintln!(
+                "RICH_MEDIA {{\"stage\":\"encoder_queue\",\"waiting\":{},\"decoded_bytes\":{}}}",
+                queue.waiting.len(),
+                queue
+                    .waiting
+                    .iter()
+                    .map(|(job, _)| job.picture.image().as_bytes().len())
+                    .sum::<usize>()
+            );
+        }
         ready.notify_one();
     }
 }
@@ -560,6 +681,134 @@ mod tests {
             on_screen,
             interval: None,
         }
+    }
+
+    #[test]
+    fn restricted_video_fallback_keeps_advancing_without_unavailable_codecs() {
+        let formats = PixelFormats::cells().with(Pixels::Kitty);
+        let mut pacing = Pacing::with_formats(ByteBudget::new(66_667), Pixels::Kitty, formats);
+        let start = Instant::now();
+        let mut last = None;
+        for seq in 1..=5 {
+            let frame = VideoFrame {
+                node: 1,
+                seq,
+                pixels: Rgb::new(2, 2, vec![seq as u8; 12]).unwrap(),
+            };
+            let picture = pacing
+                .offer(&frame, 40, 10, start + Duration::from_secs(seq), |_| 0)
+                .unwrap();
+            assert_eq!(pacing.pixels(1), Pixels::Cells);
+            assert_eq!(picture.image().to_rgb8().get_pixel(0, 0).0, [seq as u8; 3]);
+            assert_ne!(last, Some(picture.version()));
+            last = Some(picture.version());
+        }
+    }
+
+    #[test]
+    fn bound_encoder_prepares_the_exact_public_view_resource() {
+        let policy = rich_intuituive::ImagePresentation::new(
+            Pixels::Kitty,
+            rich_intuituive::KittyFeatures {
+                unicode_placeholders: true,
+                native_animation: false,
+            },
+            PixelFormats::cells().with(Pixels::Kitty),
+        );
+        let (send, receive) = std::sync::mpsc::channel();
+        let encoder = Encoder::spawn_with_presentation(policy, move |job| {
+            send.send(job).unwrap();
+        });
+        let picture = Picture::from_rgba(2, 2, vec![255; 16]).unwrap();
+        let id = picture.id();
+        let cell = rich_art::graphics::CellPixels::new(10, 20);
+        encoder.encode_with_metrics(
+            Job {
+                node: 1,
+                picture,
+                pixels: Pixels::Kitty,
+                cols: 2,
+                rows: 2,
+            },
+            Some((10, 20)),
+        );
+        let job = receive.recv_timeout(Duration::from_secs(5)).unwrap();
+        let view = crate::pictures::view(Pixels::Kitty);
+        assert!(
+            job.picture
+                .is_prepared_with_context(view, 2, 2, policy.encoding(cell))
+        );
+        let resource = job.picture.kitty_resource(view, 2, 2, true).unwrap();
+        assert_ne!(resource.id(), id);
+        let console = rich::Console::builder()
+            .width(2)
+            .color_system(Some(rich::ColorSystem::Truecolor))
+            .build();
+        let lines = job.picture.lines_with_metrics(&console, view, 2, 2, cell);
+        assert_eq!(
+            lines[0][0].style.as_ref().unwrap().color(),
+            rich_art::kitty::id_color(resource.id(), true).as_ref()
+        );
+        let before = rich_art::picture::picture_bytes(id);
+        let mut segments = Vec::new();
+        for line in lines {
+            segments.extend(line);
+            segments.push(rich::Segment::line());
+        }
+        let source = policy.graphics();
+        let placed = source.placements_with_metrics(
+            &rich_ext::frame::Frame::from_segments(&segments),
+            Some((10, 20)),
+        );
+        assert_eq!(placed.len(), 1);
+        assert!(
+            job.picture
+                .is_prepared_with_context(view, 2, 2, policy.encoding(cell))
+        );
+        assert_eq!(rich_art::picture::picture_bytes(id), before);
+        let output = placed[0].graphic.draw(0);
+        assert!(output.contains(&format!("i={},", resource.id())));
+        assert_eq!(
+            rich_art::picture::picture_bytes(id) - before,
+            output.len() as u64
+        );
+    }
+
+    #[test]
+    fn video_budget_uses_selected_metrics_before_the_first_write() {
+        let mut pacing = Pacing::new(ByteBudget::new(10_000_000), Pixels::Kitty);
+        let cell = rich_art::graphics::CellPixels::new(12, 24);
+        pacing.set_cell_pixels(cell);
+        let frame = VideoFrame {
+            node: 1,
+            seq: 1,
+            pixels: Rgb::new(4, 4, vec![255; 48]).unwrap(),
+        };
+        let picture = pacing.offer(&frame, 4, 3, Instant::now(), |_| 0).unwrap();
+        assert_eq!(
+            pacing.regions[&1].pacer.bytes_per_frame() as u64,
+            Pacer::estimate_with_metrics(Pixels::Kitty, 4, 3, cell)
+        );
+        let view = crate::pictures::view(Pixels::Kitty);
+        assert!(picture.prepare_with_metrics(view, 4, 3, cell));
+        let tag = rich_art::picture::PictureTag {
+            id: picture.id(),
+            version: picture.version(),
+            cols: 4,
+            rows: 3,
+            row: 0,
+            pixels: Pixels::Kitty,
+            fit: view.fit,
+            anchor: view.anchor,
+        };
+        let bytes = picture
+            .encode_tag_with_metrics(&tag, 0, 3, cell)
+            .unwrap()
+            .len() as u64;
+        let pacer = &mut pacing.regions.get_mut(&1).unwrap().pacer;
+        pacer.sent(Instant::now(), Some(bytes));
+        assert_eq!(pacer.bytes_per_frame() as u64, bytes);
+        assert!(picture.is_prepared_with_metrics(view, 4, 3, cell));
     }
 
     #[test]
@@ -652,6 +901,31 @@ mod tests {
         let (cut, missing) = frames.cut(&regions[..1], Some(&frame(20.0)), now);
         assert!(cut.is_empty());
         assert_eq!(missing.len(), 1);
+    }
+
+    #[test]
+    fn encoder_prepares_at_the_measured_cell_size() {
+        let (send, done) = std::sync::mpsc::channel();
+        let encoder = Encoder::spawn(move |job| drop(send.send(job)));
+        let picture = Picture::from_rgba(8, 8, vec![255; 8 * 8 * 4]).unwrap();
+        let view = crate::pictures::view(Pixels::Kitty);
+        encoder.encode_with_metrics(
+            Job {
+                node: 1,
+                picture: picture.clone(),
+                pixels: Pixels::Kitty,
+                cols: 4,
+                rows: 2,
+            },
+            Some((10, 20)),
+        );
+        done.recv_timeout(Duration::from_secs(10)).unwrap();
+        assert!(picture.is_prepared_with_metrics(
+            view,
+            4,
+            2,
+            rich_art::graphics::CellPixels::new(10, 20)
+        ));
     }
 
     #[test]

@@ -19,7 +19,14 @@ readme = "README.md"
 documentation = "https://docs.rs/noctiluca"
 keywords = ["terminal", "browser", "tui", "chrome", "rich"]
 categories = ["command-line-utilities"]
-include = ["src/**/*", "README.md", "LICENSE", "config.sample.toml", "Cargo.toml"]
+include = [
+    "src/**/*",
+    "tests/snapshots/source-native/**/*",
+    "README.md",
+    "LICENSE",
+    "config.sample.toml",
+    "Cargo.toml",
+]
 
 [lints]
 workspace = true
@@ -66,6 +73,7 @@ toml_edit = "0.25"
 libc = "0.2"
 
 [dev-dependencies]
+rich-ext.workspace = true
 # The end-to-end test: the binary on a PTY, read through rs-rich-record's
 # VT emulator.
 rich-record.workspace = true

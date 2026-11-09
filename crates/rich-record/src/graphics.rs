@@ -23,8 +23,8 @@
 //!   `preserveAspectRatio`.
 //!
 //! A Kitty placement stays until it is deleted; Sixel and iTerm2 images are
-//! part of the cells they cover, so each shows only through the cells that
-//! are as they were when it was drawn: text written over one hides it
+//! part of the cells they cover, so a write or erase hides the affected part,
+//! including a write of the same value: text written over one hides it
 //! there, as on the terminals that have them. Clearing the screen
 //! (`ED 2`), switching screens and a reset remove every placement. Images
 //! do not scroll with the text.
@@ -508,6 +508,43 @@ impl Graphics {
     pub fn clear(&mut self) {
         self.overlays.clear();
         self.pending = None;
+    }
+
+    /// Whether writes need cell-bound overlay invalidation. Kitty placements
+    /// have their own lifetime; placeholder cells already follow ordinary text.
+    pub fn has_cell_overlays(&self) -> bool {
+        self.overlays.iter().any(|overlay| overlay.under.is_some())
+    }
+
+    /// A real write/erase, even if it writes the SAME cell value, permanently
+    /// hides that portion of Sixel/iTerm overlays. Value comparison alone would
+    /// resurrect an image when a cell is later restored to its former contents.
+    pub fn erase_cells(&mut self, row: u16, columns: std::ops::Range<u16>) {
+        for overlay in &mut self.overlays {
+            if row < overlay.row || row >= overlay.row.saturating_add(overlay.rows) {
+                continue;
+            }
+            let Some(under) = &mut overlay.under else {
+                continue;
+            };
+            let start = columns.start.max(overlay.column);
+            let end = columns
+                .end
+                .min(overlay.column.saturating_add(overlay.columns));
+            for column in start..end {
+                let index = usize::from(row - overlay.row) * usize::from(overlay.columns)
+                    + usize::from(column - overlay.column);
+                if let Some(cell) = under.get_mut(index) {
+                    *cell = None;
+                }
+            }
+        }
+        self.overlays.retain(|overlay| {
+            overlay
+                .under
+                .as_ref()
+                .is_none_or(|under| under.iter().any(Option::is_some))
+        });
     }
 
     /// Forget the images too: a reset.

@@ -883,18 +883,39 @@ impl core::marker::Unpin for rich_art::picture::ImageView
 impl core::marker::UnsafeUnpin for rich_art::picture::ImageView
 impl core::panic::unwind_safe::RefUnwindSafe for rich_art::picture::ImageView
 impl core::panic::unwind_safe::UnwindSafe for rich_art::picture::ImageView
+pub struct rich_art::picture::KittyResource
+impl rich_art::picture::KittyResource
+pub fn rich_art::picture::KittyResource::id(&self) -> u32
+impl core::fmt::Debug for rich_art::picture::KittyResource
+pub fn rich_art::picture::KittyResource::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::ops::drop::Drop for rich_art::picture::KittyResource
+pub fn rich_art::picture::KittyResource::drop(&mut self)
+impl core::marker::Freeze for rich_art::picture::KittyResource
+impl core::marker::Send for rich_art::picture::KittyResource
+impl core::marker::Sync for rich_art::picture::KittyResource
+impl core::marker::Unpin for rich_art::picture::KittyResource
+impl core::marker::UnsafeUnpin for rich_art::picture::KittyResource
+impl core::panic::unwind_safe::RefUnwindSafe for rich_art::picture::KittyResource
+impl core::panic::unwind_safe::UnwindSafe for rich_art::picture::KittyResource
 pub struct rich_art::picture::Pacer
 impl rich_art::picture::Pacer
 pub fn rich_art::picture::Pacer::bytes_per_frame(&self) -> f64
+pub fn rich_art::picture::Pacer::cancel_pending(&mut self) -> bool
 pub fn rich_art::picture::Pacer::due(&mut self, std::time::Instant, &rich_art::picture::ByteBudget, f64) -> bool
+pub fn rich_art::picture::Pacer::due_replacing_pending(&mut self, std::time::Instant, &rich_art::picture::ByteBudget, f64) -> bool
 pub fn rich_art::picture::Pacer::estimate(rich_art::picture::Pixels, usize, usize) -> u64
+pub fn rich_art::picture::Pacer::estimate_with_metrics(rich_art::picture::Pixels, usize, usize, rich_art::graphics::CellPixels) -> u64
 pub fn rich_art::picture::Pacer::fps(&self, &rich_art::picture::ByteBudget, f64) -> f64
 pub fn rich_art::picture::Pacer::new(rich_art::picture::Pixels, usize, usize) -> rich_art::picture::Pacer
+pub fn rich_art::picture::Pacer::observe_bytes(&mut self, std::time::Instant, u64, bool)
 pub fn rich_art::picture::Pacer::pixels(&self) -> rich_art::picture::Pixels
 pub fn rich_art::picture::Pacer::recent_bytes(&self) -> u64
 pub fn rich_art::picture::Pacer::resize(&mut self, usize, usize)
+pub fn rich_art::picture::Pacer::schedule(&mut self, std::time::Instant)
 pub fn rich_art::picture::Pacer::sent(&mut self, std::time::Instant, core::option::Option<u64>)
+pub fn rich_art::picture::Pacer::set_cell_pixels(&mut self, rich_art::graphics::CellPixels) -> bool
 pub fn rich_art::picture::Pacer::settle(&mut self, &rich_art::picture::ByteBudget, f64) -> bool
+pub fn rich_art::picture::Pacer::with_formats(rich_art::picture::Pixels, usize, usize, rich_art::picture::PixelFormats) -> rich_art::picture::Pacer
 impl core::clone::Clone for rich_art::picture::Pacer
 pub fn rich_art::picture::Pacer::clone(&self) -> rich_art::picture::Pacer
 impl core::fmt::Debug for rich_art::picture::Pacer
@@ -909,22 +930,33 @@ impl core::panic::unwind_safe::UnwindSafe for rich_art::picture::Pacer
 pub struct rich_art::picture::Picture
 impl rich_art::picture::Picture
 pub fn rich_art::picture::Picture::animated(alloc::vec::Vec<rich_art::graphics::AnimationFrame>) -> core::option::Option<rich_art::picture::Picture>
+pub fn rich_art::picture::Picture::bound(&self, bool) -> Self
 pub fn rich_art::picture::Picture::decode(&[u8]) -> core::result::Result<rich_art::picture::Picture, alloc::string::String>
 pub fn rich_art::picture::Picture::decode_animated(&[u8]) -> core::result::Result<rich_art::picture::Picture, alloc::string::String>
 pub fn rich_art::picture::Picture::encode(&self, rich_art::picture::Pixels, usize, usize) -> core::option::Option<alloc::string::String>
 pub fn rich_art::picture::Picture::encode_rows(&self, rich_art::picture::Pixels, usize, usize, usize, usize) -> core::option::Option<alloc::string::String>
+pub fn rich_art::picture::Picture::encode_rows_with_metrics(&self, rich_art::picture::Pixels, usize, usize, usize, usize, rich_art::graphics::CellPixels) -> core::option::Option<alloc::string::String>
 pub fn rich_art::picture::Picture::encode_tag(&self, &rich_art::picture::PictureTag, usize, usize) -> core::option::Option<alloc::string::String>
+pub fn rich_art::picture::Picture::encode_tag_rect_with_context(&self, &rich_art::picture::PictureTag, core::ops::range::Range<usize>, core::ops::range::Range<usize>, rich_art::picture::PictureEncoding) -> core::option::Option<alloc::string::String>
+pub fn rich_art::picture::Picture::encode_tag_rect_with_metrics(&self, &rich_art::picture::PictureTag, core::ops::range::Range<usize>, core::ops::range::Range<usize>, rich_art::graphics::CellPixels) -> core::option::Option<alloc::string::String>
+pub fn rich_art::picture::Picture::encode_tag_with_metrics(&self, &rich_art::picture::PictureTag, usize, usize, rich_art::graphics::CellPixels) -> core::option::Option<alloc::string::String>
 pub fn rich_art::picture::Picture::find(u32, u32) -> core::option::Option<rich_art::picture::Picture>
 pub fn rich_art::picture::Picture::frames(&self) -> core::option::Option<&[rich_art::graphics::AnimationFrame]>
 pub fn rich_art::picture::Picture::from_rgba(u32, u32, alloc::vec::Vec<u8>) -> core::option::Option<rich_art::picture::Picture>
 pub fn rich_art::picture::Picture::id(&self) -> u32
 pub fn rich_art::picture::Picture::image(&self) -> &alloc::sync::Arc<image::images::dynimage::DynamicImage>
 pub fn rich_art::picture::Picture::is_animated(&self) -> bool
+pub fn rich_art::picture::Picture::is_prepared_with_context(&self, rich_art::picture::ImageView, usize, usize, rich_art::picture::PictureEncoding) -> bool
+pub fn rich_art::picture::Picture::is_prepared_with_metrics(&self, rich_art::picture::ImageView, usize, usize, rich_art::graphics::CellPixels) -> bool
+pub fn rich_art::picture::Picture::kitty_resource(&self, rich_art::picture::ImageView, usize, usize, bool) -> core::option::Option<alloc::sync::Arc<rich_art::picture::KittyResource>>
 pub fn rich_art::picture::Picture::lines(&self, &rich::console::Console, rich_art::picture::ImageView, u16, u16) -> alloc::vec::Vec<alloc::vec::Vec<rich::segment::Segment>>
+pub fn rich_art::picture::Picture::lines_with_metrics(&self, &rich::console::Console, rich_art::picture::ImageView, u16, u16, rich_art::graphics::CellPixels) -> alloc::vec::Vec<alloc::vec::Vec<rich::segment::Segment>>
 pub fn rich_art::picture::Picture::new(image::images::dynimage::DynamicImage) -> rich_art::picture::Picture
 pub fn rich_art::picture::Picture::next(&self, image::images::dynimage::DynamicImage) -> rich_art::picture::Picture
 pub fn rich_art::picture::Picture::next_rgba(&self, u32, u32, alloc::vec::Vec<u8>) -> core::option::Option<rich_art::picture::Picture>
 pub fn rich_art::picture::Picture::prepare(&self, rich_art::picture::ImageView, usize, usize) -> bool
+pub fn rich_art::picture::Picture::prepare_with_context(&self, rich_art::picture::ImageView, usize, usize, rich_art::picture::PictureEncoding) -> bool
+pub fn rich_art::picture::Picture::prepare_with_metrics(&self, rich_art::picture::ImageView, usize, usize, rich_art::graphics::CellPixels) -> bool
 pub fn rich_art::picture::Picture::release(u32) -> alloc::string::String
 pub fn rich_art::picture::Picture::still(&self) -> rich_art::picture::Picture
 pub fn rich_art::picture::Picture::version(&self) -> u32
@@ -942,6 +974,30 @@ impl core::marker::Unpin for rich_art::picture::Picture
 impl core::marker::UnsafeUnpin for rich_art::picture::Picture
 impl core::panic::unwind_safe::RefUnwindSafe for rich_art::picture::Picture
 impl core::panic::unwind_safe::UnwindSafe for rich_art::picture::Picture
+pub struct rich_art::picture::PictureEncoding
+pub rich_art::picture::PictureEncoding::cell_pixels: rich_art::graphics::CellPixels
+pub rich_art::picture::PictureEncoding::native_kitty_animation: bool
+impl rich_art::picture::PictureEncoding
+pub const fn rich_art::picture::PictureEncoding::native_kitty_animation(self, bool) -> Self
+pub const fn rich_art::picture::PictureEncoding::new(rich_art::graphics::CellPixels) -> Self
+impl core::clone::Clone for rich_art::picture::PictureEncoding
+pub fn rich_art::picture::PictureEncoding::clone(&self) -> rich_art::picture::PictureEncoding
+impl core::cmp::Eq for rich_art::picture::PictureEncoding
+impl core::cmp::PartialEq for rich_art::picture::PictureEncoding
+pub fn rich_art::picture::PictureEncoding::eq(&self, &rich_art::picture::PictureEncoding) -> bool
+impl core::fmt::Debug for rich_art::picture::PictureEncoding
+pub fn rich_art::picture::PictureEncoding::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::hash::Hash for rich_art::picture::PictureEncoding
+pub fn rich_art::picture::PictureEncoding::hash<__H: core::hash::Hasher>(&self, &mut __H)
+impl core::marker::Copy for rich_art::picture::PictureEncoding
+impl core::marker::StructuralPartialEq for rich_art::picture::PictureEncoding
+impl core::marker::Freeze for rich_art::picture::PictureEncoding
+impl core::marker::Send for rich_art::picture::PictureEncoding
+impl core::marker::Sync for rich_art::picture::PictureEncoding
+impl core::marker::Unpin for rich_art::picture::PictureEncoding
+impl core::marker::UnsafeUnpin for rich_art::picture::PictureEncoding
+impl core::panic::unwind_safe::RefUnwindSafe for rich_art::picture::PictureEncoding
+impl core::panic::unwind_safe::UnwindSafe for rich_art::picture::PictureEncoding
 pub struct rich_art::picture::PictureTag
 pub rich_art::picture::PictureTag::anchor: rich_art::image_art::ImageAnchor
 pub rich_art::picture::PictureTag::cols: usize
@@ -953,9 +1009,13 @@ pub rich_art::picture::PictureTag::rows: usize
 pub rich_art::picture::PictureTag::version: u32
 impl rich_art::picture::PictureTag
 pub const rich_art::picture::PictureTag::META_KEY: &'static str
+pub fn rich_art::picture::PictureTag::background_of(&rich::style::Style) -> core::option::Option<[u8; 3]>
+pub fn rich_art::picture::PictureTag::binding_of(&rich::style::Style) -> core::option::Option<bool>
+pub fn rich_art::picture::PictureTag::column_of(&rich::style::Style) -> core::option::Option<usize>
 pub fn rich_art::picture::PictureTag::of(&rich::style::Style) -> core::option::Option<rich_art::picture::PictureTag>
 pub fn rich_art::picture::PictureTag::picture(&self) -> core::option::Option<rich_art::picture::Picture>
 pub fn rich_art::picture::PictureTag::style(&self) -> rich::style::Style
+pub fn rich_art::picture::PictureTag::style_at(&self, usize) -> rich::style::Style
 impl core::clone::Clone for rich_art::picture::PictureTag
 pub fn rich_art::picture::PictureTag::clone(&self) -> rich_art::picture::PictureTag
 impl core::cmp::Eq for rich_art::picture::PictureTag
@@ -974,6 +1034,30 @@ impl core::marker::Unpin for rich_art::picture::PictureTag
 impl core::marker::UnsafeUnpin for rich_art::picture::PictureTag
 impl core::panic::unwind_safe::RefUnwindSafe for rich_art::picture::PictureTag
 impl core::panic::unwind_safe::UnwindSafe for rich_art::picture::PictureTag
+pub struct rich_art::picture::PixelFormats(_)
+impl rich_art::picture::PixelFormats
+pub const fn rich_art::picture::PixelFormats::all() -> Self
+pub const fn rich_art::picture::PixelFormats::cells() -> Self
+pub const fn rich_art::picture::PixelFormats::contains(self, rich_art::picture::Pixels) -> bool
+pub const fn rich_art::picture::PixelFormats::with(self, rich_art::picture::Pixels) -> Self
+impl core::clone::Clone for rich_art::picture::PixelFormats
+pub fn rich_art::picture::PixelFormats::clone(&self) -> rich_art::picture::PixelFormats
+impl core::cmp::Eq for rich_art::picture::PixelFormats
+impl core::cmp::PartialEq for rich_art::picture::PixelFormats
+pub fn rich_art::picture::PixelFormats::eq(&self, &rich_art::picture::PixelFormats) -> bool
+impl core::fmt::Debug for rich_art::picture::PixelFormats
+pub fn rich_art::picture::PixelFormats::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::hash::Hash for rich_art::picture::PixelFormats
+pub fn rich_art::picture::PixelFormats::hash<__H: core::hash::Hasher>(&self, &mut __H)
+impl core::marker::Copy for rich_art::picture::PixelFormats
+impl core::marker::StructuralPartialEq for rich_art::picture::PixelFormats
+impl core::marker::Freeze for rich_art::picture::PixelFormats
+impl core::marker::Send for rich_art::picture::PixelFormats
+impl core::marker::Sync for rich_art::picture::PixelFormats
+impl core::marker::Unpin for rich_art::picture::PixelFormats
+impl core::marker::UnsafeUnpin for rich_art::picture::PixelFormats
+impl core::panic::unwind_safe::RefUnwindSafe for rich_art::picture::PixelFormats
+impl core::panic::unwind_safe::UnwindSafe for rich_art::picture::PixelFormats
 pub struct rich_art::picture::Player
 impl rich_art::picture::Player
 pub fn rich_art::picture::Player::advance(&mut self, std::time::Instant) -> bool

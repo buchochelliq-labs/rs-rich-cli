@@ -113,7 +113,7 @@ const POLL: Duration = Duration::from_millis(15);
 #[derive(Clone, Debug, PartialEq)]
 enum Request {
     Open(String),
-    Resize(u16, u16),
+    Resize(u16, u16, u64),
     Input(WebInput),
     Back,
     Forward,
@@ -229,6 +229,10 @@ fn keep_frame(
 
 #[derive(Default)]
 struct Shared {
+    revision: u64,
+    viewport_revision: u64,
+    applied_viewport: Option<u64>,
+    expected_viewport: Option<(u32, u32)>,
     frame: Option<Pixels>,
     /// Where the last decoded frame was taken.
     meta: FrameMeta,
@@ -238,6 +242,21 @@ struct Shared {
     notify: Option<Notify>,
     /// The browser process, so the engine can end it from any thread.
     child: Option<Child>,
+}
+
+/// An opaque document/viewport capture scope for this engine. Obtain it before
+/// a model read, verify it afterward, then take a frame conditionally. A scope
+/// is available only after Chrome acknowledges the requested viewport metrics.
+#[derive(Clone)]
+pub struct ScreencastScope {
+    owner: Weak<Mutex<Shared>>,
+    revision: u64,
+}
+
+fn discard_frame(state: &mut Shared) -> Option<i64> {
+    state.frame = None;
+    state.meta = FrameMeta::default();
+    state.raw.take().and_then(|(_, _, ack)| ack)
 }
 
 /// What the browser does with a download: [`ChromeEngine::downloads`].
@@ -549,18 +568,61 @@ impl ChromeEngine {
     /// demand, it is decoded now, and acknowledged if it was not as it
     /// came, which lets Chrome send the next.
     pub fn take_screencast(&mut self) -> Option<ScreencastFrame> {
-        let (raw, decoded) = {
+        self.take_scoped(None)
+    }
+
+    /// The current capture scope, once the requested viewport is applied.
+    pub fn screencast_scope(&self) -> Option<ScreencastScope> {
+        let state = lock(&self.shared);
+        (state.applied_viewport == Some(state.viewport_revision)).then(|| ScreencastScope {
+            owner: Arc::downgrade(&self.shared),
+            revision: state.revision,
+        })
+    }
+
+    /// Whether a model read stayed in this engine's document and applied viewport.
+    pub fn screencast_scope_is_current(&self, scope: &ScreencastScope) -> bool {
+        let state = lock(&self.shared);
+        self.scope_matches(&state, scope)
+    }
+
+    fn scope_matches(&self, state: &Shared, scope: &ScreencastScope) -> bool {
+        Weak::ptr_eq(&scope.owner, &Arc::downgrade(&self.shared))
+            && scope.revision == state.revision
+            && state.applied_viewport == Some(state.viewport_revision)
+    }
+
+    /// Take only a frame in `scope`. A fresh frame for a newer scope remains
+    /// pending for its model; a navigation/resize during decode discards only
+    /// that old decode, without consuming a later frame.
+    pub fn take_screencast_for(&mut self, scope: &ScreencastScope) -> Option<ScreencastFrame> {
+        self.take_scoped(Some(scope))
+    }
+
+    fn take_scoped(&mut self, scope: Option<&ScreencastScope>) -> Option<ScreencastFrame> {
+        let (raw, decoded, revision) = {
             let mut shared = lock(&self.shared);
+            if scope.is_some_and(|scope| !self.scope_matches(&shared, scope)) {
+                return None;
+            }
             let meta = shared.meta;
-            (shared.raw.take(), shared.frame.take().map(|p| (p, meta)))
+            (
+                shared.raw.take(),
+                shared.frame.take().map(|p| (p, meta)),
+                shared.revision,
+            )
         };
-        if let Some((data, meta, ack)) = raw {
+        let frame = if let Some((data, meta, ack)) = raw {
             if let Some(ack) = ack {
                 let _ = self.send(Request::Ack(ack));
             }
-            return decode_frame(&data).map(|pixels| ScreencastFrame { pixels, meta });
-        }
-        decoded.map(|(pixels, meta)| ScreencastFrame { pixels, meta })
+            decode_frame(&data).map(|pixels| ScreencastFrame { pixels, meta })
+        } else {
+            decoded.map(|(pixels, meta)| ScreencastFrame { pixels, meta })
+        };
+        (lock(&self.shared).revision == revision)
+            .then_some(frame)
+            .flatten()
     }
 
     /// The CSS pixels one cell of the pane stands for (default 10 x 20):
@@ -817,7 +879,23 @@ impl WebEngine for ChromeEngine {
     }
 
     fn resize(&mut self, columns: u16, rows: u16) -> io::Result<()> {
-        self.send(Request::Resize(columns, rows))
+        let size = viewport(columns, rows, self.cell);
+        let (revision, ack) = {
+            let mut shared = lock(&self.shared);
+            let ack = if shared.expected_viewport != Some(size) {
+                shared.expected_viewport = Some(size);
+                shared.viewport_revision = shared.viewport_revision.wrapping_add(1);
+                shared.revision = shared.revision.wrapping_add(1);
+                discard_frame(&mut shared)
+            } else {
+                None
+            };
+            (shared.viewport_revision, ack)
+        };
+        if let Some(ack) = ack {
+            self.send(Request::Ack(ack))?;
+        }
+        self.send(Request::Resize(columns, rows, revision))
     }
 
     fn input(&mut self, input: WebInput) -> io::Result<()> {
@@ -1340,6 +1418,7 @@ enum Pending {
     CreateTarget,
     Attach,
     History,
+    Viewport(u64),
     /// An app's, through [`DevTools`]: the answer goes back to it.
     Call(Sender<io::Result<Value>>),
     Other,
@@ -1357,6 +1436,7 @@ struct Session {
     current: usize,
     /// The page's area in cells, for the viewport and the screencast.
     size: (u16, u16),
+    viewport_revision: u64,
     cell: (u32, u32),
     /// What the app asked for before the page was attached.
     waiting: Vec<Request>,
@@ -1416,9 +1496,11 @@ impl Session {
 
     fn screencast(&mut self) -> io::Result<()> {
         let (width, height) = viewport(self.size.0, self.size.1, self.cell);
-        self.page(
+        self.send(
             "Emulation.setDeviceMetricsOverride",
             json!({"width": width, "height": height, "deviceScaleFactor": 1, "mobile": false}),
+            Pending::Viewport(self.viewport_revision),
+            true,
         )?;
         self.page("Page.stopScreencast", json!({}))?;
         if !self.screencast {
@@ -1430,6 +1512,19 @@ impl Session {
             json!({"format": "jpeg", "quality": 70, "maxWidth": max_width,
                    "maxHeight": max_height, "everyNthFrame": 1}),
         )
+    }
+
+    fn ensure_viewport(&mut self, shared: &Mutex<Shared>) -> io::Result<()> {
+        let revision = lock(shared).viewport_revision;
+        if lock(shared).applied_viewport != Some(revision)
+            && !self
+                .pending
+                .iter()
+                .any(|(_, p)| matches!(p, Pending::Viewport(r) if *r == revision))
+        {
+            self.screencast()?;
+        }
+        Ok(())
     }
 
     fn history(&mut self) -> io::Result<()> {
@@ -1448,8 +1543,9 @@ impl Session {
         }
         match command {
             Request::Open(url) => self.page("Page.navigate", json!({"url": url})),
-            Request::Resize(columns, rows) => {
+            Request::Resize(columns, rows, revision) => {
                 self.size = (columns, rows);
+                self.viewport_revision = revision;
                 self.screencast()
             }
             Request::Input(WebInput::Key(key)) => {
@@ -1507,7 +1603,7 @@ impl Session {
                     // to a `file://` page, or to another site) is refused
                     // with "Not attached to an active page"; that must not
                     // end the engine.
-                    Pending::Other | Pending::History => Ok(()),
+                    Pending::Other | Pending::History | Pending::Viewport(_) => Ok(()),
                     // An app's call failing fails only that call.
                     Pending::Call(answer) => {
                         let _ = answer.send(Err(io::Error::other(error.to_string())));
@@ -1564,6 +1660,12 @@ impl Session {
                     }
                     notify(shared);
                 }
+                Pending::Viewport(revision) => {
+                    let mut state = lock(shared);
+                    if state.viewport_revision == revision {
+                        state.applied_viewport = Some(revision);
+                    }
+                }
                 Pending::Other => {}
             }
             return Ok(());
@@ -1576,13 +1678,37 @@ impl Session {
             Some(id) => self.session.as_deref() == Some(id),
             None => true,
         };
-        if ours && !method.is_empty() {
+        if !ours {
+            return Ok(());
+        }
+        // Retire the previous document's buffers before a listener can publish
+        // the new document. A pending raw frame owns at most one outstanding ACK.
+        if method == "Page.frameNavigated" && params["frame"].get("parentId").is_none() {
+            let ack = {
+                let mut state = lock(shared);
+                state.revision = state.revision.wrapping_add(1);
+                discard_frame(&mut state)
+            };
+            if let Some(ack) = ack {
+                self.page("Page.screencastFrameAck", json!({"sessionId": ack}))?;
+            }
+        }
+        if !method.is_empty() {
             deliver(&self.listeners, method, params);
         }
         match method {
             "Page.screencastFrame" => {
                 let meta = FrameMeta::of(&params["metadata"]);
                 let ack = params["sessionId"].as_i64();
+                let matching_viewport = lock(shared).expected_viewport.is_none_or(|(w, h)| {
+                    meta.device_width == f64::from(w) && meta.device_height == f64::from(h)
+                });
+                if !matching_viewport {
+                    if let Some(ack) = ack {
+                        self.page("Page.screencastFrameAck", json!({"sessionId": ack}))?;
+                    }
+                    return Ok(());
+                }
                 if self.on_demand {
                     // Kept as sent, at most one frame ahead of the app
                     // ([`keep_frame`]). Without an id there is nothing to
@@ -1619,12 +1745,14 @@ impl Session {
                 }
             }
             "Page.frameNavigated" if params["frame"].get("parentId").is_none() => {
+                self.ensure_viewport(shared)?;
                 if let Some(url) = params["frame"]["url"].as_str() {
                     lock(shared).state.url = url.to_string();
                     notify(shared);
                 }
                 self.history()?;
             }
+            "Page.loadEventFired" => self.ensure_viewport(shared)?,
             "Page.navigatedWithinDocument" => {
                 if let Some(url) = params["url"].as_str() {
                     lock(shared).state.url = url.to_string();
@@ -1666,6 +1794,7 @@ fn run(
         history: Vec::new(),
         current: 0,
         size: (80, 24),
+        viewport_revision: 0,
         cell,
         waiting: Vec::new(),
         calls: Vec::new(),
@@ -1947,6 +2076,285 @@ mod tests {
         let last = taken.last().unwrap();
         assert_eq!((last.pixels.width, last.pixels.height), (80, 80));
         assert_eq!(last.meta.scroll_y, 40.0);
+    }
+
+    #[cfg(unix)]
+    fn pending_session() -> (ChromeEngine, Session, io::PipeReader, Receiver<Request>) {
+        let (read, write) = io::pipe().unwrap();
+        let mut engine = ChromeEngine::new().screencast_on_demand(true);
+        let (send, requests) = mpsc::channel();
+        engine.commands = Some(send);
+        let mut session = Session {
+            transport: Transport::Pipe {
+                write,
+                read: mpsc::channel().1,
+                stderr: mpsc::channel().1,
+            },
+            next: 0,
+            pending: Vec::new(),
+            session: Some("ours".into()),
+            target: Some("main".into()),
+            history: Vec::new(),
+            current: 0,
+            size: (80, 24),
+            viewport_revision: 0,
+            cell: (10, 20),
+            waiting: Vec::new(),
+            calls: Vec::new(),
+            listeners: engine.listeners.clone(),
+            screencast: true,
+            on_demand: true,
+            scale: 1.0,
+        };
+        session.screencast().unwrap();
+        session
+            .message(&json!({"id":1, "result":{}}).to_string(), &engine.shared)
+            .unwrap();
+        (engine, session, read, requests)
+    }
+
+    #[cfg(unix)]
+    fn send_test_frame(session: &mut Session, shared: &Mutex<Shared>, id: i64, rgb: [u8; 3]) {
+        send_test_frame_with_meta(session, shared, id, rgb, json!({}));
+    }
+
+    #[cfg(unix)]
+    fn send_test_frame_with_meta(
+        session: &mut Session,
+        shared: &Mutex<Shared>,
+        id: i64,
+        rgb: [u8; 3],
+        meta: Value,
+    ) {
+        let mut png = Vec::new();
+        image::RgbImage::from_pixel(1, 1, image::Rgb(rgb))
+            .write_to(&mut io::Cursor::new(&mut png), image::ImageFormat::Png)
+            .unwrap();
+        session
+            .message(
+                &json!({
+                    "sessionId": "ours", "method": "Page.screencastFrame",
+                    "params": {"data": encode(&png), "sessionId": id, "metadata": meta}
+                })
+                .to_string(),
+                shared,
+            )
+            .unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn main_navigation_discards_pending_frames_and_acknowledges_once() {
+        use std::io::Read;
+        for count in [1, 2] {
+            let (mut engine, mut session, mut output, requests) = pending_session();
+            for id in 1..=count {
+                send_test_frame(&mut session, &engine.shared, id, [255, 0, 0]);
+            }
+            // Also discard the decoded fallback, not only the raw slot.
+            lock(&engine.shared).frame = Some(Pixels::new(1, 1, vec![255, 0, 0]).unwrap());
+            session
+                .message(
+                    &json!({"sessionId":"ours", "method":"Page.frameNavigated",
+                "params":{"frame":{"id":"main", "url":"https://b.test"}}})
+                    .to_string(),
+                    &engine.shared,
+                )
+                .unwrap();
+            assert!(
+                engine.take_screencast().is_none(),
+                "pre-navigation A must not escape into B"
+            );
+            assert!(
+                requests.try_recv().is_err(),
+                "discard ACK belongs to the session boundary"
+            );
+            send_test_frame(&mut session, &engine.shared, 3, [0, 0, 255]);
+            assert_eq!(engine.take_screencast().unwrap().pixels.rgb, [0, 0, 255]);
+            drop(session);
+            let mut wire = String::new();
+            output.read_to_string(&mut wire).unwrap();
+            let acks: Vec<_> = wire
+                .split('\0')
+                .filter_map(|m| serde_json::from_str::<Value>(m).ok())
+                .filter(|m| m["method"] == "Page.screencastFrameAck")
+                .map(|m| m["params"]["sessionId"].as_i64().unwrap())
+                .collect();
+            assert_eq!(
+                acks,
+                if count == 1 {
+                    vec![1, 3]
+                } else {
+                    vec![1, 2, 3]
+                }
+            );
+        }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_model_read_cannot_take_a_later_document_frame() {
+        let (mut engine, mut session, _output, _requests) = pending_session();
+        let scope = engine.screencast_scope().unwrap();
+        // A model read began in A. Navigation and a genuine sole B frame
+        // arrive before the model consumer asks for its frame.
+        session
+            .message(
+                &json!({"sessionId":"ours", "method":"Page.frameNavigated",
+            "params":{"frame":{"id":"main", "url":"https://b.test"}}})
+                .to_string(),
+                &engine.shared,
+            )
+            .unwrap();
+        send_test_frame(&mut session, &engine.shared, 1, [0, 0, 255]);
+        assert!(
+            engine.take_screencast_for(&scope).is_none(),
+            "A model must not consume sole fresh B"
+        );
+        assert_eq!(engine.take_screencast().unwrap().pixels.rgb, [0, 0, 255]);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn requested_resize_discards_pending_old_viewport_before_take() {
+        let (mut engine, mut session, _output, requests) = pending_session();
+        send_test_frame(&mut session, &engine.shared, 1, [255, 0, 0]);
+        send_test_frame(&mut session, &engine.shared, 2, [255, 0, 0]);
+        engine.resize(40, 24).unwrap();
+        assert!(
+            engine.take_screencast().is_none(),
+            "80-column source frame escaped into 40-column viewport"
+        );
+        let mut acks = 0;
+        while let Ok(request) = requests.try_recv() {
+            if matches!(request, Request::Ack(2)) {
+                acks += 1;
+            }
+        }
+        assert_eq!(acks, 1);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn navigation_retries_viewport_metrics_refused_during_renderer_swap() {
+        let (mut engine, mut session, _output, requests) = pending_session();
+        engine.resize(40, 24).unwrap();
+        while let Ok(request) = requests.try_recv() {
+            session.apply(request).unwrap();
+        }
+        let refused = session
+            .pending
+            .iter()
+            .find_map(|(id, p)| matches!(p, Pending::Viewport(1)).then_some(*id))
+            .unwrap();
+        session
+            .message(
+                &json!({"id":refused,"error":{"message":"Not attached to an active page"}})
+                    .to_string(),
+                &engine.shared,
+            )
+            .unwrap();
+        session.message(&json!({"sessionId":"ours", "method":"Page.frameNavigated", "params":{"frame":{"url":"https://b.test"}}}).to_string(), &engine.shared).unwrap();
+        let retried = session
+            .pending
+            .iter()
+            .find_map(|(id, p)| matches!(p, Pending::Viewport(1)).then_some(*id));
+        assert!(
+            retried.is_some(),
+            "a refused viewport must not leave all future model reads blocked"
+        );
+        session
+            .message(
+                &json!({"id":retried.unwrap(),"result":{}}).to_string(),
+                &engine.shared,
+            )
+            .unwrap();
+        assert!(engine.screencast_scope().is_some());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn viewport_scope_waits_for_matching_applied_metrics_and_preserves_fresh_frame() {
+        use std::io::Read;
+        let (mut engine, mut session, mut output, requests) = pending_session();
+        let old = engine.screencast_scope().unwrap();
+        engine.resize(40, 24).unwrap();
+        assert!(
+            engine.screencast_scope().is_none(),
+            "request alone is not application"
+        );
+        while let Ok(request) = requests.try_recv() {
+            session.apply(request).unwrap();
+        }
+        let apply = session
+            .pending
+            .iter()
+            .find_map(|(id, pending)| matches!(pending, Pending::Viewport(1)).then_some(*id))
+            .unwrap();
+        send_test_frame_with_meta(
+            &mut session,
+            &engine.shared,
+            10,
+            [255, 0, 0],
+            json!({"deviceWidth":800,"deviceHeight":480}),
+        );
+        assert!(
+            engine.take_screencast().is_none(),
+            "queued old-width event must not become current"
+        );
+        send_test_frame_with_meta(
+            &mut session,
+            &engine.shared,
+            11,
+            [0, 0, 255],
+            json!({"deviceWidth":400,"deviceHeight":480}),
+        );
+        assert!(engine.take_screencast_for(&old).is_none());
+        assert!(engine.screencast_scope().is_none());
+        session
+            .message(&json!({"id":apply,"result":{}}).to_string(), &engine.shared)
+            .unwrap();
+        let current = engine.screencast_scope().unwrap();
+        assert_eq!(
+            engine.take_screencast_for(&current).unwrap().pixels.rgb,
+            [0, 0, 255]
+        );
+        // A repeated request for the same source geometry keeps the valid scope.
+        engine.resize(40, 24).unwrap();
+        assert!(engine.screencast_scope_is_current(&current));
+        // A different engine can never use this token.
+        assert!(!ChromeEngine::new().screencast_scope_is_current(&current));
+        drop(session);
+        let mut wire = String::new();
+        output.read_to_string(&mut wire).unwrap();
+        for ack in [10, 11] {
+            assert_eq!(
+                wire.split('\0')
+                    .filter_map(|m| serde_json::from_str::<Value>(m).ok())
+                    .filter(|m| m["method"] == "Page.screencastFrameAck"
+                        && m["params"]["sessionId"] == ack)
+                    .count(),
+                1
+            );
+        }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn other_navigation_boundaries_preserve_pending_frame() {
+        for event in [
+            json!({"sessionId":"ours", "method":"Page.frameNavigated", "params":{"frame":{"parentId":"main", "url":"https://child.test"}}}),
+            json!({"sessionId":"ours", "method":"Page.navigatedWithinDocument", "params":{"url":"https://a.test/#hash"}}),
+            json!({"sessionId":"foreign", "method":"Page.frameNavigated", "params":{"frame":{"url":"https://other.test"}}}),
+        ] {
+            let (mut engine, mut session, _output, requests) = pending_session();
+            send_test_frame(&mut session, &engine.shared, 1, [255, 0, 0]);
+            send_test_frame(&mut session, &engine.shared, 2, [255, 0, 0]);
+            session.message(&event.to_string(), &engine.shared).unwrap();
+            assert_eq!(engine.take_screencast().unwrap().pixels.rgb, [255, 0, 0]);
+            assert!(matches!(requests.try_recv(), Ok(Request::Ack(2))));
+            assert!(requests.try_recv().is_err());
+        }
     }
 
     #[test]

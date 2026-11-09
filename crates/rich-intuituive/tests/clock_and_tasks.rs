@@ -392,3 +392,51 @@ fn graphics_are_drawn_beside_the_cells_when_they_need_to_be() {
     assert!(out.contains("<picture 0>"), "{out:?}");
     assert!(driver.finish().contains("<release>"));
 }
+
+#[test]
+fn driver_dispatches_composed_screen_with_measured_cells() {
+    use rich_ext::frame::{Frame, Placement, PlacementSource};
+    use rich_ext::surface::Screen;
+    use std::sync::Mutex;
+    type Invocation = (bool, usize, usize, Option<(u16, u16)>);
+    #[derive(Default)]
+    struct Source(Mutex<Vec<Invocation>>);
+    impl PlacementSource for Source {
+        fn placements(&self, frame: &Frame) -> Vec<Placement> {
+            self.placements_with_metrics(frame, None)
+        }
+        fn placements_with_metrics(
+            &self,
+            frame: &Frame,
+            metrics: Option<(u16, u16)>,
+        ) -> Vec<Placement> {
+            self.0
+                .lock()
+                .unwrap()
+                .push((false, frame.row_width(0), frame.height(), metrics));
+            vec![]
+        }
+        fn placements_from_screen(
+            &self,
+            screen: &Screen,
+            metrics: Option<(u16, u16)>,
+        ) -> Vec<Placement> {
+            assert_eq!(screen.cell(0, 0).text(), "x");
+            self.0.lock().unwrap().push((
+                true,
+                screen.area().width.into(),
+                screen.area().height.into(),
+                metrics,
+            ));
+            vec![]
+        }
+    }
+    let source = Arc::new(Source::default());
+    let mut driver = App::new(|| text(|| "x".into()))
+        .graphics(source.clone())
+        .driver(7, 3);
+    driver.set_cell_pixels(Some((9, 18)));
+    driver.update(Duration::ZERO);
+    driver.render().unwrap();
+    assert_eq!(*source.0.lock().unwrap(), [(true, 7, 3, Some((9, 18)))]);
+}

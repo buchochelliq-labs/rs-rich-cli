@@ -42,6 +42,13 @@ pub trait Graphic: Send + Sync + fmt::Debug {
     /// (save and restore it around anything that moves it).
     fn draw(&self, frame: usize) -> String;
 
+    /// Whether already presented in-cell data can be reused on movement.
+    /// Sources sharing a terminal resource between incompatible rasters may
+    /// disable this for those graphics. Both sides of a transition must allow it.
+    fn can_reuse_data(&self) -> bool {
+        true
+    }
+
     /// Whether the image lives in the cells themselves (Kitty's Unicode
     /// placeholders): repainting the cells repaints it, and [`draw`](Self::draw)
     /// only makes sure the terminal holds the image.
@@ -98,11 +105,52 @@ pub trait PlacementSource: Send + Sync {
     /// The placements on `frame`'s cells.
     fn placements(&self, frame: &Frame) -> Vec<Placement>;
 
+    /// Placements using measured physical cell dimensions, if known. Existing
+    /// sources may ignore these metrics and implement only `placements`.
+    fn placements_with_metrics(
+        &self,
+        frame: &Frame,
+        cell_pixels: Option<(u16, u16)>,
+    ) -> Vec<Placement> {
+        let _ = cell_pixels;
+        self.placements(frame)
+    }
+
+    /// Placements on an already composed screen, with measured cell dimensions.
+    /// The default preserves the Frame adapter used by existing painters.
+    /// Sources may override this to borrow surviving cells and styles directly.
+    fn placements_from_screen(
+        &self,
+        screen: &crate::surface::Screen,
+        cell_pixels: Option<(u16, u16)>,
+    ) -> Vec<Placement> {
+        let mut segments = Vec::new();
+        for line in screen.lines() {
+            segments.extend(line);
+            segments.push(Segment::line());
+        }
+        let frame = Frame::from_segments(&segments);
+        self.placements_with_metrics(&frame, cell_pixels)
+    }
+
     /// How long until an animation among the placements shows another frame,
     /// so an event loop knows when to repaint. `None` when nothing moves.
     fn next_change(&self) -> Option<Duration> {
         None
     }
+
+    /// Release retired per-frame resources after planning the current placements.
+    /// Append these commands to the same ordered output as that frame. Legacy
+    /// sources need no per-frame cleanup and keep the default no-op behavior.
+    fn reconcile(&self, retained: &[Placement]) -> String {
+        let _ = retained;
+        String::new()
+    }
+
+    /// Confirm successful writing of all output returned before this call.
+    /// Sources may now release ID reservations for emitted deletions. A failed
+    /// or merely queued write must not call this; manual painters own this step.
+    fn output_written(&self) {}
 
     /// The escape that releases what the terminal holds for graphics this
     /// source placed, once the view closes, except those in `retained` (still
@@ -132,6 +180,7 @@ impl GraphicsPlan {
 /// What to redraw going from `previous` placements to `next`, after the
 /// cell `changes` were painted.
 pub fn plan(previous: &[Placement], next: &[Placement], changes: &[Change]) -> GraphicsPlan {
+    let measured = media_trace_enabled().then(std::time::Instant::now);
     let mut out = GraphicsPlan::default();
     for old in previous {
         if old.graphic.in_cells() || next.iter().any(|new| new.same(old)) {
@@ -159,7 +208,20 @@ pub fn plan(previous: &[Placement], next: &[Placement], changes: &[Change]) -> G
         }
     }
     for new in next {
-        let kept = previous.iter().any(|old| old.same(new));
+        // In-cell graphics move with their cells; only the retained data matters.
+        // Limit this proof to the previous successfully presented frame (or an
+        // upload already scheduled here), never a persistent seen-id cache.
+        let kept = if new.graphic.in_cells() {
+            previous.iter().chain(out.draw.iter()).any(|old| {
+                new.graphic.can_reuse_data()
+                    && old.graphic.can_reuse_data()
+                    && old.graphic.in_cells()
+                    && old.graphic.key() == new.graphic.key()
+                    && old.frame == new.frame
+            })
+        } else {
+            previous.iter().any(|old| old.same(new))
+        };
         let wiped = !new.graphic.in_cells()
             && (changes.iter().any(|change| new.touched_by(change))
                 || out.repaint.iter().any(|(row, columns)| {
@@ -167,9 +229,28 @@ pub fn plan(previous: &[Placement], next: &[Placement], changes: &[Change]) -> G
                         && columns.start < new.column + new.cols
                         && new.column < columns.end
                 }));
-        if !kept || wiped {
+        // Earlier overlays are painted first. If one intersects this
+        // retained overlay, restore it on top in the source's order.
+        let covered = !new.graphic.in_cells()
+            && out.draw.iter().any(|lower| {
+                !lower.graphic.in_cells()
+                    && lower.row < new.row + new.rows
+                    && new.row < lower.row + lower.rows
+                    && lower.column < new.column + new.cols
+                    && new.column < lower.column + lower.cols
+            });
+        if !kept || wiped || covered {
             out.draw.push(new.clone());
         }
+    }
+    if let Some(start) = measured {
+        eprintln!(
+            "RICH_MEDIA {{\"stage\":\"graphics_plan\",\"ns\":{},\"previous\":{},\"next\":{},\"draw\":{}}}",
+            start.elapsed().as_nanos(),
+            previous.len(),
+            next.len(),
+            out.draw.len()
+        );
     }
     out
 }
@@ -192,9 +273,55 @@ impl Frame {
     }
 }
 
+fn media_trace_enabled() -> bool {
+    static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *ON.get_or_init(|| std::env::var_os("RICH_MEDIA_TRACE").is_some())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn screen_default_preserves_frame_rows_styles_and_metrics() {
+        use crate::surface::Screen;
+        use std::sync::Mutex;
+        type ObservedFrame = (String, Vec<usize>, Option<(u16, u16)>);
+        struct Legacy(Mutex<Vec<ObservedFrame>>);
+        impl PlacementSource for Legacy {
+            fn placements(&self, frame: &Frame) -> Vec<Placement> {
+                self.placements_with_metrics(frame, None)
+            }
+            fn placements_with_metrics(
+                &self,
+                frame: &Frame,
+                metrics: Option<(u16, u16)>,
+            ) -> Vec<Placement> {
+                assert!(frame.styles().get(frame.row(0)[0].style()).unwrap().bold() == Some(true));
+                self.0.lock().unwrap().push((
+                    frame.plain(),
+                    (0..frame.height()).map(|r| frame.row_width(r)).collect(),
+                    metrics,
+                ));
+                vec![at(0, 1, 7, 0)]
+            }
+        }
+        let source = Legacy(Mutex::new(Vec::new()));
+        let mut screen = Screen::new(5, 2);
+        screen.write_lines(
+            screen.area(),
+            &[vec![Segment::new(
+                "漢x",
+                Some(rich::Style::parse("bold").unwrap()),
+            )]],
+        );
+        let placements = source.placements_from_screen(&screen, Some((9, 18)));
+        assert!(placements[0].same(&at(0, 1, 7, 0)));
+        assert_eq!(
+            *source.0.lock().unwrap(),
+            [("漢x  \n     \n".into(), vec![5, 5], Some((9, 18)))]
+        );
+    }
 
     #[derive(Debug)]
     struct Image(u64, bool);
@@ -227,6 +354,17 @@ mod tests {
     }
 
     #[test]
+    fn newly_drawn_lower_overlay_restores_retained_higher_overlay() {
+        let high = at(0, 1, 2, 0);
+        let lower = at(0, 0, 1, 0);
+        let out = plan(std::slice::from_ref(&high), &[lower, high.clone()], &[]);
+        assert_eq!(
+            out.draw.iter().map(|p| p.graphic.key()).collect::<Vec<_>>(),
+            vec![1, 2]
+        );
+    }
+
+    #[test]
     fn unchanged_placements_draw_nothing() {
         let placed = [at(0, 4, 1, 0)];
         assert!(plan(&placed, &placed, &[]).is_empty());
@@ -254,6 +392,61 @@ mod tests {
         let out = plan(&old, &[], &[change(1, 3..5)]);
         assert_eq!(out.repaint, vec![(1, 5..6)]);
         assert!(out.draw.is_empty());
+    }
+
+    #[test]
+    fn in_cell_data_survives_movement_fragments_but_not_absence_or_frame_change() {
+        let old = Placement {
+            graphic: Arc::new(Image(9, true)),
+            ..at(0, 0, 9, 0)
+        };
+        let moved = Placement {
+            row: 2,
+            column: 3,
+            cols: 1,
+            rows: 3,
+            ..old.clone()
+        };
+        assert!(!old.same(&moved));
+        assert!(
+            plan(
+                std::slice::from_ref(&old),
+                &[moved.clone(), old.clone()],
+                &[change(0, 0..8)]
+            )
+            .is_empty()
+        );
+        let initial = plan(&[], &[moved.clone(), old.clone(), at(4, 0, 3, 0)], &[]);
+        assert_eq!(initial.draw.len(), 2);
+        assert_eq!(initial.draw[0].graphic.key(), 9);
+        assert_eq!(initial.draw[1].graphic.key(), 3);
+        assert_eq!(plan(&[], std::slice::from_ref(&moved), &[]).draw.len(), 1);
+        assert_eq!(
+            plan(
+                std::slice::from_ref(&old),
+                &[Placement {
+                    frame: 1,
+                    ..moved.clone()
+                }],
+                &[]
+            )
+            .draw
+            .len(),
+            1
+        );
+        assert_eq!(
+            plan(
+                &[old],
+                &[Placement {
+                    graphic: Arc::new(Image(10, true)),
+                    ..moved
+                }],
+                &[]
+            )
+            .draw
+            .len(),
+            1
+        );
     }
 
     #[test]

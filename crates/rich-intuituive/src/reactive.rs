@@ -23,10 +23,11 @@ use std::collections::{HashMap, HashSet, VecDeque};
 use std::marker::PhantomData;
 use std::panic::Location;
 use std::rc::Rc;
-use std::sync::atomic::AtomicUsize;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, mpsc};
 
 use crate::app::Ctx;
+use crate::clock::Instant;
 
 /// A node's identity in the tree, as the runtime sees it.
 pub type NodeId = u64;
@@ -84,6 +85,7 @@ pub(crate) struct Runtime {
     /// Closures sent from other threads, run on the app's thread.
     inbox: mpsc::Receiver<Job>,
     outbox: mpsc::Sender<Job>,
+    pending_jobs: Arc<AtomicUsize>,
     /// What wakes the loop's wait when another thread sends a closure.
     pub(crate) wake: Arc<WakeSlot>,
     /// Tasks started and not yet delivered.
@@ -108,6 +110,7 @@ pub(crate) struct Runtime {
     pub(crate) watchers: crate::widget::Watchers,
     /// The slot of the app's [`viewport`], once made.
     viewport: Cell<Option<usize>>,
+    cell_pixels: Cell<Option<usize>>,
     /// Where each slot's signal was made, for the inspector's trace.
     sites: RefCell<Vec<Option<&'static Location<'static>>>>,
     /// Where each watch was made.
@@ -177,6 +180,7 @@ impl Runtime {
                 graph: RefCell::new(Graph::default()),
                 inbox,
                 outbox,
+                pending_jobs: Arc::default(),
                 wake: Arc::default(),
                 tasks: Arc::new(AtomicUsize::new(0)),
                 clock: crate::task::ThreadClock::new(),
@@ -188,6 +192,7 @@ impl Runtime {
                 queued: RefCell::new(Vec::new()),
                 watchers: Default::default(),
                 viewport: Cell::new(None),
+                cell_pixels: Cell::new(None),
                 sites: RefCell::new(Vec::new()),
                 watch_sites: RefCell::new(HashMap::new()),
                 tracer: Default::default(),
@@ -205,6 +210,9 @@ impl Runtime {
                 locals: RefCell::new(HashMap::new()),
                 next_local: Cell::new(0),
             });
+            // Metrics may first be read while another signal is borrowed.
+            // Allocate the slot before any observer or drawing callback runs.
+            runtime.cell_pixels();
             all.push(Some(runtime.clone()));
             runtime
         })
@@ -255,6 +263,23 @@ impl Runtime {
                 let slot = self.insert(Box::new((0u16, 0u16)), None);
                 self.viewport.set(Some(slot));
                 // A resize says so in the trace already.
+                self.tracer.quiet(slot);
+                slot
+            }
+        };
+        Signal {
+            runtime: self.id,
+            slot,
+            _type: PhantomData,
+        }
+    }
+
+    pub(crate) fn cell_pixels(&self) -> Signal<Option<(u16, u16)>> {
+        let slot = match self.cell_pixels.get() {
+            Some(slot) => slot,
+            None => {
+                let slot = self.insert(Box::new(None::<(u16, u16)>), None);
+                self.cell_pixels.set(Some(slot));
                 self.tracer.quiet(slot);
                 slot
             }
@@ -633,9 +658,23 @@ impl Runtime {
     /// Run the closures other threads sent; whether there were any.
     pub(crate) fn run_inbox(&self, cx: &mut Ctx) -> bool {
         let mut ran = false;
-        while let Ok(job) = self.inbox.try_recv() {
+        // Snapshot this turn's work: replacements arriving during a costly
+        // job belong to the next turn. Also bound large initial batches.
+        let count = self.pending_jobs.load(Ordering::Acquire).min(64);
+        let started = Instant::now();
+        for _ in 0..count {
+            let Ok(job) = self.inbox.try_recv() else {
+                break;
+            };
+            self.pending_jobs.fetch_sub(1, Ordering::AcqRel);
             job(cx);
             ran = true;
+            if started.elapsed() >= std::time::Duration::from_millis(8) {
+                break;
+            }
+        }
+        if self.pending_jobs.load(Ordering::Acquire) > 0 {
+            self.wake.wake();
         }
         ran
     }
@@ -643,6 +682,7 @@ impl Runtime {
     pub(crate) fn proxy(&self) -> Proxy {
         Proxy {
             outbox: self.outbox.clone(),
+            pending_jobs: self.pending_jobs.clone(),
             wake: self.wake.clone(),
         }
     }
@@ -868,6 +908,14 @@ impl<T> Copy for Memo<T> {}
 pub fn viewport() -> Memo<(u16, u16)> {
     Memo {
         inner: Runtime::current_for("viewport()").viewport(),
+    }
+}
+
+/// The measured physical cell size, reactive like [`viewport`]. `None`
+/// means the backend did not report a valid size.
+pub fn cell_pixels() -> Memo<Option<(u16, u16)>> {
+    Memo {
+        inner: Runtime::current_for("cell_pixels()").cell_pixels(),
     }
 }
 
@@ -1176,6 +1224,7 @@ impl<T: Clone + 'static> Memo<T> {
 #[derive(Clone)]
 pub struct Proxy {
     outbox: mpsc::Sender<Job>,
+    pending_jobs: Arc<AtomicUsize>,
     wake: Arc<WakeSlot>,
 }
 
@@ -1226,7 +1275,10 @@ impl Proxy {
 
     /// Run `f` on the app's thread with a [`Ctx`], so it can also move the
     /// focus, open a screen or quit. Returns `false` if the app has
-    /// finished.
+    /// finished. A default Driver update consumes a bounded initial inbox
+    /// batch; jobs queued by a running job wait for another turn. Callbacks
+    /// themselves must return promptly: an executing callback is not preempted.
+    /// Apps configured to wait for tasks continue settling successive batches.
     #[track_caller]
     pub fn run_with(&self, f: impl FnOnce(&mut Ctx) + Send + 'static) -> bool {
         let at = Location::caller();
@@ -1239,7 +1291,11 @@ impl Proxy {
     /// Send `job` as it is: a task's delivery, which traces itself. The
     /// loop's wait on the terminal ends, so it runs at once.
     pub(crate) fn send(&self, job: Job) -> bool {
+        self.pending_jobs.fetch_add(1, Ordering::AcqRel);
         let sent = self.outbox.send(job).is_ok();
+        if !sent {
+            self.pending_jobs.fetch_sub(1, Ordering::AcqRel);
+        }
         if sent {
             self.wake.wake();
         }

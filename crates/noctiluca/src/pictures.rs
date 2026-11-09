@@ -23,7 +23,7 @@ use std::rc::Rc;
 use std::time::Instant;
 
 use rich::segment::Segment;
-use rich_art::picture::{ByteBudget, Pacer, Player, picture_bytes};
+use rich_art::picture::{ByteBudget, Pacer, PixelFormats, Player, picture_bytes};
 use rich_intuituive::{ImageFit, ImageView, Picture, Pixels};
 
 use crate::config::Images;
@@ -60,13 +60,30 @@ pub struct Live {
 /// the rows that show them.
 #[derive(Default)]
 pub struct Cells {
+    presentation: Option<rich_intuituive::ImagePresentation>,
     made: RefCell<HashMap<CellsKey, Rc<Vec<Vec<Segment>>>>>,
 }
 
 /// A picture's frame, its size in cells and its protocol.
-type CellsKey = (u32, u32, usize, usize, Pixels);
+type CellsKey = (
+    u32,
+    u32,
+    usize,
+    usize,
+    Pixels,
+    Option<(u16, u16)>,
+    Option<rich::ColorSystem>,
+);
 
 impl Cells {
+    /// Share the app's independent fitted-resource and encoding policy.
+    pub fn with_presentation(presentation: rich_intuituive::ImagePresentation) -> Self {
+        Self {
+            presentation: Some(presentation),
+            ..Self::default()
+        }
+    }
+
     /// `picture`'s cells at `cols` x `rows` through `pixels`.
     pub fn of(
         &self,
@@ -76,7 +93,28 @@ impl Cells {
         cols: usize,
         rows: usize,
     ) -> Rc<Vec<Vec<Segment>>> {
-        let key = (picture.id(), picture.version(), cols, rows, pixels);
+        self.of_with_metrics(console, picture, pixels, cols, rows, None)
+    }
+
+    /// Cells drawn using the physical terminal cell dimensions, when known.
+    pub fn of_with_metrics(
+        &self,
+        console: &rich::Console,
+        picture: &Picture,
+        pixels: Pixels,
+        cols: usize,
+        rows: usize,
+        metrics: Option<(u16, u16)>,
+    ) -> Rc<Vec<Vec<Segment>>> {
+        let key = (
+            picture.id(),
+            picture.version(),
+            cols,
+            rows,
+            pixels,
+            metrics,
+            console.color_system(),
+        );
         if let Some(lines) = self.made.borrow().get(&key) {
             return lines.clone();
         }
@@ -87,7 +125,14 @@ impl Cells {
         } else {
             view(pixels)
         };
-        let lines = Rc::new(picture.lines(console, view, cols as u16, rows as u16));
+        let cell = metrics
+            .filter(|&(w, h)| w > 0 && h > 0)
+            .map(|(w, h)| rich_art::graphics::CellPixels::new(w.into(), h.into()))
+            .unwrap_or_default();
+        let bound = self.presentation.map(|policy| policy.picture(picture));
+        let picture = bound.as_ref().unwrap_or(picture);
+        let lines =
+            Rc::new(picture.lines_with_metrics(console, view, cols as u16, rows as u16, cell));
         let mut made = self.made.borrow_mut();
         // Old frames go; what is on screen is made again at once.
         if made.len() > 512 {
@@ -112,6 +157,24 @@ pub fn splice(
     regions: &[Region],
     picture: impl Fn(&Region) -> Option<(Picture, Pixels)>,
 ) -> Vec<Segment> {
+    splice_with_metrics(console, cells, line, width, row, regions, picture, None)
+}
+
+/// Splice picture cells using measured physical cell dimensions.
+#[allow(
+    clippy::too_many_arguments,
+    reason = "Additive metrics API preserves the public splice signature and caller compatibility"
+)]
+pub fn splice_with_metrics(
+    console: &rich::Console,
+    cells: &Cells,
+    line: Vec<Segment>,
+    width: usize,
+    row: usize,
+    regions: &[Region],
+    picture: impl Fn(&Region) -> Option<(Picture, Pixels)>,
+    metrics: Option<(u16, u16)>,
+) -> Vec<Segment> {
     let mut line = Segment::adjust_line_length(&line, width, None);
     let mut on: Vec<&Region> = regions
         .iter()
@@ -123,7 +186,8 @@ pub fn splice(
             continue;
         };
         let cols = region.cols.min(width - region.column);
-        let lines = cells.of(console, &shown, pixels, region.cols, region.rows);
+        let lines =
+            cells.of_with_metrics(console, &shown, pixels, region.cols, region.rows, metrics);
         let Some(part) = lines.get(row - region.row) else {
             continue;
         };
@@ -173,6 +237,8 @@ pub fn on_backdrop(line: Vec<Segment>, width: usize, backdrop: &str) -> Vec<Segm
 /// in view, on a terminal that cannot play animations itself.
 pub struct Motion {
     budget: ByteBudget,
+    native_animation: bool,
+    formats: PixelFormats,
     /// Other moving pictures sharing the budget (videos playing).
     others: usize,
     /// How many animations stepped at the last look.
@@ -180,6 +246,7 @@ pub struct Motion {
     playing: HashMap<NodeId, Moving>,
     /// Frozen animations' still frames for Kitty, by node.
     stills: HashMap<NodeId, (Picture, Picture)>,
+    cell: rich_art::graphics::CellPixels,
 }
 
 struct Moving {
@@ -189,6 +256,9 @@ struct Moving {
     pacer: Pacer,
     /// [`picture_bytes`] of its id when it last stepped.
     bytes: u64,
+    cell: rich_art::graphics::CellPixels,
+    geometry: (usize, usize),
+    stale_bytes: bool,
 }
 
 impl Default for Motion {
@@ -201,10 +271,25 @@ impl Motion {
     pub fn new(budget: ByteBudget) -> Motion {
         Motion {
             budget,
+            native_animation: true,
+            formats: PixelFormats::all(),
             others: 0,
             moving: 0,
             playing: HashMap::new(),
             stills: HashMap::new(),
+            cell: rich_art::graphics::CellPixels::DEFAULT,
+        }
+    }
+
+    /// Software fallback and supported formats from the same policy as first paint.
+    pub fn with_presentation(
+        budget: ByteBudget,
+        presentation: rich_intuituive::ImagePresentation,
+    ) -> Self {
+        Self {
+            native_animation: presentation.kitty_features().native_animation,
+            formats: presentation.formats(),
+            ..Self::new(budget)
         }
     }
 
@@ -218,6 +303,22 @@ impl Motion {
     pub fn share_with(&mut self, budget: ByteBudget, others: usize) {
         self.budget = budget;
         self.others = others;
+    }
+
+    /// Select the physical cell size used to estimate animated frame costs.
+    pub fn set_cell_pixels(&mut self, cell: rich_art::graphics::CellPixels) {
+        self.cell = rich_art::graphics::CellPixels::new(cell.width, cell.height);
+    }
+
+    /// The projection is hidden: release unshown reservations while keeping
+    /// counted bytes in the rolling windows in case it becomes visible again.
+    pub(crate) fn hide(&mut self) {
+        for moving in self.playing.values_mut() {
+            if moving.pacer.cancel_pending() {
+                moving.stale_bytes = true;
+            }
+        }
+        self.moving = 0;
     }
 
     /// How many animations it stepped at its last look: what it takes of
@@ -252,13 +353,14 @@ impl Motion {
             })
             .collect();
         // Kitty plays animations itself: only the others share the bytes.
-        self.moving = if pixels == Pixels::Kitty || frozen {
+        self.moving = if (pixels == Pixels::Kitty && self.native_animation) || frozen {
             0
         } else {
             in_view.len()
         };
         let share = 1.0 / (self.moving + self.others).max(1) as f64;
         let budget = self.budget;
+        let cell = self.cell;
         let mut seen = Vec::new();
         for region in in_view {
             let media = &page.media[region.media];
@@ -266,7 +368,7 @@ impl Motion {
                 continue;
             };
             seen.push(media.node);
-            if pixels == Pixels::Kitty {
+            if pixels == Pixels::Kitty && self.native_animation {
                 // Kitty plays it; frozen, the still frame stands in.
                 let picture = if frozen {
                     self.still(media.node, &animation)
@@ -276,23 +378,56 @@ impl Motion {
                 out.insert(media.node, Live { picture, pixels });
                 continue;
             }
-            let moving = self.moving(media.node, &animation, region, pixels, now);
+            let moving = self.moving(media.node, &animation, region, pixels, now, cell);
+            let metrics_changed = moving.cell != cell;
+            let geometry_changed = moving.geometry != (region.cols, region.rows);
+            let id = moving.player.frame().id();
+            let counted = picture_bytes(id);
+            let spent = counted.saturating_sub(moving.bytes);
+            moving.bytes = counted;
+            if spent > 0 {
+                moving.pacer.observe_bytes(
+                    now,
+                    spent + (region.cols * region.rows) as u64 * UNDERLAY,
+                    moving.pacer.pixels() != Pixels::Cells
+                        && !metrics_changed
+                        && !geometry_changed
+                        && !moving.stale_bytes,
+                );
+                moving.stale_bytes = false;
+            }
+            if metrics_changed || geometry_changed {
+                moving.pacer.cancel_pending();
+                moving.pacer.set_cell_pixels(cell);
+                moving.cell = cell;
+                moving.geometry = (region.cols, region.rows);
+                // A frame already shown may be counted after this transition.
+                moving.stale_bytes = spent == 0;
+            }
             // Short of bytes from the start (its estimate under the floor):
             // step down before sending a frame at all.
+            let before = moving.pacer.pixels();
             while moving.pacer.settle(&budget, share) {}
-            if !frozen && moving.player.due(now) && moving.pacer.due(now, &budget, share) {
-                let id = moving.player.frame().id();
-                let spent = picture_bytes(id).saturating_sub(moving.bytes);
-                moving.bytes = picture_bytes(id);
-                // A picture in cells costs its cells, which the painter
-                // sends: the pacer's estimate stands for them. In pixels,
-                // its escape, and the half blocks under it, which change
-                // with each frame too.
-                let measured = (moving.pacer.pixels() != Pixels::Cells && spent > 0)
-                    .then(|| spent + (region.cols * region.rows) as u64 * UNDERLAY);
-                moving.pacer.sent(now, measured);
-                moving.player.advance(now);
-                moving.pacer.settle(&budget, share);
+            if moving.pacer.pixels() != before {
+                moving.pacer.cancel_pending();
+                moving.stale_bytes = true;
+            }
+            if !frozen && moving.player.due(now) {
+                // Retain the displayed frame's reservation until the new
+                // frame has actually been admitted as its replacement.
+                if moving.pacer.due_replacing_pending(now, &budget, share) {
+                    // Motion and the graphics painter run on the same app
+                    // thread: the counter was read above, and an unpainted
+                    // frame cannot be drawn after this replacement.
+                    moving.pacer.cancel_pending();
+                    if moving.pacer.pixels() == Pixels::Cells {
+                        moving.pacer.sent(now, None);
+                    } else {
+                        moving.pacer.schedule(now);
+                    }
+                    moving.player.advance(now);
+                    moving.pacer.settle(&budget, share);
+                }
             }
             out.insert(
                 media.node,
@@ -315,16 +450,22 @@ impl Motion {
         region: &Region,
         pixels: Pixels,
         now: Instant,
+        cell: rich_art::graphics::CellPixels,
     ) -> &mut Moving {
         let stale = self.playing.get(&node).is_none_or(|m| m.of != *animation);
         if stale && let Some(player) = Player::new(animation, now) {
+            let mut pacer = Pacer::with_formats(pixels, region.cols, region.rows, self.formats);
+            pacer.set_cell_pixels(cell);
             self.playing.insert(
                 node,
                 Moving {
                     of: animation.clone(),
                     bytes: picture_bytes(animation.id()),
+                    cell,
+                    geometry: (region.cols, region.rows),
+                    stale_bytes: false,
                     player,
-                    pacer: Pacer::new(pixels, region.cols, region.rows),
+                    pacer,
                 },
             );
         }
@@ -352,6 +493,21 @@ mod tests {
     use rich_art::graphics::AnimationFrame;
     use rich_art::image::{Rgba, RgbaImage};
     use std::time::Duration;
+
+    #[test]
+    fn cells_reuse_matching_metrics_and_rebuild_for_changed_aspect() {
+        let picture = Picture::new(rich_art::image::DynamicImage::ImageRgba8(
+            RgbaImage::from_fn(12, 8, |x, _| Rgba([(x * 20) as u8, 0, 0, 255])),
+        ));
+        let console = rich::Console::builder().width(4).build();
+        let cache = Cells::default();
+        let normal = cache.of_with_metrics(&console, &picture, Pixels::Cells, 4, 4, Some((8, 16)));
+        let same = cache.of_with_metrics(&console, &picture, Pixels::Cells, 4, 4, Some((8, 16)));
+        let square = cache.of_with_metrics(&console, &picture, Pixels::Cells, 4, 4, Some((12, 12)));
+        assert!(Rc::ptr_eq(&normal, &same));
+        assert!(!Rc::ptr_eq(&normal, &square));
+        assert_ne!(*normal, *square);
+    }
 
     fn gif() -> Picture {
         Picture::animated(
@@ -427,6 +583,449 @@ mod tests {
                 .step(&page, &[REGION], 20..30, Pixels::Sixel, false, start)
                 .is_empty()
         );
+    }
+
+    #[test]
+    fn changed_cell_geometry_keeps_old_bytes_out_of_new_estimate() {
+        let animation = gif();
+        let id = animation.id();
+        let page = page_with(animation);
+        let mut motion = Motion::new(ByteBudget::new(10_000_000));
+        let start = Instant::now();
+        motion.step(&page, &[REGION], 0..10, Pixels::Sixel, false, start);
+        rich_art::picture::count_picture_bytes(id, 12_345);
+        let resized = Region { cols: 8, ..REGION };
+        motion.step(
+            &page,
+            &[resized],
+            0..10,
+            Pixels::Sixel,
+            false,
+            start + Duration::from_millis(125),
+        );
+        let pacer = &motion.playing[&7].pacer;
+        assert_eq!(
+            pacer.recent_bytes(),
+            12_345 + (resized.cols * resized.rows) as u64 * UNDERLAY
+        );
+        assert_eq!(
+            pacer.bytes_per_frame() as u64,
+            Pacer::estimate(Pixels::Sixel, resized.cols, resized.rows)
+        );
+    }
+
+    #[test]
+    fn leaving_the_view_cancels_unseen_reservations_without_losing_bytes() {
+        let animation = gif();
+        let id = animation.id();
+        let page = page_with(animation);
+        let mut motion = Motion::new(ByteBudget::new(10_000_000));
+        let start = Instant::now();
+        motion.step(&page, &[REGION], 0..10, Pixels::Sixel, false, start);
+        motion.step(
+            &page,
+            &[REGION],
+            0..10,
+            Pixels::Sixel,
+            false,
+            start + Duration::from_millis(125),
+        );
+        motion.hide();
+        assert!(!motion.playing.get_mut(&7).unwrap().pacer.cancel_pending());
+        rich_art::picture::count_picture_bytes(id, 4000);
+        motion.step(
+            &page,
+            &[REGION],
+            0..10,
+            Pixels::Sixel,
+            true,
+            start + Duration::from_millis(130),
+        );
+        assert_eq!(motion.playing[&7].pacer.recent_bytes(), 5000);
+    }
+
+    #[test]
+    fn freezing_keeps_unobserved_displayed_frame_reservation() {
+        let page = page_with(gif());
+        let mut motion = Motion::new(ByteBudget::new(10_000_000));
+        let start = Instant::now();
+        motion.step(&page, &[REGION], 0..10, Pixels::Sixel, false, start);
+        motion.step(
+            &page,
+            &[REGION],
+            0..10,
+            Pixels::Sixel,
+            false,
+            start + Duration::from_millis(125),
+        );
+        motion.step(
+            &page,
+            &[REGION],
+            0..10,
+            Pixels::Sixel,
+            true,
+            start + Duration::from_millis(130),
+        );
+        assert!(
+            motion.playing.get_mut(&7).unwrap().pacer.cancel_pending(),
+            "the frozen frame remains eligible to paint"
+        );
+    }
+
+    #[test]
+    fn driver_paints_replacement_synchronously_and_pacer_learns_each_actual_cost() {
+        use rich_intuituive::{App, image_graphics, picture_of, signal};
+        let animation = gif();
+        let id = animation.id();
+        let page = page_with(animation);
+        let mut motion = Motion::new(ByteBudget::new(10_000_000));
+        let start = Instant::now();
+        let initial = motion.step(&page, &[REGION], 0..10, Pixels::Sixel, false, start)[&7]
+            .picture
+            .clone();
+        let handle = std::rc::Rc::new(std::cell::Cell::new(None));
+        let stored = handle.clone();
+        let app = App::new(move || {
+            let shown = signal(Some(initial.clone()));
+            stored.set(Some(shown));
+            picture_of(move || shown.get(), view(Pixels::Sixel)).fixed(4)
+        })
+        .graphics(image_graphics());
+        let mut driver = app.driver(10, 4);
+        let shown = handle.get().unwrap();
+        let mut prior_cost = None;
+        for cycle in 0..2u64 {
+            let base = cycle * 250;
+            let a = motion.step(
+                &page,
+                &[REGION],
+                0..10,
+                Pixels::Sixel,
+                false,
+                start + Duration::from_millis(base + 125),
+            )[&7]
+                .picture
+                .clone();
+            shown.set(Some(a.clone()));
+            // A is superseded before any Driver render can paint it.
+            let b = motion.step(
+                &page,
+                &[REGION],
+                0..10,
+                Pixels::Sixel,
+                false,
+                start + Duration::from_millis(base + 250),
+            )[&7]
+                .picture
+                .clone();
+            assert_ne!(a.version(), b.version());
+            shown.set(Some(b));
+            let before = picture_bytes(id);
+            driver.update(Duration::from_millis(base + 250));
+            let output = driver.render().unwrap_or_default();
+            assert!(
+                output.contains("\x1bP"),
+                "the replacement must actually be painted"
+            );
+            let actual = picture_bytes(id) - before + (REGION.cols * REGION.rows) as u64 * UNDERLAY;
+            assert!(actual > (REGION.cols * REGION.rows) as u64 * UNDERLAY);
+            motion.step(
+                &page,
+                &[REGION],
+                0..10,
+                Pixels::Sixel,
+                false,
+                start + Duration::from_millis(base + 260),
+            );
+            let pacer = &mut motion.playing.get_mut(&7).unwrap().pacer;
+            let expected =
+                prior_cost.map_or(actual as f64, |old: f64| old * 0.7 + actual as f64 * 0.3);
+            assert!((pacer.bytes_per_frame() - expected).abs() < 0.001);
+            assert!(
+                !pacer.cancel_pending(),
+                "the painted replacement must reconcile its reservation"
+            );
+            prior_cost = Some(expected);
+        }
+    }
+
+    #[test]
+    fn unseen_gif_frame_reservation_is_replaced_before_next_due_check() {
+        let page = page_with(gif());
+        let region = Region {
+            cols: 1,
+            rows: 1,
+            ..REGION
+        };
+        let mut motion = Motion::new(ByteBudget::new(1000));
+        let start = Instant::now();
+        motion.step(&page, &[region], 0..10, Pixels::Sixel, false, start);
+        motion
+            .playing
+            .get_mut(&7)
+            .unwrap()
+            .pacer
+            .observe_bytes(start, 1900, false);
+        let first = motion.step(
+            &page,
+            &[region],
+            0..10,
+            Pixels::Sixel,
+            false,
+            start + Duration::from_millis(125),
+        )[&7]
+            .picture
+            .version();
+        let second = motion.step(
+            &page,
+            &[region],
+            0..10,
+            Pixels::Sixel,
+            false,
+            start + Duration::from_millis(250),
+        )[&7]
+            .picture
+            .version();
+        assert_ne!(
+            first, second,
+            "an unseen superseded frame must not hold the budget"
+        );
+    }
+
+    #[test]
+    fn changed_metrics_at_due_tick_account_old_bytes_without_teaching_new_cost() {
+        let animation = gif();
+        let id = animation.id();
+        let page = page_with(animation);
+        let mut motion = Motion::new(ByteBudget::new(10_000_000));
+        let start = Instant::now();
+        motion.step(&page, &[REGION], 0..10, Pixels::Sixel, false, start);
+        rich_art::picture::count_picture_bytes(id, 43_210);
+        motion.set_cell_pixels(rich_art::graphics::CellPixels::new(12, 24));
+        motion.step(
+            &page,
+            &[REGION],
+            0..10,
+            Pixels::Sixel,
+            false,
+            start + Duration::from_millis(125),
+        );
+        let pacer = &motion.playing[&7].pacer;
+        assert_eq!(
+            pacer.recent_bytes(),
+            43_210 + (REGION.cols * REGION.rows) as u64 * UNDERLAY
+        );
+        assert_eq!(
+            pacer.bytes_per_frame() as u64,
+            Pacer::estimate_with_metrics(
+                Pixels::Sixel,
+                REGION.cols,
+                REGION.rows,
+                rich_art::graphics::CellPixels::new(12, 24)
+            )
+        );
+    }
+
+    #[test]
+    fn frozen_metric_change_accounts_late_old_bytes_without_teaching_new_cost() {
+        let animation = gif();
+        let id = animation.id();
+        let page = page_with(animation);
+        let mut motion = Motion::new(ByteBudget::new(10_000_000));
+        let start = Instant::now();
+        motion.step(&page, &[REGION], 0..10, Pixels::Sixel, false, start);
+        motion.set_cell_pixels(rich_art::graphics::CellPixels::new(12, 24));
+        motion.step(
+            &page,
+            &[REGION],
+            0..10,
+            Pixels::Sixel,
+            true,
+            start + Duration::from_millis(10),
+        );
+        rich_art::picture::count_picture_bytes(id, 57_890);
+        motion.step(
+            &page,
+            &[REGION],
+            0..10,
+            Pixels::Sixel,
+            true,
+            start + Duration::from_millis(20),
+        );
+        let pacer = &motion.playing[&7].pacer;
+        assert_eq!(
+            pacer.recent_bytes(),
+            57_890 + (REGION.cols * REGION.rows) as u64 * UNDERLAY
+        );
+        assert_eq!(
+            pacer.bytes_per_frame() as u64,
+            Pacer::estimate_with_metrics(
+                Pixels::Sixel,
+                REGION.cols,
+                REGION.rows,
+                rich_art::graphics::CellPixels::new(12, 24)
+            )
+        );
+        // Once a frame at the new size is drawn, its observed cost can
+        // become the measurement without losing the earlier window bytes.
+        motion.step(
+            &page,
+            &[REGION],
+            0..10,
+            Pixels::Sixel,
+            false,
+            start + Duration::from_millis(125),
+        );
+        rich_art::picture::count_picture_bytes(id, 9_000);
+        motion.step(
+            &page,
+            &[REGION],
+            0..10,
+            Pixels::Sixel,
+            false,
+            start + Duration::from_millis(130),
+        );
+        let pacer = &motion.playing[&7].pacer;
+        assert_eq!(pacer.recent_bytes(), 68_890);
+        assert_eq!(pacer.bytes_per_frame(), 10_000.0);
+    }
+
+    #[test]
+    fn late_old_protocol_bytes_do_not_teach_new_protocol_cost() {
+        let animation = gif();
+        let id = animation.id();
+        let page = page_with(animation);
+        let mut motion = Motion::new(ByteBudget::new(10_000_000));
+        let start = Instant::now();
+        motion.step(&page, &[REGION], 0..10, Pixels::Iterm, false, start);
+        motion.budget = ByteBudget::new(12_000);
+        motion.step(
+            &page,
+            &[REGION],
+            0..10,
+            Pixels::Iterm,
+            false,
+            start + Duration::from_millis(10),
+        );
+        assert_eq!(motion.playing[&7].pacer.pixels(), Pixels::Sixel);
+        rich_art::picture::count_picture_bytes(id, 4300);
+        motion.step(
+            &page,
+            &[REGION],
+            0..10,
+            Pixels::Iterm,
+            false,
+            start + Duration::from_millis(20),
+        );
+        let pacer = &motion.playing[&7].pacer;
+        assert_eq!(pacer.recent_bytes(), 5300);
+        assert_eq!(
+            pacer.bytes_per_frame() as u64,
+            Pacer::estimate(Pixels::Sixel, REGION.cols, REGION.rows)
+        );
+    }
+
+    #[test]
+    fn late_graphics_bytes_are_counted_after_pacer_steps_to_cells() {
+        let animation = gif();
+        let id = animation.id();
+        let page = page_with(animation);
+        let mut motion = Motion::new(ByteBudget::new(10_000_000));
+        let start = Instant::now();
+        motion.step(&page, &[REGION], 0..10, Pixels::Sixel, false, start);
+        motion.budget = ByteBudget::new(1);
+        motion.set_cell_pixels(rich_art::graphics::CellPixels::new(12, 24));
+        motion.step(
+            &page,
+            &[REGION],
+            0..10,
+            Pixels::Sixel,
+            true,
+            start + Duration::from_millis(10),
+        );
+        assert_eq!(motion.playing[&7].pacer.pixels(), Pixels::Cells);
+        rich_art::picture::count_picture_bytes(id, 10_000);
+        motion.step(
+            &page,
+            &[REGION],
+            0..10,
+            Pixels::Sixel,
+            true,
+            start + Duration::from_millis(20),
+        );
+        assert_eq!(motion.playing[&7].pacer.recent_bytes(), 11_000);
+    }
+
+    #[test]
+    fn first_frame_at_nondefault_metrics_teaches_its_actual_cost() {
+        let animation = gif();
+        let id = animation.id();
+        let page = page_with(animation);
+        let mut motion = Motion::new(ByteBudget::new(10_000_000));
+        motion.set_cell_pixels(rich_art::graphics::CellPixels::new(12, 24));
+        let start = Instant::now();
+        motion.step(&page, &[REGION], 0..10, Pixels::Sixel, false, start);
+        rich_art::picture::count_picture_bytes(id, 7_300);
+        motion.step(
+            &page,
+            &[REGION],
+            0..10,
+            Pixels::Sixel,
+            false,
+            start + Duration::from_millis(10),
+        );
+        let pacer = &motion.playing[&7].pacer;
+        assert_eq!(pacer.recent_bytes(), 8_300);
+        assert_eq!(pacer.bytes_per_frame(), 8_300.0);
+    }
+
+    #[test]
+    fn animated_picture_budget_uses_selected_metrics() {
+        let page = page_with(gif());
+        let mut motion = Motion::new(ByteBudget::new(10_000_000));
+        let cell = rich_art::graphics::CellPixels::new(12, 24);
+        motion.set_cell_pixels(cell);
+        motion.step(
+            &page,
+            &[REGION],
+            0..10,
+            Pixels::Sixel,
+            false,
+            Instant::now(),
+        );
+        assert_eq!(
+            motion.playing[&7].pacer.bytes_per_frame() as u64,
+            Pacer::estimate_with_metrics(Pixels::Sixel, REGION.cols, REGION.rows, cell)
+        );
+    }
+
+    #[test]
+    fn restricted_kitty_uses_software_frames() {
+        let animation = gif();
+        let page = page_with(animation.clone());
+        let presentation = rich_intuituive::ImagePresentation::new(
+            Pixels::Kitty,
+            rich_intuituive::KittyFeatures {
+                unicode_placeholders: true,
+                native_animation: false,
+            },
+            PixelFormats::cells().with(Pixels::Kitty),
+        );
+        let mut motion = Motion::with_presentation(ByteBudget::new(10_000_000), presentation);
+        let now = Instant::now();
+        let first = motion.step(&page, &[REGION], 0..10, Pixels::Kitty, false, now);
+        let next = motion.step(
+            &page,
+            &[REGION],
+            0..10,
+            Pixels::Kitty,
+            false,
+            now + Duration::from_millis(150),
+        );
+        assert!(!first[&7].picture.is_animated());
+        assert_eq!(first[&7].picture.id(), animation.id());
+        assert_ne!(first[&7].picture.image(), next[&7].picture.image());
+        assert_eq!(motion.moving, 1);
     }
 
     #[test]

@@ -146,8 +146,9 @@ change it for you: remove it, or fix its owner and mode, and run again.
 only.
 
 **"The pixel view needs Kitty graphics".** It draws through Kitty's
-protocol only. In kitty, WezTerm or Ghostty, name it if it was not
-detected: `--images kitty --pixels`.
+protocol and Unicode placeholders. If your terminal supports both, name
+it when not detected: `--images kitty --pixels`. WezTerm defaults to iTerm2
+images for the projection; Kitty protocol support alone is insufficient.
 
 **The pixel view lags while scrolling.** Scrolling changes every tile, so
 each frame costs nearly a whole frame of pixels; frames the byte budget

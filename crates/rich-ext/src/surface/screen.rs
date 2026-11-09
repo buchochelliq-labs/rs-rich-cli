@@ -10,6 +10,7 @@
 
 use std::collections::HashMap;
 
+use rich::protocol::region_of;
 use rich::{ColorSystem, Segment, Style};
 
 use crate::frame::{Frame, FxBuild, Rgb, StyleId, StyleRemap, StyleTable};
@@ -929,7 +930,7 @@ impl Screen {
                 || segment
                     .style
                     .as_ref()
-                    .is_none_or(|s| s.meta_ref().is_none())
+                    .is_none_or(|s| region_of(s).is_none())
                     && !segment.text.contains('\n')
         });
         if !direct {
@@ -994,7 +995,7 @@ impl Screen {
         }
         let lines = &lines[..lines.len().min(rect.height as usize)];
         // What only the Frame path writes: a line break inside a run, or a
-        // style with metadata (region tags).
+        // style with a recognised region tag. Ordinary metadata stays intact.
         let mut checked = None;
         let framed = lines.iter().flat_map(AsRef::as_ref).any(|run| {
             run.text.contains('\n')
@@ -1002,7 +1003,7 @@ impl Screen {
                     checked = Some(run.style);
                     self.styles
                         .get(run.style)
-                        .is_some_and(|s| s.meta_ref().is_some())
+                        .is_some_and(|s| region_of(s).is_some())
                 }
         });
         if framed {
@@ -3353,6 +3354,181 @@ mod tests {
             let widths = |s: &Screen| (0..12).map(|x| s.cell(x, 1).width).collect::<Vec<_>>();
             assert_eq!(widths(&fast), widths(&slow), "{lines:?}");
         }
+    }
+
+    fn assert_metadata_cells(actual: &Screen, expected: &Screen) {
+        assert_eq!(actual.lines(), expected.lines());
+        for y in 0..actual.height {
+            for x in 0..actual.width {
+                let a = actual.cell(x, y);
+                let b = expected.cell(x, y);
+                assert_eq!((a.text(), a.width), (b.text(), b.width), "at {x},{y}");
+                assert_eq!(actual.style(a.style), expected.style(b.style), "at {x},{y}");
+            }
+        }
+    }
+
+    // Catch both a restored all-metadata fallback and loss of metadata/style
+    // while writing, clipping, combining or clearing through either public API.
+    #[test]
+    fn ordinary_metadata_uses_direct_lines_with_frame_cell_parity() {
+        use rich::style::{Meta, MetaValue};
+
+        let ordinary = Style::default().with_meta(
+            [
+                ("consumer.note", MetaValue::Str("kept".into())),
+                (
+                    "consumer.payload",
+                    MetaValue::Tuple(vec![MetaValue::Int(7), MetaValue::Bool(true)]),
+                ),
+            ]
+            .into_iter()
+            .collect::<Meta>(),
+        );
+        let linked = Style::parse("bold italic red on blue")
+            .unwrap()
+            .with_link("https://example.test/metadata")
+            .with_meta(ordinary.meta_ref().unwrap().clone());
+        let malformed = linked.clone().with_meta(
+            [
+                ("rich.region", MetaValue::Str("unknown".into())),
+                ("consumer.note", MetaValue::Int(3)),
+            ]
+            .into_iter()
+            .collect::<Meta>(),
+        );
+        for style in [ordinary, linked, malformed] {
+            let mut suppressed = Segment::control("ignored\n");
+            suppressed.style = Some(
+                Style::default().with_meta(
+                    [("rich.region", MetaValue::Int(9))]
+                        .into_iter()
+                        .collect::<Meta>(),
+                ),
+            );
+            let cases = [
+                vec![Segment::new("ASCII", Some(style.clone()))],
+                vec![Segment::new("日本語", Some(style.clone()))],
+                vec![
+                    Segment::new("e", Some(style.clone())),
+                    Segment::new("\u{301}x", Some(style.clone())),
+                ],
+                vec![Segment::new("\u{301}x", Some(style.clone()))],
+                vec![Segment::new("👨\u{200d}👩\u{200d}👧", Some(style.clone()))],
+                vec![Segment::new("a\x1b\tb", Some(style.clone()))],
+                vec![suppressed, Segment::new("ok", Some(style.clone()))],
+            ];
+            for pieces in cases {
+                for rect in [
+                    Rect::new(1, 1, 7, 2),
+                    Rect::new(2, 1, 1, 2),
+                    Rect::new(7, 1, 5, 2),
+                ] {
+                    let lines = vec![pieces.clone()];
+                    let mut fast = Screen::new(9, 4);
+                    fast.write_lines(
+                        fast.area(),
+                        &[line("日本語日本"), line("日本語日本"), line("日本語日本")],
+                    );
+                    let mut slow = fast.clone();
+                    let mut runs_screen = fast.clone();
+                    let clipped = rect.intersection(fast.area());
+                    // Check the public result against the old Frame oracle first,
+                    // so the baseline failure identifies cost-path eligibility.
+                    fast.write_lines(rect, &lines);
+                    slow.split_edges(clipped);
+                    slow.write_frame_lines(clipped, &lines);
+                    assert_metadata_cells(&fast, &slow);
+                    let runs: Vec<Vec<TextRun<'_>>> = lines
+                        .iter()
+                        .map(|row| {
+                            row.iter()
+                                .filter(|s| !s.control)
+                                .map(|s| {
+                                    TextRun::new(&s.text, runs_screen.intern(s.style.as_ref()))
+                                })
+                                .collect()
+                        })
+                        .collect();
+                    runs_screen.write_runs(rect, &runs);
+                    assert_metadata_cells(&runs_screen, &slow);
+                    assert!(
+                        fast.write_simple_lines(clipped, &lines),
+                        "ordinary metadata rejected: {pieces:?}"
+                    );
+                    assert_metadata_cells(&fast, &slow);
+
+                    // Two shorter overwrites must clear styled cells and wide tails.
+                    for text in ["z", ""] {
+                        let replacement = vec![vec![Segment::new(text, Some(style.clone()))]];
+                        fast.write_lines(rect, &replacement);
+                        slow.split_edges(clipped);
+                        slow.write_frame_lines(clipped, &replacement);
+                        let id = runs_screen.intern(Some(&style));
+                        runs_screen.write_runs(rect, &[vec![TextRun::new(text, id)]]);
+                        assert_metadata_cells(&fast, &slow);
+                        assert_metadata_cells(&runs_screen, &slow);
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn semantic_region_metadata_and_newlines_keep_frame_fallback() {
+        use rich::style::{Meta, MetaValue};
+
+        for tag in [MetaValue::Int(7), MetaValue::Int(-1)] {
+            let style = Style::parse("bold red")
+                .unwrap()
+                .with_link("https://example.test")
+                .with_meta(
+                    [
+                        ("rich.region", tag),
+                        ("consumer.note", MetaValue::Str("retained".into())),
+                    ]
+                    .into_iter()
+                    .collect::<Meta>(),
+                );
+            metadata_fallback_parity(vec![
+                Segment::new("日本e", Some(style.clone())),
+                Segment::new("\u{301}", Some(style)),
+            ]);
+        }
+        let ordinary = Style::default().with_meta(
+            [("consumer.note", MetaValue::Int(4))]
+                .into_iter()
+                .collect::<Meta>(),
+        );
+        metadata_fallback_parity(vec![Segment::new("a\nb", Some(ordinary))]);
+    }
+
+    fn metadata_fallback_parity(pieces: Vec<Segment>) {
+        let rect = Rect::new(1, 1, 4, 3);
+        let lines = vec![pieces];
+        let mut actual = Screen::new(7, 5);
+        actual.write_lines(
+            actual.area(),
+            &[line("日本語"), line("日本語"), line("日本語")],
+        );
+        let mut expected = actual.clone();
+        let mut runs_screen = actual.clone();
+        assert!(!actual.write_simple_lines(rect, &lines));
+        assert_metadata_cells(&actual, &expected); // Rejection must not write.
+        actual.write_lines(rect, &lines);
+        expected.split_edges(rect);
+        expected.write_frame_lines(rect, &lines);
+        assert_metadata_cells(&actual, &expected);
+        let runs: Vec<Vec<TextRun<'_>>> = lines
+            .iter()
+            .map(|row| {
+                row.iter()
+                    .map(|s| TextRun::new(&s.text, runs_screen.intern(s.style.as_ref())))
+                    .collect()
+            })
+            .collect();
+        runs_screen.write_runs(rect, &runs);
+        assert_metadata_cells(&runs_screen, &expected);
     }
 
     #[test]

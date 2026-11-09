@@ -69,7 +69,9 @@ mod web;
 #[cfg(feature = "browsh")]
 pub use browsh::BrowshEngine;
 #[cfg(feature = "chrome")]
-pub use chrome::{ChromeEngine, DevTools, DevToolsEvent, Downloads, FrameMeta, ScreencastFrame};
+pub use chrome::{
+    ChromeEngine, DevTools, DevToolsEvent, Downloads, FrameMeta, ScreencastFrame, ScreencastScope,
+};
 pub use host::{Command, ExitStatus, LocalPty, Notify, PtyHost, ReplayHandle, ReplayHost};
 pub use pane::{DEFAULT_SCROLLBACK, TerminalPane, terminal, terminal_with};
 pub use pixels::{Pixels, half_blocks};

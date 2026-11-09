@@ -84,6 +84,26 @@ items, code, tables, media and controls, in reading order), `controls`
 string in it is cleaned already. `page.text()` is its text, and
 `page.find(role, name)` its controls with that role and name.
 
+## Retaining source relationships
+
+`model::build_source(snapshot, revisions)` returns an opaque, cloneable
+`SourcePage`. Its `page()` accessor borrows the exact `Arc<Page>` paired
+with immutable source relationships. `build_source_with` additionally
+accepts the engine's appended scroll boxes, like `build_with`.
+
+Use `Tab::spawn_with_source(engine, |update, source| { ... })` to retain
+these relationships through snapshot reads, live logs, playback, stills
+and decoded images. Every `Update::Page(page)` carries `Some(source)` with
+`Arc::ptr_eq(&page, source.page())`; other updates carry `None`. Keep that
+pair together when queuing updates. A relationship-only source change can
+publish a Page whose value equals the previous one.
+
+The existing `build`, `build_with`, `Tab::spawn`, complete model literals
+and projection functions keep their signatures and behavior. The source
+pair cannot be constructed from an arbitrary Page and unrelated metadata.
+This API retains source ownership and exact cleaned text ranges; it does
+not enable additional reflow or change adaptation defaults.
+
 ## Reading a page
 
 `dump::read_page` opens an address and waits until the page has loaded
@@ -183,3 +203,19 @@ for the binary only: built with it, `noctiluca` replays the snapshots in
 the folder `NOCTILUCA_FAKE_ENGINE` names instead of starting Chrome. The
 end-to-end test and the docs recordings run the binary so. A build
 without the feature ignores the variable.
+
+## Optional source relationships
+
+`model::build_source(snapshot, revisions)` returns an opaque `SourcePage` that
+owns the exact immutable `Arc<Page>` exposed by `page()`. Pass that pair to
+`layout::project_source(&source, columns, cell_size, &marks)` for source-owned
+nested grids, figure/caption flow, known canonical twin placement and linked
+image targets. `Tab::spawn_with_source` delivers the companion with the same
+page allocation; media and fixed-log updates preserve its relationships.
+
+The existing `build`, `project`, `project_overlay`, `Tab::spawn`, complete public
+model literals and reader behavior remain available. A manually constructed
+`Page` needs no companion or migration. `Rule::FigureFlow` is an appended public
+enum variant (`figure-flow`, default on); exhaustive matches over `Rule` must
+handle it. It only changes ordinary source-aware flow and is disabled by
+faithful mode and source-preserving popup underlays.

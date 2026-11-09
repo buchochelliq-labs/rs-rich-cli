@@ -3643,9 +3643,11 @@ pub rich_interact::headless::Headless::synchronized_output: bool
 impl rich_interact::headless::Headless
 pub fn rich_interact::headless::Headless::new(rich_interact::headless::Script, u16, u16) -> rich_interact::headless::Headless
 pub fn rich_interact::headless::Headless::record(&self) -> alloc::rc::Rc<core::cell::RefCell<rich_interact::headless::Record>>
+pub fn rich_interact::headless::Headless::set_cell_pixels(&mut self, core::option::Option<(u16, u16)>)
 impl rich_interact::session::Backend for rich_interact::headless::Headless
 pub fn rich_interact::headless::Headless::alternate_screen(&self) -> bool
 pub fn rich_interact::headless::Headless::can_suspend(&self) -> bool
+pub fn rich_interact::headless::Headless::cell_pixels(&self) -> core::option::Option<(u16, u16)>
 pub fn rich_interact::headless::Headless::clipboard(&self) -> core::result::Result<(), alloc::string::String>
 pub fn rich_interact::headless::Headless::copy(&mut self, &str) -> std::io::error::Result<()>
 pub fn rich_interact::headless::Headless::elapsed(&self) -> core::time::Duration
@@ -4748,6 +4750,7 @@ pub fn rich_interact::paint::Painter::finish(&mut self, bool) -> alloc::string::
 pub fn rich_interact::paint::Painter::graphics(&self) -> core::option::Option<&alloc::sync::Arc<dyn rich_ext::frame::graphics::PlacementSource>>
 pub fn rich_interact::paint::Painter::invalidate(&mut self)
 pub fn rich_interact::paint::Painter::new(core::option::Option<rich::color::ColorSystem>, bool) -> rich_interact::paint::Painter
+pub fn rich_interact::paint::Painter::output_written(&self)
 pub fn rich_interact::paint::Painter::paint(&mut self, &rich_interact::component::View, usize) -> alloc::string::String
 pub fn rich_interact::paint::Painter::reset(&mut self)
 pub fn rich_interact::paint::Painter::set_graphics(&mut self, core::option::Option<alloc::sync::Arc<dyn rich_ext::frame::graphics::PlacementSource>>)
@@ -4972,6 +4975,7 @@ pub fn rich_interact::push::PushBackend::port(&self) -> rich_interact::push::Pus
 impl rich_interact::session::Backend for rich_interact::push::PushBackend
 pub fn rich_interact::push::PushBackend::alternate_screen(&self) -> bool
 pub fn rich_interact::push::PushBackend::can_suspend(&self) -> bool
+pub fn rich_interact::push::PushBackend::cell_pixels(&self) -> core::option::Option<(u16, u16)>
 pub fn rich_interact::push::PushBackend::clipboard(&self) -> core::result::Result<(), alloc::string::String>
 pub fn rich_interact::push::PushBackend::copy(&mut self, &str) -> std::io::error::Result<()>
 pub fn rich_interact::push::PushBackend::elapsed(&self) -> core::time::Duration
@@ -5078,6 +5082,7 @@ pub fn rich_interact::session::Session::drop(&mut self)
 impl rich_interact::session::Backend for rich_interact::session::Session
 pub fn rich_interact::session::Session::alternate_screen(&self) -> bool
 pub fn rich_interact::session::Session::can_suspend(&self) -> bool
+pub fn rich_interact::session::Session::cell_pixels(&self) -> core::option::Option<(u16, u16)>
 pub fn rich_interact::session::Session::clipboard(&self) -> core::result::Result<(), alloc::string::String>
 pub fn rich_interact::session::Session::copy(&mut self, &str) -> std::io::error::Result<()>
 pub fn rich_interact::session::Session::elapsed(&self) -> core::time::Duration
@@ -5153,6 +5158,7 @@ pub const rich_interact::session::SYNC_OUTPUT_ENV: &str
 pub trait rich_interact::session::Backend
 pub fn rich_interact::session::Backend::alternate_screen(&self) -> bool
 pub fn rich_interact::session::Backend::can_suspend(&self) -> bool
+pub fn rich_interact::session::Backend::cell_pixels(&self) -> core::option::Option<(u16, u16)>
 pub fn rich_interact::session::Backend::clipboard(&self) -> core::result::Result<(), alloc::string::String>
 pub fn rich_interact::session::Backend::copy(&mut self, &str) -> std::io::error::Result<()>
 pub fn rich_interact::session::Backend::elapsed(&self) -> core::time::Duration
@@ -5171,6 +5177,7 @@ pub fn rich_interact::session::Backend::write_frame(&mut self, &str) -> std::io:
 impl rich_interact::session::Backend for rich_interact::headless::Headless
 pub fn rich_interact::headless::Headless::alternate_screen(&self) -> bool
 pub fn rich_interact::headless::Headless::can_suspend(&self) -> bool
+pub fn rich_interact::headless::Headless::cell_pixels(&self) -> core::option::Option<(u16, u16)>
 pub fn rich_interact::headless::Headless::clipboard(&self) -> core::result::Result<(), alloc::string::String>
 pub fn rich_interact::headless::Headless::copy(&mut self, &str) -> std::io::error::Result<()>
 pub fn rich_interact::headless::Headless::elapsed(&self) -> core::time::Duration
@@ -5189,6 +5196,7 @@ pub fn rich_interact::headless::Headless::write_frame(&mut self, &str) -> std::i
 impl rich_interact::session::Backend for rich_interact::push::PushBackend
 pub fn rich_interact::push::PushBackend::alternate_screen(&self) -> bool
 pub fn rich_interact::push::PushBackend::can_suspend(&self) -> bool
+pub fn rich_interact::push::PushBackend::cell_pixels(&self) -> core::option::Option<(u16, u16)>
 pub fn rich_interact::push::PushBackend::clipboard(&self) -> core::result::Result<(), alloc::string::String>
 pub fn rich_interact::push::PushBackend::copy(&mut self, &str) -> std::io::error::Result<()>
 pub fn rich_interact::push::PushBackend::elapsed(&self) -> core::time::Duration
@@ -5207,6 +5215,7 @@ pub fn rich_interact::push::PushBackend::write_frame(&mut self, &str) -> std::io
 impl rich_interact::session::Backend for rich_interact::session::Session
 pub fn rich_interact::session::Session::alternate_screen(&self) -> bool
 pub fn rich_interact::session::Session::can_suspend(&self) -> bool
+pub fn rich_interact::session::Session::cell_pixels(&self) -> core::option::Option<(u16, u16)>
 pub fn rich_interact::session::Session::clipboard(&self) -> core::result::Result<(), alloc::string::String>
 pub fn rich_interact::session::Session::copy(&mut self, &str) -> std::io::error::Result<()>
 pub fn rich_interact::session::Session::elapsed(&self) -> core::time::Duration
@@ -7432,6 +7441,7 @@ pub fn rich_interact::push::PushBackend::port(&self) -> rich_interact::push::Pus
 impl rich_interact::session::Backend for rich_interact::push::PushBackend
 pub fn rich_interact::push::PushBackend::alternate_screen(&self) -> bool
 pub fn rich_interact::push::PushBackend::can_suspend(&self) -> bool
+pub fn rich_interact::push::PushBackend::cell_pixels(&self) -> core::option::Option<(u16, u16)>
 pub fn rich_interact::push::PushBackend::clipboard(&self) -> core::result::Result<(), alloc::string::String>
 pub fn rich_interact::push::PushBackend::copy(&mut self, &str) -> std::io::error::Result<()>
 pub fn rich_interact::push::PushBackend::elapsed(&self) -> core::time::Duration
@@ -7670,6 +7680,7 @@ pub fn rich_interact::session::Session::drop(&mut self)
 impl rich_interact::session::Backend for rich_interact::session::Session
 pub fn rich_interact::session::Session::alternate_screen(&self) -> bool
 pub fn rich_interact::session::Session::can_suspend(&self) -> bool
+pub fn rich_interact::session::Session::cell_pixels(&self) -> core::option::Option<(u16, u16)>
 pub fn rich_interact::session::Session::clipboard(&self) -> core::result::Result<(), alloc::string::String>
 pub fn rich_interact::session::Session::copy(&mut self, &str) -> std::io::error::Result<()>
 pub fn rich_interact::session::Session::elapsed(&self) -> core::time::Duration
@@ -8265,6 +8276,7 @@ impl core::panic::unwind_safe::UnwindSafe for rich_interact::session::Waker
 pub trait rich_interact::Backend
 pub fn rich_interact::Backend::alternate_screen(&self) -> bool
 pub fn rich_interact::Backend::can_suspend(&self) -> bool
+pub fn rich_interact::Backend::cell_pixels(&self) -> core::option::Option<(u16, u16)>
 pub fn rich_interact::Backend::clipboard(&self) -> core::result::Result<(), alloc::string::String>
 pub fn rich_interact::Backend::copy(&mut self, &str) -> std::io::error::Result<()>
 pub fn rich_interact::Backend::elapsed(&self) -> core::time::Duration
@@ -8283,6 +8295,7 @@ pub fn rich_interact::Backend::write_frame(&mut self, &str) -> std::io::error::R
 impl rich_interact::session::Backend for rich_interact::headless::Headless
 pub fn rich_interact::headless::Headless::alternate_screen(&self) -> bool
 pub fn rich_interact::headless::Headless::can_suspend(&self) -> bool
+pub fn rich_interact::headless::Headless::cell_pixels(&self) -> core::option::Option<(u16, u16)>
 pub fn rich_interact::headless::Headless::clipboard(&self) -> core::result::Result<(), alloc::string::String>
 pub fn rich_interact::headless::Headless::copy(&mut self, &str) -> std::io::error::Result<()>
 pub fn rich_interact::headless::Headless::elapsed(&self) -> core::time::Duration
@@ -8301,6 +8314,7 @@ pub fn rich_interact::headless::Headless::write_frame(&mut self, &str) -> std::i
 impl rich_interact::session::Backend for rich_interact::push::PushBackend
 pub fn rich_interact::push::PushBackend::alternate_screen(&self) -> bool
 pub fn rich_interact::push::PushBackend::can_suspend(&self) -> bool
+pub fn rich_interact::push::PushBackend::cell_pixels(&self) -> core::option::Option<(u16, u16)>
 pub fn rich_interact::push::PushBackend::clipboard(&self) -> core::result::Result<(), alloc::string::String>
 pub fn rich_interact::push::PushBackend::copy(&mut self, &str) -> std::io::error::Result<()>
 pub fn rich_interact::push::PushBackend::elapsed(&self) -> core::time::Duration
@@ -8319,6 +8333,7 @@ pub fn rich_interact::push::PushBackend::write_frame(&mut self, &str) -> std::io
 impl rich_interact::session::Backend for rich_interact::session::Session
 pub fn rich_interact::session::Session::alternate_screen(&self) -> bool
 pub fn rich_interact::session::Session::can_suspend(&self) -> bool
+pub fn rich_interact::session::Session::cell_pixels(&self) -> core::option::Option<(u16, u16)>
 pub fn rich_interact::session::Session::clipboard(&self) -> core::result::Result<(), alloc::string::String>
 pub fn rich_interact::session::Session::copy(&mut self, &str) -> std::io::error::Result<()>
 pub fn rich_interact::session::Session::elapsed(&self) -> core::time::Duration

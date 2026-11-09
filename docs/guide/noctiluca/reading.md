@@ -54,6 +54,15 @@ A page's own layers are kept apart from its flow:
   that needs more cells than it has moves left, then shortens its faces
   (`[Sign…]`), rather than being cut by the screen.
 
+Nonmodal source popups have their own scroll pane. `Tab` and `Shift+Tab` move focus
+between the page, the popup pane and its visible controls. Starting with
+the page focused and one popup whose controls are below the screen, press
+`Tab` once, then `PageDown` until the controls appear. `Tab` alone changes
+focus without scrolling. `PageDown`, `PageUp` and the arrow keys scroll
+the focused pane; the other pane keeps its place. Press `f` and type a
+visible control's hint to use it. A nonmodal popup also lets you return
+to the page with `Shift+Tab` from its scroll pane and use outside controls.
+
 A page that fits in two screens is read where it starts: Noctiluca does
 not scroll Chrome to its bottom to look for more, as it does for a long
 page or a feed.

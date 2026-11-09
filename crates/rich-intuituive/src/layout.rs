@@ -20,6 +20,22 @@
 use crate::node::Axis;
 use crate::screen::Rect;
 
+/// Number of equal tracks that fit a container's content width.
+///
+/// Includes `gap` between tracks. A nonempty grid always has at least one
+/// logical track, even at zero width; `max_tracks == 0` returns zero.
+/// A zero minimum means one cell. Arithmetic is widened before adding gaps.
+/// Used by [`Node::adaptive_columns`](crate::Node::adaptive_columns) and by
+/// adapters that arrange their own source rectangles.
+pub fn adaptive_columns(available: u16, min_track: u16, gap: u16, max_tracks: usize) -> usize {
+    if max_tracks == 0 {
+        return 0;
+    }
+    let fit =
+        (u32::from(available) + u32::from(gap)) / (u32::from(min_track.max(1)) + u32::from(gap));
+    (fit as usize).max(1).min(max_tracks)
+}
+
 /// How much of its parent's axis a child takes.
 ///
 /// More kinds may come: match with a wildcard arm.

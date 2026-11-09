@@ -22,6 +22,7 @@
   .filters label { display: block; }
   .grid { display: grid; grid-template-columns: repeat(3, 220px); gap: 16px; }
   .card img { width: 220px; height: 160px; object-fit: cover; }
+  #quality-intrinsic { width: auto; height: auto; }
   .card h2 { font-size: 15px; font-weight: 400; margin: 4px 0; }
   .rating { display: flex; gap: 6px; align-items: center; font-size: 12px; }
   .price { font-size: 13px; }
@@ -82,6 +83,10 @@
         <div class="price"><span class="sr">$49.00</span><span aria-hidden="true">$<span class="whole">49</span>00</span></div>
       </div>
     </div>
+    <section id="quality-cases" hidden aria-label="Delayed products">
+      <div class="card" data-key="reserved"><img id="quality-reserved" src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==" alt="Reserved harbour kettle" width="220" height="160"><h2>Harbour kettle — 海辺の長い名前</h2><span>$42.50</span></div>
+      <div class="card" data-key="intrinsic"><img id="quality-intrinsic" alt="Intrinsic kettle"><h2>Intrinsic kettle with a long title</h2><span>$18.75</span></div>
+    </section>
     <h2>Customers also viewed</h2>
     <button aria-label="Previous items">‹</button>
     <ol class="shelf" aria-label="Customers also viewed">
@@ -95,6 +100,13 @@
     <button aria-label="Next items">›</button>
   </main>
 </div>
+<script>
+  if (location.search.includes('quality')) document.getElementById('quality-cases').hidden = false;
+  window.revealQualityProducts = () => {
+    document.getElementById('quality-reserved').src = 'media/thumb-1.jpg';
+    document.getElementById('quality-intrinsic').src = 'media/thumb-2.jpg';
+  };
+</script>
 <div class="cookies" role="dialog" aria-label="Cookie preferences">
   <span>We use cookies to run the shop.</span><button>Accept</button><button>Decline</button>
 </div>

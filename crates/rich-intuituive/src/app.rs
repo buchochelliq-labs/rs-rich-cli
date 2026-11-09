@@ -2088,6 +2088,7 @@ struct Animation {
 struct Layer {
     root: Node,
     focus: Option<NodeId>,
+    controlled_scopes: Vec<(NodeId, Option<NodeId>)>,
     /// A modal's width and height; `None` for a full screen.
     modal: Option<(Size, Size)>,
     /// A modal's shadow and backdrop.
@@ -2782,6 +2783,7 @@ impl App {
             layers: vec![Layer {
                 root,
                 focus: None,
+                controlled_scopes: Vec::new(),
                 modal: None,
                 look: ModalOptions::default(),
                 drawn: None,
@@ -3891,6 +3893,7 @@ impl App {
         let frame_time = self.frame_time;
         let mut last_frame: Option<Duration> = None;
         let mut driver = self.driver(width, height);
+        driver.set_cell_pixels(backend.cell_pixels());
         driver.set_clipboard(backend.clipboard().is_ok());
         driver.set_releases(backend.releases_reported());
         // A value from another thread ends the wait on the terminal.
@@ -3950,6 +3953,7 @@ impl App {
                 if inline {
                     driver.set_origin(backend.origin());
                 }
+                driver.set_cell_pixels(backend.cell_pixels());
                 driver.resize(columns, rows);
                 driver.handed_back(handoff, result);
             }
@@ -3988,6 +3992,7 @@ impl App {
                     if inline {
                         driver.set_origin(backend.origin());
                     }
+                    driver.set_cell_pixels(backend.cell_pixels());
                     driver.resize(columns, rows);
                     return Ok(());
                 }
@@ -4005,6 +4010,7 @@ impl App {
             if inline {
                 driver.set_origin(backend.origin());
             }
+            driver.set_cell_pixels(backend.cell_pixels());
             driver.event(event);
             copy_all(driver, backend);
             hand_off(driver, backend, linear, inline)
@@ -4032,6 +4038,7 @@ impl App {
                     last_frame = Some(now);
                     let started = crate::clock::Instant::now();
                     put(backend, linear, &out)?;
+                    driver.output_written();
                     let took = started.elapsed();
                     driver.app.stats.update(|stats| {
                         stats.write += took;
@@ -4084,9 +4091,13 @@ impl App {
         let rows = driver.printed_rows(&printed);
         // A preflight failure before the first frame owns no output yet.
         let cleanup = if driver.started {
-            driver
-                .try_finish()
-                .and_then(|out| put(backend, linear, &out))
+            driver.try_finish_output().and_then(|mut output| {
+                let written = put(backend, linear, output.as_str());
+                if written.is_ok() {
+                    output.output_written();
+                }
+                written
+            })
         } else {
             drop(driver);
             Ok(())
@@ -4182,6 +4193,7 @@ impl App {
             console,
             screen,
             rows: height,
+            cell_pixels: None,
             first: true,
             started: false,
             origin: 0,
@@ -5719,6 +5731,7 @@ impl App {
         self.layers.push(Layer {
             root,
             focus: None,
+            controlled_scopes: Vec::new(),
             modal,
             look: ModalOptions::default(),
             drawn: None,
@@ -5878,14 +5891,47 @@ impl App {
         found
     }
 
+    fn controlled_scopes(&self) -> Vec<NodeId> {
+        if !self.top().root.has_controlled_modal() {
+            return Vec::new();
+        }
+        let maximized = self.top().maximized;
+        let ancestors = maximized.map(|id| self.path_to(id)).unwrap_or_default();
+        let mut known = std::collections::HashSet::new();
+        let mut selected = Vec::new();
+        self.top().root.walk_accessible(&mut |node, path| {
+            // Rectangles are unavailable before layout and for text-only scopes.
+            // Maximize defines the visible subtree; its modal ancestors still apply.
+            if maximized.is_some_and(|id| !path.contains(&id)) && !ancestors.contains(&node.id()) {
+                return;
+            }
+            if node.is_controlled_modal() {
+                known.insert(node.id());
+                selected = path
+                    .iter()
+                    .filter(|id| known.contains(id))
+                    .copied()
+                    .collect();
+            }
+        });
+        selected
+    }
+
+    fn controlled_scope(&self) -> Option<NodeId> {
+        self.controlled_scopes().last().copied()
+    }
+
     /// The Tab order: nodes that can take the focus, less those
     /// [hidden](crate::Node::access_hidden) from assistive technology.
     fn focusable(&self) -> Vec<NodeId> {
         let mut ids = Vec::new();
         // While a node is maximized, only what is inside it.
         let maximized = self.top().maximized;
+        let controlled = self.controlled_scope();
         self.top().root.walk_accessible(&mut |node, path| {
-            if maximized.is_some_and(|m| !path.contains(&m)) {
+            if controlled.is_some_and(|m| !path.contains(&m))
+                || maximized.is_some_and(|m| !path.contains(&m))
+            {
                 return;
             }
             // A wrapper whose focus passes inside is not a stop of its own.
@@ -5902,6 +5948,35 @@ impl App {
     /// the one before it if it was last; with nothing focused, to the
     /// first focusable node.
     fn keep_focus(&mut self) {
+        let scopes = self.controlled_scopes();
+        if let Some(&scope) = scopes.last() {
+            self.confine_pointer(scope);
+        }
+        let previous = self.top().controlled_scopes.clone();
+        let common = previous
+            .iter()
+            .map(|(id, _)| *id)
+            .zip(&scopes)
+            .take_while(|(a, b)| a == *b)
+            .count();
+        if common != previous.len() || common != scopes.len() {
+            let restore = previous.get(common).and_then(|(_, saved)| *saved);
+            self.top_mut().controlled_scopes.truncate(common);
+            for &scope in &scopes[common..] {
+                let saved = self.focus();
+                self.top_mut().controlled_scopes.push((scope, saved));
+            }
+            if let Some(saved) = restore.filter(|id| self.focusable().contains(id)) {
+                self.set_focus(Some(saved));
+            }
+            if !scopes.is_empty()
+                && !self
+                    .focus()
+                    .is_some_and(|id| self.focusable().contains(&id))
+            {
+                self.set_focus(self.focusable().first().copied());
+            }
+        }
         // A container asked to take the focus, once it is built.
         if let Some(id) = self.runtime.focus_later.get() {
             self.focus_inside(id);
@@ -6008,9 +6083,14 @@ impl App {
     /// [hidden](crate::Node::access_hidden) from assistive technology.
     fn autofocused(&self) -> Option<NodeId> {
         let mut chosen = None;
+        let allowed = (self.top().maximized.is_some() || self.controlled_scope().is_some())
+            .then(|| self.focusable());
         self.top().root.walk_accessible(&mut |node, _| {
             if node.autofocus && chosen.is_none() && !node.disabled() {
-                chosen = Some(node.focus_target().unwrap_or(node.id));
+                let target = node.focus_target().unwrap_or(node.id);
+                if allowed.as_ref().is_none_or(|ids| ids.contains(&target)) {
+                    chosen = Some(target);
+                }
             }
         });
         chosen
@@ -6157,6 +6237,11 @@ impl App {
     }
 
     fn set_focus(&mut self, id: Option<NodeId>) {
+        if let (Some(scope), Some(target)) = (self.controlled_scope(), id)
+            && !self.path_to(target).contains(&scope)
+        {
+            return;
+        }
         // Against the node last told, whichever screen it is on: opening a
         // modal takes the focus from the screen below, and closing it gives
         // the focus back.
@@ -6271,8 +6356,24 @@ impl App {
     /// holds work too.
     fn key_path(&self) -> Vec<NodeId> {
         match self.focus().map(|id| self.path_to(id)) {
-            Some(path) if !path.is_empty() => path,
+            Some(path)
+                if !path.is_empty()
+                    && self
+                        .controlled_scope()
+                        .is_none_or(|scope| path.contains(&scope)) =>
+            {
+                path
+            }
             _ => {
+                // An owner-controlled scope must receive its own keys even
+                // when it contains no focusable child. Never use stale hover
+                // outside the active scope in that case.
+                if let Some(scope) = self.controlled_scope() {
+                    let path = self.path_to(scope);
+                    if !path.is_empty() {
+                        return path;
+                    }
+                }
                 let hovered = self.hover_path.get_untracked();
                 if hovered.first() == Some(&self.top().root.id) {
                     return hovered;
@@ -6853,11 +6954,27 @@ impl App {
     /// until one uses it. A press first focuses the deepest focusable node
     /// under the pointer. Whether to quit.
     fn mouse_event(&mut self, mouse: rich_interact::Mouse) -> Option<bool> {
+        let scope = self.controlled_scope();
+        if let Some(scope) = scope {
+            self.confine_pointer(scope);
+        }
         // A press ends a key sequence under way.
         if matches!(mouse.kind, MouseKind::Down(_)) && self.pending.take().is_some() {
             self.which_key_changed();
         }
-        let hits = crate::node::hit_path(&self.top().root, mouse.column, mouse.row);
+        let mut hits = crate::node::hit_path(&self.top().root, mouse.column, mouse.row);
+        if let Some(scope) = scope {
+            // Rectangle admission alone is insufficient for transparent containers
+            // and later siblings. No pointer action or hover may escape the subtree.
+            if node_rect(&self.layers, scope)
+                .is_some_and(|rect| rect.contains(mouse.column, mouse.row))
+                && let Some(at) = hits.iter().position(|(id, _)| *id == scope)
+            {
+                hits.drain(..at);
+            } else {
+                hits.clear();
+            }
+        }
         let path: Vec<NodeId> = hits.iter().map(|(id, _)| *id).collect();
         let old = self.hover_path.get_untracked();
         self.last_pointer = Some((mouse.column, mouse.row));
@@ -6932,7 +7049,38 @@ impl App {
             }
         }
         // A press that may start a drag is used: it starts no selection.
-        (self.drag.is_some() && matches!(mouse.kind, MouseKind::Down(_))).then_some(false)
+        (scope.is_some() || self.drag.is_some() && matches!(mouse.kind, MouseKind::Down(_)))
+            .then_some(false)
+    }
+
+    /// Cancel pointer state owned outside a newly active controlled scope.
+    fn confine_pointer(&mut self, scope: NodeId) {
+        let old = self.hover_path.get_untracked();
+        if !old.is_empty() && !old.contains(&scope) {
+            for &id in &old {
+                self.lifecycle.push((id, WidgetEvent::Hover(false)));
+                if self.runtime.watchers.hover.borrow().contains(&id) {
+                    self.runtime.mark_dirty(id);
+                }
+            }
+            let runtime = self.runtime.clone();
+            let hover = self.hover_path;
+            runtime.enter(|| hover.set(Vec::new()));
+        }
+        if self
+            .capture
+            .is_some_and(|(id, _)| !self.path_to(id).contains(&scope))
+        {
+            self.capture = None;
+        }
+        if self
+            .drag
+            .as_ref()
+            .is_some_and(|drag| !self.path_to(drag.source).contains(&scope))
+        {
+            self.drag = None;
+            self.restack = true;
+        }
     }
 
     /// The deepest node in `path` with a value to drag.
@@ -7083,7 +7231,14 @@ impl App {
         // Into the node's coordinates (they differ inside a scroll), then
         // relative to its rectangle.
         let at = |value: u16, by: i32, from: u16| {
-            (value as i32 + by - from as i32).clamp(0, u16::MAX as i32) as u16
+            let local = value as i32 + by - from as i32;
+            // An outside release must not look like a click at the top-left.
+            // Drags still clamp left/up to zero so sliders move toward their minimum.
+            if local < 0 && matches!(mouse.kind, MouseKind::Up(_)) {
+                u16::MAX
+            } else {
+                local.clamp(0, u16::MAX as i32) as u16
+            }
         };
         // Keeping its modifiers: Shift+wheel scrolls across.
         let local = rich_interact::Mouse {
@@ -7212,21 +7367,15 @@ impl App {
 /// `Surface` draws them. `placements` is what the last frame drew.
 fn draw_graphics(
     source: &dyn rich_ext::frame::PlacementSource,
+    cell_pixels: Option<(u16, u16)>,
     placements: &mut Vec<rich_ext::frame::Placement>,
     screen: &Screen,
     painter: &mut Painter,
 ) -> String {
-    use rich::Segment;
-    use rich_ext::frame::{Change, Frame};
-    let mut segments = Vec::new();
-    for line in screen.lines() {
-        segments.extend(line);
-        segments.push(Segment::line());
-    }
-    let frame = Frame::from_segments(&segments);
-    let height = frame.height();
+    use rich_ext::frame::Change;
+    let height = usize::from(screen.area().height);
     let next: Vec<_> = source
-        .placements(&frame)
+        .placements_from_screen(screen, cell_pixels)
         .into_iter()
         .filter(|p| p.row + p.rows <= height)
         .collect();
@@ -7261,6 +7410,7 @@ fn draw_graphics(
         out.push_str(&painter.move_to(placement.column as u16, placement.row as u16));
         out.push_str(&placement.graphic.draw(placement.frame));
     }
+    out.push_str(&source.reconcile(&next));
     *placements = next;
     out
 }
@@ -7308,6 +7458,7 @@ pub struct Driver {
     screen: Screen,
     /// The terminal's rows.
     rows: u16,
+    cell_pixels: Option<(u16, u16)>,
     /// Draw everything next time.
     first: bool,
     /// The cursor was hidden by the first frame.
@@ -7323,6 +7474,48 @@ pub struct Driver {
     written_focus: Option<NodeId>,
     /// The last frames' damage, by frame number: [`Driver::damage_since`].
     damage_log: std::collections::VecDeque<(u64, Vec<Rect>)>,
+}
+
+/// Final terminal output and the graphics resources it retires. Keep this
+/// value until the output has been written successfully, in order.
+#[must_use]
+pub struct FinishOutput {
+    output: String,
+    written: usize,
+    graphics: Option<std::sync::Arc<dyn rich_ext::frame::graphics::PlacementSource>>,
+}
+
+impl FinishOutput {
+    /// The complete output, for a sink that writes it atomically. Do not mix
+    /// this with partial `write_to` attempts.
+    pub fn as_str(&self) -> &str {
+        &self.output
+    }
+
+    /// Confirm that all of `as_str()` was successfully written in order.
+    /// Call this only after success, never for queued or failed output.
+    pub fn output_written(&mut self) {
+        self.written = self.output.len();
+        if let Some(source) = self.graphics.take() {
+            source.output_written();
+        }
+    }
+
+    /// Write the remaining bytes and flush the sink. On failure this value
+    /// retains its resources and remembers partial progress for a retry.
+    pub fn write_to(&mut self, writer: &mut impl std::io::Write) -> std::io::Result<()> {
+        while self.written < self.output.len() {
+            match writer.write(&self.output.as_bytes()[self.written..]) {
+                Ok(0) => return Err(std::io::ErrorKind::WriteZero.into()),
+                Ok(n) => self.written += n,
+                Err(e) if e.kind() == std::io::ErrorKind::Interrupted => continue,
+                Err(e) => return Err(e),
+            }
+        }
+        writer.flush()?;
+        self.output_written();
+        Ok(())
+    }
 }
 
 /// How many frames' damage a [`Driver`] keeps for
@@ -7346,6 +7539,18 @@ const LAYOUT_ROUNDS: usize = 4;
 const DRAIN_EVENTS: usize = 64;
 
 impl Driver {
+    /// Set measured physical cell dimensions. A change repaints even when
+    /// the terminal's columns and rows are unchanged. Zero dimensions are unknown.
+    pub fn set_cell_pixels(&mut self, pixels: Option<(u16, u16)>) {
+        let pixels = pixels.filter(|&(w, h)| w > 0 && h > 0);
+        if self.cell_pixels != pixels {
+            self.cell_pixels = pixels;
+            self.app.runtime.cell_pixels().set(pixels);
+            self.first = true;
+            self.painter.invalidate();
+        }
+    }
+
     /// Bring the app up to `now` (the time since it started): run the
     /// timers that are due, move animations, deliver results from other
     /// threads and run the watches they set off, and drop toasts that are
@@ -8864,6 +9069,34 @@ impl Driver {
         out
     }
 
+    /// Confirm that all previously returned frame output was written successfully
+    /// in order. Manual drivers using bound image resources must call this after
+    /// each successful write, never when bytes are queued or a write fails.
+    pub fn output_written(&self) {
+        if let Some(source) = &self.app.graphics {
+            source.output_written();
+        }
+    }
+
+    /// Finish while retaining graphics reservations until the final output is
+    /// successfully written. Prefer this for manual loops using bound pictures.
+    pub fn finish_output(self) -> FinishOutput {
+        self.try_finish_output()
+            .expect("premeasured painting requires fullscreen mode")
+    }
+
+    /// Fallible [`finish_output`](Self::finish_output), retaining graphics
+    /// reservations until the returned output is confirmed written.
+    pub fn try_finish_output(self) -> io::Result<FinishOutput> {
+        let graphics = self.app.graphics.clone();
+        let output = self.try_finish()?;
+        Ok(FinishOutput {
+            output,
+            written: 0,
+            graphics,
+        })
+    }
+
     /// Stop: the bytes that show the last change and leave the terminal
     /// as it was (styles reset, the cursor shown; inline, below the
     /// region, where the shell's prompt follows the app's last frame).
@@ -8988,6 +9221,7 @@ impl Driver {
         if let Some(source) = app.graphics.clone() {
             out.push_str(&draw_graphics(
                 &*source,
+                self.cell_pixels,
                 &mut app.placements,
                 screen,
                 &mut self.painter,
@@ -9321,6 +9555,103 @@ mod tests {
 
     use crate::prelude::*;
     use crate::widget::{Canvas, DrawCx, Widget, widget};
+
+    #[cfg(feature = "art")]
+    struct TransitionBackend {
+        inner: rich_interact::headless::Headless,
+    }
+    #[cfg(feature = "art")]
+    impl rich_interact::Backend for TransitionBackend {
+        fn size(&self) -> (u16, u16) {
+            self.inner.size()
+        }
+        fn cell_pixels(&self) -> Option<(u16, u16)> {
+            self.inner.cell_pixels()
+        }
+        fn read(&mut self, timeout: Option<Duration>) -> std::io::Result<Option<Event>> {
+            self.inner.read(timeout)
+        }
+        fn write(&mut self, text: &str) -> std::io::Result<()> {
+            self.inner.write(text)
+        }
+        fn elapsed(&self) -> Duration {
+            self.inner.elapsed()
+        }
+        fn handoff(&mut self, _: &mut std::process::Command) -> std::io::Result<Option<i32>> {
+            self.inner.set_cell_pixels(Some((12, 24)));
+            Ok(Some(0))
+        }
+        fn alternate_screen(&self) -> bool {
+            self.inner.alternate_screen()
+        }
+        fn can_suspend(&self) -> bool {
+            true
+        }
+        fn suspend(&mut self) -> std::io::Result<()> {
+            self.inner.set_cell_pixels(Some((12, 24)));
+            Ok(())
+        }
+    }
+
+    #[cfg(feature = "art")]
+    fn transition_run(handoff: bool) -> (String, Option<(u16, u16)>) {
+        use rich_interact::headless::{Headless, Script};
+        let callback = std::rc::Rc::new(std::cell::Cell::new(None));
+        let seen = callback.clone();
+        let picture = crate::Picture::from_rgba(4, 4, vec![255; 64]).unwrap();
+        let app = App::new(move || {
+            let shown = picture.clone();
+            let seen = seen.clone();
+            crate::picture_of(
+                move || Some(shown.clone()),
+                crate::ImageView::new()
+                    .fit(crate::ImageFit::Stretch)
+                    .pixels(crate::Pixels::Kitty),
+            )
+            .fixed(2)
+            .on_key("h", move |cx| {
+                let seen = seen.clone();
+                cx.handoff_then(std::process::Command::new("test"), move |_, _| {
+                    seen.set(crate::cell_pixels().get_untracked())
+                });
+            })
+            .on_key("q", |cx| cx.quit())
+        })
+        .graphics(crate::image_graphics());
+        let key = if handoff { "h" } else { "ctrl+z" };
+        let script = Script::new()
+            .keys(key)
+            .wait(Duration::from_millis(100))
+            .keys("q");
+        let mut inner = Headless::new(script, 4, 2);
+        inner.set_cell_pixels(Some((8, 16)));
+        let record = inner.record();
+        app.run_on(&mut TransitionBackend { inner }).unwrap();
+        let out = record.borrow().output();
+        (out, callback.get())
+    }
+
+    #[cfg(feature = "art")]
+    #[test]
+    fn resumed_backend_refreshes_metrics_before_the_next_event() {
+        let (out, _) = transition_run(false);
+        assert!(out.contains("s=32,v=32"));
+        assert!(
+            out.contains("s=48,v=48"),
+            "missing resized upload during wait"
+        );
+    }
+
+    #[cfg(feature = "art")]
+    #[test]
+    fn handoff_refreshes_metrics_before_callback_and_redraw() {
+        let (out, callback) = transition_run(true);
+        assert_eq!(callback, Some((12, 24)));
+        assert!(
+            out.contains("s=48,v=48"),
+            "missing resized upload during wait"
+        );
+    }
 
     struct Hoverable;
 

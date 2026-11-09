@@ -9,6 +9,47 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Noctiluca and shared media presentation
+
+- **Noctiluca model migration:** `Page` now includes `overlays` for visible
+  source dialogs and large opaque fixed layers. Existing complete `Page { ... }`
+  literals must add `overlays: Vec::new()` (or use `..Page::default()`). Use
+  `Page::dialogs()` to inspect source-declared dialogs; fixed geometry alone
+  does not make an overlay modal. Source dialogs formerly exposed as docked
+  strips are now projected independently.
+  Absolute/static `role=dialog`/`alertdialog` surfaces and open native dialogs
+  also use independent popups. Document-positioned popups move with page scroll;
+  fixed dialogs retain their docked/source placement. Only source modal semantics
+  trap focus. Unsupported computed color syntax is not treated as opaque.
+
+- Popup projection keeps foreground and background policies paired: configured
+  PageColors remains enabled while geometry stays source aligned; faithful popup
+  backgrounds use the same source-color transform as their text. Closing restores
+  configured geometry adaptations. Configured accessible text twins also stay
+  enabled under a popup, preserving canonical text such as split prices; faithful
+  mode and an explicit rule disable keep their existing behavior.
+- Waiting video encodes and prepared results are pruned on document, region and
+  view changes. A current executing encode can finish while newer frames coalesce.
+  The additive default `Engine::capture_model` preserves legacy engine callers;
+  Chrome guards model-owned screenshots before and after document/applied-viewport
+  changes, while standalone `capture` retains its prior behavior.
+  Playing video partly outside Chrome's viewport uses the same guarded whole-region
+  fallback as other missing regions, so a continuous screencast cannot leave a
+  narrow adapted view displaying a frozen partial video.
+
+- Projection, media pacing and capture handling use measured terminal geometry,
+  feature-aware graphics fallbacks and document/viewport scoped frames. Adaptive
+  layouts retain readable video and chat at narrow widths.
+- The optional intuiTUIve image integration offers `ImagePresentation` for
+  independent fitted and versioned Kitty resources. Manual Driver loops use
+  `output_written()` after successful frame writes and `finish_output()` to retain
+  final cleanup resources across failed or partial writes. Existing low-level
+  picture and `Driver::finish()` APIs remain available; see the image guide for
+  their lifetime and simultaneous-fit limits.
+- Release validation remains blocked by the original iTerm-compatible frame,
+  input and process-CPU limits across the final three-run sample. Kitty and ANSI
+  meet their frozen frame/input limits; all observations and remaining native
+  limitations are recorded in the [media-quality handoff](docs/design/noctiluca-media-quality-status.md).
 ### Premeasured fullscreen cells (rs-rich-ext / rs-rich-intuituive 0.1.0)
 
 - Import borrowed `PremeasuredCell` grids through `Screen::write_premeasured`
@@ -40,7 +81,6 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   SIGKILL cannot be recovered by software.
 - `Screen::cell`/`get` and `Canvas::cell` expose exact imported geometry;
   plain text, segment lines and the existing SVG export lose that geometry.
-
 
 ### Releases: rab v2.0.1
 

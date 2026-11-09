@@ -25,9 +25,9 @@
 //!   rs-rich-art's; frames come from whoever has them (a browser's
 //!   screencast, an emulator).
 
-use std::collections::BTreeMap;
 #[cfg(feature = "frames")]
 use std::collections::VecDeque;
+use std::collections::{BTreeMap, BTreeSet};
 use std::sync::{Arc, Mutex, Weak};
 use std::time::{Duration, Instant};
 
@@ -49,8 +49,8 @@ pub enum Pixels {
     /// In cells, as the view's mode draws them: any terminal.
     #[default]
     Cells,
-    /// Kitty's graphics protocol with Unicode placeholders (Kitty, Ghostty,
-    /// WezTerm): the cells are placeholders, shown as the uploaded picture.
+    /// Kitty's graphics protocol with Unicode placeholders: the cells are
+    /// placeholders, shown as the uploaded picture. Both features are required.
     Kitty,
     /// Sixel, drawn over the picture's half blocks (foot, WezTerm, mlterm,
     /// xterm with `-ti vt340`, Windows Terminal).
@@ -64,9 +64,25 @@ impl Pixels {
     /// The protocol the terminal is likely to speak, from the environment:
     /// Kitty in Kitty and Ghostty, iTerm2's in iTerm2 and WezTerm, Sixel
     /// where [`sixel::is_probably_supported`](crate::sixel::is_probably_supported)
-    /// guesses it works, else cells.
+    /// guesses it works, else cells. `RICH_GRAPHICS` and `RICH_SIXEL`
+    /// override detection; unknown tmux/screen transport falls back to cells.
     pub fn detect() -> Pixels {
         let var = |name: &str| std::env::var(name).unwrap_or_default();
+        match var("RICH_GRAPHICS").to_ascii_lowercase().as_str() {
+            "none" => return Pixels::Cells,
+            "kitty" => return Pixels::Kitty,
+            "iterm" => return Pixels::Iterm,
+            "sixel" => return Pixels::Sixel,
+            _ => {}
+        }
+        match var("RICH_SIXEL").to_ascii_lowercase().as_str() {
+            "1" | "true" | "yes" | "on" => return Pixels::Sixel,
+            "0" | "false" | "no" | "off" => return Pixels::Cells,
+            _ => {}
+        }
+        if !var("TMUX").is_empty() || !var("STY").is_empty() {
+            return Pixels::Cells;
+        }
         let (term, program) = (var("TERM"), var("TERM_PROGRAM"));
         if std::env::var_os("KITTY_WINDOW_ID").is_some()
             || term.contains("kitty")
@@ -105,7 +121,7 @@ impl Pixels {
         }
     }
 
-    fn code(self) -> i64 {
+    const fn code(self) -> i64 {
         match self {
             Pixels::Cells => 0,
             Pixels::Kitty => 1,
@@ -121,6 +137,64 @@ impl Pixels {
             3 => Pixels::Iterm,
             _ => return None,
         })
+    }
+}
+
+/// Representations a terminal can display. Cells are always supported.
+/// Explicit low-level callers may retain the historical ladder with [`Self::all`].
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct PixelFormats(u8);
+
+impl PixelFormats {
+    /// Only ordinary cells.
+    pub const fn cells() -> Self {
+        Self(1)
+    }
+    /// Every explicit codec, preserving the historical fallback ladder.
+    pub const fn all() -> Self {
+        Self(15)
+    }
+    #[must_use]
+    /// Add a supported codec.
+    pub const fn with(self, pixels: Pixels) -> Self {
+        Self(self.0 | (1 << pixels.code()))
+    }
+    /// Whether this representation is supported.
+    pub const fn contains(self, pixels: Pixels) -> bool {
+        self.0 & (1 << pixels.code()) != 0
+    }
+
+    #[cfg(feature = "frames")]
+    fn supported(self, mut pixels: Pixels) -> Pixels {
+        while !self.contains(pixels) {
+            pixels = pixels.lower().unwrap_or(Pixels::Cells);
+        }
+        pixels
+    }
+}
+
+/// Immutable permissions for one encoding; legacy codecs allow native animation.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct PictureEncoding {
+    /// Physical cell dimensions used to fit the raster.
+    pub cell_pixels: CellPixels,
+    /// Whether native Kitty animation commands are supported.
+    pub native_kitty_animation: bool,
+}
+
+impl PictureEncoding {
+    /// Legacy explicit-codec permissions at these metrics.
+    pub const fn new(cell_pixels: CellPixels) -> Self {
+        Self {
+            cell_pixels,
+            native_kitty_animation: true,
+        }
+    }
+    #[must_use]
+    /// Select native animation support independently of static Kitty images.
+    pub const fn native_kitty_animation(mut self, allowed: bool) -> Self {
+        self.native_kitty_animation = allowed;
+        self
     }
 }
 
@@ -213,10 +287,13 @@ impl ImageView {
 #[derive(Clone)]
 pub struct Picture {
     shown: Arc<Shown>,
+    bound: Option<bool>,
 }
 
 /// One frame of a picture.
 struct Shown {
+    family: Arc<Family>,
+    bindings: Mutex<Vec<(BindingKey, Arc<KittyResource>)>>,
     id: u32,
     version: u32,
     image: Arc<DynamicImage>,
@@ -233,11 +310,20 @@ struct Shown {
 
 /// What an escape of a whole picture was made for: the protocol, the
 /// cells, and how it was fitted to them.
-type Encoding = (Pixels, usize, usize, Option<ImageFit>, ImageAnchor);
+type Encoding = (
+    Pixels,
+    usize,
+    usize,
+    Option<ImageFit>,
+    ImageAnchor,
+    PictureEncoding,
+    u32,
+);
 
 impl PartialEq for Picture {
     fn eq(&self, other: &Self) -> bool {
-        (self.shown.id, self.shown.version) == (other.shown.id, other.shown.version)
+        (self.shown.id, self.shown.version, self.bound)
+            == (other.shown.id, other.shown.version, other.bound)
     }
 }
 
@@ -258,23 +344,72 @@ impl std::fmt::Debug for Picture {
 /// Every picture's frames, by id and version, for [`Picture::find`]
 /// (weakly: a frame nothing holds goes).
 static PICTURES: Mutex<BTreeMap<(u32, u32), Weak<Shown>>> = Mutex::new(BTreeMap::new());
-static NEXT_PICTURE: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(1);
-/// The bytes of escapes drawn for each picture id so far.
+/// The bytes of escapes drawn for each logical picture id so far.
 static DRAWN: Mutex<BTreeMap<u32, u64>> = Mutex::new(BTreeMap::new());
 
-/// A new picture id: 1 to 2^24 - 1, as Kitty's colour-coded ids take.
-fn new_id() -> u32 {
-    NEXT_PICTURE
-        .fetch_add(1, std::sync::atomic::Ordering::SeqCst)
-        .wrapping_sub(1)
-        % 0x00ff_fffe
-        + 1
+#[derive(Default)]
+struct Namespace {
+    next: u32,
+    live: BTreeSet<u32>,
 }
+impl Namespace {
+    fn allocate(&mut self, first: u32, last: u32) -> Option<u32> {
+        let start = self.next.clamp(first, last);
+        let mut id = start;
+        loop {
+            if self.live.insert(id) {
+                self.next = if id == last { first } else { id + 1 };
+                return Some(id);
+            }
+            id = if id == last { first } else { id + 1 };
+            if id == start {
+                return None;
+            }
+        }
+    }
+}
+static IDS: Mutex<Namespace> = Mutex::new(Namespace {
+    next: 1,
+    live: BTreeSet::new(),
+});
+
+/// A reservation in the shared Kitty/logical ID namespace. Holding this small
+/// lease keeps an ID from being reused; it holds no decoded pixels. Terminal
+/// owners must keep it until their delete command has been written successfully.
+#[derive(Debug)]
+pub struct KittyResource {
+    id: u32,
+}
+impl KittyResource {
+    /// The actual terminal resource ID (which may differ from [`Picture::id`]).
+    pub fn id(&self) -> u32 {
+        self.id
+    }
+}
+impl Drop for KittyResource {
+    fn drop(&mut self) {
+        IDS.lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .live
+            .remove(&self.id);
+    }
+}
+fn reserve(first: u32, last: u32) -> Option<Arc<KittyResource>> {
+    IDS.lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .allocate(first, last)
+        .map(|id| Arc::new(KittyResource { id }))
+}
+struct Family {
+    id: Arc<KittyResource>,
+    next_version: std::sync::atomic::AtomicU32,
+}
+type BindingKey = (usize, usize, Option<ImageFit>, ImageAnchor, bool);
 
 impl Picture {
     /// `image`, under a new id.
     pub fn new(image: DynamicImage) -> Picture {
-        Picture::make(new_id(), 0, Arc::new(image), None, false)
+        Picture::make(Self::family(), 0, Arc::new(image), None, false)
     }
 
     /// The image in `bytes` (any format the `image` crate reads here),
@@ -321,7 +456,7 @@ impl Picture {
     pub fn from_rgba(width: u32, height: u32, rgba: Vec<u8>) -> Option<Picture> {
         let image = RgbaImage::from_raw(width, height, rgba)?;
         Some(Picture::make(
-            new_id(),
+            Self::family(),
             0,
             Arc::new(DynamicImage::ImageRgba8(image)),
             None,
@@ -337,7 +472,7 @@ impl Picture {
         let first = DynamicImage::ImageRgba8(frames.first()?.image.clone());
         let animation = (frames.len() > 1).then(|| frames.into());
         Some(Picture::make(
-            new_id(),
+            Self::family(),
             0,
             Arc::new(first),
             animation,
@@ -345,14 +480,26 @@ impl Picture {
         ))
     }
 
+    fn family() -> Arc<Family> {
+        Arc::new(Family {
+            id: reserve(1, 0x00ff_ffff)
+                .or_else(|| reserve(0x0100_0000, u32::MAX))
+                .expect("picture ID namespace exhausted"),
+            next_version: std::sync::atomic::AtomicU32::new(1),
+        })
+    }
+
     fn make(
-        id: u32,
+        family: Arc<Family>,
         version: u32,
         image: Arc<DynamicImage>,
         animation: Option<Arc<[AnimationFrame]>>,
         raw: bool,
     ) -> Picture {
+        let id = family.id.id();
         let shown = Arc::new(Shown {
+            family,
+            bindings: Mutex::new(Vec::new()),
             id,
             version,
             image,
@@ -363,27 +510,37 @@ impl Picture {
         let mut pictures = PICTURES.lock().unwrap_or_else(|e| e.into_inner());
         pictures.retain(|_, weak| weak.strong_count() > 0);
         pictures.insert((id, version), Arc::downgrade(&shown));
-        Picture { shown }
+        Picture { shown, bound: None }
     }
 
     /// The next frame of this picture: `image` under the same id, so a
     /// terminal that holds pictures (Kitty) replaces this one with it.
     #[must_use]
     pub fn next(&self, image: DynamicImage) -> Picture {
-        Picture::make(self.id(), self.bumped(), Arc::new(image), None, false)
+        Picture::make(
+            self.shown.family.clone(),
+            self.bumped(),
+            Arc::new(image),
+            None,
+            false,
+        )
+        .with_binding(self.bound)
     }
 
     /// The next frame as raw RGBA pixels (see [`from_rgba`](Self::from_rgba)).
     /// `None` when the pixels are not `width * height * 4` bytes.
     pub fn next_rgba(&self, width: u32, height: u32, rgba: Vec<u8>) -> Option<Picture> {
         let image = RgbaImage::from_raw(width, height, rgba)?;
-        Some(Picture::make(
-            self.id(),
-            self.bumped(),
-            Arc::new(DynamicImage::ImageRgba8(image)),
-            None,
-            true,
-        ))
+        Some(
+            Picture::make(
+                self.shown.family.clone(),
+                self.bumped(),
+                Arc::new(DynamicImage::ImageRgba8(image)),
+                None,
+                true,
+            )
+            .with_binding(self.bound),
+        )
     }
 
     /// This picture standing still on the frame it shows, under the same
@@ -391,16 +548,85 @@ impl Picture {
     #[must_use]
     pub fn still(&self) -> Picture {
         Picture::make(
-            self.id(),
+            self.shown.family.clone(),
             self.bumped(),
             self.shown.image.clone(),
             None,
             self.shown.raw,
         )
+        .with_binding(self.bound)
     }
 
     fn bumped(&self) -> u32 {
-        self.shown.version.wrapping_add(1)
+        // Branching from an old frame still allocates a unique live lookup key.
+        loop {
+            let version = self
+                .shown
+                .family
+                .next_version
+                .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            if !PICTURES
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .get(&(self.id(), version))
+                .is_some_and(|w| w.strong_count() > 0)
+            {
+                return version;
+            }
+        }
+    }
+
+    fn with_binding(mut self, bound: Option<bool>) -> Self {
+        self.bound = bound;
+        self
+    }
+
+    /// Opt into independent terminal resources for each live version and fitted
+    /// view. The logical ID and byte counter stay unchanged. Native animation is
+    /// an immutable permission for this handle. Keep this handle alive while its
+    /// prebuilt lines are in use; at most 128 fitted bindings are kept per frame.
+    #[must_use]
+    pub fn bound(&self, native_animation: bool) -> Self {
+        self.clone().with_binding(Some(native_animation))
+    }
+
+    /// Reserve the resource used by this handle's lines and encoding. Legacy
+    /// handles return their logical ID. Indexed consoles can use only IDs16–255;
+    /// an unavailable ID/fit capacity returns `None` before placeholders are made.
+    pub fn kitty_resource(
+        &self,
+        view: ImageView,
+        cols: usize,
+        rows: usize,
+        truecolor: bool,
+    ) -> Option<Arc<KittyResource>> {
+        if cols == 0 || rows == 0 {
+            return None;
+        }
+        let Some(native) = self.bound else {
+            crate::kitty::id_color(self.id(), truecolor)?;
+            return Some(self.shown.family.id.clone());
+        };
+        let key = (cols, rows, view.fit, view.anchor, native);
+        let mut bindings = self
+            .shown
+            .bindings
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+        if let Some((_, resource)) = bindings.iter().find(|(k, _)| *k == key) {
+            crate::kitty::id_color(resource.id(), truecolor)?;
+            return Some(resource.clone());
+        }
+        if bindings.len() >= 128 {
+            return None;
+        }
+        let resource = if truecolor {
+            reserve(1, 0x00ff_ffff)
+        } else {
+            reserve(16, 255)
+        }?;
+        bindings.push((key, resource.clone()));
+        Some(resource)
     }
 
     /// The frame `version` of picture `id`, while something holds it.
@@ -409,7 +635,7 @@ impl Picture {
         pictures
             .get(&(id, version))
             .and_then(Weak::upgrade)
-            .map(|shown| Picture { shown })
+            .map(|shown| Picture { shown, bound: None })
     }
 
     /// The id terminal graphics know it by, the same for every frame.
@@ -450,15 +676,46 @@ impl Picture {
         width: u16,
         height: u16,
     ) -> Vec<Vec<Segment>> {
+        self.lines_with_metrics(console, view, width, height, CellPixels::DEFAULT)
+    }
+
+    /// Draw cells using measured physical cell dimensions. Unknown metrics can
+    /// use [`CellPixels::DEFAULT`], which preserves the original cell output.
+    pub fn lines_with_metrics(
+        &self,
+        console: &rich::Console,
+        view: ImageView,
+        width: u16,
+        height: u16,
+        cell: CellPixels,
+    ) -> Vec<Vec<Segment>> {
         if width == 0 {
             return Vec::new();
         }
+        let cell = CellPixels::new(cell.width, cell.height);
         let mode = match view.mode {
             // Pixel protocols cannot reach the terminal through cells.
             ImageMode::Auto | ImageMode::Sixel => ImageMode::Blocks,
             mode => mode,
         };
-        let mut art = ImageArt::new(DynamicImage::clone(&self.shown.image))
+        // Cell renderers assume a cell is twice as tall as it is wide.
+        // Adjust the image's sampling aspect to match the physical cell,
+        // bounded before resampling. The protocol raster keeps the original.
+        let image = if cell.width.saturating_mul(2) == cell.height {
+            DynamicImage::clone(&self.shown.image)
+        } else {
+            let image = &self.shown.image;
+            let ratio = (f64::from(cell.width) * 2.0) / f64::from(cell.height.max(1));
+            let w = f64::from(image.width().max(1));
+            let h = f64::from(image.height().max(1)) * ratio;
+            let scale = (f64::from(KEEP) / w.max(h)).min(1.0);
+            image.resize_exact(
+                (w * scale).round().max(1.0) as u32,
+                (h * scale).round().max(1.0) as u32,
+                image::imageops::FilterType::Lanczos3,
+            )
+        };
+        let mut art = ImageArt::new(image)
             .mode(mode)
             .anchor(view.anchor)
             .background_mode(match view.background {
@@ -512,28 +769,44 @@ impl Picture {
         if rows == 0 || cols == 0 {
             return lines;
         }
-        let tag = |row: usize| {
-            PictureTag {
-                id: self.id(),
-                version: self.version(),
-                cols,
-                rows,
-                row,
-                pixels,
-                fit: view.fit,
-                anchor: view.anchor,
-            }
-            .style()
+        let tag = |row: usize| PictureTag {
+            id: self.id(),
+            version: self.version(),
+            cols,
+            rows,
+            row,
+            pixels,
+            fit: view.fit,
+            anchor: view.anchor,
         };
         if pixels == Pixels::Kitty {
             let truecolor = console.color_system() == Some(rich::color::ColorSystem::Truecolor);
-            let Some(colour) = crate::kitty::id_color(self.id(), truecolor) else {
+            let Some(resource) = self.kitty_resource(view, cols, rows, truecolor) else {
+                return lines;
+            };
+            let Some(colour) = crate::kitty::id_color(resource.id(), truecolor) else {
                 return lines;
             };
             return (0..rows)
                 .map(|row| {
                     let cells = crate::kitty::placeholder_row(row, cols).unwrap_or_default();
-                    let style = Style::new().with_color(colour.clone()).combine(&tag(row));
+                    // Placeholder diacritics already carry exact row/column
+                    // provenance. Keep a single style/segment for the whole row.
+                    let provenance = self.bound.and_then(|native| {
+                        CompactTag::new(tag(row), None, view.background, native)
+                    });
+                    let mut style = Style::new().with_color(colour.clone()).combine(
+                        &provenance
+                            .map(|tag| Style::from_meta(tag.metadata()))
+                            .unwrap_or_else(|| tag(row).style()),
+                    );
+                    if provenance.is_none()
+                        && let Some(native) = self.bound
+                    {
+                        let mut meta = Meta::new();
+                        meta.insert("intuituive.image.bound", MetaValue::Int(i64::from(native)));
+                        style = style.combine(&Style::from_meta(meta));
+                    }
                     vec![Segment::new(cells, Some(style))]
                 })
                 .collect();
@@ -541,15 +814,7 @@ impl Picture {
         lines
             .into_iter()
             .enumerate()
-            .map(|(row, line)| {
-                let tag = tag(row);
-                line.into_iter()
-                    .map(|mut segment| {
-                        segment.style = Some(segment.style.unwrap_or_default().combine(&tag));
-                        segment
-                    })
-                    .collect()
-            })
+            .map(|(row, line)| tag_cells(line, tag(row), view.background, self.bound))
             .collect()
     }
 
@@ -559,7 +824,14 @@ impl Picture {
     /// placeholder cells (an animation's frames too, playing). `None` for
     /// cells, or when it will not encode.
     pub fn encode(&self, pixels: Pixels, cols: usize, rows: usize) -> Option<String> {
-        self.encode_fitted(pixels, cols, rows, None, ImageAnchor::Center)
+        self.encode_fitted(
+            pixels,
+            cols,
+            rows,
+            None,
+            ImageAnchor::Center,
+            PictureEncoding::new(CellPixels::DEFAULT),
+        )
     }
 
     /// The escape that draws rows `first` to `first + shown` of the cells
@@ -567,16 +839,80 @@ impl Picture {
     /// view's fit and anchor), through the tag's protocol. What a painter
     /// draws over a picture's tagged cells.
     pub fn encode_tag(&self, tag: &PictureTag, first: usize, shown: usize) -> Option<String> {
-        let (pixels, cols, rows) = (tag.pixels, tag.cols, tag.rows);
-        if pixels == Pixels::Kitty || (first == 0 && shown >= rows) {
-            return self.encode_fitted(pixels, cols, rows, tag.fit, tag.anchor);
+        self.encode_tag_with_metrics(tag, first, shown, CellPixels::DEFAULT)
+    }
+
+    /// Encode tagged rows using the measured physical cell size. Unknown metrics
+    /// can use [`CellPixels::DEFAULT`] to preserve the conventional 8×16 output.
+    pub fn encode_tag_with_metrics(
+        &self,
+        tag: &PictureTag,
+        first: usize,
+        shown: usize,
+        cell: CellPixels,
+    ) -> Option<String> {
+        self.encode_tag_rect_with_metrics(
+            tag,
+            0..tag.cols,
+            first..first.saturating_add(shown),
+            cell,
+        )
+    }
+
+    /// Encode a visible rectangle in the full tagged cell canvas. Fit and anchor
+    /// the entire picture first, then crop; end coordinates clamp to the canvas.
+    /// Empty, reversed or oversized canvases return `None`. Kitty uploads the
+    /// whole fitted view: its coordinate-bearing placeholders perform the crop.
+    pub fn encode_tag_rect_with_metrics(
+        &self,
+        tag: &PictureTag,
+        columns: std::ops::Range<usize>,
+        rows: std::ops::Range<usize>,
+        cell: CellPixels,
+    ) -> Option<String> {
+        self.encode_tag_rect_with_context(tag, columns, rows, PictureEncoding::new(cell))
+    }
+
+    /// Encode a tagged rectangle with explicit native-animation permission.
+    pub fn encode_tag_rect_with_context(
+        &self,
+        tag: &PictureTag,
+        columns: std::ops::Range<usize>,
+        rows: std::ops::Range<usize>,
+        context: PictureEncoding,
+    ) -> Option<String> {
+        let cell = CellPixels::new(context.cell_pixels.width, context.cell_pixels.height);
+        if !raster_fits(tag.cols, tag.rows, cell) {
+            return None;
         }
-        self.encode_part(
-            &self.fitted(&self.shown.image, cols, rows, tag.fit, tag.anchor),
-            pixels,
-            cols,
-            first,
-            shown,
+        let right = columns.end.min(tag.cols);
+        let bottom = rows.end.min(tag.rows);
+        if columns.start >= right || rows.start >= bottom {
+            return None;
+        }
+        if tag.pixels == Pixels::Kitty
+            || (columns.start == 0 && rows.start == 0 && right == tag.cols && bottom == tag.rows)
+        {
+            return self
+                .encode_fitted(tag.pixels, tag.cols, tag.rows, tag.fit, tag.anchor, context);
+        }
+        if tag.pixels == Pixels::Cells {
+            return None;
+        }
+        let whole = self.fitted(
+            &self.shown.image,
+            tag.cols,
+            tag.rows,
+            tag.fit,
+            tag.anchor,
+            cell,
+        );
+        self.encode_rect(
+            &whole,
+            tag.pixels,
+            columns.start..right,
+            rows.start..bottom,
+            cell,
         )
     }
 
@@ -588,8 +924,8 @@ impl Picture {
         rows: usize,
         fit: Option<ImageFit>,
         anchor: ImageAnchor,
+        cell: CellPixels,
     ) -> RgbaImage {
-        let cell = CellPixels::DEFAULT;
         match fit {
             None | Some(ImageFit::Contain) | Some(ImageFit::Native) => {
                 fit_to_cells(image, cols, rows, cell)
@@ -608,8 +944,72 @@ impl Picture {
     /// painter, on the thread that draws. Cells keep nothing (their
     /// characters are made as they are drawn). Whether there is an escape.
     pub fn prepare(&self, view: ImageView, cols: usize, rows: usize) -> bool {
-        self.encode_fitted(view.pixels, cols, rows, view.fit, view.anchor)
+        self.prepare_with_metrics(view, cols, rows, CellPixels::DEFAULT)
+    }
+
+    /// Prepare a whole-image escape using measured physical cell dimensions.
+    pub fn prepare_with_metrics(
+        &self,
+        view: ImageView,
+        cols: usize,
+        rows: usize,
+        cell: CellPixels,
+    ) -> bool {
+        self.prepare_with_context(view, cols, rows, PictureEncoding::new(cell))
+    }
+
+    /// Prepare with the same immutable permissions as the presentation source.
+    pub fn prepare_with_context(
+        &self,
+        view: ImageView,
+        cols: usize,
+        rows: usize,
+        context: PictureEncoding,
+    ) -> bool {
+        self.encode_fitted(view.pixels, cols, rows, view.fit, view.anchor, context)
             .is_some()
+    }
+
+    /// Whether the whole-image escape for this view and measured cell size
+    /// is already cached. This can be used to check worker preparation.
+    pub fn is_prepared_with_metrics(
+        &self,
+        view: ImageView,
+        cols: usize,
+        rows: usize,
+        cell: CellPixels,
+    ) -> bool {
+        self.is_prepared_with_context(view, cols, rows, PictureEncoding::new(cell))
+    }
+
+    /// Whether preparation matches both geometry and permissions.
+    pub fn is_prepared_with_context(
+        &self,
+        view: ImageView,
+        cols: usize,
+        rows: usize,
+        mut context: PictureEncoding,
+    ) -> bool {
+        context.cell_pixels =
+            CellPixels::new(context.cell_pixels.width, context.cell_pixels.height);
+        if let Some(native) = self.bound {
+            context.native_kitty_animation &= native;
+        }
+        let id = if view.pixels == Pixels::Kitty {
+            let Some(resource) = self.kitty_resource(view, cols, rows, true) else {
+                return false;
+            };
+            resource.id()
+        } else {
+            self.id()
+        };
+        let key = (view.pixels, cols, rows, view.fit, view.anchor, context, id);
+        self.shown
+            .encoded
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .as_ref()
+            .is_some_and(|(made, _)| *made == key)
     }
 
     fn encode_fitted(
@@ -619,14 +1019,42 @@ impl Picture {
         rows: usize,
         fit: Option<ImageFit>,
         anchor: ImageAnchor,
+        context: PictureEncoding,
     ) -> Option<String> {
-        let key = (pixels, cols, rows, fit, anchor);
+        let cell = CellPixels::new(context.cell_pixels.width, context.cell_pixels.height);
+        let context = PictureEncoding {
+            cell_pixels: cell,
+            native_kitty_animation: self.bound.unwrap_or(true) && context.native_kitty_animation,
+        };
+        if !raster_fits(cols, rows, cell) {
+            return None;
+        }
+        let resource = if pixels == Pixels::Kitty {
+            self.kitty_resource(
+                ImageView {
+                    fit,
+                    anchor,
+                    pixels,
+                    ..ImageView::new()
+                },
+                cols,
+                rows,
+                true,
+            )
+        } else {
+            None
+        };
+        if pixels == Pixels::Kitty && resource.is_none() {
+            return None;
+        }
+        let id = resource.as_ref().map_or(self.id(), |r| r.id());
+        let key = (pixels, cols, rows, fit, anchor, context, id);
         if let Some((made, escape)) = &*self.shown.encoded.lock().unwrap_or_else(|e| e.into_inner())
             && *made == key
         {
             return Some(escape.clone());
         }
-        let escape = self.encode_new(pixels, cols, rows, fit, anchor)?;
+        let escape = self.encode_new(pixels, cols, rows, fit, anchor, context)?;
         *self.shown.encoded.lock().unwrap_or_else(|e| e.into_inner()) = Some((key, escape.clone()));
         Some(escape)
     }
@@ -638,11 +1066,73 @@ impl Picture {
         rows: usize,
         fit: Option<ImageFit>,
         anchor: ImageAnchor,
+        context: PictureEncoding,
     ) -> Option<String> {
-        let fitted = |image: &DynamicImage| self.fitted(image, cols, rows, fit, anchor);
+        let measured = media_trace_enabled().then(std::time::Instant::now);
+        let result = self.encode_new_inner(pixels, cols, rows, fit, anchor, context);
+        if let Some(start) = measured {
+            let pictures = PICTURES.lock().unwrap_or_else(|e| e.into_inner());
+            let mut decoded = 0usize;
+            let mut encoded = 0usize;
+            let mut live = 0usize;
+            for weak in pictures.values() {
+                if let Some(p) = weak.upgrade() {
+                    live += 1;
+                    decoded += p.image.as_bytes().len();
+                    decoded += p.animation.as_ref().map_or(0, |a| {
+                        a.iter().map(|f| f.image.as_raw().len()).sum::<usize>()
+                    });
+                    encoded += p
+                        .encoded
+                        .lock()
+                        .unwrap_or_else(|e| e.into_inner())
+                        .as_ref()
+                        .map_or(0, |(_, s)| s.len());
+                }
+            }
+            eprintln!(
+                "RICH_MEDIA {{\"stage\":\"encode\",\"ns\":{},\"bytes\":{},\"decoded_bytes\":{},\"cached_escapes_bytes\":{},\"live_pictures\":{},\"weak_slots\":{}}}",
+                start.elapsed().as_nanos(),
+                result.as_ref().map_or(0, |s| s.len()),
+                decoded,
+                encoded,
+                live,
+                pictures.len()
+            );
+        }
+        result
+    }
+
+    fn encode_new_inner(
+        &self,
+        pixels: Pixels,
+        cols: usize,
+        rows: usize,
+        fit: Option<ImageFit>,
+        anchor: ImageAnchor,
+        context: PictureEncoding,
+    ) -> Option<String> {
+        let cell = context.cell_pixels;
+        let resource = if pixels == Pixels::Kitty {
+            Some(self.kitty_resource(
+                ImageView {
+                    fit,
+                    anchor,
+                    pixels,
+                    ..ImageView::new()
+                },
+                cols,
+                rows,
+                true,
+            )?)
+        } else {
+            None
+        };
+        let id = resource.as_ref().map_or(self.id(), |r| r.id());
+        let fitted = |image: &DynamicImage| self.fitted(image, cols, rows, fit, anchor, cell);
         match pixels {
             Pixels::Cells => None,
-            Pixels::Kitty if self.shown.animation.is_some() => {
+            Pixels::Kitty if context.native_kitty_animation && self.shown.animation.is_some() => {
                 let frames: Vec<_> = self
                     .frames()?
                     .iter()
@@ -651,7 +1141,7 @@ impl Picture {
                         delay: frame.delay,
                     })
                     .collect();
-                crate::kitty::transmit_animation(self.id(), &frames, cols, rows)
+                crate::kitty::transmit_animation(id, &frames, cols, rows)
             }
             Pixels::Kitty => {
                 let fitted = fitted(&self.shown.image);
@@ -661,7 +1151,7 @@ impl Picture {
                     if fitted.pixels().all(|p| p[3] == 255) {
                         let rgb = DynamicImage::ImageRgba8(fitted).into_rgb8();
                         return Some(crate::kitty::transmit_rgb(
-                            self.id(),
+                            id,
                             rgb.as_raw(),
                             width,
                             height,
@@ -670,7 +1160,7 @@ impl Picture {
                         ));
                     }
                     return Some(crate::kitty::transmit_rgba(
-                        self.id(),
+                        id,
                         fitted.as_raw(),
                         width,
                         height,
@@ -679,11 +1169,13 @@ impl Picture {
                     ));
                 }
                 let png = encode_png(&fitted)?;
-                Some(crate::kitty::transmit(self.id(), &png, cols, rows))
+                Some(crate::kitty::transmit(id, &png, cols, rows))
             }
             Pixels::Sixel => {
                 let image = DynamicImage::ImageRgba8(fitted(&self.shown.image));
-                let sixel = crate::SixelArt::new(image).encode_cells(cols, rows)?;
+                let sixel = crate::SixelArt::new(image)
+                    .cell_px(cell.width, cell.height)
+                    .encode_cells(cols, rows)?;
                 Some(format!("\x1b7{sixel}\x1b8"))
             }
             Pixels::Iterm => {
@@ -708,11 +1200,39 @@ impl Picture {
         first: usize,
         shown: usize,
     ) -> Option<String> {
-        if pixels == Pixels::Kitty || (first == 0 && shown >= rows) {
-            return self.encode(pixels, cols, rows);
+        self.encode_rows_with_metrics(pixels, cols, rows, first, shown, CellPixels::DEFAULT)
+    }
+
+    /// Encode visible rows using measured physical cell dimensions.
+    pub fn encode_rows_with_metrics(
+        &self,
+        pixels: Pixels,
+        cols: usize,
+        rows: usize,
+        first: usize,
+        shown: usize,
+        cell: CellPixels,
+    ) -> Option<String> {
+        let cell = CellPixels::new(cell.width, cell.height);
+        if !raster_fits(cols, rows, cell) {
+            return None;
         }
-        let whole = fit_to_cells(&self.shown.image, cols, rows, CellPixels::DEFAULT);
-        self.encode_part(&whole, pixels, cols, first, shown)
+        let shown = shown.min(rows.saturating_sub(first));
+        if shown == 0 {
+            return None;
+        }
+        if pixels == Pixels::Kitty || (first == 0 && shown >= rows) {
+            return self.encode_fitted(
+                pixels,
+                cols,
+                rows,
+                None,
+                ImageAnchor::Center,
+                PictureEncoding::new(cell),
+            );
+        }
+        let whole = fit_to_cells(&self.shown.image, cols, rows, cell);
+        self.encode_part(&whole, pixels, cols, first, shown, cell)
     }
 
     /// Rows `first` to `first + shown` of `whole`, the picture already
@@ -724,17 +1244,33 @@ impl Picture {
         cols: usize,
         first: usize,
         shown: usize,
+        cell: CellPixels,
     ) -> Option<String> {
-        let cell = CellPixels::DEFAULT;
-        let top = (first as u32 * cell.height).min(whole.height());
-        let height = (shown as u32 * cell.height).min(whole.height() - top);
-        if height == 0 {
-            return None;
-        }
-        let part = image::imageops::crop_imm(whole, 0, top, whole.width(), height).to_image();
+        self.encode_rect(whole, pixels, 0..cols, first..first + shown, cell)
+    }
+
+    fn encode_rect(
+        &self,
+        whole: &RgbaImage,
+        pixels: Pixels,
+        columns: std::ops::Range<usize>,
+        rows: std::ops::Range<usize>,
+        cell: CellPixels,
+    ) -> Option<String> {
+        let cols = columns.end - columns.start;
+        let shown = rows.end - rows.start;
+        let part = image::imageops::crop_imm(
+            whole,
+            columns.start as u32 * cell.width,
+            rows.start as u32 * cell.height,
+            cols as u32 * cell.width,
+            shown as u32 * cell.height,
+        )
+        .to_image();
         match pixels {
             Pixels::Sixel => {
                 let sixel = crate::SixelArt::new(DynamicImage::ImageRgba8(part))
+                    .cell_px(cell.width, cell.height)
                     .encode_cells(cols, shown)?;
                 Some(format!("\x1b7{sixel}\x1b8"))
             }
@@ -754,6 +1290,90 @@ impl Picture {
     pub fn release(id: u32) -> String {
         crate::kitty::delete(id)
     }
+}
+
+// Blocks and Kitty placeholders are single-cell graphemes. Divide before
+// attaching provenance so later segment clipping keeps exact source columns.
+fn tag_cells(
+    line: Vec<Segment>,
+    tag: PictureTag,
+    background: Option<[u8; 3]>,
+    bound: Option<bool>,
+) -> Vec<Segment> {
+    let compact = bound.and_then(|native| CompactTag::new(tag, Some(0), background, native));
+    let mut row_meta = tag.metadata();
+    row_meta.insert("intuituive.image.column", MetaValue::Int(0));
+    if let Some(rgb) = background {
+        row_meta.insert(
+            "intuituive.image.background",
+            MetaValue::List(
+                rgb.into_iter()
+                    .map(|v| MetaValue::Int(i64::from(v)))
+                    .collect(),
+            ),
+        );
+    }
+    if let Some(native) = bound {
+        row_meta.insert("intuituive.image.bound", MetaValue::Int(i64::from(native)));
+    }
+    let mut out = Vec::with_capacity(tag.cols);
+    let mut column = 0;
+    let mut append = |mut segment: Segment, column: usize| {
+        // Keep one final metadata map per cell, in the same insertion order
+        // as style_at + background. Consuming the sampled style avoids cloning
+        // that map through several temporary styles for every source column.
+        let meta: Meta = if let Some(compact) = compact.filter(|_| column < tag.cols) {
+            compact.at(column).metadata()
+        } else {
+            row_meta
+                .iter()
+                .map(|(key, value)| {
+                    let value = if key == "intuituive.image.column" {
+                        MetaValue::Int(column as i64)
+                    } else {
+                        value.clone()
+                    };
+                    (key, value)
+                })
+                .collect()
+        };
+        let style = segment.style.take().unwrap_or_default();
+        let meta = if style.meta_ref().is_some() {
+            let mut merged = style.meta();
+            merged.update(&meta);
+            merged
+        } else {
+            meta
+        };
+        segment.style = Some(style.with_meta(meta));
+        out.push(segment);
+    };
+    for segment in line {
+        // BlockArt normally emits one cell per segment. Avoid allocating
+        // splitter vectors on that path; retain it for merged input segments.
+        let cells = rich::cells::cell_len(&segment.text);
+        if cells == 1 {
+            append(segment, column);
+            column += 1;
+        } else {
+            for pieces in Segment::divide(&[segment], &(1..=cells).collect::<Vec<_>>()) {
+                for segment in pieces {
+                    append(segment, column);
+                }
+                column += 1;
+            }
+        }
+    }
+    out
+}
+
+// Reject oversized raster requests before allocating the fitted canvas.
+fn raster_fits(cols: usize, rows: usize, cell: CellPixels) -> bool {
+    if !(1..=4096).contains(&cols) || !(1..=4096).contains(&rows) {
+        return false;
+    }
+    let (width, height) = cell.span(cols, rows);
+    u64::from(width) * u64::from(height) <= crate::sixel::MAX_PIXELS
 }
 
 /// The most frames [`Picture::decode_animated`] keeps.
@@ -919,6 +1539,150 @@ const ANCHORS: [ImageAnchor; 9] = [
     ImageAnchor::BottomRight,
 ];
 
+// Opt-in bound handles carry exact provenance in three bit-pattern words.
+// No origin inference is involved: Screen/Frame clipping copies each source column.
+// Legacy public styles and out-of-domain geometry keep the original representation.
+#[derive(Clone, Copy)]
+struct CompactTag {
+    identity: u64,
+    geometry: u64,
+    flags: u64,
+}
+
+impl CompactTag {
+    const KEY: &'static str = "intuituive.image.compact";
+    const VERSION: u64 = 1 << 38;
+    const COLUMN: u64 = 1 << 10;
+    const BACKGROUND: u64 = 1 << 11;
+
+    fn new(
+        tag: PictureTag,
+        column: Option<usize>,
+        background: Option<[u8; 3]>,
+        native: bool,
+    ) -> Option<Self> {
+        let cols = u16::try_from(tag.cols).ok()?;
+        let rows = u16::try_from(tag.rows).ok()?;
+        let row = u16::try_from(tag.row).ok()?;
+        if cols == 0 || rows == 0 || row >= rows || column.is_some_and(|column| column >= tag.cols)
+        {
+            return None;
+        }
+        if tag.pixels == Pixels::Cells {
+            return None;
+        }
+        let fit = tag.fit.map_or(Some(0), |fit| {
+            FITS.iter()
+                .position(|candidate| *candidate == fit)
+                .map(|at| at + 1)
+        })?;
+        let anchor = ANCHORS.iter().position(|anchor| *anchor == tag.anchor)?;
+        let mut flags = Self::VERSION
+            | tag.pixels.code() as u64
+            | (fit as u64) << 3
+            | (anchor as u64) << 6
+            | ((if native { 2 } else { 1 }) << 12);
+        if column.is_some() {
+            flags |= Self::COLUMN;
+        }
+        if let Some([r, g, b]) = background {
+            flags |=
+                Self::BACKGROUND | ((u64::from(r) << 16 | u64::from(g) << 8 | u64::from(b)) << 14);
+        }
+        Some(Self {
+            identity: u64::from(tag.id) << 32 | u64::from(tag.version),
+            geometry: u64::from(cols) << 48
+                | u64::from(rows) << 32
+                | u64::from(row) << 16
+                | column.unwrap_or(0) as u64,
+            flags,
+        })
+    }
+
+    fn at(self, column: usize) -> Self {
+        Self {
+            geometry: (self.geometry & !0xffff) | column as u64,
+            ..self
+        }
+    }
+
+    fn metadata(self) -> Meta {
+        let mut meta = Meta::new();
+        meta.insert(
+            Self::KEY,
+            MetaValue::Tuple(
+                [self.identity, self.geometry, self.flags]
+                    .into_iter()
+                    .map(|word| MetaValue::Int(i64::from_ne_bytes(word.to_ne_bytes())))
+                    .collect(),
+            ),
+        );
+        meta
+    }
+
+    fn of(style: &Style) -> Option<Self> {
+        let MetaValue::Tuple(words) = style.meta_ref()?.get(Self::KEY)? else {
+            return None;
+        };
+        if words.len() != 3 {
+            return None;
+        }
+        let word = |at| match words.get(at)? {
+            MetaValue::Int(value) => Some(u64::from_ne_bytes(value.to_ne_bytes())),
+            _ => None,
+        };
+        let compact = Self {
+            identity: word(0)?,
+            geometry: word(1)?,
+            flags: word(2)?,
+        };
+        let flags = compact.flags;
+        // Exact version, reserved bits, supported protocol/enums and canonical absence.
+        if flags >> 38 != 1
+            || Pixels::from_code((flags & 7) as i64).is_none()
+            || (flags >> 3 & 7) > FITS.len() as u64
+            || (flags >> 6 & 15) >= ANCHORS.len() as u64
+            || !matches!(flags >> 12 & 3, 1 | 2)
+            || flags & Self::BACKGROUND == 0 && flags >> 14 & 0xffffff != 0
+        {
+            return None;
+        }
+        let tag = compact.tag();
+        let column = compact.geometry & 0xffff;
+        if tag.cols == 0
+            || tag.rows == 0
+            || tag.row >= tag.rows
+            || flags & Self::COLUMN != 0 && column >= tag.cols as u64
+            || flags & Self::COLUMN == 0 && column != 0
+        {
+            return None;
+        }
+        Some(compact)
+    }
+
+    fn tag(self) -> PictureTag {
+        PictureTag {
+            id: (self.identity >> 32) as u32,
+            version: self.identity as u32,
+            cols: (self.geometry >> 48) as usize,
+            rows: (self.geometry >> 32 & 0xffff) as usize,
+            row: (self.geometry >> 16 & 0xffff) as usize,
+            pixels: Pixels::from_code((self.flags & 7) as i64).expect("checked compact protocol"),
+            fit: (self.flags >> 3 & 7)
+                .checked_sub(1)
+                .and_then(|at| FITS.get(at as usize).copied()),
+            anchor: ANCHORS[(self.flags >> 6 & 15) as usize],
+        }
+    }
+
+    fn background(self) -> Option<[u8; 3]> {
+        (self.flags & Self::BACKGROUND != 0).then(|| {
+            let rgb = self.flags >> 14;
+            [(rgb >> 16) as u8, (rgb >> 8) as u8, rgb as u8]
+        })
+    }
+}
+
 impl PictureTag {
     /// The meta key: `[id, cols, rows, row, protocol, version, fit,
     /// anchor]`.
@@ -926,6 +1690,11 @@ impl PictureTag {
 
     /// The tag a cell's style carries, if any.
     pub fn of(style: &Style) -> Option<PictureTag> {
+        // A valid compact carrier is authoritative; malformed private metadata
+        // cannot mask a valid public legacy tag.
+        if let Some(compact) = CompactTag::of(style) {
+            return Some(compact.tag());
+        }
         let MetaValue::List(items) = style.meta_ref()?.get(Self::META_KEY)? else {
             return None;
         };
@@ -951,8 +1720,25 @@ impl PictureTag {
         })
     }
 
+    /// Bound-handle permission carried by these cells. `None` is the legacy
+    /// logical-ID path; the public tag literal is unchanged.
+    pub fn binding_of(style: &Style) -> Option<bool> {
+        if let Some(compact) = CompactTag::of(style) {
+            return Some(compact.flags >> 12 & 3 == 2);
+        }
+        match style.meta_ref()?.get("intuituive.image.bound")? {
+            MetaValue::Int(0) => Some(false),
+            MetaValue::Int(1) => Some(true),
+            _ => None,
+        }
+    }
+
     /// The style that carries this tag.
     pub fn style(&self) -> Style {
+        Style::from_meta(self.metadata())
+    }
+
+    fn metadata(&self) -> Meta {
         let mut meta = Meta::new();
         meta.insert(
             Self::META_KEY,
@@ -971,7 +1757,50 @@ impl PictureTag {
                 MetaValue::Int(ANCHORS.iter().position(|a| *a == self.anchor).unwrap_or(0) as i64),
             ]),
         );
+        meta
+    }
+
+    /// A tag with the exact source column attached. This additive metadata
+    /// survives clipping; old `style()` tags remain valid for whole-width runs.
+    pub fn style_at(&self, column: usize) -> Style {
+        let mut meta = self.metadata();
+        if column < self.cols
+            && let Ok(column) = i64::try_from(column)
+        {
+            meta.insert("intuituive.image.column", MetaValue::Int(column));
+        }
         Style::from_meta(meta)
+    }
+
+    /// Exact source column, when present and valid for the style's picture tag.
+    pub fn column_of(style: &Style) -> Option<usize> {
+        if let Some(compact) = CompactTag::of(style) {
+            return (compact.flags & CompactTag::COLUMN != 0)
+                .then_some((compact.geometry & 0xffff) as usize);
+        }
+        let tag = Self::of(style)?;
+        let MetaValue::Int(column) = style.meta_ref()?.get("intuituive.image.column")? else {
+            return None;
+        };
+        let column = usize::try_from(*column).ok()?;
+        (column < tag.cols).then_some(column)
+    }
+
+    /// The explicitly requested image background, if any. Absence means the
+    /// terminal default, as in [`ImageView::background`]. This provenance is
+    /// separate from the half-block fallback's sampled foreground/background.
+    pub fn background_of(style: &Style) -> Option<[u8; 3]> {
+        if let Some(compact) = CompactTag::of(style) {
+            return compact.background();
+        }
+        let MetaValue::List(rgb) = style.meta_ref()?.get("intuituive.image.background")? else {
+            return None;
+        };
+        let channel = |i| match rgb.get(i)? {
+            MetaValue::Int(v) => u8::try_from(*v).ok(),
+            _ => None,
+        };
+        Some([channel(0)?, channel(1)?, channel(2)?])
     }
 
     /// The frame it tags, while something holds it.
@@ -1070,19 +1899,23 @@ const WINDOW: Duration = Duration::from_secs(2);
 #[derive(Clone, Debug)]
 pub struct Pacer {
     pixels: Pixels,
+    formats: PixelFormats,
     cols: usize,
     rows: usize,
+    cell: CellPixels,
     /// Frames sent in the last [`WINDOW`]: when, and their bytes.
-    sent: VecDeque<(Instant, u64)>,
-    /// When it last stepped down: frames sent before are counted against
-    /// the window but not taken as what the next frame may cost.
-    stepped: Option<Instant>,
+    sent: VecDeque<(Instant, u64, Option<u64>)>,
+    /// Reservations are separate from bytes that have actually been sent.
+    pending: VecDeque<(u64, u64)>,
+    /// Current protocol/geometry generation for eligible measurements.
+    generation: u64,
     /// What a frame costs at this protocol, measured; else estimated.
     measured: Option<f64>,
     /// The time the last frame was due at, on the even spacing frames
     /// keep to, and that spacing: a frame that comes a little early or
     /// late (a thread's hop on its way) keeps to its slot.
     slot: Option<Instant>,
+    last_scheduled: Option<Instant>,
     spacing: Duration,
 }
 
@@ -1090,14 +1923,23 @@ pub struct Pacer {
 impl Pacer {
     /// A picture of `cols` x `rows` cells starting at `pixels`.
     pub fn new(pixels: Pixels, cols: usize, rows: usize) -> Pacer {
+        Self::with_formats(pixels, cols, rows, PixelFormats::all())
+    }
+
+    /// Pace only supported representations, skipping unavailable intermediate codecs.
+    pub fn with_formats(pixels: Pixels, cols: usize, rows: usize, formats: PixelFormats) -> Pacer {
         Pacer {
-            pixels,
+            pixels: formats.supported(pixels),
+            formats,
             cols: cols.max(1),
             rows: rows.max(1),
+            cell: CellPixels::DEFAULT,
             sent: VecDeque::new(),
-            stepped: None,
+            pending: VecDeque::new(),
+            generation: 0,
             measured: None,
             slot: None,
+            last_scheduled: None,
             spacing: Duration::ZERO,
         }
     }
@@ -1107,13 +1949,37 @@ impl Pacer {
         self.pixels
     }
 
-    /// A new size in cells: what a frame costs is estimated again.
+    /// A new size in cells: what a frame costs is estimated again. Cancel
+    /// reservations for frames that will no longer be shown.
     pub fn resize(&mut self, cols: usize, rows: usize) {
         if (cols.max(1), rows.max(1)) != (self.cols, self.rows) {
             self.cols = cols.max(1);
             self.rows = rows.max(1);
             self.measured = None;
+            self.generation = self.generation.wrapping_add(1);
         }
+    }
+
+    /// Use measured physical cell dimensions for estimates. A change clears
+    /// the previous per-frame measurement but retains the rolling byte window
+    /// and reservations. Cancel reservations for superseded frames explicitly.
+    ///
+    /// ```
+    /// use rich_art::graphics::CellPixels;
+    /// use rich_art::picture::{Pacer, Pixels};
+    /// let mut pacer = Pacer::new(Pixels::Kitty, 4, 3);
+    /// pacer.set_cell_pixels(CellPixels::new(12, 24));
+    /// assert_eq!(pacer.bytes_per_frame(), 4608.0);
+    /// ```
+    pub fn set_cell_pixels(&mut self, cell: CellPixels) -> bool {
+        let cell = CellPixels::new(cell.width, cell.height);
+        if self.cell == cell {
+            return false;
+        }
+        self.cell = cell;
+        self.measured = None;
+        self.generation = self.generation.wrapping_add(1);
+        true
     }
 
     /// What one frame of `cols` x `rows` cells is likely to cost through
@@ -1121,7 +1987,18 @@ impl Pacer {
     /// of its raw size, base64 for Kitty and iTerm2, about half a byte a
     /// pixel for Sixel, and 40 bytes a cell for half blocks in true colour.
     pub fn estimate(pixels: Pixels, cols: usize, rows: usize) -> u64 {
-        let (w, h) = CellPixels::DEFAULT.span(cols, rows);
+        Self::estimate_with_metrics(pixels, cols, rows, CellPixels::DEFAULT)
+    }
+
+    /// Estimate using measured physical cell dimensions. Estimates are
+    /// provisional: actual encoded bytes replace them after transmission.
+    pub fn estimate_with_metrics(
+        pixels: Pixels,
+        cols: usize,
+        rows: usize,
+        cell: CellPixels,
+    ) -> u64 {
+        let (w, h) = CellPixels::new(cell.width, cell.height).span(cols, rows);
         let area = u64::from(w) * u64::from(h);
         match pixels {
             Pixels::Kitty | Pixels::Iterm => area * 4 / 3,
@@ -1133,7 +2010,9 @@ impl Pacer {
     /// What a frame costs now: measured, else [`estimate`](Self::estimate)d.
     pub fn bytes_per_frame(&self) -> f64 {
         self.measured
-            .unwrap_or_else(|| Pacer::estimate(self.pixels, self.cols, self.rows) as f64)
+            .unwrap_or_else(|| {
+                Pacer::estimate_with_metrics(self.pixels, self.cols, self.rows, self.cell) as f64
+            })
             .max(1.0)
     }
 
@@ -1155,6 +2034,23 @@ impl Pacer {
     /// waiting a whole frame more. Two are never less than half a frame
     /// apart, and the rate stays at most the ceiling.
     pub fn due(&mut self, now: Instant, budget: &ByteBudget, share: f64) -> bool {
+        self.due_with_replacement(now, budget, share, false)
+    }
+
+    /// Check whether a frame may replace the oldest pending frame. The
+    /// check retains that reservation; cancel it only when committing the
+    /// replacement. With no pending frame this is identical to [`due`](Self::due).
+    pub fn due_replacing_pending(&mut self, now: Instant, budget: &ByteBudget, share: f64) -> bool {
+        self.due_with_replacement(now, budget, share, true)
+    }
+
+    fn due_with_replacement(
+        &mut self,
+        now: Instant,
+        budget: &ByteBudget,
+        share: f64,
+        replace: bool,
+    ) -> bool {
         self.forget(now);
         let per_second = budget.bytes_per_second as f64 * share.clamp(0.0, 1.0);
         if per_second <= 0.0 {
@@ -1166,13 +2062,19 @@ impl Pacer {
         let fps = (per_second / next).min(budget.max_fps);
         let spacing = Duration::from_secs_f64(1.0 / fps.max(f64::MIN_POSITIVE)).min(WINDOW);
         self.spacing = spacing;
-        if let Some((last, _)) = self.sent.back() {
-            let slot = self.slot.unwrap_or(*last) + spacing;
-            if now + spacing / 4 < slot || now.duration_since(*last) < spacing / 2 {
+        if let Some(last) = self.last_scheduled {
+            let slot = self.slot.unwrap_or(last) + spacing;
+            if now + spacing / 4 < slot || now.duration_since(last) < spacing / 2 {
                 return false;
             }
         }
-        let used: u64 = self.sent.iter().map(|(_, b)| b).sum();
+        let used = self.recent_bytes().saturating_add(
+            self.pending
+                .iter()
+                .skip(usize::from(replace))
+                .map(|(bytes, _)| *bytes)
+                .fold(0u64, u64::saturating_add),
+        );
         used as f64 + next <= per_second * WINDOW.as_secs_f64()
     }
 
@@ -1184,29 +2086,88 @@ impl Pacer {
         let largest = self
             .sent
             .iter()
-            .filter(|(at, _)| self.stepped.is_none_or(|stepped| *at >= stepped))
-            .map(|(_, b)| *b)
+            .filter(|(_, _, generation)| *generation == Some(self.generation))
+            .map(|(_, b, _)| *b)
             .max()
             .unwrap_or(0) as f64;
         largest.max(self.bytes_per_frame())
+    }
+
+    /// Reserve the estimated bytes for a scheduled frame until it is observed
+    /// or cancelled. Call [`observe_bytes`](Self::observe_bytes) with
+    /// `measure = true` when the painter reports the oldest current-generation
+    /// frame, or [`cancel_pending`](Self::cancel_pending) when it is superseded.
+    ///
+    /// ```
+    /// use std::time::Instant;
+    /// use rich_art::picture::{Pacer, Pixels};
+    /// let mut pacer = Pacer::new(Pixels::Sixel, 4, 3);
+    /// let now = Instant::now();
+    /// pacer.schedule(now);
+    /// // Cancel a superseded frame before recording an unrelated old one.
+    /// pacer.cancel_pending();
+    /// // A late frame from earlier metrics belongs in the byte window,
+    /// // but should not become the estimate for the current metrics.
+    /// pacer.observe_bytes(now, 1000, false);
+    /// assert_eq!(pacer.recent_bytes(), 1000);
+    /// ```
+    pub fn schedule(&mut self, now: Instant) {
+        self.forget(now);
+        self.mark_slot(now);
+        self.pending
+            .push_back((self.next_frame().ceil() as u64, self.generation));
+    }
+
+    /// Release the oldest unobserved reservation when its frame is superseded.
+    /// Returns whether a reservation was removed. A late write is still
+    /// recorded separately through [`observe_bytes`](Self::observe_bytes).
+    pub fn cancel_pending(&mut self) -> bool {
+        self.pending.pop_front().is_some()
+    }
+
+    /// Add actually transmitted bytes to the rolling window. Set `measure`
+    /// only for an observation of the oldest scheduled frame at the current
+    /// protocol and cell metrics; this reconciles its reservation. With
+    /// `measure = false`, reservations are untouched and bytes count only
+    /// toward the window, not the next-frame estimate.
+    pub fn observe_bytes(&mut self, now: Instant, bytes: u64, measure: bool) {
+        if measure {
+            if let Some(index) = self
+                .pending
+                .iter()
+                .position(|(_, generation)| *generation == self.generation)
+            {
+                self.pending.remove(index);
+            }
+            self.measured = Some(match self.measured {
+                Some(before) => before * 0.7 + bytes as f64 * 0.3,
+                None => bytes as f64,
+            });
+        }
+        self.sent
+            .push_back((now, bytes, measure.then_some(self.generation)));
+        self.forget(now);
+    }
+
+    fn mark_slot(&mut self, now: Instant) {
+        let next = self.slot.map(|slot| slot + self.spacing);
+        self.slot = Some(match next {
+            Some(slot) if now + self.spacing / 4 >= slot && now < slot + self.spacing => slot,
+            _ => now,
+        });
+        self.last_scheduled = Some(now);
     }
 
     /// A frame was sent at `now`, costing `bytes` (counted by the painter,
     /// [`picture_bytes`], or `None` to take the estimate).
     pub fn sent(&mut self, now: Instant, bytes: Option<u64>) {
         let bytes = bytes.unwrap_or_else(|| self.bytes_per_frame() as u64);
-        // The slot it was sent for: the next on the spacing when it is
-        // near, else (a pause, a first frame) a new run of slots from now.
-        let next = self.slot.map(|slot| slot + self.spacing);
-        self.slot = Some(match next {
-            Some(slot) if now + self.spacing / 4 >= slot && now < slot + self.spacing => slot,
-            _ => now,
-        });
+        self.mark_slot(now);
         self.measured = Some(match self.measured {
             Some(before) => before * 0.7 + bytes as f64 * 0.3,
             None => bytes as f64,
         });
-        self.sent.push_back((now, bytes));
+        self.sent.push_back((now, bytes, Some(self.generation)));
         self.forget(now);
     }
 
@@ -1214,7 +2175,7 @@ impl Pacer {
         while self
             .sent
             .front()
-            .is_some_and(|(at, _)| now.duration_since(*at) > WINDOW)
+            .is_some_and(|(at, _, _)| now.duration_since(*at) > WINDOW)
         {
             self.sent.pop_front();
         }
@@ -1226,24 +2187,33 @@ impl Pacer {
         if self.fps(budget, share) >= budget.min_fps {
             return false;
         }
-        match self.pixels.lower() {
+        match self
+            .pixels
+            .lower()
+            .map(|lower| self.formats.supported(lower))
+        {
             Some(lower) => {
                 self.pixels = lower;
                 self.measured = None;
-                self.stepped = self
-                    .sent
-                    .back()
-                    .map(|(at, _)| *at + Duration::from_nanos(1));
+                self.generation = self.generation.wrapping_add(1);
                 true
             }
             None => false,
         }
     }
 
-    /// The bytes sent in the last two seconds.
+    /// The bytes sent in the last two seconds, excluding pending reservations.
     pub fn recent_bytes(&self) -> u64 {
-        self.sent.iter().map(|(_, b)| b).sum()
+        self.sent
+            .iter()
+            .map(|(_, b, _)| *b)
+            .fold(0u64, u64::saturating_add)
     }
+}
+
+fn media_trace_enabled() -> bool {
+    static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *ON.get_or_init(|| std::env::var_os("RICH_MEDIA_TRACE").is_some())
 }
 
 #[cfg(test)]
@@ -1253,6 +2223,777 @@ mod tests {
 
     fn solid(r: u8) -> DynamicImage {
         DynamicImage::ImageRgb8(RgbImage::from_pixel(8, 8, Rgb([r, 0, 0])))
+    }
+
+    #[test]
+    fn detect_obeys_multiplexer_and_explicit_graphics_override() {
+        if let Ok(expected) = std::env::var("TEST_PICTURE_DETECT") {
+            assert_eq!(Pixels::detect().name(), expected);
+            return;
+        }
+        let binary = std::env::current_exe().unwrap();
+        for (forced, expected) in [
+            (None, "cells"),
+            (Some("kitty"), "kitty"),
+            (Some("none"), "cells"),
+        ] {
+            let mut command = std::process::Command::new(&binary);
+            command
+                .args([
+                    "--exact",
+                    "picture::tests::detect_obeys_multiplexer_and_explicit_graphics_override",
+                ])
+                .env("TEST_PICTURE_DETECT", expected)
+                .env("TERM_PROGRAM", "ghostty")
+                .env("TERM", "xterm-ghostty")
+                .env("TMUX", "/tmp/tmux")
+                .env_remove("KITTY_WINDOW_ID")
+                .env_remove("RICH_SIXEL");
+            match forced {
+                Some(value) => {
+                    command.env("RICH_GRAPHICS", value);
+                }
+                None => {
+                    command.env_remove("RICH_GRAPHICS");
+                }
+            }
+            assert!(command.status().unwrap().success(), "forced={forced:?}");
+        }
+    }
+
+    #[cfg(feature = "frames")]
+    #[test]
+    fn restricted_fallback_skips_unavailable_formats() {
+        let mut pacer = Pacer::with_formats(
+            Pixels::Kitty,
+            40,
+            10,
+            PixelFormats::cells().with(Pixels::Kitty),
+        );
+        let budget = ByteBudget::new(60_000);
+        while pacer.settle(&budget, 1.0) {}
+        assert_eq!(
+            pacer.pixels(),
+            Pixels::Cells,
+            "Kitty-only terminal cannot render an intermediate codec"
+        );
+    }
+
+    #[test]
+    fn prepared_encoding_permissions_never_alias() {
+        let picture = Picture::animated(vec![
+            AnimationFrame {
+                image: RgbaImage::from_pixel(2, 2, image::Rgba([255, 0, 0, 255])),
+                delay: Duration::from_millis(50),
+            },
+            AnimationFrame {
+                image: RgbaImage::from_pixel(2, 2, image::Rgba([0, 0, 255, 255])),
+                delay: Duration::from_millis(50),
+            },
+        ])
+        .unwrap();
+        let view = ImageView::new().pixels(Pixels::Kitty);
+        let native = PictureEncoding::new(CellPixels::new(10, 20));
+        let restricted = native.native_kitty_animation(false);
+        for context in [native, restricted, native, restricted] {
+            assert!(picture.prepare_with_context(view, 2, 2, context));
+            assert!(picture.is_prepared_with_context(view, 2, 2, context));
+            assert!(!picture.is_prepared_with_context(
+                view,
+                2,
+                2,
+                context.native_kitty_animation(!context.native_kitty_animation)
+            ));
+            let tag = PictureTag {
+                id: picture.id(),
+                version: picture.version(),
+                cols: 2,
+                rows: 2,
+                row: 0,
+                pixels: Pixels::Kitty,
+                fit: None,
+                anchor: view.anchor,
+            };
+            let out = picture
+                .encode_tag_rect_with_context(&tag, 0..2, 0..2, context)
+                .unwrap();
+            assert_eq!(out.contains("a=f"), context.native_kitty_animation);
+            assert_eq!(out.contains("a=a"), context.native_kitty_animation);
+        }
+        assert!(
+            picture.encode(Pixels::Kitty, 2, 2).unwrap().contains("a=f"),
+            "legacy default remains native"
+        );
+    }
+
+    #[cfg(feature = "frames")]
+    #[test]
+    fn restricted_downgrade_keeps_spending_and_pending_reservations() {
+        let mut p = Pacer::with_formats(
+            Pixels::Kitty,
+            40,
+            10,
+            PixelFormats::cells().with(Pixels::Kitty),
+        );
+        let now = Instant::now();
+        p.observe_bytes(now, 100_000, false);
+        p.schedule(now);
+        assert!(p.settle(&ByteBudget::new(60_000), 1.0));
+        assert_eq!(p.pixels(), Pixels::Cells);
+        assert_eq!(p.recent_bytes(), 100_000);
+        assert!(p.cancel_pending());
+        assert!(!p.cancel_pending());
+        let mut legacy = Pacer::new(Pixels::Kitty, 40, 10);
+        while legacy.settle(&ByteBudget::new(60_000), 1.0) {}
+        assert_eq!(legacy.pixels(), Pixels::Sixel);
+    }
+
+    #[test]
+    fn legacy_picture_id_wraps_to_a_representable_free_colour() {
+        if std::env::var_os("TEST_LEGACY_ID_WRAP_CHILD").is_some() {
+            IDS.lock().unwrap().next = 0x0100_0000;
+            let picture = Picture::new(solid(1));
+            assert!(
+                crate::kitty::id_color(picture.id(), true).is_some(),
+                "legacy picture ID {} cannot be represented",
+                picture.id()
+            );
+            return;
+        }
+        let status = std::process::Command::new(std::env::current_exe().unwrap())
+            .args([
+                "--exact",
+                "picture::tests::legacy_picture_id_wraps_to_a_representable_free_colour",
+            ])
+            .env("TEST_LEGACY_ID_WRAP_CHILD", "1")
+            .status()
+            .unwrap();
+        assert!(status.success());
+    }
+
+    #[test]
+    fn bounded_namespace_wraps_without_reusing_live_or_unrepresentable_ids() {
+        let mut ids = Namespace {
+            next: 254,
+            ..Namespace::default()
+        };
+        assert_eq!(ids.allocate(16, 255), Some(254));
+        assert_eq!(ids.allocate(16, 255), Some(255));
+        assert_eq!(ids.allocate(16, 255), Some(16));
+        for _ in 0..237 {
+            assert!((16..=255).contains(&ids.allocate(16, 255).unwrap()));
+        }
+        assert_eq!(ids.allocate(16, 255), None);
+        ids.live.remove(&17);
+        assert_eq!(ids.allocate(16, 255), Some(17));
+        assert_eq!(ids.live.len(), 240);
+    }
+
+    #[test]
+    fn bound_view_capacity_falls_back_before_placeholder_generation() {
+        let picture = Picture::new(solid(200)).bound(false);
+        let view = ImageView::new()
+            .pixels(Pixels::Kitty)
+            .fit(ImageFit::Stretch);
+        for cols in 1..=128 {
+            assert!(picture.kitty_resource(view, cols, 1, true).is_some());
+        }
+        assert!(picture.kitty_resource(view, 129, 1, true).is_none());
+        let console = rich::Console::builder()
+            .width(129)
+            .color_system(Some(rich::ColorSystem::Truecolor))
+            .build();
+        let lines = picture.lines(&console, view, 129, 1);
+        assert!(!lines.is_empty());
+        assert!(
+            lines
+                .iter()
+                .flatten()
+                .all(|s| !s.text.contains(crate::kitty::PLACEHOLDER))
+        );
+        assert!(
+            lines
+                .iter()
+                .flatten()
+                .all(|s| s.style.as_ref().and_then(PictureTag::of).is_none())
+        );
+        assert_eq!(picture.shown.bindings.lock().unwrap().len(), 128);
+    }
+
+    #[test]
+    fn bound_indexed_lines_are_representable_or_ordinary_cells() {
+        let picture = Picture::new(solid(200)).bound(false);
+        let view = ImageView::new()
+            .pixels(Pixels::Kitty)
+            .fit(ImageFit::Stretch);
+        let console = rich::Console::builder()
+            .width(2)
+            .color_system(Some(rich::ColorSystem::EightBit))
+            .build();
+        let lines = picture.lines(&console, view, 2, 1);
+        if let Some(resource) = picture.kitty_resource(view, 2, 1, false) {
+            assert!((16..=255).contains(&resource.id()));
+            assert_eq!(
+                lines[0][0].style.as_ref().unwrap().color(),
+                crate::kitty::id_color(resource.id(), false).as_ref()
+            );
+        } else {
+            assert!(
+                lines
+                    .iter()
+                    .flatten()
+                    .all(|s| !s.text.contains(crate::kitty::PLACEHOLDER))
+            );
+        }
+    }
+
+    #[test]
+    fn bound_prepare_and_prebuilt_lines_share_identity_across_metrics() {
+        let original = Picture::new(solid(200));
+        let picture = original.bound(false);
+        let view = ImageView::new()
+            .pixels(Pixels::Kitty)
+            .fit(ImageFit::Stretch);
+        let console = rich::Console::builder()
+            .width(2)
+            .color_system(Some(rich::ColorSystem::Truecolor))
+            .build();
+        let lines = picture.lines(&console, view, 2, 2);
+        let tag = PictureTag::of(lines[0][0].style.as_ref().unwrap()).unwrap();
+        let resource = picture.kitty_resource(view, 2, 2, true).unwrap();
+        for cell in [
+            CellPixels::DEFAULT,
+            CellPixels::new(12, 24),
+            CellPixels::DEFAULT,
+        ] {
+            assert!(picture.prepare_with_metrics(view, 2, 2, cell));
+            let before = picture_bytes(original.id());
+            assert!(picture.is_prepared_with_metrics(view, 2, 2, cell));
+            let out = picture.encode_tag_with_metrics(&tag, 0, 2, cell).unwrap();
+            assert!(out.contains(&format!("i={},", resource.id())));
+            assert_eq!(
+                lines[0][0].style.as_ref().unwrap().color(),
+                crate::kitty::id_color(resource.id(), true).as_ref()
+            );
+            assert_eq!(
+                picture_bytes(original.id()),
+                before,
+                "preparation is not a write"
+            );
+        }
+        let legacy = original.encode(Pixels::Kitty, 2, 2).unwrap();
+        assert!(legacy.contains(&format!("i={},", original.id())));
+        assert_ne!(resource.id(), original.id());
+        assert_eq!(picture.id(), original.id());
+    }
+
+    #[test]
+    fn branches_keep_distinct_weak_lookup_versions() {
+        let original = Picture::new(solid(10));
+        let a = original.next(solid(20));
+        let b = original.next(solid(30));
+        assert_ne!(a.version(), b.version());
+        assert_eq!(
+            Picture::find(a.id(), a.version()).unwrap().image(),
+            a.image()
+        );
+        assert_eq!(
+            Picture::find(b.id(), b.version()).unwrap().image(),
+            b.image()
+        );
+    }
+
+    #[test]
+    fn fallback_cells_follow_physical_aspect_ratio() {
+        let picture = Picture::new(solid(200));
+        let console = rich::Console::builder().width(4).build();
+        assert_eq!(
+            picture
+                .lines_with_metrics(&console, ImageView::new(), 4, 0, CellPixels::DEFAULT)
+                .len(),
+            2
+        );
+        assert_eq!(
+            picture
+                .lines_with_metrics(&console, ImageView::new(), 4, 0, CellPixels::new(12, 12))
+                .len(),
+            4
+        );
+    }
+
+    #[test]
+    fn prepared_metric_escape_is_reused_and_other_metrics_rebuild() {
+        let picture = Picture::from_rgba(4, 4, vec![255; 64]).unwrap();
+        let view = ImageView::new()
+            .fit(ImageFit::Stretch)
+            .pixels(Pixels::Kitty);
+        let cell = CellPixels::new(10, 20);
+        assert!(picture.prepare_with_metrics(view, 4, 2, cell));
+        let tag = PictureTag {
+            id: picture.id(),
+            version: picture.version(),
+            cols: 4,
+            rows: 2,
+            row: 0,
+            pixels: view.pixels,
+            fit: view.fit,
+            anchor: view.anchor,
+        };
+        // A sentinel in the prepared slot demonstrates that the painter's
+        // exact matching request returns that slot instead of encoding again.
+        picture.shown.encoded.lock().unwrap().as_mut().unwrap().1 = "prepared".into();
+        assert_eq!(
+            picture.encode_tag_with_metrics(&tag, 0, 2, cell).as_deref(),
+            Some("prepared")
+        );
+        let changed = picture
+            .encode_tag_with_metrics(&tag, 0, 2, CellPixels::new(12, 24))
+            .unwrap();
+        assert!(changed.contains("s=48,v=48"));
+        assert!(!picture.is_prepared_with_metrics(view, 4, 2, cell));
+    }
+
+    #[test]
+    fn cropped_rows_clamp_to_image_and_out_of_range_is_empty() {
+        let picture = Picture::from_rgba(4, 4, vec![255; 64]).unwrap();
+        for pixels in [Pixels::Iterm, Pixels::Sixel] {
+            assert!(picture.encode_rows(pixels, 4, 3, usize::MAX, 3).is_none());
+            let encoded = picture.encode_rows(pixels, 4, 3, 2, 3).unwrap();
+            if pixels == Pixels::Iterm {
+                assert!(encoded.contains("height=1"), "{encoded:?}");
+            } else {
+                assert!(encoded.contains("\"1;1;32;16"), "{encoded:?}");
+            }
+        }
+    }
+
+    #[test]
+    fn rectangular_crops_fit_full_source_before_cropping_at_all_metrics() {
+        let image = DynamicImage::ImageRgba8(RgbaImage::from_fn(77, 31, |x, y| {
+            image::Rgba([
+                (x * 3) as u8,
+                (y * 7) as u8,
+                (x + y) as u8,
+                if x < 5 { 0 } else { 255 },
+            ])
+        }));
+        let picture = Picture::new(image.clone());
+        let mut tag = PictureTag {
+            id: picture.id(),
+            version: picture.version(),
+            cols: 8,
+            rows: 4,
+            row: 0,
+            pixels: Pixels::Iterm,
+            fit: Some(ImageFit::Stretch),
+            anchor: ImageAnchor::Center,
+        };
+        for cell in [
+            CellPixels::new(8, 16),
+            CellPixels::new(10, 20),
+            CellPixels::new(12, 24),
+        ] {
+            for fit in [
+                ImageFit::Stretch,
+                ImageFit::Cover,
+                ImageFit::Contain,
+                ImageFit::Native,
+            ] {
+                for anchor in [
+                    ImageAnchor::Left,
+                    ImageAnchor::Right,
+                    ImageAnchor::Top,
+                    ImageAnchor::Bottom,
+                ] {
+                    tag.fit = Some(fit);
+                    tag.anchor = anchor;
+                    let whole = crate::graphics::fill_pixels(
+                        &image,
+                        8 * cell.width,
+                        4 * cell.height,
+                        fit,
+                        anchor,
+                    );
+                    for (columns, rows) in [(4..8, 1..2), (0..4, 0..3), (2..7, 2..4)] {
+                        let expected = image::imageops::crop_imm(
+                            &whole,
+                            columns.start as u32 * cell.width,
+                            rows.start as u32 * cell.height,
+                            (columns.end - columns.start) as u32 * cell.width,
+                            (rows.end - rows.start) as u32 * cell.height,
+                        )
+                        .to_image();
+                        let encoded = picture
+                            .encode_tag_rect_with_metrics(&tag, columns, rows, cell)
+                            .unwrap();
+                        assert!(
+                            encoded.contains(&crate::graphics::base64(
+                                &encode_png(&expected).unwrap()
+                            ))
+                        );
+                    }
+                }
+            }
+        }
+        for (columns, rows) in [
+            (usize::MAX..usize::MAX, 0..1),
+            (0..0, 0..1),
+            (std::ops::Range { start: 4, end: 2 }, 0..1),
+            (0..1, 4..5),
+        ] {
+            assert!(
+                picture
+                    .encode_tag_rect_with_metrics(&tag, columns, rows, CellPixels::DEFAULT)
+                    .is_none()
+            );
+        }
+        assert_eq!(
+            picture.encode_tag_rect_with_metrics(
+                &tag,
+                4..usize::MAX,
+                2..usize::MAX,
+                CellPixels::DEFAULT
+            ),
+            picture.encode_tag_rect_with_metrics(&tag, 4..8, 2..4, CellPixels::DEFAULT)
+        );
+        for cols in [0, 4097, usize::MAX] {
+            tag.cols = cols;
+            assert!(
+                picture
+                    .encode_tag_rect_with_metrics(&tag, 0..1, 0..1, CellPixels::DEFAULT)
+                    .is_none()
+            );
+        }
+    }
+
+    #[test]
+    fn compact_provenance_round_trips_checked_boundaries_and_rejects_malformed_words() {
+        let tag = PictureTag {
+            id: u32::MAX,
+            version: u32::MAX,
+            cols: u16::MAX as usize,
+            rows: u16::MAX as usize,
+            row: u16::MAX as usize - 1,
+            pixels: Pixels::Iterm,
+            fit: Some(ImageFit::Native),
+            anchor: ImageAnchor::BottomRight,
+        };
+        for pixels in [Pixels::Iterm, Pixels::Sixel, Pixels::Kitty] {
+            for fit in [
+                None,
+                Some(ImageFit::Contain),
+                Some(ImageFit::Cover),
+                Some(ImageFit::Stretch),
+                Some(ImageFit::Native),
+            ] {
+                for anchor in ANCHORS {
+                    for background in [None, Some([0, 255, 128])] {
+                        for native in [false, true] {
+                            for column in [None, Some(0), Some(tag.cols - 1)] {
+                                let tag = PictureTag {
+                                    pixels,
+                                    fit,
+                                    anchor,
+                                    ..tag
+                                };
+                                let compact =
+                                    CompactTag::new(tag, column, background, native).unwrap();
+                                let style = Style::from_meta(compact.metadata());
+                                assert_eq!(PictureTag::of(&style), Some(tag));
+                                assert_eq!(PictureTag::column_of(&style), column);
+                                assert_eq!(PictureTag::binding_of(&style), Some(native));
+                                assert_eq!(PictureTag::background_of(&style), background);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        for invalid in [
+            PictureTag { cols: 0, ..tag },
+            PictureTag { rows: 0, ..tag },
+            PictureTag {
+                row: tag.rows,
+                ..tag
+            },
+            PictureTag {
+                cols: tag.cols + 1,
+                ..tag
+            },
+            PictureTag {
+                rows: tag.rows + 1,
+                ..tag
+            },
+            PictureTag {
+                pixels: Pixels::Cells,
+                ..tag
+            },
+        ] {
+            assert!(CompactTag::new(invalid, Some(0), None, false).is_none());
+        }
+        assert!(CompactTag::new(tag, Some(tag.cols), None, false).is_none());
+        let valid = CompactTag::new(tag, Some(0), None, false).unwrap();
+        for flags in [
+            valid.flags | 1 << 63,
+            valid.flags & !(255 << 38),
+            (valid.flags & !(255 << 38)) | 2 << 38,
+            valid.flags & !7,
+            (valid.flags & !7) | 4,
+            (valid.flags & !(7 << 3)) | 5 << 3,
+            (valid.flags & !(15 << 6)) | 9 << 6,
+            valid.flags & !(3 << 12),
+            valid.flags | 3 << 12,
+            valid.flags | 1 << 14,
+        ] {
+            assert!(
+                PictureTag::of(&Style::from_meta(CompactTag { flags, ..valid }.metadata()))
+                    .is_none(),
+                "flags={flags:x}"
+            );
+        }
+        for geometry in [
+            0,
+            valid.geometry & 0xffff_ffff,
+            valid.geometry & 0xffff_0000_ffff_ffff,
+            (valid.geometry & !0xffff_0000) | (tag.rows as u64) << 16,
+            valid.geometry | tag.cols as u64,
+        ] {
+            assert!(
+                PictureTag::of(&Style::from_meta(
+                    CompactTag { geometry, ..valid }.metadata()
+                ))
+                .is_none(),
+                "geometry={geometry:x}"
+            );
+        }
+        let absent_column = CompactTag {
+            flags: valid.flags & !CompactTag::COLUMN,
+            ..valid.at(1)
+        };
+        assert!(PictureTag::of(&Style::from_meta(absent_column.metadata())).is_none());
+        for words in [
+            vec![],
+            vec![MetaValue::Int(1); 2],
+            vec![MetaValue::Bool(true); 3],
+            vec![MetaValue::Int(1); 4],
+        ] {
+            let style = Style::from_meta(
+                [(CompactTag::KEY, MetaValue::Tuple(words))]
+                    .into_iter()
+                    .collect(),
+            );
+            assert!(PictureTag::of(&style).is_none());
+        }
+    }
+
+    #[test]
+    fn compact_provenance_preserves_style_metadata_precedence_and_checked_legacy_fallback() {
+        let tag = PictureTag {
+            id: 23,
+            version: 7,
+            cols: 2,
+            rows: 1,
+            row: 0,
+            pixels: Pixels::Iterm,
+            fit: Some(ImageFit::Cover),
+            anchor: ImageAnchor::Left,
+        };
+        let original = Style::parse("bold italic red on blue link https://example.test")
+            .unwrap()
+            .combine(&tag.style_at(1))
+            .with_meta({
+                let mut meta = tag.style_at(1).meta();
+                meta.insert(
+                    "user",
+                    MetaValue::Tuple(vec![MetaValue::Bool(true), MetaValue::Int(-3)]),
+                );
+                meta
+            });
+        let cells = tag_cells(
+            vec![Segment::new("▀▄", Some(original.clone()))],
+            tag,
+            Some([12, 34, 56]),
+            Some(true),
+        );
+        for (column, cell) in cells.iter().enumerate() {
+            let style = cell.style.as_ref().unwrap();
+            assert_eq!(style.clone().with_meta(original.meta()), original);
+            assert_eq!(
+                style.meta_ref().unwrap().get("user"),
+                original.meta_ref().unwrap().get("user")
+            );
+            assert_eq!(PictureTag::of(style), Some(tag));
+            assert_eq!(PictureTag::column_of(style), Some(column));
+            assert_eq!(PictureTag::background_of(style), Some([12, 34, 56]));
+            assert_eq!(PictureTag::binding_of(style), Some(true));
+        }
+        let mut legacy = tag.style_at(1).meta();
+        legacy.insert(
+            CompactTag::KEY,
+            MetaValue::Tuple(vec![MetaValue::Int(0); 3]),
+        );
+        assert_eq!(PictureTag::of(&Style::from_meta(legacy)), Some(tag));
+        let outside = PictureTag {
+            cols: u16::MAX as usize + 1,
+            ..tag
+        };
+        let fallback = tag_cells(vec![Segment::new("X", None)], outside, None, Some(false));
+        let style = fallback[0].style.as_ref().unwrap();
+        assert!(style.meta_ref().unwrap().get(CompactTag::KEY).is_none());
+        assert_eq!(PictureTag::of(style), Some(outside));
+        assert_eq!(PictureTag::column_of(style), Some(0));
+        assert_eq!(PictureTag::binding_of(style), Some(false));
+        assert!(matches!(
+            tag.style().meta_ref().unwrap().get(PictureTag::META_KEY),
+            Some(MetaValue::List(_))
+        ));
+    }
+
+    #[test]
+    fn bound_native_lines_use_compact_exact_provenance_and_legacy_lines_stay_public() {
+        let picture = Picture::new(solid(200));
+        let console = rich::Console::builder()
+            .force_terminal(true)
+            .color_system(Some(rich::color::ColorSystem::Truecolor))
+            .build();
+        let view = ImageView {
+            pixels: Pixels::Iterm,
+            background: Some([1, 2, 3]),
+            ..ImageView::default()
+        };
+        let bound = picture.bound(false);
+        let lines = bound.lines(&console, view, 4, 3);
+        for (row, line) in lines.iter().enumerate() {
+            for (column, segment) in line.iter().enumerate() {
+                let style = segment.style.as_ref().unwrap();
+                let tag = PictureTag::of(style).unwrap();
+                assert_eq!(
+                    (tag.id, tag.version, tag.row, tag.cols, tag.rows),
+                    (picture.id(), picture.version(), row, 4, 3)
+                );
+                assert_eq!(PictureTag::column_of(style), Some(column));
+                assert_eq!(PictureTag::background_of(style), Some([1, 2, 3]));
+                assert_eq!(PictureTag::binding_of(style), Some(false));
+                let meta = style.meta_ref().unwrap();
+                assert_eq!(
+                    meta.len(),
+                    1,
+                    "bound metadata still has nested per-property maps"
+                );
+                assert!(meta.iter().any(|(_, value)| matches!(value, MetaValue::Tuple(words) if words.len() == 3 && words.iter().all(|word| matches!(word, MetaValue::Int(_))))));
+            }
+        }
+        let unbound = picture.lines(&console, view, 4, 3);
+        assert!(matches!(
+            unbound[0][0]
+                .style
+                .as_ref()
+                .unwrap()
+                .meta_ref()
+                .unwrap()
+                .get(PictureTag::META_KEY),
+            Some(MetaValue::List(_))
+        ));
+        assert_eq!(
+            PictureTag::binding_of(unbound[0][0].style.as_ref().unwrap()),
+            None
+        );
+    }
+
+    #[test]
+    fn source_column_metadata_is_additive_and_validated() {
+        let tag = PictureTag {
+            id: 1,
+            version: 0,
+            cols: 8,
+            rows: 4,
+            row: 1,
+            pixels: Pixels::Iterm,
+            fit: None,
+            anchor: ImageAnchor::Center,
+        };
+        assert_eq!(PictureTag::column_of(&tag.style()), None);
+        assert_eq!(PictureTag::of(&tag.style_at(5)), Some(tag));
+        assert_eq!(PictureTag::column_of(&tag.style_at(5)), Some(5));
+        assert_eq!(PictureTag::column_of(&tag.style_at(8)), None);
+        assert_eq!(PictureTag::column_of(&tag.style_at(usize::MAX)), None);
+    }
+
+    #[test]
+    fn tagging_merged_cells_keeps_existing_style_metadata_and_order() {
+        let tag = PictureTag {
+            id: 1,
+            version: 2,
+            cols: 2,
+            rows: 1,
+            row: 0,
+            pixels: Pixels::Iterm,
+            fit: Some(ImageFit::Cover),
+            anchor: ImageAnchor::Right,
+        };
+        let mut meta = Meta::new();
+        meta.insert("before", MetaValue::Tuple(vec![MetaValue::Bool(true)]));
+        meta.insert("intuituive.image.column", MetaValue::Int(99));
+        meta.insert("intuituive.image", MetaValue::None);
+        let original = Style::parse("bold red on blue").unwrap().with_meta(meta);
+        for background in [None, Some([12, 34, 56])] {
+            let tagged = tag_cells(
+                vec![Segment::new("▀▄", Some(original.clone()))],
+                tag,
+                background,
+                None,
+            );
+            assert_eq!(tagged.len(), 2);
+            for (column, segment) in tagged.iter().enumerate() {
+                let mut background_meta = Meta::new();
+                if let Some(rgb) = background {
+                    background_meta.insert(
+                        "intuituive.image.background",
+                        MetaValue::List(rgb.map(|v| MetaValue::Int(v.into())).to_vec()),
+                    );
+                }
+                let expected = original.combine(
+                    &tag.style_at(column)
+                        .combine(&Style::from_meta(background_meta)),
+                );
+                assert_eq!(segment.style.as_ref(), Some(&expected));
+                assert_eq!(segment.text, if column == 0 { "▀" } else { "▄" });
+            }
+        }
+    }
+
+    #[test]
+    fn measured_cell_size_controls_full_and_cropped_rasters() {
+        let picture = Picture::from_rgba(4, 4, vec![255; 4 * 4 * 4]).unwrap();
+        let mut tag = PictureTag {
+            id: picture.id(),
+            version: picture.version(),
+            cols: 4,
+            rows: 3,
+            row: 0,
+            pixels: Pixels::Kitty,
+            fit: Some(ImageFit::Stretch),
+            anchor: ImageAnchor::Center,
+        };
+        for (width, height) in [(8, 16), (10, 20), (12, 24)] {
+            let cell = CellPixels::new(width, height);
+            let full = picture.encode_tag_with_metrics(&tag, 0, 3, cell).unwrap();
+            assert!(
+                full.contains(&format!("s={},v={}", width * 4, height * 3)),
+                "{full:?}"
+            );
+            tag.pixels = Pixels::Iterm;
+            let cropped = picture.encode_tag_with_metrics(&tag, 1, 1, cell).unwrap();
+            let expected = RgbaImage::from_pixel(width * 4, height, image::Rgba([255; 4]));
+            let png = encode_png(&expected).unwrap();
+            assert!(cropped.contains(&crate::graphics::base64(&png)));
+            tag.pixels = Pixels::Sixel;
+            let sixel = picture.encode_tag_with_metrics(&tag, 0, 3, cell).unwrap();
+            assert!(sixel.contains(&format!("\"1;1;{};{}", width * 4, height * 3)));
+            let sixel = picture.encode_tag_with_metrics(&tag, 1, 1, cell).unwrap();
+            assert!(sixel.contains(&format!("\"1;1;{};{}", width * 4, height)));
+            tag.pixels = Pixels::Kitty;
+        }
     }
 
     #[test]
@@ -1337,7 +3078,9 @@ mod tests {
                 4,
                 2,
                 Some(ImageFit::Cover),
-                ImageAnchor::Center
+                ImageAnchor::Center,
+                PictureEncoding::new(CellPixels::DEFAULT),
+                picture.id()
             )
         );
         // The painter's call for the whole picture in those cells is it.
@@ -1418,9 +3161,16 @@ mod tests {
             (tag.fit, tag.anchor),
             (Some(ImageFit::Cover), ImageAnchor::Top)
         );
-        let covered = wide.fitted(wide.image(), 4, 4, tag.fit, tag.anchor);
+        let covered = wide.fitted(wide.image(), 4, 4, tag.fit, tag.anchor, CellPixels::DEFAULT);
         assert!(covered.pixels().all(|p| p.0[3] == 255));
-        let contained = wide.fitted(wide.image(), 4, 4, None, ImageAnchor::Center);
+        let contained = wide.fitted(
+            wide.image(),
+            4,
+            4,
+            None,
+            ImageAnchor::Center,
+            CellPixels::DEFAULT,
+        );
         assert!(contained.pixels().any(|p| p.0[3] == 0));
         assert_ne!(
             wide.encode_tag(&tag, 0, 4),
@@ -1437,6 +3187,138 @@ mod tests {
         count_picture_bytes(picture.id(), 10);
         count_picture_bytes(picture.id(), 5);
         assert_eq!(picture_bytes(picture.id()), 15);
+    }
+
+    #[cfg(feature = "frames")]
+    #[test]
+    fn replacement_budget_check_keeps_old_reservation_until_committed() {
+        let mut p = Pacer::new(Pixels::Sixel, 1, 1);
+        let budget = ByteBudget::new(1000);
+        let start = Instant::now();
+        p.observe_bytes(start, 1900, false);
+        assert!(p.due(start, &budget, 1.0));
+        p.schedule(start);
+        let next = start + Duration::from_millis(100);
+        assert!(p.due_replacing_pending(next, &budget, 1.0));
+        assert!(
+            !p.due(next, &budget, 1.0),
+            "the check itself must not release the old reservation"
+        );
+        assert!(!p.due_replacing_pending(next, &ByteBudget::new(980), 1.0));
+        assert!(p.cancel_pending());
+        p.schedule(next);
+        p.observe_bytes(next, 64, true);
+        assert_eq!(p.recent_bytes(), 1964);
+        assert!(!p.cancel_pending());
+    }
+
+    #[cfg(feature = "frames")]
+    #[test]
+    fn cancelled_unseen_frame_releases_reservation_for_replacement() {
+        let mut p = Pacer::new(Pixels::Sixel, 1, 1);
+        let budget = ByteBudget::new(1000);
+        let start = Instant::now();
+        p.observe_bytes(start, 1900, false);
+        assert!(p.due(start, &budget, 1.0));
+        p.schedule(start);
+        p.cancel_pending();
+        assert!(p.due(start + Duration::from_millis(100), &budget, 1.0));
+        p.schedule(start + Duration::from_millis(100));
+        p.observe_bytes(start + Duration::from_millis(110), 64, true);
+        assert_eq!(p.recent_bytes(), 1964);
+        assert!(!p.due(start + Duration::from_millis(225), &budget, 1.0));
+    }
+
+    #[cfg(feature = "frames")]
+    #[test]
+    fn pending_frame_reserves_budget_until_observed_or_cancelled() {
+        let mut p = Pacer::new(Pixels::Sixel, 1, 1);
+        let budget = ByteBudget::new(1000);
+        let start = Instant::now();
+        p.observe_bytes(start, 1900, false);
+        assert!(p.due(start, &budget, 1.0));
+        p.schedule(start);
+        assert!(!p.due(start + Duration::from_millis(100), &budget, 1.0));
+        p.observe_bytes(start + Duration::from_millis(101), 64, true);
+        assert_eq!(p.recent_bytes(), 1964);
+        assert!(!p.due(start + Duration::from_millis(200), &budget, 1.0));
+    }
+
+    #[cfg(feature = "frames")]
+    #[test]
+    fn late_old_observation_does_not_reconcile_current_reservation() {
+        let mut p = Pacer::new(Pixels::Sixel, 1, 1);
+        let start = Instant::now();
+        p.schedule(start);
+        p.set_cell_pixels(CellPixels::new(12, 24));
+        assert!(p.cancel_pending());
+        p.schedule(start + Duration::from_millis(125));
+        p.observe_bytes(start + Duration::from_millis(126), 100, false);
+        assert!(
+            p.cancel_pending(),
+            "stale bytes must not consume the new reservation"
+        );
+        assert!(!p.cancel_pending());
+        assert_eq!(p.recent_bytes(), 100);
+    }
+
+    #[cfg(feature = "frames")]
+    #[test]
+    fn new_generation_at_the_same_instant_keeps_its_outlier() {
+        let mut p = Pacer::new(Pixels::Sixel, 1, 1);
+        let start = Instant::now();
+        p.observe_bytes(start, 100, true);
+        p.set_cell_pixels(CellPixels::new(12, 24));
+        p.observe_bytes(start, 10_000, true);
+        p.observe_bytes(start, 1_000, true);
+        assert!(!p.due(start, &ByteBudget::new(10_000), 1.0));
+    }
+
+    #[cfg(feature = "frames")]
+    #[test]
+    fn stale_bytes_do_not_remove_current_geometry_outliers() {
+        let mut p = Pacer::new(Pixels::Sixel, 1, 1);
+        p.set_cell_pixels(CellPixels::new(12, 24));
+        let start = Instant::now();
+        let budget = ByteBudget::new(10_000);
+        p.observe_bytes(start, 10_000, true);
+        p.observe_bytes(start, 1_000, true);
+        assert_eq!(p.bytes_per_frame(), 7_300.0);
+        assert!(!p.due(start, &budget, 1.0));
+        p.observe_bytes(start, 1, false);
+        assert!(!p.due(start, &budget, 1.0));
+        assert_eq!(p.recent_bytes(), 11_001);
+    }
+
+    #[cfg(feature = "frames")]
+    #[test]
+    fn scheduled_frames_account_observed_bytes_without_moving_the_clock() {
+        let mut pacer = Pacer::new(Pixels::Sixel, 4, 3);
+        let budget = ByteBudget::new(10_000_000);
+        let start = Instant::now();
+        assert!(pacer.due(start, &budget, 1.0));
+        pacer.schedule(start);
+        let estimate = pacer.bytes_per_frame();
+        pacer.observe_bytes(start + Duration::from_millis(120), 43_210, false);
+        assert_eq!(pacer.recent_bytes(), 43_210);
+        assert_eq!(pacer.bytes_per_frame(), estimate);
+        assert!(pacer.due(start + Duration::from_millis(125), &budget, 1.0));
+        pacer.observe_bytes(start + Duration::from_millis(126), 7_000, true);
+        assert_eq!(pacer.recent_bytes(), 50_210);
+        assert_eq!(pacer.bytes_per_frame(), 7_000.0);
+    }
+
+    #[cfg(feature = "frames")]
+    #[test]
+    fn pacer_estimates_the_measured_raster_area_before_first_frame() {
+        let mut pacer = Pacer::new(Pixels::Kitty, 4, 3);
+        let default = pacer.bytes_per_frame();
+        pacer.set_cell_pixels(CellPixels::new(12, 24));
+        assert_eq!(pacer.bytes_per_frame(), default * 2.25);
+        pacer.sent(Instant::now(), Some(456));
+        assert_eq!(pacer.bytes_per_frame(), 456.0);
+        pacer.set_cell_pixels(CellPixels::new(10, 20));
+        assert_ne!(pacer.bytes_per_frame(), 456.0);
     }
 
     #[cfg(feature = "frames")]

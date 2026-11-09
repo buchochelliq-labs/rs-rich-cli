@@ -262,3 +262,37 @@ fn a_stale_value_stays_a_while_and_then_goes() {
     open[1].send(()).unwrap();
     wait_for(&mut driver, "user 2");
 }
+
+#[test]
+fn continuously_replenished_proxy_yields_without_losing_semantic_jobs() {
+    fn next(proxy: intuituive::Proxy, count: Arc<AtomicU32>) {
+        let again = proxy.clone();
+        proxy.run(move || {
+            let n = count.fetch_add(1, Ordering::SeqCst) + 1;
+            if n < 257 {
+                next(again, count);
+            }
+        });
+    }
+    let app = App::new(|| label("ready"));
+    let proxy = app.proxy();
+    let mut driver = app.driver(20, 1);
+    driver.settle();
+    let count = Arc::new(AtomicU32::new(0));
+    let semantic = Arc::new(AtomicU32::new(0));
+    next(proxy.clone(), count.clone());
+    proxy.run({
+        let semantic = semantic.clone();
+        move || {
+            semantic.store(1, Ordering::SeqCst);
+        }
+    });
+    driver.update(Duration::ZERO);
+    let first = count.load(Ordering::SeqCst);
+    assert_eq!(first, 1, "newly arriving work belongs to the next turn");
+    assert_eq!(semantic.load(Ordering::SeqCst), 1);
+    for _ in 0..300 {
+        driver.update(Duration::ZERO);
+    }
+    assert_eq!(count.load(Ordering::SeqCst), 257);
+}

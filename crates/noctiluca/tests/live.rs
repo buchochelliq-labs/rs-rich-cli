@@ -468,6 +468,96 @@ fn visually_hidden_hints_are_not_read() {
 }
 
 #[test]
+fn a_playing_video_partly_outside_the_applied_viewport_keeps_delivering_changed_pixels() {
+    use noctiluca::engine::{Engine, TabId};
+    use noctiluca::model::MediaKind;
+    use std::collections::HashSet;
+    use std::hash::{Hash, Hasher};
+    let Some(binary) = chrome() else { return };
+    // A 40x24 adapted projection uses an 80x19 source viewport. The fixture's
+    // video is taller than that viewport, while remaining visible in the TUI.
+    let mut backend = ChromeBackend::start(ChromeOptions {
+        binary: Some(binary),
+        columns: 80,
+        rows: 19,
+        ..ChromeOptions::default()
+    })
+    .unwrap();
+    let metrics = backend.metrics(TabId(0)).unwrap();
+    let devtools = backend.devtools().clone();
+    let cast = devtools.listen(&["Page.screencastFrame"]);
+    let (send, updates) = mpsc::channel();
+    let tab = Tab::spawn(Box::new(backend), move |update| {
+        let _ = send.send(update);
+    });
+    let url = std::env::var("NOCTILUCA_FIXTURE_HTTP")
+        .map(|base| format!("{base}/stream-with-log.html"))
+        .unwrap_or_else(|_| fixture("stream-with-log.html"));
+    tab.send(Command::Open(url));
+    let hash = |bytes: &[u8]| {
+        let mut hash = std::collections::hash_map::DefaultHasher::new();
+        bytes.hash(&mut hash);
+        hash.finish()
+    };
+    let mut node = None;
+    let mut source = None;
+    let mut frames = HashSet::new();
+    let mut casts = HashSet::new();
+    let mut cast_count = 0;
+    let mut cast_meta = None;
+    let mut clocks = HashSet::new();
+    let deadline = Instant::now() + Duration::from_secs(6);
+    while Instant::now() < deadline {
+        match updates.recv_timeout(Duration::from_millis(10)) {
+            Ok(Update::Page(page)) => {
+                if let Some(video) = page.media.iter().find(|m| m.kind == MediaKind::Video) {
+                    source = Some(video.rect);
+                    if let Some(playback) = video.playback {
+                        clocks.insert((playback.time * 100.0) as u64);
+                    }
+                    if node != Some(video.node) {
+                        node = Some(video.node);
+                        tab.send(Command::Regions {
+                            on_screen: vec![video.node],
+                            intervals: Vec::new(),
+                            scale: 1.0,
+                        });
+                    }
+                }
+            }
+            Ok(Update::Frame(frame)) if Some(frame.node) == node => {
+                frames.insert(hash(&frame.pixels.rgb));
+            }
+            _ => {}
+        }
+        while let Ok(event) = cast.try_recv() {
+            cast_count += 1;
+            cast_meta.get_or_insert(event.params["metadata"].clone());
+            if let Some(data) = event.params["data"].as_str() {
+                casts.insert(hash(data.as_bytes()));
+            }
+        }
+    }
+    let source = source.expect("fixture video model");
+    eprintln!(
+        "partial-video: viewport={metrics:?} source={source:?} raw_casts={cast_count} distinct_casts={} delivered_pixel_hashes={} clock_samples={} metadata={cast_meta:?}",
+        casts.len(),
+        frames.len(),
+        clocks.len()
+    );
+    assert!(source.y < metrics.viewport_height && source.bottom() > metrics.viewport_height);
+    assert!(
+        cast_count > 3 && casts.len() > 1,
+        "Chrome did not supply changing frames"
+    );
+    assert!(clocks.len() > 1, "source playback did not advance");
+    assert!(
+        frames.len() > 1,
+        "partly visible video never delivered changed pixels"
+    );
+}
+
+#[test]
 fn an_empty_slot_takes_one_row() {
     let Some(binary) = chrome() else { return };
     let mut live = Live::start(binary);
@@ -561,4 +651,81 @@ fn a_sticky_header_is_pinned_and_a_fixed_banner_docked() {
     let lines = plain(&projection.lines);
     assert!(!lines.contains("An error occurred"), "{lines}");
     assert_eq!(projection.overlays.len(), 3, "{lines}");
+}
+
+#[test]
+fn model_captures_require_current_document_and_applied_viewport_but_standalone_capture_remains_valid()
+ {
+    use noctiluca::engine::{Engine, Format, Rect, TabId};
+    let Some(binary) = chrome() else { return };
+    let mut backend = ChromeBackend::start(ChromeOptions {
+        binary: Some(binary),
+        columns: 80,
+        rows: 24,
+        ..ChromeOptions::default()
+    })
+    .unwrap();
+    let region = Rect::new(0.0, 0.0, 32.0, 32.0);
+    let wait_loaded = |backend: &mut ChromeBackend, url: &str| {
+        let deadline = Instant::now() + Duration::from_secs(10);
+        loop {
+            let state = backend.state(TabId(0));
+            if state.url == url && !state.loading {
+                break;
+            }
+            assert!(
+                Instant::now() < deadline,
+                "navigation did not finish: {state:?}"
+            );
+            std::thread::sleep(Duration::from_millis(5));
+        }
+    };
+    let read_model = |backend: &mut ChromeBackend| {
+        let deadline = Instant::now() + Duration::from_secs(10);
+        while backend.snapshot(TabId(0)).is_err() {
+            assert!(
+                Instant::now() < deadline,
+                "scope-aware snapshot did not become ready"
+            );
+            std::thread::sleep(Duration::from_millis(5));
+        }
+    };
+    let first = fixture("second.html");
+    backend.open(TabId(0), &first).unwrap();
+    wait_loaded(&mut backend, &first);
+    assert!(
+        backend
+            .capture_model(TabId(0), region, Format::Png)
+            .is_err(),
+        "no model has been published"
+    );
+    let standalone = backend.capture(TabId(0), region, Format::Png).unwrap();
+    assert!(image::load_from_memory(&standalone.bytes).is_ok());
+    read_model(&mut backend);
+    assert!(backend.capture_model(TabId(0), region, Format::Png).is_ok());
+    backend.resize(40, 24).unwrap();
+    assert!(
+        backend
+            .capture_model(TabId(0), region, Format::Png)
+            .is_err(),
+        "old model survived viewport revision"
+    );
+    read_model(&mut backend);
+    assert!(
+        backend
+            .capture_model(TabId(0), region, Format::Jpeg)
+            .is_ok()
+    );
+    let second = fixture("reader.html");
+    backend.open(TabId(0), &second).unwrap();
+    wait_loaded(&mut backend, &second);
+    assert!(
+        backend
+            .capture_model(TabId(0), region, Format::Png)
+            .is_err(),
+        "A model captured B pixels"
+    );
+    assert!(backend.capture(TabId(0), region, Format::Png).is_ok());
+    read_model(&mut backend);
+    assert!(backend.capture_model(TabId(0), region, Format::Png).is_ok());
 }

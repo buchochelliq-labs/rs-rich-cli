@@ -662,15 +662,44 @@ fn a_sticky_header_read_while_scrolled_is_pinned_not_mid_page() {
 }
 
 #[test]
-fn a_cookie_banner_fixed_to_the_bottom_is_docked_and_the_shops_header_pinned() {
-    let (lines, pinned, docked) = strips("product-grid-scrolled", 100);
-    let all = |l: &[String]| l.join("\n");
-    assert!(all(&docked).contains("We use cookies"), "{docked:#?}");
-    assert!(all(&docked).contains("[Accept]"), "{docked:#?}");
-    assert!(!all(&lines).contains("We use cookies"), "{lines:#?}");
-    assert!(all(&pinned).contains("Search the shop"), "{pinned:#?}");
-    assert!(!all(&lines).contains("Search the shop"), "{lines:#?}");
-    assert!(lines.iter().any(|l| l.contains("1-3 of over 2,000")));
+fn a_source_dialog_at_the_bottom_is_projected_separately_and_header_stays_pinned() {
+    let page = page("product-grid-scrolled");
+    let projection = noctiluca::layout::project(&page, 100, (8.0, 18.0), &Marks::default());
+    let lines = projection
+        .lines
+        .iter()
+        .map(Line::plain)
+        .collect::<Vec<_>>()
+        .join("\n");
+    let pinned = projection
+        .pinned
+        .as_ref()
+        .unwrap()
+        .lines
+        .iter()
+        .map(Line::plain)
+        .collect::<Vec<_>>()
+        .join("\n");
+    let popup = page
+        .overlays
+        .iter()
+        .enumerate()
+        .filter_map(|(index, _)| {
+            noctiluca::layout::project_overlay(&page, index, 100, (8.0, 18.0), &Marks::default())
+        })
+        .map(|p| {
+            p.lines
+                .iter()
+                .map(Line::plain)
+                .collect::<Vec<_>>()
+                .join("\n")
+        })
+        .find(|text| text.contains("We use cookies"))
+        .expect("source dialog was not projected separately");
+    assert!(popup.contains("[Accept]"), "{popup}");
+    assert!(!lines.contains("We use cookies"), "{lines}");
+    assert!(pinned.contains("Search the shop"), "{pinned}");
+    assert!(lines.contains("1-3 of over 2,000"), "{lines}");
 }
 
 #[test]
@@ -802,4 +831,1148 @@ fn two_runs_that_touch_in_cells_keep_a_space_between_them() {
         .map(Line::plain)
         .collect();
     assert!(lines.iter().any(|l| l.contains("16 13y ago")), "{lines:#?}");
+}
+
+#[test]
+fn opaque_tall_fixed_dialog_does_not_mix_covered_underlay() {
+    use noctiluca::engine::Rect;
+    use noctiluca::layout::project;
+    use noctiluca::testing::PageBuilder;
+    let mut p = PageBuilder::new("https://example.test/layers", "Layers", 960.0, 720.0);
+    p.view(0.0, 720.0);
+    let body = p.body();
+    let under = p.element(
+        body,
+        "BUTTON",
+        &[],
+        &[],
+        Some(Rect::new(384.0, 272.0, 176.0, 40.0)),
+    );
+    p.paint(under, 10);
+    p.text(
+        under,
+        "Underlying action",
+        Rect::new(390.0, 278.0, 150.0, 18.0),
+    );
+    let panel = p.element(
+        body,
+        "DIV",
+        &[],
+        &[
+            ("position", "fixed"),
+            ("background-color", "rgb(55, 57, 82)"),
+        ],
+        Some(Rect::new(196.0, 72.0, 567.0, 532.0)),
+    );
+    p.paint(panel, 100);
+    let dialog = p.element(
+        panel,
+        "DIV",
+        &[("role", "dialog")],
+        &[],
+        Some(Rect::new(196.0, 72.0, 567.0, 532.0)),
+    );
+    let text = p.element(
+        dialog,
+        "P",
+        &[],
+        &[],
+        Some(Rect::new(210.0, 272.0, 220.0, 18.0)),
+    );
+    p.paint(text, 101);
+    p.text(text, "Dialog content", Rect::new(210.0, 272.0, 200.0, 18.0));
+    let page = build(&p.snapshot(), &mut Revisions::new());
+    let projection = project(&page, 120, (8.0, 18.0), &Marks::default());
+    let text = projection
+        .lines
+        .iter()
+        .map(Line::plain)
+        .collect::<Vec<_>>()
+        .join("\n");
+    assert_eq!(page.overlays.len(), 1);
+    assert!(!page.overlays[0].modal);
+    assert!(
+        text.contains("Underlying action"),
+        "source underlay must remain in the page projection: {text}"
+    );
+    assert!(
+        !text.contains("Dialog content"),
+        "dialog remained in page flow: {text}"
+    );
+    let popup =
+        noctiluca::layout::project_overlay(&page, 0, 70, (8.0, 18.0), &Marks::default()).unwrap();
+    let popup_text = popup
+        .lines
+        .iter()
+        .map(Line::plain)
+        .collect::<Vec<_>>()
+        .join("\n");
+    assert!(popup_text.contains("Dialog content"), "{popup_text}");
+    assert!(!popup_text.contains("Underlying action"), "{popup_text}");
+}
+
+fn source_dialog_layer(modal: bool, higher: bool) {
+    use noctiluca::{
+        app::{Options, app},
+        bookmarks::Bookmarks,
+        config::{Config, Images, View},
+        engine::{PageAction, Rect},
+        testing::{FakeEngine, PageBuilder},
+    };
+    use std::time::{Duration, Instant};
+    let mut p = PageBuilder::new("https://example.test/popup.html", "Popup", 960.0, 720.0);
+    p.view(0.0, 720.0);
+    let body = p.body();
+    let outside = p.element(
+        body,
+        "BUTTON",
+        &[],
+        &[],
+        Some(Rect::new(0.0, 0.0, 160.0, 30.0)),
+    );
+    p.text(outside, "Outside", Rect::new(4.0, 4.0, 100.0, 18.0));
+    let behind = p.element(
+        body,
+        "BUTTON",
+        &[],
+        &[],
+        Some(Rect::new(384.0, 272.0, 176.0, 40.0)),
+    );
+    p.paint(behind, 10);
+    p.text(
+        behind,
+        "Underlying action",
+        Rect::new(390.0, 278.0, 150.0, 18.0),
+    );
+    let panel = p.element(
+        body,
+        "DIV",
+        &[],
+        &[
+            ("position", "fixed"),
+            ("background-color", "rgb(55, 57, 82)"),
+        ],
+        Some(Rect::new(196.0, 72.0, 567.0, 532.0)),
+    );
+    p.paint(panel, 100);
+    let attrs = if modal {
+        vec![("role", "dialog"), ("aria-modal", "true")]
+    } else {
+        vec![("role", "dialog")]
+    };
+    let dialog = p.element(
+        panel,
+        "DIV",
+        &attrs,
+        &[],
+        Some(Rect::new(196.0, 72.0, 567.0, 532.0)),
+    );
+    let text = p.element(
+        dialog,
+        "P",
+        &[],
+        &[],
+        Some(Rect::new(210.0, 100.0, 220.0, 18.0)),
+    );
+    p.text(text, "Dialog content", Rect::new(210.0, 100.0, 200.0, 18.0));
+    let action = p.element(
+        dialog,
+        "BUTTON",
+        &[],
+        &[],
+        Some(Rect::new(210.0, 140.0, 160.0, 30.0)),
+    );
+    p.text(action, "Choose", Rect::new(215.0, 145.0, 80.0, 18.0));
+    let other = p.element(
+        dialog,
+        "BUTTON",
+        &[],
+        &[],
+        Some(Rect::new(410.0, 140.0, 160.0, 30.0)),
+    );
+    p.text(other, "Second", Rect::new(415.0, 145.0, 80.0, 18.0));
+    if !higher && !modal {
+        for i in 0..45 {
+            let y = 180.0 + f64::from(i) * 18.0;
+            let row = p.element(
+                dialog,
+                "P",
+                &[],
+                &[],
+                Some(Rect::new(210.0, y, 200.0, 18.0)),
+            );
+            p.text(
+                row,
+                &format!("Popup row {i}"),
+                Rect::new(210.0, y, 180.0, 18.0),
+            );
+        }
+        let deep = p.element(
+            dialog,
+            "BUTTON",
+            &[],
+            &[],
+            Some(Rect::new(210.0, 1000.0, 150.0, 30.0)),
+        );
+        p.text(deep, "Deep action", Rect::new(210.0, 1000.0, 130.0, 18.0));
+    }
+    if higher {
+        let over = p.element(
+            body,
+            "BUTTON",
+            &[],
+            &[],
+            Some(Rect::new(700.0, 180.0, 55.0, 30.0)),
+        );
+        p.paint(over, 200);
+        p.text(over, "Above", Rect::new(700.0, 180.0, 50.0, 18.0));
+        let incoming = p.element(
+            body,
+            "BUTTON",
+            &[],
+            &[],
+            Some(Rect::new(700.0, 900.0, 70.0, 30.0)),
+        );
+        p.paint(incoming, 201);
+        p.text(incoming, "Incoming", Rect::new(700.0, 900.0, 65.0, 18.0));
+        for i in 0..35 {
+            let y = 740.0 + f64::from(i) * 30.0;
+            let row = p.element(body, "P", &[], &[], Some(Rect::new(0.0, y, 140.0, 18.0)));
+            p.text(
+                row,
+                &format!("Later row {i}"),
+                Rect::new(0.0, y, 120.0, 18.0),
+            );
+        }
+    }
+    let model = build(&p.snapshot(), &mut Revisions::new());
+    let higher_node = higher.then(|| model.find("button", "Above")[0].node);
+    let incoming_node = higher.then(|| model.find("button", "Incoming")[0].node);
+    let higher_hint = higher_node.map(|node| {
+        let controls = model
+            .controls
+            .iter()
+            .filter(|control| !control.disabled && !control.hover_only)
+            .collect::<Vec<_>>();
+        let index = controls
+            .iter()
+            .position(|control| control.node == node)
+            .unwrap();
+        noctiluca::layout::hint_labels(controls.len())[index].clone()
+    });
+    let lower_node = model.find("button", "Underlying action")[0].node;
+    assert!(
+        !model.overlays[0].foreground.contains(&lower_node),
+        "lower-painted control was promoted"
+    );
+    if let Some(node) = higher_node {
+        assert!(
+            model.overlays[0].foreground.contains(&node),
+            "higher-painted control was not associated"
+        );
+    }
+    let expected = model.find("button", "Second")[0].node;
+    let choose = model.find("button", "Choose")[0].node;
+    let deep = (!higher && !modal).then(|| model.find("button", "Deep action")[0].node);
+    let hint_for = |node| {
+        let controls = model
+            .controls
+            .iter()
+            .filter(|c| !c.disabled && !c.hover_only)
+            .collect::<Vec<_>>();
+        let index = controls.iter().position(|c| c.node == node).unwrap();
+        noctiluca::layout::hint_labels(controls.len())[index].clone()
+    };
+    let choose_hint = hint_for(choose);
+    let deep_hint = deep.map(hint_for);
+    let outside_node = model.find("button", "Outside")[0].node;
+    let visible = p.snapshot();
+    p.set_style(panel, "opacity", "0");
+    let hidden = p.snapshot();
+    assert!(
+        build(&hidden, &mut Revisions::new()).overlays.is_empty(),
+        "hidden source still declared a dialog"
+    );
+    let engine = FakeEngine::from_dir(
+        &std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/snapshots"),
+    )
+    .unwrap();
+    let state = engine.state.clone();
+    state
+        .lock()
+        .unwrap()
+        .pages
+        .insert("popup".into(), visible.clone());
+    let mut driver = app(
+        Box::new(engine),
+        Options {
+            config: Config::default(),
+            bookmarks: Bookmarks::default(),
+            url: Some("popup.html".into()),
+            view: Some(View::Projection),
+            images: Some(Images::None),
+            tunnel: None,
+            control: None,
+        },
+    )
+    .driver(120, 40);
+    let deadline = Instant::now() + Duration::from_secs(5);
+    loop {
+        driver.settle();
+        if driver.find_text("Choose").is_some() {
+            break;
+        }
+        assert!(
+            Instant::now() < deadline,
+            "popup not shown: {}",
+            driver.screen().plain().join("\n")
+        );
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    assert!(driver.find_text("Dialog content").is_some());
+    assert!(driver.find_text("Underlying action").is_none());
+    if let Some(deep_node) = deep {
+        driver.press("f");
+        driver.settle();
+        assert!(
+            driver.find_text(&format!("[{choose_hint}]")).is_some(),
+            "popup hint was not visible"
+        );
+        driver.press("esc");
+        use rich_intuituive::interact::{Event, Mouse, MouseKind};
+        for _ in 0..35 {
+            driver.event(Event::Mouse(Mouse::new(MouseKind::ScrollDown, 30, 10)));
+        }
+        driver.settle();
+        assert!(
+            driver.find_text("Deep action").is_some(),
+            "popup did not scroll to its deep control: {:?}",
+            driver.screen().plain()
+        );
+        driver.press("f");
+        driver.settle();
+        driver
+            .find_text(&format!("[{}]", deep_hint.as_ref().unwrap()))
+            .expect("scrolled popup hint was not visible");
+        driver.type_text(deep_hint.as_ref().unwrap());
+        let deadline = Instant::now() + Duration::from_secs(5);
+        loop {
+            driver.settle();
+            if state
+                .lock()
+                .unwrap()
+                .actions
+                .iter()
+                .any(|a| matches!(a, PageAction::Click(node) if *node == deep_node))
+            {
+                break;
+            }
+            assert!(
+                Instant::now() < deadline,
+                "scrolled popup hint did not activate its source control"
+            );
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        for _ in 0..35 {
+            driver.event(Event::Mouse(Mouse::new(MouseKind::ScrollUp, 30, 10)));
+        }
+        driver.settle();
+    }
+    if modal {
+        let focused = driver.focused_name();
+        let before = state.lock().unwrap().actions.len();
+        driver.press("f1");
+        driver.settle();
+        assert!(
+            driver.find_text("Link hints").is_some(),
+            "Actions did not open above source modal"
+        );
+        driver.press("esc");
+        driver.settle();
+        assert!(driver.find_text("Choose").is_some());
+        assert_eq!(
+            driver.focused_name(),
+            focused,
+            "source modal focus was not restored"
+        );
+        assert!(!state.lock().unwrap().actions[before..].iter().any(|a| matches!(a, PageAction::Key(key) if *key == rich_intuituive::interact::Key::parse("esc").unwrap())), "Actions Escape reached source");
+        driver.press("a");
+        driver.settle();
+        assert!(
+            driver.find_text("Choose").is_some(),
+            "faithful projection lost source dialog"
+        );
+        driver.press("a");
+        driver.press("r");
+        driver.settle();
+        let reader = driver.screen().plain().join("\n");
+        assert!(
+            reader.matches("Dialog content").count() <= 1,
+            "Reader duplicated source popup: {reader}"
+        );
+        driver.press("r");
+        driver.settle();
+        assert!(
+            driver.find_text("Choose").is_some(),
+            "return to projection lost source dialog"
+        );
+    }
+    if let Some(target) = higher_node {
+        let (x, y) = driver
+            .find_text("Above")
+            .expect("higher-painted source control hidden by popup");
+        let hint = higher_hint.as_ref().unwrap();
+        driver.press("f");
+        driver.settle();
+        let (hint_x, hint_y) = driver
+            .find_text(&format!("[{hint}]"))
+            .expect("foreground hint is not visible");
+        assert_eq!(hint_y, y);
+        assert!(
+            hint_x.abs_diff(x) <= 1,
+            "hint appeared away from its source control"
+        );
+        driver.type_text(hint);
+        let deadline = Instant::now() + Duration::from_secs(5);
+        loop {
+            driver.settle();
+            if state
+                .lock()
+                .unwrap()
+                .actions
+                .iter()
+                .any(|a| matches!(a, PageAction::Click(node) if *node == target))
+            {
+                break;
+            }
+            assert!(
+                Instant::now() < deadline,
+                "foreground hint did not activate its source control"
+            );
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        let copies = driver
+            .accessibility()
+            .iter()
+            .filter(|entry| entry.name.contains("Above"))
+            .count();
+        assert!(
+            copies <= 1,
+            "foreground duplicated accessibility entries: {copies}"
+        );
+        let previous = state
+            .lock()
+            .unwrap()
+            .actions
+            .iter()
+            .filter(|a| matches!(a, PageAction::Click(node) if *node == target))
+            .count();
+        driver.click(x, y);
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while state
+            .lock()
+            .unwrap()
+            .actions
+            .iter()
+            .filter(|a| matches!(a, PageAction::Click(node) if *node == target))
+            .count()
+            <= previous
+        {
+            driver.settle();
+            assert!(
+                Instant::now() < deadline,
+                "higher-painted source control did not receive click"
+            );
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        driver.press("j j");
+        driver.settle();
+        let (moved_x, moved_y) = driver
+            .find_text("Above")
+            .expect("scrolled foreground disappeared");
+        assert!(
+            moved_y < y,
+            "foreground did not follow underlay scroll: {y} -> {moved_y}"
+        );
+        assert_eq!(moved_x, x);
+        let previous = state
+            .lock()
+            .unwrap()
+            .actions
+            .iter()
+            .filter(|a| matches!(a, PageAction::Click(node) if *node == target))
+            .count();
+        driver.click(moved_x, moved_y);
+        let deadline = Instant::now() + Duration::from_secs(5);
+        loop {
+            driver.settle();
+            if state
+                .lock()
+                .unwrap()
+                .actions
+                .iter()
+                .filter(|a| matches!(a, PageAction::Click(node) if *node == target))
+                .count()
+                > previous
+            {
+                break;
+            }
+            assert!(
+                Instant::now() < deadline,
+                "scrolled foreground hit did not reach source"
+            );
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        driver.press("home");
+        driver.settle();
+        assert!(driver.find_text("Incoming").is_none());
+        for _ in 0..35 {
+            driver.press("j");
+        }
+        driver.settle();
+        let (incoming_x, incoming_y) = driver.find_text("Incoming").expect("higher-painted offscreen control was hidden after scrolling into popup without a source update");
+        let incoming = incoming_node.unwrap();
+        driver.click(incoming_x, incoming_y);
+        let deadline = Instant::now() + Duration::from_secs(5);
+        loop {
+            driver.settle();
+            if state
+                .lock()
+                .unwrap()
+                .actions
+                .iter()
+                .any(|a| matches!(a, PageAction::Click(node) if *node == incoming))
+            {
+                break;
+            }
+            assert!(
+                Instant::now() < deadline,
+                "incoming higher-painted control was not clickable"
+            );
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        driver.press("home");
+        driver.settle();
+    }
+    let (outside_x, outside_y) = driver.find_text("Outside").unwrap();
+    driver.click(outside_x, outside_y);
+    let until = Instant::now() + Duration::from_millis(250);
+    while Instant::now() < until {
+        driver.settle();
+        std::thread::sleep(Duration::from_millis(5));
+    }
+    let outside_clicked = state
+        .lock()
+        .unwrap()
+        .actions
+        .iter()
+        .any(|a| matches!(a, PageAction::Click(node) if *node == outside_node));
+    assert_eq!(
+        outside_clicked, !modal,
+        "modal policy incorrectly routed outside click"
+    );
+    let target = format!("popup-control-{expected}");
+    for _ in 0..12 {
+        if driver.focused_name().as_deref() == Some(target.as_str()) {
+            break;
+        }
+        driver.press("tab");
+    }
+    assert_eq!(
+        driver.focused_name().as_deref(),
+        Some(target.as_str()),
+        "second control was not keyboard reachable"
+    );
+    driver.press("enter");
+    let deadline = Instant::now() + Duration::from_secs(5);
+    loop {
+        driver.settle();
+        if state
+            .lock()
+            .unwrap()
+            .actions
+            .iter()
+            .any(|a| matches!(a, PageAction::Click(node) if *node == expected))
+        {
+            break;
+        }
+        assert!(
+            Instant::now() < deadline,
+            "keyboard action did not reach second source control"
+        );
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    let (x, y) = driver.find_text("Choose").unwrap();
+    driver.click(x, y);
+    let deadline = Instant::now() + Duration::from_secs(5);
+    loop {
+        driver.settle();
+        if state
+            .lock()
+            .unwrap()
+            .actions
+            .iter()
+            .any(|a| matches!(a, PageAction::Click(node) if *node == choose))
+        {
+            break;
+        }
+        assert!(Instant::now() < deadline, "popup action was not forwarded");
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    driver.press("esc");
+    let deadline = Instant::now() + Duration::from_secs(5);
+    loop {
+        driver.settle();
+        if state.lock().unwrap().actions.iter().any(|a| matches!(a, PageAction::Key(key) if *key == rich_intuituive::interact::Key::parse("esc").unwrap())) { break; }
+        assert!(
+            Instant::now() < deadline,
+            "Escape was not forwarded to the source"
+        );
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    assert!(
+        driver.find_text("Choose").is_some(),
+        "Escape hid a source-owned dialog without source change"
+    );
+    for (snapshot, should_show) in [(hidden, false), (visible.clone(), true)] {
+        {
+            let mut state = state.lock().unwrap();
+            state.pages.insert("popup".into(), snapshot);
+            state.events.push(noctiluca::engine::EngineEvent::Changed);
+        }
+        let deadline = Instant::now() + Duration::from_secs(5);
+        loop {
+            driver.settle();
+            if driver.find_text("Choose").is_some() == should_show {
+                break;
+            }
+            assert!(
+                Instant::now() < deadline,
+                "popup visibility did not update to {should_show}: {}",
+                driver.screen().plain().join("\n")
+            );
+            std::thread::sleep(Duration::from_millis(10));
+        }
+    }
+    if !modal {
+        let engine = FakeEngine::from_dir(
+            &std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/snapshots"),
+        )
+        .unwrap();
+        let state = engine.state.clone();
+        state.lock().unwrap().pages.insert("popup".into(), visible);
+        let policy = rich_intuituive::ImagePresentation::new(
+            rich_art::picture::Pixels::Kitty,
+            rich_intuituive::KittyFeatures {
+                unicode_placeholders: true,
+                native_animation: false,
+            },
+            rich_intuituive::PixelFormats::cells().with(rich_art::picture::Pixels::Kitty),
+        );
+        let mut pixels = noctiluca::app::app_with_presentation(
+            Box::new(engine),
+            Options {
+                config: Config::default(),
+                bookmarks: Bookmarks::default(),
+                url: Some("popup.html".into()),
+                view: Some(View::Pixels),
+                images: Some(Images::Kitty),
+                tunnel: None,
+                control: None,
+            },
+            policy,
+        )
+        .driver(120, 40);
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while !state.lock().unwrap().screencast {
+            pixels.settle();
+            assert!(Instant::now() < deadline, "pixel view did not start");
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        pixels.settle();
+        assert!(
+            pixels.find_text("Dialog content").is_none(),
+            "pixel view duplicated the projected dialog"
+        );
+        assert!(
+            !pixels
+                .accessibility()
+                .iter()
+                .any(|node| node.name.contains("Dialog content")),
+            "pixel view exposed a duplicate projected dialog"
+        );
+    }
+}
+
+#[test]
+fn source_nonmodal_dialog_is_shown_as_an_interactive_layer() {
+    source_dialog_layer(false, false);
+}
+
+#[test]
+fn oversized_nonmodal_popup_has_a_keyboard_scroll_route() {
+    use noctiluca::{
+        app::{Options, app},
+        bookmarks::Bookmarks,
+        config::{Config, Images, View},
+        engine::{PageAction, Rect},
+        testing::{FakeEngine, PageBuilder},
+    };
+    use std::time::{Duration, Instant};
+
+    let mut p = PageBuilder::new(
+        "https://example.test/keyboard.html",
+        "Keyboard",
+        960.0,
+        4000.0,
+    );
+    p.view(0.0, 720.0);
+    let body = p.body();
+    let outside = p.element(
+        body,
+        "BUTTON",
+        &[],
+        &[],
+        Some(Rect::new(0.0, 0.0, 140.0, 18.0)),
+    );
+    p.text(outside, "Outside", Rect::new(0.0, 0.0, 120.0, 18.0));
+    for i in 0..80 {
+        let y = 36.0 + f64::from(i) * 36.0;
+        let row = p.element(body, "P", &[], &[], Some(Rect::new(0.0, y, 160.0, 18.0)));
+        p.text(
+            row,
+            &format!("Underlay {i:02}"),
+            Rect::new(0.0, y, 150.0, 18.0),
+        );
+    }
+    let panel = p.element(
+        body,
+        "DIV",
+        &[("role", "dialog"), ("aria-label", "Keyboard popup")],
+        &[
+            ("position", "fixed"),
+            ("background-color", "rgb(55, 57, 82)"),
+        ],
+        Some(Rect::new(24.0, 72.0, 296.0, 288.0)),
+    );
+    p.paint(panel, 100);
+    for i in 0..45 {
+        let y = 90.0 + f64::from(i) * 18.0;
+        let row = p.element(panel, "P", &[], &[], Some(Rect::new(32.0, y, 240.0, 18.0)));
+        p.text(
+            row,
+            &format!("Popup paragraph {i:02}"),
+            Rect::new(32.0, y, 230.0, 18.0),
+        );
+    }
+    let action = p.element(
+        panel,
+        "BUTTON",
+        &[],
+        &[],
+        Some(Rect::new(32.0, 1000.0, 150.0, 30.0)),
+    );
+    p.text(action, "Deep action", Rect::new(32.0, 1000.0, 130.0, 18.0));
+    let model = build(&p.snapshot(), &mut Revisions::new());
+    assert_eq!(model.overlays.len(), 1);
+    assert!(!model.overlays[0].modal);
+    let deep_node = model.find("button", "Deep action")[0].node;
+    let outside_node = model.find("button", "Outside")[0].node;
+    let controls = model
+        .controls
+        .iter()
+        .filter(|c| !c.disabled && !c.hover_only)
+        .collect::<Vec<_>>();
+    let hints = noctiluca::layout::hint_labels(controls.len());
+    let hint_for = |node| hints[controls.iter().position(|c| c.node == node).unwrap()].clone();
+    let deep_hint = hint_for(deep_node);
+    let outside_hint = hint_for(outside_node);
+    let engine = FakeEngine::from_dir(
+        &std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/snapshots"),
+    )
+    .unwrap();
+    let state = engine.state.clone();
+    state
+        .lock()
+        .unwrap()
+        .pages
+        .insert("keyboard".into(), p.snapshot());
+    let mut driver = app(
+        Box::new(engine),
+        Options {
+            config: Config::default(),
+            bookmarks: Bookmarks::default(),
+            url: Some("keyboard.html".into()),
+            view: Some(View::Projection),
+            images: Some(Images::None),
+            tunnel: None,
+            control: None,
+        },
+    )
+    .driver(40, 24);
+    let deadline = Instant::now() + Duration::from_secs(5);
+    while driver.find_text("Popup paragraph 00").is_none() {
+        driver.settle();
+        assert!(
+            Instant::now() < deadline,
+            "popup not shown: {:?}",
+            driver.screen().plain()
+        );
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    assert!(driver.find_text("Deep action").is_none());
+    driver.assert_focused("page");
+    let page_focus = driver.focused();
+    let status = driver.screen().plain()[22].clone();
+    // The first ordinary Tab enters the popup's scroll pane, before any
+    // of its controls have been materialized. Tab counts alone cannot
+    // reveal those controls: PageDown must go to this focused pane.
+    driver.press("tab");
+    let popup_focus = driver.focused();
+    assert!(popup_focus.is_some());
+    assert_ne!(popup_focus, page_focus);
+    for _ in 0..3 {
+        driver.press("pagedown");
+        assert_eq!(driver.focused(), popup_focus);
+        assert_eq!(
+            driver.screen().plain()[22],
+            status,
+            "popup scroll moved the underlay"
+        );
+        assert!(driver.find_text("Underlay 00").is_some());
+    }
+    assert!(driver.find_text("Popup paragraph 00").is_none());
+    assert!(
+        driver.find_text("Deep action").is_some(),
+        "{:?}",
+        driver.screen().plain()
+    );
+    driver.press("f");
+    driver
+        .find_text(&format!("[{deep_hint}]"))
+        .expect("deep control hint must be visible before use");
+    driver.type_text(&deep_hint);
+    let deadline = Instant::now() + Duration::from_secs(5);
+    loop {
+        driver.settle();
+        if state
+            .lock()
+            .unwrap()
+            .actions
+            .iter()
+            .any(|a| matches!(a, PageAction::Click(node) if *node == deep_node))
+        {
+            break;
+        }
+        assert!(
+            Instant::now() < deadline,
+            "visible deep hint did not activate its control"
+        );
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    assert_eq!(
+        state
+            .lock()
+            .unwrap()
+            .actions
+            .iter()
+            .filter(|a| matches!(a, PageAction::Click(node) if *node == deep_node))
+            .count(),
+        1
+    );
+    assert!(
+        driver.find_text("Deep action").is_some(),
+        "source popup was dismissed without a source update"
+    );
+    // Nonmodal focus can leave the popup. Its scroll stays put while the
+    // page pane acts on a visible outside control and then scrolls itself.
+    driver.press("shift+tab");
+    driver.assert_focused("page");
+    driver.press("f");
+    driver
+        .find_text(&format!("[{outside_hint}]"))
+        .expect("outside control hint must be visible before use");
+    driver.type_text(&outside_hint);
+    let deadline = Instant::now() + Duration::from_secs(5);
+    loop {
+        driver.settle();
+        if state
+            .lock()
+            .unwrap()
+            .actions
+            .iter()
+            .any(|a| matches!(a, PageAction::Click(node) if *node == outside_node))
+        {
+            break;
+        }
+        assert!(
+            Instant::now() < deadline,
+            "nonmodal outside control was not usable"
+        );
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    assert_eq!(
+        state
+            .lock()
+            .unwrap()
+            .actions
+            .iter()
+            .filter(|a| matches!(a, PageAction::Click(node) if *node == outside_node))
+            .count(),
+        1
+    );
+    let popup_rows = |d: &rich_intuituive::Driver| {
+        d.screen().plain()[6..22]
+            .iter()
+            .map(|row| row.chars().skip(3).collect::<String>())
+            .collect::<Vec<_>>()
+    };
+    let popup_before = popup_rows(&driver);
+    let status_before = driver.screen().plain()[22].clone();
+    driver.press("pagedown");
+    driver.assert_focused("page");
+    assert_ne!(
+        driver.screen().plain()[22],
+        status_before,
+        "page pane did not scroll"
+    );
+    assert_eq!(
+        popup_rows(&driver),
+        popup_before,
+        "underlay scrolling moved the popup"
+    );
+    assert!(driver.find_text("Deep action").is_some());
+    let scrolled_status = driver.screen().plain()[22].clone();
+    driver.press("tab pageup");
+    assert_eq!(driver.focused(), popup_focus);
+    assert_eq!(driver.screen().plain()[22], scrolled_status);
+    assert_ne!(popup_rows(&driver), popup_before);
+    for target in [deep_node, outside_node] {
+        assert_eq!(
+            state
+                .lock()
+                .unwrap()
+                .actions
+                .iter()
+                .filter(|a| matches!(a, PageAction::Click(node) if *node == target))
+                .count(),
+            1,
+            "source control was activated more than once"
+        );
+    }
+}
+
+#[test]
+fn source_modal_dialog_blocks_outside_and_keeps_its_actions() {
+    source_dialog_layer(true, false);
+}
+
+#[test]
+fn opening_and_closing_a_fixed_dialog_keeps_the_underlay_scroll_anchor() {
+    use noctiluca::{
+        app::{Options, app},
+        bookmarks::Bookmarks,
+        config::{Config, Images, View},
+        engine::{EngineEvent, Rect},
+        testing::{FakeEngine, PageBuilder},
+    };
+    use std::time::{Duration, Instant};
+    let mut p = PageBuilder::new("https://example.test/anchor.html", "Anchor", 960.0, 4000.0);
+    p.view(0.0, 720.0);
+    let body = p.body();
+    for i in 0..80 {
+        let y = i as f64 * 40.0;
+        let block = p.element(body, "P", &[], &[], Some(Rect::new(0.0, y, 160.0, 18.0)));
+        p.text(
+            block,
+            &format!("Anchor item {i:02}"),
+            Rect::new(0.0, y, 150.0, 18.0),
+        );
+    }
+    let panel = p.element(
+        body,
+        "DIV",
+        &[("role", "dialog")],
+        &[
+            ("position", "fixed"),
+            ("background-color", "rgb(55, 57, 82)"),
+        ],
+        Some(Rect::new(400.0, 72.0, 400.0, 532.0)),
+    );
+    p.paint(panel, 100);
+    p.text(panel, "Popup visible", Rect::new(410.0, 100.0, 150.0, 18.0));
+    let visible = p.snapshot();
+    p.set_style(panel, "opacity", "0");
+    let hidden = p.snapshot();
+    let engine = FakeEngine::from_dir(
+        &std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/snapshots"),
+    )
+    .unwrap();
+    let state = engine.state.clone();
+    state
+        .lock()
+        .unwrap()
+        .pages
+        .insert("anchor".into(), hidden.clone());
+    let mut driver = app(
+        Box::new(engine),
+        Options {
+            config: Config::default(),
+            bookmarks: Bookmarks::default(),
+            url: Some("anchor.html".into()),
+            view: Some(View::Projection),
+            images: Some(Images::None),
+            tunnel: None,
+            control: None,
+        },
+    )
+    .driver(120, 40);
+    let deadline = Instant::now() + Duration::from_secs(5);
+    while driver.find_text("Anchor item 00").is_none() {
+        driver.settle();
+        assert!(Instant::now() < deadline);
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    for _ in 0..20 {
+        driver.press("j");
+    }
+    driver.settle();
+    let before = driver.screen().plain();
+    let marker = before
+        .iter()
+        .find_map(|line| {
+            line.split_whitespace()
+                .collect::<Vec<_>>()
+                .windows(3)
+                .find(|w| w[0] == "Anchor" && w[1] == "item")
+                .map(|w| w.join(" "))
+        })
+        .expect("scrolled anchor");
+    assert_ne!(marker, "Anchor item 00");
+    for (snapshot, popup) in [(visible, true), (hidden, false)] {
+        {
+            let mut state = state.lock().unwrap();
+            state.pages.insert("anchor".into(), snapshot);
+            state.events.push(EngineEvent::Changed);
+        }
+        let deadline = Instant::now() + Duration::from_secs(5);
+        loop {
+            driver.settle();
+            if driver.find_text("Popup visible").is_some() == popup {
+                break;
+            }
+            assert!(Instant::now() < deadline, "popup state did not change");
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        assert!(
+            driver.find_text(&marker).is_some(),
+            "lost {marker} on popup={popup}: {:?}",
+            driver.screen().plain()
+        );
+    }
+}
+
+#[test]
+fn higher_painted_source_control_remains_above_a_nonmodal_popup() {
+    source_dialog_layer(false, true);
+}
+
+#[test]
+fn source_dialog_fits_narrow_off_right_and_short_viewports_with_reachable_controls() {
+    use noctiluca::{
+        app::{Options, app},
+        bookmarks::Bookmarks,
+        config::{Config, Images, View},
+        engine::{PageAction, Rect},
+        testing::{FakeEngine, PageBuilder},
+    };
+    use std::time::{Duration, Instant};
+    for (columns, rows, source_x, source_y) in [
+        (40, 24, 196.0, 72.0),
+        (20, 16, 196.0, 72.0),
+        (40, 24, 900.0, 500.0),
+    ] {
+        let mut p = PageBuilder::new("https://example.test/fit.html", "Fit", 960.0, 720.0);
+        p.view(0.0, 720.0);
+        let panel = p.element(
+            p.body(),
+            "DIV",
+            &[("role", "dialog")],
+            &[
+                ("position", "fixed"),
+                ("background-color", "rgb(55, 57, 82)"),
+            ],
+            Some(Rect::new(source_x, source_y, 567.0, 532.0)),
+        );
+        p.paint(panel, 100);
+        let action = p.element(
+            panel,
+            "BUTTON",
+            &[],
+            &[],
+            Some(Rect::new(source_x + 16.0, source_y + 18.0, 112.0, 30.0)),
+        );
+        p.text(
+            action,
+            "Accept",
+            Rect::new(source_x + 16.0, source_y + 18.0, 90.0, 18.0),
+        );
+        let model = build(&p.snapshot(), &mut Revisions::new());
+        let target = model.find("button", "Accept")[0].node;
+        let engine = FakeEngine::from_dir(
+            &std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/snapshots"),
+        )
+        .unwrap();
+        let state = engine.state.clone();
+        state
+            .lock()
+            .unwrap()
+            .pages
+            .insert("fit".into(), p.snapshot());
+        let mut driver = app(
+            Box::new(engine),
+            Options {
+                config: Config::default(),
+                bookmarks: Bookmarks::default(),
+                url: Some("fit.html".into()),
+                view: Some(View::Projection),
+                images: Some(Images::None),
+                tunnel: None,
+                control: None,
+            },
+        )
+        .driver(columns, rows);
+        let deadline = Instant::now() + Duration::from_secs(2);
+        let (x, y) = loop {
+            driver.settle();
+            if let Some(at) = driver.find_text("Accept") {
+                break at;
+            }
+            assert!(
+                Instant::now() < deadline,
+                "popup control not identifiable in {columns}x{rows} at {source_x},{source_y}: {:?}",
+                driver.screen().plain()
+            );
+            std::thread::sleep(Duration::from_millis(10));
+        };
+        driver.click(x, y);
+        let deadline = Instant::now() + Duration::from_secs(2);
+        loop {
+            driver.settle();
+            if state
+                .lock()
+                .unwrap()
+                .actions
+                .iter()
+                .any(|action| matches!(action, PageAction::Click(node) if *node == target))
+            {
+                break;
+            }
+            assert!(
+                Instant::now() < deadline,
+                "fitted control was not reachable"
+            );
+            std::thread::sleep(Duration::from_millis(10));
+        }
+    }
 }

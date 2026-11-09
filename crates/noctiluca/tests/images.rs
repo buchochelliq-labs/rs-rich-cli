@@ -120,8 +120,10 @@ fn pictures_are_decoded_from_the_files_the_page_loaded() {
     let tide = by_src("tide.gif").picture.clone().unwrap();
     assert!(tide.is_animated());
     assert_eq!(tide.frames().map(<[_]>::len), Some(12));
-    // A figure's caption is the page's own; the others get ours.
-    assert!(by_src("market.jpg").captioned);
+    // This figure caption ("The Saturday market reopened") does not
+    // supply the original alt ("Fruit stalls under striped awnings").
+    // Keep both meanings, just as for an uncaptioned picture.
+    assert!(!by_src("market.jpg").captioned);
     assert!(!by_src("storm.jpg").captioned);
 }
 

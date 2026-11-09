@@ -9,5 +9,16 @@
 <div style="height: 8000px">Scroll down.</div>
 <img loading="lazy" src="glow.png" alt="A glow" width="64" height="64">
 <p>The end.</p>
+<section aria-label="Delayed image cases">
+  <img id="reserved" alt="Reserved delayed harbour" width="160" height="90">
+  <img id="intrinsic" alt="Intrinsic delayed kettle">
+  <p>Images load only when the test calls revealDelayedImages().</p>
+</section>
+<script>
+window.revealDelayedImages = () => {
+  document.getElementById('reserved').src = 'media/harbour.jpg';
+  document.getElementById('intrinsic').src = 'media/thumb-1.jpg';
+};
+</script>
 </body>
 </html>

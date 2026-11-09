@@ -204,8 +204,8 @@ pub use rich_interact::dates;
 pub use actions::{Action, action_overlay};
 pub use app::DEFAULT_MODE;
 pub use app::{
-    Anchor, App, Ctx, Driver, Easing, FrameStats, Handoff, Holds, ModalOptions, Placement,
-    StatsHandle, Theme, Timer, after, every, fixed_step, held_keys, plain_key, rate,
+    Anchor, App, Ctx, Driver, Easing, FinishOutput, FrameStats, Handoff, Holds, ModalOptions,
+    Placement, StatsHandle, Theme, Timer, after, every, fixed_step, held_keys, plain_key, rate,
 };
 #[cfg(feature = "art")]
 pub use big_text::big_text;
@@ -238,8 +238,9 @@ pub use fx::Fx;
 pub use help::{HelpOptions, KeyFormat, KeyHintsOptions};
 #[cfg(feature = "art")]
 pub use image::{
-    ImageAnchor, ImageFit, ImageMode, ImageView, Picture, Pixels, image, image_bytes,
-    image_bytes_of, image_graphics, image_of, image_with, picture_bytes, picture_of, tiles_of,
+    ImageAnchor, ImageFit, ImageMode, ImagePresentation, ImageView, KittyFeatures, Picture,
+    PictureEncoding, PixelFormats, Pixels, image, image_bytes, image_bytes_of, image_graphics,
+    image_of, image_with, picture_bytes, picture_of, tiles_of,
 };
 pub use input::{input, number_input};
 pub use jobs::{
@@ -269,7 +270,9 @@ pub use parity::{
 pub use place::{Offset, Origin, RectHandle};
 pub use preview::{PreviewOfOptions, preview_of, preview_of_with};
 pub use rating::{rating, rating_input};
-pub use reactive::{Memo, Proxy, Signal, memo, on_write, on_write_ref, signal, viewport, watch};
+pub use reactive::{
+    Memo, Proxy, Signal, cell_pixels, memo, on_write, on_write_ref, signal, viewport, watch,
+};
 /// What a text does with what does not fit a line: rich's.
 pub use rich::Overflow;
 pub use rule::rule;

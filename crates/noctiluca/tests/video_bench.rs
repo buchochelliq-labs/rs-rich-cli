@@ -218,7 +218,23 @@ fn run(images: Images, link: (&'static str, Option<u64>), fps: u32, seconds: f64
         tunnel: None,
         control: None,
     };
-    let mut driver = app(Box::new(engine), options).driver(100, 40);
+    let app = if images == Images::Kitty {
+        noctiluca::app::app_with_presentation(
+            Box::new(engine),
+            options,
+            rich_intuituive::ImagePresentation::new(
+                rich_intuituive::Pixels::Kitty,
+                rich_intuituive::KittyFeatures {
+                    unicode_placeholders: true,
+                    native_animation: true,
+                },
+                rich_intuituive::PixelFormats::cells().with(rich_intuituive::Pixels::Kitty),
+            ),
+        )
+    } else {
+        app(Box::new(engine), options)
+    };
+    let mut driver = app.driver(100, 40);
     // Woken by the tab as the real loop is.
     let woke = Arc::new((Mutex::new(false), Condvar::new()));
     {

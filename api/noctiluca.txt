@@ -63,6 +63,7 @@ pub noctiluca::adapt::Rule::Captions
 pub noctiluca::adapt::Rule::CollapseGaps
 pub noctiluca::adapt::Rule::CollapseNav
 pub noctiluca::adapt::Rule::DecorativeImages
+pub noctiluca::adapt::Rule::FigureFlow
 pub noctiluca::adapt::Rule::IconButtons
 pub noctiluca::adapt::Rule::Indicators
 pub noctiluca::adapt::Rule::InlinePictures
@@ -72,6 +73,7 @@ pub noctiluca::adapt::Rule::ScreenReaderTwins
 pub noctiluca::adapt::Rule::Shelves
 pub noctiluca::adapt::Rule::SnapGrids
 pub noctiluca::adapt::Rule::TextOverPictures
+pub noctiluca::adapt::Rule::WrapActionLabels
 impl noctiluca::adapt::Rule
 pub fn noctiluca::adapt::Rule::info(self) -> &'static noctiluca::adapt::RuleInfo
 pub fn noctiluca::adapt::Rule::name(self) -> &'static str
@@ -286,6 +288,7 @@ pub const noctiluca::app::CHROME_ROWS: u16
 pub const noctiluca::app::LOCAL_CEILING: u64
 pub fn noctiluca::app::agent_text(&noctiluca::model::Page, usize) -> core::option::Option<alloc::string::String>
 pub fn noctiluca::app::app(alloc::boxed::Box<dyn noctiluca::engine::Engine>, noctiluca::app::Options) -> intuituive::app::App
+pub fn noctiluca::app::app_with_presentation(alloc::boxed::Box<dyn noctiluca::engine::Engine>, noctiluca::app::Options, intuituive::image::ImagePresentation) -> intuituive::app::App
 pub fn noctiluca::app::availability(noctiluca::app::Browser, &str) -> core::result::Result<(), alloc::string::String>
 pub fn noctiluca::app::byte_budget(noctiluca::app::Browser) -> rich_art::picture::ByteBudget
 pub fn noctiluca::app::current_log(noctiluca::app::Browser) -> core::option::Option<(noctiluca::engine::NodeId, usize)>
@@ -444,6 +447,7 @@ pub fn noctiluca::cdp::ChromeBackend::act(&mut self, noctiluca::engine::TabId, &
 pub fn noctiluca::cdp::ChromeBackend::appended(&mut self, noctiluca::engine::TabId) -> std::io::error::Result<alloc::vec::Vec<i64>>
 pub fn noctiluca::cdp::ChromeBackend::can_play(&mut self, noctiluca::engine::TabId, &[&str]) -> std::io::error::Result<alloc::vec::Vec<alloc::string::String>>
 pub fn noctiluca::cdp::ChromeBackend::capture(&mut self, noctiluca::engine::TabId, noctiluca::engine::Rect, noctiluca::engine::Format) -> std::io::error::Result<noctiluca::engine::Frame>
+pub fn noctiluca::cdp::ChromeBackend::capture_model(&mut self, noctiluca::engine::TabId, noctiluca::engine::Rect, noctiluca::engine::Format) -> std::io::error::Result<noctiluca::engine::Frame>
 pub fn noctiluca::cdp::ChromeBackend::close_tab(&mut self, noctiluca::engine::TabId) -> std::io::error::Result<()>
 pub fn noctiluca::cdp::ChromeBackend::events(&mut self) -> alloc::vec::Vec<noctiluca::engine::EngineEvent>
 pub fn noctiluca::cdp::ChromeBackend::history(&mut self, noctiluca::engine::TabId, noctiluca::engine::HistoryStep) -> std::io::error::Result<()>
@@ -451,6 +455,7 @@ pub fn noctiluca::cdp::ChromeBackend::image_ready(&mut self, noctiluca::engine::
 pub fn noctiluca::cdp::ChromeBackend::metrics(&mut self, noctiluca::engine::TabId) -> std::io::error::Result<noctiluca::engine::Metrics>
 pub fn noctiluca::cdp::ChromeBackend::new_tab(&mut self, &str) -> std::io::error::Result<noctiluca::engine::TabId>
 pub fn noctiluca::cdp::ChromeBackend::open(&mut self, noctiluca::engine::TabId, &str) -> std::io::error::Result<()>
+pub fn noctiluca::cdp::ChromeBackend::optional_resources(&mut self) -> core::option::Option<noctiluca::engine::ResourceReader>
 pub fn noctiluca::cdp::ChromeBackend::playback(&mut self, noctiluca::engine::TabId, i64) -> std::io::error::Result<noctiluca::engine::Playback>
 pub fn noctiluca::cdp::ChromeBackend::product(&mut self, noctiluca::engine::TabId) -> alloc::string::String
 pub fn noctiluca::cdp::ChromeBackend::read_live(&mut self, noctiluca::engine::TabId, i64, bool) -> std::io::error::Result<noctiluca::engine::LiveRead>
@@ -1203,6 +1208,7 @@ pub fn noctiluca::engine::Engine::act(&mut self, noctiluca::engine::TabId, &noct
 pub fn noctiluca::engine::Engine::appended(&mut self, noctiluca::engine::TabId) -> std::io::error::Result<alloc::vec::Vec<noctiluca::engine::NodeId>>
 pub fn noctiluca::engine::Engine::can_play(&mut self, noctiluca::engine::TabId, &[&str]) -> std::io::error::Result<alloc::vec::Vec<alloc::string::String>>
 pub fn noctiluca::engine::Engine::capture(&mut self, noctiluca::engine::TabId, noctiluca::engine::Rect, noctiluca::engine::Format) -> std::io::error::Result<noctiluca::engine::Frame>
+pub fn noctiluca::engine::Engine::capture_model(&mut self, noctiluca::engine::TabId, noctiluca::engine::Rect, noctiluca::engine::Format) -> std::io::error::Result<noctiluca::engine::Frame>
 pub fn noctiluca::engine::Engine::close_tab(&mut self, noctiluca::engine::TabId) -> std::io::error::Result<()>
 pub fn noctiluca::engine::Engine::events(&mut self) -> alloc::vec::Vec<noctiluca::engine::EngineEvent>
 pub fn noctiluca::engine::Engine::history(&mut self, noctiluca::engine::TabId, noctiluca::engine::HistoryStep) -> std::io::error::Result<()>
@@ -1210,6 +1216,7 @@ pub fn noctiluca::engine::Engine::image_ready(&mut self, noctiluca::engine::TabI
 pub fn noctiluca::engine::Engine::metrics(&mut self, noctiluca::engine::TabId) -> std::io::error::Result<noctiluca::engine::Metrics>
 pub fn noctiluca::engine::Engine::new_tab(&mut self, &str) -> std::io::error::Result<noctiluca::engine::TabId>
 pub fn noctiluca::engine::Engine::open(&mut self, noctiluca::engine::TabId, &str) -> std::io::error::Result<()>
+pub fn noctiluca::engine::Engine::optional_resources(&mut self) -> core::option::Option<noctiluca::engine::ResourceReader>
 pub fn noctiluca::engine::Engine::playback(&mut self, noctiluca::engine::TabId, noctiluca::engine::NodeId) -> std::io::error::Result<noctiluca::engine::Playback>
 pub fn noctiluca::engine::Engine::product(&mut self, noctiluca::engine::TabId) -> alloc::string::String
 pub fn noctiluca::engine::Engine::read_live(&mut self, noctiluca::engine::TabId, noctiluca::engine::NodeId, bool) -> std::io::error::Result<noctiluca::engine::LiveRead>
@@ -1225,6 +1232,7 @@ pub fn noctiluca::cdp::ChromeBackend::act(&mut self, noctiluca::engine::TabId, &
 pub fn noctiluca::cdp::ChromeBackend::appended(&mut self, noctiluca::engine::TabId) -> std::io::error::Result<alloc::vec::Vec<i64>>
 pub fn noctiluca::cdp::ChromeBackend::can_play(&mut self, noctiluca::engine::TabId, &[&str]) -> std::io::error::Result<alloc::vec::Vec<alloc::string::String>>
 pub fn noctiluca::cdp::ChromeBackend::capture(&mut self, noctiluca::engine::TabId, noctiluca::engine::Rect, noctiluca::engine::Format) -> std::io::error::Result<noctiluca::engine::Frame>
+pub fn noctiluca::cdp::ChromeBackend::capture_model(&mut self, noctiluca::engine::TabId, noctiluca::engine::Rect, noctiluca::engine::Format) -> std::io::error::Result<noctiluca::engine::Frame>
 pub fn noctiluca::cdp::ChromeBackend::close_tab(&mut self, noctiluca::engine::TabId) -> std::io::error::Result<()>
 pub fn noctiluca::cdp::ChromeBackend::events(&mut self) -> alloc::vec::Vec<noctiluca::engine::EngineEvent>
 pub fn noctiluca::cdp::ChromeBackend::history(&mut self, noctiluca::engine::TabId, noctiluca::engine::HistoryStep) -> std::io::error::Result<()>
@@ -1232,6 +1240,7 @@ pub fn noctiluca::cdp::ChromeBackend::image_ready(&mut self, noctiluca::engine::
 pub fn noctiluca::cdp::ChromeBackend::metrics(&mut self, noctiluca::engine::TabId) -> std::io::error::Result<noctiluca::engine::Metrics>
 pub fn noctiluca::cdp::ChromeBackend::new_tab(&mut self, &str) -> std::io::error::Result<noctiluca::engine::TabId>
 pub fn noctiluca::cdp::ChromeBackend::open(&mut self, noctiluca::engine::TabId, &str) -> std::io::error::Result<()>
+pub fn noctiluca::cdp::ChromeBackend::optional_resources(&mut self) -> core::option::Option<noctiluca::engine::ResourceReader>
 pub fn noctiluca::cdp::ChromeBackend::playback(&mut self, noctiluca::engine::TabId, i64) -> std::io::error::Result<noctiluca::engine::Playback>
 pub fn noctiluca::cdp::ChromeBackend::product(&mut self, noctiluca::engine::TabId) -> alloc::string::String
 pub fn noctiluca::cdp::ChromeBackend::read_live(&mut self, noctiluca::engine::TabId, i64, bool) -> std::io::error::Result<noctiluca::engine::LiveRead>
@@ -1247,6 +1256,7 @@ pub fn noctiluca::testing::FakeEngine::act(&mut self, noctiluca::engine::TabId, 
 pub fn noctiluca::testing::FakeEngine::appended(&mut self, noctiluca::engine::TabId) -> std::io::error::Result<alloc::vec::Vec<noctiluca::engine::NodeId>>
 pub fn noctiluca::testing::FakeEngine::can_play(&mut self, noctiluca::engine::TabId, &[&str]) -> std::io::error::Result<alloc::vec::Vec<alloc::string::String>>
 pub fn noctiluca::testing::FakeEngine::capture(&mut self, noctiluca::engine::TabId, noctiluca::engine::Rect, noctiluca::engine::Format) -> std::io::error::Result<noctiluca::engine::Frame>
+pub fn noctiluca::testing::FakeEngine::capture_model(&mut self, noctiluca::engine::TabId, noctiluca::engine::Rect, noctiluca::engine::Format) -> std::io::error::Result<noctiluca::engine::Frame>
 pub fn noctiluca::testing::FakeEngine::close_tab(&mut self, noctiluca::engine::TabId) -> std::io::error::Result<()>
 pub fn noctiluca::testing::FakeEngine::events(&mut self) -> alloc::vec::Vec<noctiluca::engine::EngineEvent>
 pub fn noctiluca::testing::FakeEngine::history(&mut self, noctiluca::engine::TabId, noctiluca::engine::HistoryStep) -> std::io::error::Result<()>
@@ -1254,6 +1264,7 @@ pub fn noctiluca::testing::FakeEngine::image_ready(&mut self, noctiluca::engine:
 pub fn noctiluca::testing::FakeEngine::metrics(&mut self, noctiluca::engine::TabId) -> std::io::error::Result<noctiluca::engine::Metrics>
 pub fn noctiluca::testing::FakeEngine::new_tab(&mut self, &str) -> std::io::error::Result<noctiluca::engine::TabId>
 pub fn noctiluca::testing::FakeEngine::open(&mut self, noctiluca::engine::TabId, &str) -> std::io::error::Result<()>
+pub fn noctiluca::testing::FakeEngine::optional_resources(&mut self) -> core::option::Option<noctiluca::engine::ResourceReader>
 pub fn noctiluca::testing::FakeEngine::playback(&mut self, noctiluca::engine::TabId, i64) -> std::io::error::Result<noctiluca::engine::Playback>
 pub fn noctiluca::testing::FakeEngine::product(&mut self, noctiluca::engine::TabId) -> alloc::string::String
 pub fn noctiluca::testing::FakeEngine::read_live(&mut self, noctiluca::engine::TabId, noctiluca::engine::NodeId, bool) -> std::io::error::Result<noctiluca::engine::LiveRead>
@@ -1265,6 +1276,7 @@ pub fn noctiluca::testing::FakeEngine::set_screencast_scale(&mut self, noctiluca
 pub fn noctiluca::testing::FakeEngine::snapshot(&mut self, noctiluca::engine::TabId) -> std::io::error::Result<noctiluca::engine::PageSnapshot>
 pub fn noctiluca::testing::FakeEngine::state(&self, noctiluca::engine::TabId) -> rich_embed::web::PageState
 pub type noctiluca::engine::NodeId = i64
+pub type noctiluca::engine::ResourceReader = alloc::boxed::Box<(dyn core::ops::function::FnMut(&str) -> std::io::error::Result<alloc::vec::Vec<u8>> + core::marker::Send)>
 pub mod noctiluca::indicator
 pub enum noctiluca::indicator::Shape
 pub noctiluca::indicator::Shape::Bar
@@ -1380,10 +1392,13 @@ pub noctiluca::layout::Marks::hints: std::collections::hash::map::HashMap<usize,
 pub noctiluca::layout::Marks::logs: std::collections::hash::map::HashMap<noctiluca::engine::NodeId, noctiluca::layout::LogScroll>
 impl core::clone::Clone for noctiluca::layout::Marks
 pub fn noctiluca::layout::Marks::clone(&self) -> noctiluca::layout::Marks
+impl core::cmp::PartialEq for noctiluca::layout::Marks
+pub fn noctiluca::layout::Marks::eq(&self, &noctiluca::layout::Marks) -> bool
 impl core::default::Default for noctiluca::layout::Marks
 pub fn noctiluca::layout::Marks::default() -> noctiluca::layout::Marks
 impl core::fmt::Debug for noctiluca::layout::Marks
 pub fn noctiluca::layout::Marks::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for noctiluca::layout::Marks
 impl core::marker::Freeze for noctiluca::layout::Marks
 impl core::marker::Send for noctiluca::layout::Marks
 impl core::marker::Sync for noctiluca::layout::Marks
@@ -1485,6 +1500,8 @@ pub fn noctiluca::layout::matches(&str, &str) -> alloc::vec::Vec<(usize, usize)>
 pub fn noctiluca::layout::play_mark(&noctiluca::model::Media, usize) -> core::option::Option<noctiluca::layout::Line>
 pub fn noctiluca::layout::point_in(f64, f64, usize, usize, (f32, f32)) -> (f64, f64)
 pub fn noctiluca::layout::project(&noctiluca::model::Page, u16, (f64, f64), &noctiluca::layout::Marks) -> noctiluca::layout::Projection
+pub fn noctiluca::layout::project_overlay(&noctiluca::model::Page, usize, u16, (f64, f64), &noctiluca::layout::Marks) -> core::option::Option<noctiluca::layout::Projection>
+pub fn noctiluca::layout::project_source(&noctiluca::model::SourcePage, u16, (f64, f64), &noctiluca::layout::Marks) -> noctiluca::layout::Projection
 pub fn noctiluca::layout::projection(&noctiluca::model::Page, u16, (f64, f64), &noctiluca::layout::Marks) -> alloc::vec::Vec<noctiluca::layout::Line>
 pub fn noctiluca::layout::reader(&noctiluca::model::Page, u16, &noctiluca::layout::Marks) -> alloc::vec::Vec<noctiluca::layout::Piece>
 pub fn noctiluca::layout::scroll_log(&noctiluca::model::Log, noctiluca::layout::LogScroll, isize) -> noctiluca::layout::LogScroll
@@ -1989,6 +2006,7 @@ pub noctiluca::model::Page::inline_pictures: std::collections::hash::map::HashMa
 pub noctiluca::model::Page::layers: alloc::vec::Vec<noctiluca::model::Layer>
 pub noctiluca::model::Page::logs: alloc::vec::Vec<noctiluca::model::Log>
 pub noctiluca::model::Page::media: alloc::vec::Vec<noctiluca::model::Media>
+pub noctiluca::model::Page::overlays: alloc::vec::Vec<noctiluca::model::SourceOverlay>
 pub noctiluca::model::Page::regions: alloc::vec::Vec<noctiluca::model::Region>
 pub noctiluca::model::Page::scroll_y: f64
 pub noctiluca::model::Page::shelves: alloc::vec::Vec<noctiluca::model::Shelf>
@@ -2000,6 +2018,7 @@ pub noctiluca::model::Page::width: f64
 impl noctiluca::model::Page
 pub fn noctiluca::model::Page::check(&self, &noctiluca::model::Binding) -> core::result::Result<&noctiluca::model::Control, alloc::string::String>
 pub fn noctiluca::model::Page::control(&self, noctiluca::engine::NodeId) -> core::option::Option<&noctiluca::model::Control>
+pub fn noctiluca::model::Page::dialogs(&self) -> impl core::iter::traits::iterator::Iterator<Item = &noctiluca::model::SourceOverlay>
 pub fn noctiluca::model::Page::find(&self, &str, &str) -> alloc::vec::Vec<&noctiluca::model::Control>
 pub fn noctiluca::model::Page::text(&self) -> alloc::string::String
 impl core::clone::Clone for noctiluca::model::Page
@@ -2131,6 +2150,43 @@ impl core::marker::Unpin for noctiluca::model::Shelf
 impl core::marker::UnsafeUnpin for noctiluca::model::Shelf
 impl core::panic::unwind_safe::RefUnwindSafe for noctiluca::model::Shelf
 impl core::panic::unwind_safe::UnwindSafe for noctiluca::model::Shelf
+pub struct noctiluca::model::SourceOverlay
+pub noctiluca::model::SourceOverlay::background: core::option::Option<alloc::string::String>
+pub noctiluca::model::SourceOverlay::dialog: bool
+pub noctiluca::model::SourceOverlay::foreground: alloc::vec::Vec<noctiluca::engine::NodeId>
+pub noctiluca::model::SourceOverlay::layer: usize
+pub noctiluca::model::SourceOverlay::modal: bool
+pub noctiluca::model::SourceOverlay::name: alloc::string::String
+pub noctiluca::model::SourceOverlay::node: noctiluca::engine::NodeId
+pub noctiluca::model::SourceOverlay::paint_order: i64
+impl core::clone::Clone for noctiluca::model::SourceOverlay
+pub fn noctiluca::model::SourceOverlay::clone(&self) -> noctiluca::model::SourceOverlay
+impl core::cmp::PartialEq for noctiluca::model::SourceOverlay
+pub fn noctiluca::model::SourceOverlay::eq(&self, &noctiluca::model::SourceOverlay) -> bool
+impl core::fmt::Debug for noctiluca::model::SourceOverlay
+pub fn noctiluca::model::SourceOverlay::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for noctiluca::model::SourceOverlay
+impl core::marker::Freeze for noctiluca::model::SourceOverlay
+impl core::marker::Send for noctiluca::model::SourceOverlay
+impl core::marker::Sync for noctiluca::model::SourceOverlay
+impl core::marker::Unpin for noctiluca::model::SourceOverlay
+impl core::marker::UnsafeUnpin for noctiluca::model::SourceOverlay
+impl core::panic::unwind_safe::RefUnwindSafe for noctiluca::model::SourceOverlay
+impl core::panic::unwind_safe::UnwindSafe for noctiluca::model::SourceOverlay
+pub struct noctiluca::model::SourcePage
+impl noctiluca::model::SourcePage
+pub fn noctiluca::model::SourcePage::page(&self) -> &alloc::sync::Arc<noctiluca::model::Page>
+impl core::clone::Clone for noctiluca::model::SourcePage
+pub fn noctiluca::model::SourcePage::clone(&self) -> noctiluca::model::SourcePage
+impl core::fmt::Debug for noctiluca::model::SourcePage
+pub fn noctiluca::model::SourcePage::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Freeze for noctiluca::model::SourcePage
+impl core::marker::Send for noctiluca::model::SourcePage
+impl core::marker::Sync for noctiluca::model::SourcePage
+impl core::marker::Unpin for noctiluca::model::SourcePage
+impl core::marker::UnsafeUnpin for noctiluca::model::SourcePage
+impl core::panic::unwind_safe::RefUnwindSafe for noctiluca::model::SourcePage
+impl core::panic::unwind_safe::UnwindSafe for noctiluca::model::SourcePage
 pub struct noctiluca::model::Stack
 pub noctiluca::model::Stack::covered: bool
 pub noctiluca::model::Stack::layer: core::option::Option<usize>
@@ -2175,6 +2231,8 @@ impl core::panic::unwind_safe::UnwindSafe for noctiluca::model::Table
 pub const noctiluca::model::MAX_BLOCKS: usize
 pub const noctiluca::model::MAX_ENTRIES: usize
 pub fn noctiluca::model::build(&noctiluca::engine::PageSnapshot, &mut noctiluca::model::Revisions) -> noctiluca::model::Page
+pub fn noctiluca::model::build_source(&noctiluca::engine::PageSnapshot, &mut noctiluca::model::Revisions) -> noctiluca::model::SourcePage
+pub fn noctiluca::model::build_source_with(&noctiluca::engine::PageSnapshot, &mut noctiluca::model::Revisions, &std::collections::hash::set::HashSet<noctiluca::engine::NodeId>) -> noctiluca::model::SourcePage
 pub fn noctiluca::model::build_with(&noctiluca::engine::PageSnapshot, &mut noctiluca::model::Revisions, &std::collections::hash::set::HashSet<noctiluca::engine::NodeId>) -> noctiluca::model::Page
 pub fn noctiluca::model::live_runs(&serde_json::value::Value, &str) -> alloc::vec::Vec<noctiluca::model::Run>
 pub fn noctiluca::model::number_text(f64) -> alloc::string::String
@@ -2184,6 +2242,8 @@ pub mod noctiluca::pictures
 pub struct noctiluca::pictures::Cells
 impl noctiluca::pictures::Cells
 pub fn noctiluca::pictures::Cells::of(&self, &rich::console::Console, &rich_art::picture::Picture, rich_art::picture::Pixels, usize, usize) -> alloc::rc::Rc<alloc::vec::Vec<alloc::vec::Vec<rich::segment::Segment>>>
+pub fn noctiluca::pictures::Cells::of_with_metrics(&self, &rich::console::Console, &rich_art::picture::Picture, rich_art::picture::Pixels, usize, usize, core::option::Option<(u16, u16)>) -> alloc::rc::Rc<alloc::vec::Vec<alloc::vec::Vec<rich::segment::Segment>>>
+pub fn noctiluca::pictures::Cells::with_presentation(intuituive::image::ImagePresentation) -> Self
 impl core::default::Default for noctiluca::pictures::Cells
 pub fn noctiluca::pictures::Cells::default() -> noctiluca::pictures::Cells
 impl !core::marker::Freeze for noctiluca::pictures::Cells
@@ -2215,8 +2275,10 @@ impl noctiluca::pictures::Motion
 pub fn noctiluca::pictures::Motion::budget(&self) -> rich_art::picture::ByteBudget
 pub fn noctiluca::pictures::Motion::moving_count(&self) -> usize
 pub fn noctiluca::pictures::Motion::new(rich_art::picture::ByteBudget) -> noctiluca::pictures::Motion
+pub fn noctiluca::pictures::Motion::set_cell_pixels(&mut self, rich_art::graphics::CellPixels)
 pub fn noctiluca::pictures::Motion::share_with(&mut self, rich_art::picture::ByteBudget, usize)
 pub fn noctiluca::pictures::Motion::step(&mut self, &noctiluca::model::Page, &[noctiluca::layout::Region], core::ops::range::Range<usize>, rich_art::picture::Pixels, bool, std::time::Instant) -> std::collections::hash::map::HashMap<noctiluca::engine::NodeId, noctiluca::pictures::Live>
+pub fn noctiluca::pictures::Motion::with_presentation(rich_art::picture::ByteBudget, intuituive::image::ImagePresentation) -> Self
 impl core::default::Default for noctiluca::pictures::Motion
 pub fn noctiluca::pictures::Motion::default() -> Self
 impl core::marker::Freeze for noctiluca::pictures::Motion
@@ -2229,6 +2291,7 @@ impl core::panic::unwind_safe::UnwindSafe for noctiluca::pictures::Motion
 pub fn noctiluca::pictures::on_backdrop(alloc::vec::Vec<rich::segment::Segment>, usize, &str) -> alloc::vec::Vec<rich::segment::Segment>
 pub fn noctiluca::pictures::pixels(noctiluca::config::Images) -> rich_art::picture::Pixels
 pub fn noctiluca::pictures::splice(&rich::console::Console, &noctiluca::pictures::Cells, alloc::vec::Vec<rich::segment::Segment>, usize, usize, &[noctiluca::layout::Region], impl core::ops::function::Fn(&noctiluca::layout::Region) -> core::option::Option<(rich_art::picture::Picture, rich_art::picture::Pixels)>) -> alloc::vec::Vec<rich::segment::Segment>
+pub fn noctiluca::pictures::splice_with_metrics(&rich::console::Console, &noctiluca::pictures::Cells, alloc::vec::Vec<rich::segment::Segment>, usize, usize, &[noctiluca::layout::Region], impl core::ops::function::Fn(&noctiluca::layout::Region) -> core::option::Option<(rich_art::picture::Picture, rich_art::picture::Pixels)>, core::option::Option<(u16, u16)>) -> alloc::vec::Vec<rich::segment::Segment>
 pub fn noctiluca::pictures::view(rich_art::picture::Pixels) -> rich_art::picture::ImageView
 pub mod noctiluca::pixel_view
 pub struct noctiluca::pixel_view::Screen
@@ -2549,6 +2612,7 @@ pub struct noctiluca::tab::Tab
 impl noctiluca::tab::Tab
 pub fn noctiluca::tab::Tab::send(&self, noctiluca::tab::Command) -> u64
 pub fn noctiluca::tab::Tab::spawn(alloc::boxed::Box<dyn noctiluca::engine::Engine>, impl core::ops::function::Fn(noctiluca::tab::Update) + core::marker::Send + 'static) -> noctiluca::tab::Tab
+pub fn noctiluca::tab::Tab::spawn_with_source(alloc::boxed::Box<dyn noctiluca::engine::Engine>, impl core::ops::function::Fn(noctiluca::tab::Update, core::option::Option<noctiluca::model::SourcePage>) + core::marker::Send + 'static) -> noctiluca::tab::Tab
 impl core::clone::Clone for noctiluca::tab::Tab
 pub fn noctiluca::tab::Tab::clone(&self) -> noctiluca::tab::Tab
 impl core::fmt::Debug for noctiluca::tab::Tab
@@ -2585,6 +2649,7 @@ pub fn noctiluca::testing::FakeEngine::act(&mut self, noctiluca::engine::TabId, 
 pub fn noctiluca::testing::FakeEngine::appended(&mut self, noctiluca::engine::TabId) -> std::io::error::Result<alloc::vec::Vec<noctiluca::engine::NodeId>>
 pub fn noctiluca::testing::FakeEngine::can_play(&mut self, noctiluca::engine::TabId, &[&str]) -> std::io::error::Result<alloc::vec::Vec<alloc::string::String>>
 pub fn noctiluca::testing::FakeEngine::capture(&mut self, noctiluca::engine::TabId, noctiluca::engine::Rect, noctiluca::engine::Format) -> std::io::error::Result<noctiluca::engine::Frame>
+pub fn noctiluca::testing::FakeEngine::capture_model(&mut self, noctiluca::engine::TabId, noctiluca::engine::Rect, noctiluca::engine::Format) -> std::io::error::Result<noctiluca::engine::Frame>
 pub fn noctiluca::testing::FakeEngine::close_tab(&mut self, noctiluca::engine::TabId) -> std::io::error::Result<()>
 pub fn noctiluca::testing::FakeEngine::events(&mut self) -> alloc::vec::Vec<noctiluca::engine::EngineEvent>
 pub fn noctiluca::testing::FakeEngine::history(&mut self, noctiluca::engine::TabId, noctiluca::engine::HistoryStep) -> std::io::error::Result<()>
@@ -2592,6 +2657,7 @@ pub fn noctiluca::testing::FakeEngine::image_ready(&mut self, noctiluca::engine:
 pub fn noctiluca::testing::FakeEngine::metrics(&mut self, noctiluca::engine::TabId) -> std::io::error::Result<noctiluca::engine::Metrics>
 pub fn noctiluca::testing::FakeEngine::new_tab(&mut self, &str) -> std::io::error::Result<noctiluca::engine::TabId>
 pub fn noctiluca::testing::FakeEngine::open(&mut self, noctiluca::engine::TabId, &str) -> std::io::error::Result<()>
+pub fn noctiluca::testing::FakeEngine::optional_resources(&mut self) -> core::option::Option<noctiluca::engine::ResourceReader>
 pub fn noctiluca::testing::FakeEngine::playback(&mut self, noctiluca::engine::TabId, i64) -> std::io::error::Result<noctiluca::engine::Playback>
 pub fn noctiluca::testing::FakeEngine::product(&mut self, noctiluca::engine::TabId) -> alloc::string::String
 pub fn noctiluca::testing::FakeEngine::read_live(&mut self, noctiluca::engine::TabId, noctiluca::engine::NodeId, bool) -> std::io::error::Result<noctiluca::engine::LiveRead>
@@ -2612,6 +2678,7 @@ impl !core::panic::unwind_safe::UnwindSafe for noctiluca::testing::FakeEngine
 pub struct noctiluca::testing::FakeState
 pub noctiluca::testing::FakeState::actions: alloc::vec::Vec<noctiluca::engine::PageAction>
 pub noctiluca::testing::FakeState::at: usize
+pub noctiluca::testing::FakeState::capture_steps: alloc::collections::vec_deque::VecDeque<core::option::Option<alloc::vec::Vec<u8>>>
 pub noctiluca::testing::FakeState::captures: alloc::vec::Vec<noctiluca::engine::Rect>
 pub noctiluca::testing::FakeState::codecs: std::collections::hash::map::HashMap<alloc::string::String, alloc::string::String>
 pub noctiluca::testing::FakeState::current: core::option::Option<alloc::string::String>
@@ -2624,7 +2691,9 @@ pub noctiluca::testing::FakeState::opened: alloc::vec::Vec<alloc::string::String
 pub noctiluca::testing::FakeState::pages: std::collections::hash::map::HashMap<alloc::string::String, noctiluca::engine::PageSnapshot>
 pub noctiluca::testing::FakeState::paint: core::option::Option<[u8; 3]>
 pub noctiluca::testing::FakeState::recorded: core::option::Option<std::path::PathBuf>
+pub noctiluca::testing::FakeState::resource_reads: alloc::vec::Vec<alloc::string::String>
 pub noctiluca::testing::FakeState::resource_root: core::option::Option<std::path::PathBuf>
+pub noctiluca::testing::FakeState::resource_steps: std::collections::hash::map::HashMap<alloc::string::String, alloc::collections::vec_deque::VecDeque<core::option::Option<alloc::vec::Vec<u8>>>>
 pub noctiluca::testing::FakeState::resources: std::collections::hash::map::HashMap<alloc::string::String, alloc::vec::Vec<u8>>
 pub noctiluca::testing::FakeState::screencast: bool
 pub noctiluca::testing::FakeState::screencast_scale: f64
@@ -2682,8 +2751,13 @@ pub fn noctiluca::url::scheme(&str) -> core::option::Option<&str>
 pub mod noctiluca::video
 pub struct noctiluca::video::Encoder
 impl noctiluca::video::Encoder
+pub fn noctiluca::video::Encoder::clear_waiting(&self)
 pub fn noctiluca::video::Encoder::encode(&self, noctiluca::video::Job)
+pub fn noctiluca::video::Encoder::encode_with_metrics(&self, noctiluca::video::Job, core::option::Option<(u16, u16)>)
+pub fn noctiluca::video::Encoder::retain_waiting(&self, &std::collections::hash::set::HashSet<noctiluca::engine::NodeId>)
 pub fn noctiluca::video::Encoder::spawn(impl core::ops::function::Fn(noctiluca::video::Job) + core::marker::Send + 'static) -> noctiluca::video::Encoder
+pub fn noctiluca::video::Encoder::spawn_with_context(rich_art::picture::PictureEncoding, impl core::ops::function::Fn(noctiluca::video::Job) + core::marker::Send + 'static) -> noctiluca::video::Encoder
+pub fn noctiluca::video::Encoder::spawn_with_presentation(intuituive::image::ImagePresentation, impl core::ops::function::Fn(noctiluca::video::Job) + core::marker::Send + 'static) -> noctiluca::video::Encoder
 impl core::fmt::Debug for noctiluca::video::Encoder
 pub fn noctiluca::video::Encoder::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 impl core::ops::drop::Drop for noctiluca::video::Encoder
@@ -2746,8 +2820,10 @@ pub fn noctiluca::video::Pacing::new(rich_art::picture::ByteBudget, rich_art::pi
 pub fn noctiluca::video::Pacing::offer(&mut self, &noctiluca::video::VideoFrame, usize, usize, std::time::Instant, noctiluca::video::ByteCounter) -> core::option::Option<rich_art::picture::Picture>
 pub fn noctiluca::video::Pacing::pixels(&self, noctiluca::engine::NodeId) -> rich_art::picture::Pixels
 pub fn noctiluca::video::Pacing::recent_bytes(&self, noctiluca::engine::NodeId) -> u64
+pub fn noctiluca::video::Pacing::set_cell_pixels(&mut self, rich_art::graphics::CellPixels)
 pub fn noctiluca::video::Pacing::start_for(core::option::Option<rich_art::picture::Pixels>, rich_art::picture::Pixels) -> rich_art::picture::Pixels
 pub fn noctiluca::video::Pacing::still(&mut self, noctiluca::engine::NodeId)
+pub fn noctiluca::video::Pacing::with_formats(rich_art::picture::ByteBudget, rich_art::picture::Pixels, rich_art::picture::PixelFormats) -> noctiluca::video::Pacing
 impl core::marker::Freeze for noctiluca::video::Pacing
 impl core::marker::Send for noctiluca::video::Pacing
 impl core::marker::Sync for noctiluca::video::Pacing

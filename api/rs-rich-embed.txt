@@ -62,9 +62,12 @@ pub fn rich_embed::chrome::ChromeEngine::new() -> rich_embed::chrome::ChromeEngi
 pub fn rich_embed::chrome::ChromeEngine::profile(self, impl core::convert::Into<std::path::PathBuf>) -> rich_embed::chrome::ChromeEngine
 pub fn rich_embed::chrome::ChromeEngine::screencast(self, bool) -> rich_embed::chrome::ChromeEngine
 pub fn rich_embed::chrome::ChromeEngine::screencast_on_demand(self, bool) -> rich_embed::chrome::ChromeEngine
+pub fn rich_embed::chrome::ChromeEngine::screencast_scope(&self) -> core::option::Option<rich_embed::chrome::ScreencastScope>
+pub fn rich_embed::chrome::ChromeEngine::screencast_scope_is_current(&self, &rich_embed::chrome::ScreencastScope) -> bool
 pub fn rich_embed::chrome::ChromeEngine::set_screencast(&mut self, bool) -> std::io::error::Result<()>
 pub fn rich_embed::chrome::ChromeEngine::set_screencast_scale(&mut self, f64) -> std::io::error::Result<()>
 pub fn rich_embed::chrome::ChromeEngine::take_screencast(&mut self) -> core::option::Option<rich_embed::chrome::ScreencastFrame>
+pub fn rich_embed::chrome::ChromeEngine::take_screencast_for(&mut self, &rich_embed::chrome::ScreencastScope) -> core::option::Option<rich_embed::chrome::ScreencastFrame>
 impl core::default::Default for rich_embed::chrome::ChromeEngine
 pub fn rich_embed::chrome::ChromeEngine::default() -> Self
 impl core::fmt::Debug for rich_embed::chrome::ChromeEngine
@@ -166,6 +169,16 @@ impl core::marker::Unpin for rich_embed::chrome::ScreencastFrame
 impl core::marker::UnsafeUnpin for rich_embed::chrome::ScreencastFrame
 impl core::panic::unwind_safe::RefUnwindSafe for rich_embed::chrome::ScreencastFrame
 impl core::panic::unwind_safe::UnwindSafe for rich_embed::chrome::ScreencastFrame
+pub struct rich_embed::chrome::ScreencastScope
+impl core::clone::Clone for rich_embed::chrome::ScreencastScope
+pub fn rich_embed::chrome::ScreencastScope::clone(&self) -> rich_embed::chrome::ScreencastScope
+impl core::marker::Freeze for rich_embed::chrome::ScreencastScope
+impl core::marker::Send for rich_embed::chrome::ScreencastScope
+impl core::marker::Sync for rich_embed::chrome::ScreencastScope
+impl core::marker::Unpin for rich_embed::chrome::ScreencastScope
+impl core::marker::UnsafeUnpin for rich_embed::chrome::ScreencastScope
+impl core::panic::unwind_safe::RefUnwindSafe for rich_embed::chrome::ScreencastScope
+impl core::panic::unwind_safe::UnwindSafe for rich_embed::chrome::ScreencastScope
 pub const rich_embed::chrome::BINARY_NAMES: &[&str]
 pub fn rich_embed::chrome::key_events(rich_interact::event::Key) -> alloc::vec::Vec<serde_json::value::Value>
 pub mod rich_embed::keys
@@ -271,9 +284,12 @@ pub fn rich_embed::chrome::ChromeEngine::new() -> rich_embed::chrome::ChromeEngi
 pub fn rich_embed::chrome::ChromeEngine::profile(self, impl core::convert::Into<std::path::PathBuf>) -> rich_embed::chrome::ChromeEngine
 pub fn rich_embed::chrome::ChromeEngine::screencast(self, bool) -> rich_embed::chrome::ChromeEngine
 pub fn rich_embed::chrome::ChromeEngine::screencast_on_demand(self, bool) -> rich_embed::chrome::ChromeEngine
+pub fn rich_embed::chrome::ChromeEngine::screencast_scope(&self) -> core::option::Option<rich_embed::chrome::ScreencastScope>
+pub fn rich_embed::chrome::ChromeEngine::screencast_scope_is_current(&self, &rich_embed::chrome::ScreencastScope) -> bool
 pub fn rich_embed::chrome::ChromeEngine::set_screencast(&mut self, bool) -> std::io::error::Result<()>
 pub fn rich_embed::chrome::ChromeEngine::set_screencast_scale(&mut self, f64) -> std::io::error::Result<()>
 pub fn rich_embed::chrome::ChromeEngine::take_screencast(&mut self) -> core::option::Option<rich_embed::chrome::ScreencastFrame>
+pub fn rich_embed::chrome::ChromeEngine::take_screencast_for(&mut self, &rich_embed::chrome::ScreencastScope) -> core::option::Option<rich_embed::chrome::ScreencastFrame>
 impl core::default::Default for rich_embed::chrome::ChromeEngine
 pub fn rich_embed::chrome::ChromeEngine::default() -> Self
 impl core::fmt::Debug for rich_embed::chrome::ChromeEngine
@@ -568,6 +584,16 @@ impl core::marker::Unpin for rich_embed::chrome::ScreencastFrame
 impl core::marker::UnsafeUnpin for rich_embed::chrome::ScreencastFrame
 impl core::panic::unwind_safe::RefUnwindSafe for rich_embed::chrome::ScreencastFrame
 impl core::panic::unwind_safe::UnwindSafe for rich_embed::chrome::ScreencastFrame
+pub struct rich_embed::ScreencastScope
+impl core::clone::Clone for rich_embed::chrome::ScreencastScope
+pub fn rich_embed::chrome::ScreencastScope::clone(&self) -> rich_embed::chrome::ScreencastScope
+impl core::marker::Freeze for rich_embed::chrome::ScreencastScope
+impl core::marker::Send for rich_embed::chrome::ScreencastScope
+impl core::marker::Sync for rich_embed::chrome::ScreencastScope
+impl core::marker::Unpin for rich_embed::chrome::ScreencastScope
+impl core::marker::UnsafeUnpin for rich_embed::chrome::ScreencastScope
+impl core::panic::unwind_safe::RefUnwindSafe for rich_embed::chrome::ScreencastScope
+impl core::panic::unwind_safe::UnwindSafe for rich_embed::chrome::ScreencastScope
 pub struct rich_embed::TerminalPane
 impl rich_embed::TerminalPane
 pub fn rich_embed::TerminalPane::node(self) -> intuituive::node::Node

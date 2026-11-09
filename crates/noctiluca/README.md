@@ -55,6 +55,26 @@ as a normal user, never as root.
   keywords, the search engine, keys, and per-site settings and keys. See
   [`config.sample.toml`](config.sample.toml).
 
+## Image fallback and recovery
+
+Images decode asynchronously through the shared Picture decoder. If original
+bytes are unavailable, unsupported or fail decoding, Noctiluca captures the
+current model's guarded Chrome pixels as a PNG fallback. A temporary network
+cache miss is retried after 500 ms, 2 s, 8 s, then 30 s per attempt (capped).
+The last successfully decoded picture stays visible while the same source,
+size and revision is replaced. An already decoded SVG drawing also stays visible
+during a content revision of that same drawing; its old ownership is retained
+separately, and late old-revision results cannot replace it. Changed documents,
+nodes, sources, sizes or media kinds start fresh.
+
+Retries respect image readiness and pending document changes. Admission is
+limited to eight sources per batch and eight outstanding still decodes, with
+one pending attempt per live key. Screenshot failures also back off; unsupported
+originals, data URLs and drawings without originals do not poll for original
+bytes. A successful original is retained without repeated reads. Retrying a
+cache miss does not force lazy loading or make a new browser network request.
+A fallback is a still: animation returns only if the original becomes available.
+
 ## Cargo features
 
 - `fake-engine` (off; **test-only**): the binary replays saved page
@@ -92,3 +112,16 @@ The guide is on the docs site:
 The library's reference is on [docs.rs](https://docs.rs/noctiluca). The
 design, its phases and what is still to come are in
 [`docs/design/browser.md`](https://github.com/buchochelliq-labs/rs-rich-cli/blob/main/docs/design/browser.md).
+
+Long action labels wrap by default in the adaptive projection and source popups.
+Set `[adapt] wrap-action-labels = false` or use
+`--adapt=-wrap-action-labels` for compact controls. `--no-adapt` also selects
+compact labels. Shift+F1 opens a local, scrollable list of full names, including
+disabled choices; Escape closes that list without dismissing the website popup.
+The binding is configurable as `[keys] page.labels = "..."`; F1 keeps Actions.
+
+Popups use shared intuiTUIve buttons with `Node::wrap_label(bool)`, measured
+scrolling and owner-controlled modal scopes. Other applications can use the same
+public components; shared buttons remain compact by default. Noctiluca's public
+`Rule` enum appends `WrapActionLabels` after `FigureFlow`; exhaustive matches
+should account for the added variant.

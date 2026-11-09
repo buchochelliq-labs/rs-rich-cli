@@ -39,9 +39,18 @@
     g.font = '12px sans-serif';
     g.fillText('Mbps', 120, 150);
   }
+  window.setGauge = (download, upload) => {
+    dial(document.getElementById('painted'), download);
+    dial(document.getElementById('labelled'), download);
+    const meter = document.getElementById('meter');
+    dial(meter, upload);
+    meter.setAttribute('aria-valuenow', upload.toFixed(1));
+    meter.setAttribute('aria-valuetext', upload.toFixed(1) + ' Mbps');
+    document.getElementById('value').textContent = download.toFixed(2);
+  };
   const start = performance.now();
   function frame(now) {
-    const mbps = Math.min((now - start) / 1000 * 36, 287.4);
+    const mbps = Math.min((now - start) / 1000 * 24, 287.4);
     dial(document.getElementById('painted'), mbps);
     dial(document.getElementById('labelled'), mbps);
     const up = mbps / 3;
@@ -52,5 +61,5 @@
     document.getElementById('value').textContent = mbps.toFixed(2);
     if (mbps < 287.4) requestAnimationFrame(frame);
   }
-  requestAnimationFrame(frame);
+  if (!location.search.includes('quiet')) requestAnimationFrame(frame);
 </script>

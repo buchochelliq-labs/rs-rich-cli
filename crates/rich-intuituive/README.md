@@ -60,7 +60,10 @@ fn main() -> std::io::Result<()> {
   (`[accent]…[/]`), switched at run time with `cx.set_theme`.
 - **Inline apps:** `App::inline(rows)` runs in a few rows under the prompt
   and leaves its last frame in the scrollback.
-- **Responsive:** `.hide_below(cols)` and `.show_below(cols)` on a node,
+- **Responsive:** `grid(...).adaptive_columns(min_track, max_tracks)` uses its
+  actual parent width and retains children, focus and values across reflow; see
+  [adaptive layout guidance](../../docs/intuituive-adaptive-layout.md).
+  `.hide_below(cols)` and `.show_below(cols)` on a node,
   and `@media (max-width: 80)` in a stylesheet, follow the terminal's size;
   `viewport()` reads it.
 - **Errors:** `.error_when(…)` puts a node in error, styled by the theme and
@@ -99,6 +102,7 @@ More examples (`cargo run -p rs-rich-intuituive --example <name>`):
 |---|---|
 | `todo` | the tutorial's app: signals, a list, an input, a modal |
 | `screens` | screens, a grid of cards and a modal |
+| `adaptive_layout` | container-aware grid, retained draft, keyed history and transport; `-- --record DIR` saves four sizes |
 | `inline` | an inline app that keeps the scrollback |
 | `meters` | widgets of your own: retained drawing, focus, resize and pointer events, keys seen first |
 | `planner` | the components together: a menu bar, a tree, split panes, a calendar, a virtual list, the palette |

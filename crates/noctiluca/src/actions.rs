@@ -210,6 +210,13 @@ pub const ACTIONS: &[Action] = &[
     ),
     action("actions", "Actions (this list)", "help", "f1", "f1"),
     action(
+        "page.labels",
+        "Read complete action labels",
+        "help",
+        "shift+f1",
+        "shift+f1",
+    ),
+    action(
         "about",
         "About: version and the active adaptations",
         "help",

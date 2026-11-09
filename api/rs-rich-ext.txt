@@ -1094,6 +1094,7 @@ pub struct rich_ext::capabilities::Capabilities
 impl rich_ext::capabilities::Capabilities
 pub fn rich_ext::capabilities::Capabilities::detect(&dyn rich_ext::capabilities::Environment) -> rich_ext::capabilities::Report
 pub fn rich_ext::capabilities::Capabilities::detect_with(&dyn rich_ext::capabilities::Environment, &rich_ext::capabilities::Overrides) -> rich_ext::capabilities::Report
+pub fn rich_ext::capabilities::Capabilities::graphics_features(&dyn rich_ext::capabilities::Environment) -> rich_ext::capabilities::GraphicsFeatureReport
 pub fn rich_ext::capabilities::Capabilities::system() -> rich_ext::capabilities::Report
 impl core::clone::Clone for rich_ext::capabilities::Capabilities
 pub fn rich_ext::capabilities::Capabilities::clone(&self) -> rich_ext::capabilities::Capabilities
@@ -1144,6 +1145,46 @@ impl<T> core::marker::Unpin for rich_ext::capabilities::Field<T> where T: core::
 impl<T> core::marker::UnsafeUnpin for rich_ext::capabilities::Field<T> where T: core::marker::UnsafeUnpin
 impl<T> core::panic::unwind_safe::RefUnwindSafe for rich_ext::capabilities::Field<T> where T: core::panic::unwind_safe::RefUnwindSafe
 impl<T> core::panic::unwind_safe::UnwindSafe for rich_ext::capabilities::Field<T> where T: core::panic::unwind_safe::UnwindSafe
+pub struct rich_ext::capabilities::GraphicsFeatureReport
+pub rich_ext::capabilities::GraphicsFeatureReport::iterm: rich_ext::capabilities::Field<bool>
+pub rich_ext::capabilities::GraphicsFeatureReport::native_animation: rich_ext::capabilities::Field<bool>
+pub rich_ext::capabilities::GraphicsFeatureReport::sixel: rich_ext::capabilities::Field<bool>
+pub rich_ext::capabilities::GraphicsFeatureReport::unicode_placeholders: rich_ext::capabilities::Field<bool>
+pub rich_ext::capabilities::GraphicsFeatureReport::warnings: alloc::vec::Vec<alloc::string::String>
+impl rich_ext::capabilities::GraphicsFeatureReport
+pub fn rich_ext::capabilities::GraphicsFeatureReport::kitty_features(&self) -> rich_ext::capabilities::KittyFeatures
+impl core::clone::Clone for rich_ext::capabilities::GraphicsFeatureReport
+pub fn rich_ext::capabilities::GraphicsFeatureReport::clone(&self) -> rich_ext::capabilities::GraphicsFeatureReport
+impl core::fmt::Debug for rich_ext::capabilities::GraphicsFeatureReport
+pub fn rich_ext::capabilities::GraphicsFeatureReport::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Freeze for rich_ext::capabilities::GraphicsFeatureReport
+impl core::marker::Send for rich_ext::capabilities::GraphicsFeatureReport
+impl core::marker::Sync for rich_ext::capabilities::GraphicsFeatureReport
+impl core::marker::Unpin for rich_ext::capabilities::GraphicsFeatureReport
+impl core::marker::UnsafeUnpin for rich_ext::capabilities::GraphicsFeatureReport
+impl core::panic::unwind_safe::RefUnwindSafe for rich_ext::capabilities::GraphicsFeatureReport
+impl core::panic::unwind_safe::UnwindSafe for rich_ext::capabilities::GraphicsFeatureReport
+pub struct rich_ext::capabilities::KittyFeatures
+pub rich_ext::capabilities::KittyFeatures::native_animation: bool
+pub rich_ext::capabilities::KittyFeatures::unicode_placeholders: bool
+impl core::clone::Clone for rich_ext::capabilities::KittyFeatures
+pub fn rich_ext::capabilities::KittyFeatures::clone(&self) -> rich_ext::capabilities::KittyFeatures
+impl core::cmp::Eq for rich_ext::capabilities::KittyFeatures
+impl core::cmp::PartialEq for rich_ext::capabilities::KittyFeatures
+pub fn rich_ext::capabilities::KittyFeatures::eq(&self, &rich_ext::capabilities::KittyFeatures) -> bool
+impl core::default::Default for rich_ext::capabilities::KittyFeatures
+pub fn rich_ext::capabilities::KittyFeatures::default() -> rich_ext::capabilities::KittyFeatures
+impl core::fmt::Debug for rich_ext::capabilities::KittyFeatures
+pub fn rich_ext::capabilities::KittyFeatures::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Copy for rich_ext::capabilities::KittyFeatures
+impl core::marker::StructuralPartialEq for rich_ext::capabilities::KittyFeatures
+impl core::marker::Freeze for rich_ext::capabilities::KittyFeatures
+impl core::marker::Send for rich_ext::capabilities::KittyFeatures
+impl core::marker::Sync for rich_ext::capabilities::KittyFeatures
+impl core::marker::Unpin for rich_ext::capabilities::KittyFeatures
+impl core::marker::UnsafeUnpin for rich_ext::capabilities::KittyFeatures
+impl core::panic::unwind_safe::RefUnwindSafe for rich_ext::capabilities::KittyFeatures
+impl core::panic::unwind_safe::UnwindSafe for rich_ext::capabilities::KittyFeatures
 pub struct rich_ext::capabilities::MapEnvironment
 pub rich_ext::capabilities::MapEnvironment::cell_pixels: core::option::Option<(u16, u16)>
 pub rich_ext::capabilities::MapEnvironment::size: core::option::Option<(usize, usize)>
@@ -9245,13 +9286,18 @@ impl core::marker::UnsafeUnpin for rich_ext::frame::graphics::Placement
 impl !core::panic::unwind_safe::RefUnwindSafe for rich_ext::frame::graphics::Placement
 impl !core::panic::unwind_safe::UnwindSafe for rich_ext::frame::graphics::Placement
 pub trait rich_ext::frame::graphics::Graphic: core::marker::Send + core::marker::Sync + core::fmt::Debug
+pub fn rich_ext::frame::graphics::Graphic::can_reuse_data(&self) -> bool
 pub fn rich_ext::frame::graphics::Graphic::draw(&self, usize) -> alloc::string::String
 pub fn rich_ext::frame::graphics::Graphic::in_cells(&self) -> bool
 pub fn rich_ext::frame::graphics::Graphic::key(&self) -> u64
 pub trait rich_ext::frame::graphics::PlacementSource: core::marker::Send + core::marker::Sync
 pub fn rich_ext::frame::graphics::PlacementSource::next_change(&self) -> core::option::Option<core::time::Duration>
+pub fn rich_ext::frame::graphics::PlacementSource::output_written(&self)
 pub fn rich_ext::frame::graphics::PlacementSource::placements(&self, &rich_ext::frame::Frame) -> alloc::vec::Vec<rich_ext::frame::graphics::Placement>
+pub fn rich_ext::frame::graphics::PlacementSource::placements_from_screen(&self, &rich_ext::surface::Screen, core::option::Option<(u16, u16)>) -> alloc::vec::Vec<rich_ext::frame::graphics::Placement>
+pub fn rich_ext::frame::graphics::PlacementSource::placements_with_metrics(&self, &rich_ext::frame::Frame, core::option::Option<(u16, u16)>) -> alloc::vec::Vec<rich_ext::frame::graphics::Placement>
 pub fn rich_ext::frame::graphics::PlacementSource::prepare(&self, alloc::vec::Vec<rich::segment::Segment>) -> alloc::vec::Vec<rich::segment::Segment>
+pub fn rich_ext::frame::graphics::PlacementSource::reconcile(&self, &[rich_ext::frame::graphics::Placement]) -> alloc::string::String
 pub fn rich_ext::frame::graphics::PlacementSource::release(&self, &[rich_ext::frame::graphics::Placement]) -> alloc::string::String
 pub fn rich_ext::frame::graphics::plan(&[rich_ext::frame::graphics::Placement], &[rich_ext::frame::graphics::Placement], &[rich_ext::frame::Change]) -> rich_ext::frame::graphics::GraphicsPlan
 pub mod rich_ext::frame::regions
@@ -9694,13 +9740,18 @@ impl<'a> core::marker::UnsafeUnpin for rich_ext::frame::SvgOptions<'a>
 impl<'a> core::panic::unwind_safe::RefUnwindSafe for rich_ext::frame::SvgOptions<'a>
 impl<'a> core::panic::unwind_safe::UnwindSafe for rich_ext::frame::SvgOptions<'a>
 pub trait rich_ext::frame::Graphic: core::marker::Send + core::marker::Sync + core::fmt::Debug
+pub fn rich_ext::frame::Graphic::can_reuse_data(&self) -> bool
 pub fn rich_ext::frame::Graphic::draw(&self, usize) -> alloc::string::String
 pub fn rich_ext::frame::Graphic::in_cells(&self) -> bool
 pub fn rich_ext::frame::Graphic::key(&self) -> u64
 pub trait rich_ext::frame::PlacementSource: core::marker::Send + core::marker::Sync
 pub fn rich_ext::frame::PlacementSource::next_change(&self) -> core::option::Option<core::time::Duration>
+pub fn rich_ext::frame::PlacementSource::output_written(&self)
 pub fn rich_ext::frame::PlacementSource::placements(&self, &rich_ext::frame::Frame) -> alloc::vec::Vec<rich_ext::frame::graphics::Placement>
+pub fn rich_ext::frame::PlacementSource::placements_from_screen(&self, &rich_ext::surface::Screen, core::option::Option<(u16, u16)>) -> alloc::vec::Vec<rich_ext::frame::graphics::Placement>
+pub fn rich_ext::frame::PlacementSource::placements_with_metrics(&self, &rich_ext::frame::Frame, core::option::Option<(u16, u16)>) -> alloc::vec::Vec<rich_ext::frame::graphics::Placement>
 pub fn rich_ext::frame::PlacementSource::prepare(&self, alloc::vec::Vec<rich::segment::Segment>) -> alloc::vec::Vec<rich::segment::Segment>
+pub fn rich_ext::frame::PlacementSource::reconcile(&self, &[rich_ext::frame::graphics::Placement]) -> alloc::string::String
 pub fn rich_ext::frame::PlacementSource::release(&self, &[rich_ext::frame::graphics::Placement]) -> alloc::string::String
 pub fn rich_ext::frame::plan_graphics(&[rich_ext::frame::graphics::Placement], &[rich_ext::frame::graphics::Placement], &[rich_ext::frame::Change]) -> rich_ext::frame::graphics::GraphicsPlan
 pub fn rich_ext::frame::render_frame(&rich::console::Console, &rich::console::ConsoleOptions, &dyn rich::protocol::Renderable) -> rich_ext::frame::Frame

@@ -355,6 +355,7 @@ impl<'a> EventLoop<'a> {
                 .join("\n");
             self.backend.painted(&plain);
             self.backend.write_frame(&out)?;
+            self.painter.output_written();
         }
         self.rows = rows;
         self.shown = view.lines;
@@ -524,6 +525,7 @@ impl<'a> EventLoop<'a> {
         if let Step::Handoff(mut command) = step {
             let finish = self.painter.finish(false);
             self.backend.write_frame(&finish)?;
+            self.painter.output_written();
             let code = self.backend.handoff(&mut command)?;
             self.painter.reset();
             self.deliver(index, &Event::Returned(code))?;
@@ -594,6 +596,7 @@ impl<'a> EventLoop<'a> {
             Some(Event::Key(key)) if key == Key::ctrl('z') && self.backend.can_suspend() => {
                 let finish = self.painter.finish(false);
                 self.backend.write_frame(&finish)?;
+                self.painter.output_written();
                 self.backend.suspend()?;
                 self.painter.reset();
                 let (columns, rows) = self.backend.size();
@@ -703,7 +706,9 @@ impl<'a> EventLoop<'a> {
     /// [`step`](Self::step) calls it once at the end.
     pub fn finish(&mut self) -> io::Result<()> {
         let finish = self.painter.finish(self.options.transient);
-        self.backend.write_frame(&finish)
+        self.backend.write_frame(&finish)?;
+        self.painter.output_written();
+        Ok(())
     }
 }
 

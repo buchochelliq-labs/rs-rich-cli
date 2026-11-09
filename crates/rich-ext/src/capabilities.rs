@@ -31,12 +31,14 @@
 //!   no. Alacritty (≥ 0.11) supports them but does not publish its version, so
 //!   it is left out on purpose — override with `RICH_HYPERLINKS=1`.
 //! * **graphics** — on a tty only: kitty (`TERM=xterm-kitty` or
-//!   `KITTY_WINDOW_ID`) → kitty; `TERM_PROGRAM` iTerm.app or WezTerm → iTerm
+//!   `KITTY_WINDOW_ID`) and Ghostty → kitty; `TERM_PROGRAM` iTerm.app or WezTerm → iTerm
 //!   inline images; else the Sixel heuristic → sixel. **sixel** is reported
 //!   separately (WezTerm speaks both): `WT_SESSION`, a `TERM` containing
 //!   `sixel`/`mlterm`/`foot`, or `TERM_PROGRAM` wezterm/mintty. This is the
 //!   same heuristic `rich_art::sixel::is_probably_supported` uses, which can
 //!   later call into this module instead.
+//!   Inside tmux or screen, graphics transport is unknown and defaults to none;
+//!   an explicit override still takes precedence.
 //! * **width / height** — `RICH_WIDTH`/`RICH_HEIGHT`, then `COLUMNS`/`LINES`,
 //!   then the terminal's reported size, then 80×25.
 //! * **interactive** — stdout is a terminal.
@@ -472,7 +474,100 @@ fn from_var(name: &str) -> Origin {
     Origin::Environment(name.into())
 }
 
+/// Independent Kitty features: selecting a protocol does not establish either.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct KittyFeatures {
+    pub unicode_placeholders: bool,
+    pub native_animation: bool,
+}
+
+/// Graphics feature evidence, separate from the legacy literal-compatible report.
+#[derive(Clone, Debug)]
+pub struct GraphicsFeatureReport {
+    pub unicode_placeholders: Field<bool>,
+    pub native_animation: Field<bool>,
+    pub iterm: Field<bool>,
+    pub sixel: Field<bool>,
+    pub warnings: Vec<String>,
+}
+
+impl GraphicsFeatureReport {
+    pub fn kitty_features(&self) -> KittyFeatures {
+        KittyFeatures {
+            unicode_placeholders: self.unicode_placeholders.value,
+            native_animation: self.native_animation.value,
+        }
+    }
+}
+
+// Override variables, parsed once.
+fn parsed<T>(
+    p: &Probe<'_>,
+    name: &str,
+    parse: impl Fn(&str) -> Option<T>,
+    warnings: &mut Vec<String>,
+) -> Option<Field<T>> {
+    let raw = p.get(name)?;
+    match parse(&raw) {
+        Some(value) => Some(Field::new(value, from_var(name), format!("{name}={raw}"))),
+        None => {
+            warnings.push(format!("ignored {name}={raw:?}: unrecognised value"));
+            None
+        }
+    }
+}
+
 impl Capabilities {
+    /// Resolve independent image features without terminal probes. Ghostty's
+    /// native Kitty animation arrived in stable 1.4.0; unknown/development
+    /// versions conservatively use software frames. Overrides are assertions,
+    /// not evidence that a multiplexer transports a protocol.
+    pub fn graphics_features(env: &dyn Environment) -> GraphicsFeatureReport {
+        let p = Probe { env };
+        let report = Self::detect(env);
+        let ghostty = p.program().eq_ignore_ascii_case("ghostty") || p.term().contains("ghostty");
+        let kitty = !ghostty && p.kitty().is_some();
+        let direct = env.is_terminal() && p.get("TMUX").is_none() && p.get("STY").is_none();
+        let identified = |value, reason| Field::new(value, Origin::Inferred, reason);
+        let mut warnings = Vec::new();
+        let placeholders = parsed(&p, "RICH_KITTY_PLACEHOLDERS", parse_bool, &mut warnings)
+            .unwrap_or_else(|| {
+                identified(
+                    direct && (kitty || ghostty),
+                    "direct Kitty/ Ghostty placeholder support",
+                )
+            });
+        let version = p.get("TERM_PROGRAM_VERSION").and_then(|v| {
+            let parts: Vec<_> = v.split('.').map(str::parse::<u32>).collect();
+            match parts.as_slice() {
+                [Ok(major), Ok(minor), Ok(patch)] => Some((*major, *minor, *patch)),
+                _ => None,
+            }
+        });
+        let animation = parsed(&p, "RICH_KITTY_ANIMATION", parse_bool, &mut warnings)
+            .unwrap_or_else(|| {
+                Field::new(
+                    direct && (kitty || (ghostty && version.is_some_and(|v| v >= (1, 4, 0)))),
+                    if ghostty {
+                        from_var("TERM_PROGRAM_VERSION")
+                    } else {
+                        Origin::Inferred
+                    },
+                    "Kitty or stable Ghostty >= 1.4.0; unknown versions require software playback",
+                )
+            });
+        GraphicsFeatureReport {
+            unicode_placeholders: placeholders,
+            native_animation: animation,
+            iterm: identified(
+                report.graphics.value == Graphics::Iterm,
+                "selected iTerm image route",
+            ),
+            sixel: report.sixel,
+            warnings,
+        }
+    }
+
     /// Detect from `env` with no caller overrides.
     pub fn detect(env: &dyn Environment) -> Report {
         Self::detect_with(env, &Overrides::default())
@@ -492,22 +587,6 @@ impl Capabilities {
         let program = p.program();
         let ci = p.ci();
 
-        // Override variables, parsed once.
-        fn parsed<T>(
-            p: &Probe<'_>,
-            name: &str,
-            parse: impl Fn(&str) -> Option<T>,
-            warnings: &mut Vec<String>,
-        ) -> Option<Field<T>> {
-            let raw = p.get(name)?;
-            match parse(&raw) {
-                Some(value) => Some(Field::new(value, from_var(name), format!("{name}={raw}"))),
-                None => {
-                    warnings.push(format!("ignored {name}={raw:?}: unrecognised value"));
-                    None
-                }
-            }
-        }
         let size = |v: &str| v.trim().parse::<usize>().ok().filter(|v| *v > 0);
 
         // Colour.
@@ -553,6 +632,12 @@ impl Capabilities {
             s.clone()
         } else if !tty {
             Field::new(false, Origin::Inferred, "stdout is not a terminal")
+        } else if p.get("TMUX").is_some() || p.get("STY").is_some() {
+            Field::new(
+                false,
+                Origin::Inferred,
+                "multiplexer graphics transport unknown",
+            )
         } else if let Some(reason) = p.sixel() {
             let origin = from_var(reason.split('=').next().unwrap_or(&reason));
             Field::new(true, origin, reason)
@@ -574,6 +659,23 @@ impl Capabilities {
             Field::new(value, s.origin, s.reason)
         } else if !tty {
             Field::new(Graphics::None, Origin::Inferred, "stdout is not a terminal")
+        } else if p.get("TMUX").is_some() || p.get("STY").is_some() {
+            Field::new(
+                Graphics::None,
+                Origin::Inferred,
+                "multiplexer graphics transport unknown",
+            )
+        } else if program.eq_ignore_ascii_case("ghostty") || term.contains("ghostty") {
+            let reason = if program.eq_ignore_ascii_case("ghostty") {
+                format!("TERM_PROGRAM={program}")
+            } else {
+                format!("TERM={term}")
+            };
+            Field::new(
+                Graphics::Kitty,
+                from_var(reason.split('=').next().unwrap_or("TERM")),
+                reason,
+            )
         } else if let Some(reason) = p.kitty() {
             let origin = from_var(reason.split('=').next().unwrap_or(&reason));
             Field::new(Graphics::Kitty, origin, reason)

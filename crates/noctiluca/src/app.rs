@@ -13,12 +13,14 @@ use std::sync::mpsc;
 use std::time::{Duration, Instant};
 
 use rich_embed::PageState;
+#[cfg(test)]
+use rich_intuituive::image_graphics;
 use rich_intuituive::interact::keymap::{Keymap, try_keys};
 use rich_intuituive::interact::{Key, KeyCode, MouseKind};
 use rich_intuituive::prelude::*;
 use rich_intuituive::{
-    Action, ImageView, Picture, Pixels, button_of, image_graphics, picture_bytes, picture_of,
-    scroll_virtual_with, slider, spawn_stream,
+    Action, ImageView, Picture, Pixels, button_of, picture_bytes, picture_of, scroll_virtual_with,
+    slider, spawn_stream,
 };
 
 use crate::actions::{self, ACTIONS, keys_label};
@@ -37,6 +39,11 @@ use crate::shelf::page_by;
 use crate::tab::{Command, Intent, Refusal, Tab, Update};
 use crate::video::{Encoder, Job, Pacing, VideoFrame};
 use crate::widgets::{WebControl, web_widget};
+
+mod labels;
+
+#[cfg(test)]
+type UpdateSink = Arc<dyn Fn(Update) + Send + Sync>;
 
 /// The video regions on screen and the pacing's intervals, as told to the
 /// tab.
@@ -75,7 +82,11 @@ pub struct Options {
 /// handler and sent with the tab's updates.
 #[derive(Clone, Copy)]
 pub struct Browser {
+    pub(crate) presentation: rich_intuituive::ImagePresentation,
     pub page: Signal<Option<Arc<Page>>>,
+    /// Complete immutable pair; the public legacy signal is its compatibility view.
+    source: Signal<Option<crate::model::SourcePage>>,
+    label_details: Signal<Option<(u64, Option<NodeId>)>>,
     pub state: Signal<PageState>,
     pub view: Signal<View>,
     pub hints: Signal<Option<Hints>>,
@@ -111,6 +122,7 @@ pub struct Browser {
     /// Encodes the frames the pacing lets through, off the thread that
     /// draws.
     encoder: Signal<Rc<Encoder>>,
+    prepared: Signal<Arc<std::sync::Mutex<Prepared>>>,
     /// The regions on screen and the pacing's intervals, as last told to
     /// the tab.
     regions_sent: Signal<RegionsSent>,
@@ -279,7 +291,41 @@ impl Browser {
 /// every piece of reader mode in turn (a media region or a control as its
 /// rows of nothing), or the projection, with each row's key and place on
 /// the page.
+#[cfg(test)]
 pub(crate) fn lay_out(page: &Page, view: View, width: u16, marks: &Marks) -> Projection {
+    lay_out_with_logs(page, view, width, marks, &mut Vec::new())
+}
+
+pub(crate) fn lay_out_with_logs(
+    page: &Page,
+    view: View,
+    width: u16,
+    marks: &Marks,
+    slots: &mut Vec<layout::LogSlot>,
+) -> Projection {
+    lay_out_pair(page, None, view, width, marks, slots)
+}
+
+pub(crate) fn lay_out_source_with_logs(
+    source: &crate::model::SourcePage,
+    view: View,
+    width: u16,
+    marks: &Marks,
+    slots: &mut Vec<layout::LogSlot>,
+) -> Projection {
+    lay_out_pair(source.page(), Some(source), view, width, marks, slots)
+}
+
+fn lay_out_pair(
+    page: &Page,
+    source: Option<&crate::model::SourcePage>,
+    view: View,
+    width: u16,
+    marks: &Marks,
+    slots: &mut Vec<layout::LogSlot>,
+) -> Projection {
+    #[cfg(test)]
+    TEST_LAYOUTS.with(|n| n.set(n.get() + 1));
     match view {
         View::Reader => {
             let mut lines = Vec::new();
@@ -304,7 +350,43 @@ pub(crate) fn lay_out(page: &Page, view: View, width: u16, marks: &Marks) -> Pro
                 ..Projection::default()
             }
         }
-        _ => layout::project(page, width, (CELL.0 as f64, CELL.1 as f64), marks),
+        _ => {
+            // Fixed source dialogs use source-positioned underlay while visible;
+            // otherwise adaptive gap collapse can move covered content outside
+            // the source rectangle. Restore the configured rules on close.
+            let mut underlay = marks.clone();
+            if !page.overlays.is_empty() {
+                underlay.adapt = crate::adapt::Adapt::none()
+                    .with(
+                        crate::adapt::Rule::Shelves,
+                        marks.adapt.on(crate::adapt::Rule::Shelves),
+                    )
+                    .with(
+                        crate::adapt::Rule::PageColors,
+                        marks.adapt.on(crate::adapt::Rule::PageColors),
+                    )
+                    .with(
+                        crate::adapt::Rule::ScreenReaderTwins,
+                        marks.adapt.on(crate::adapt::Rule::ScreenReaderTwins),
+                    );
+            }
+            match source {
+                Some(source) => layout::project_source_with_logs(
+                    source,
+                    width,
+                    (CELL.0 as f64, CELL.1 as f64),
+                    &underlay,
+                    slots,
+                ),
+                None => layout::project_with_logs(
+                    page,
+                    width,
+                    (CELL.0 as f64, CELL.1 as f64),
+                    &underlay,
+                    slots,
+                ),
+            }
+        }
     }
 }
 
@@ -358,10 +440,15 @@ fn step_motion(b: Browser, motion: &mut pictures::Motion) {
         pacing.moving()
     });
     motion.share_with(budget, videos);
+    let cell = rich_intuituive::cell_pixels()
+        .get_untracked()
+        .map(|(w, h)| rich_art::graphics::CellPixels::new(w.into(), h.into()))
+        .unwrap_or_default();
+    motion.set_cell_pixels(cell);
     let page = b.page.get_untracked();
     let images = b.images.get_untracked();
     let next = match page {
-        Some(page) if images != Images::None && b.view.get_untracked() != View::Reader => {
+        Some(page) if images != Images::None && b.view.get_untracked() == View::Projection => {
             let height = usize::from(b.viewport.get_untracked().1);
             b.layout.with_untracked(|l| {
                 // The first row in view; "the end" is a scroll past it.
@@ -379,7 +466,10 @@ fn step_motion(b: Browser, motion: &mut pictures::Motion) {
                 )
             })
         }
-        _ => HashMap::new(),
+        _ => {
+            motion.hide();
+            HashMap::new()
+        }
     };
     b.pacing
         .with_untracked(|p| p.borrow_mut().others = motion.moving_count());
@@ -696,6 +786,7 @@ pub fn run(b: Browser, id: &str, cx: &mut Ctx) {
         "site.bind" => bind_picker(b, cx),
         "site.keys" => site_keys_list(b, cx),
         "actions" => overlay(b, cx),
+        "page.labels" => labels::open(b),
         "quit" => cx.quit(),
         _ => {}
     }
@@ -835,6 +926,23 @@ use crate::bars::clock;
 /// How far the seek keys move the media, in seconds: the PoC's step.
 const SEEK: f64 = 5.0;
 
+fn offer_video_frame(
+    view: View,
+    pacing: &mut Pacing,
+    frame: &VideoFrame,
+    cols: usize,
+    rows: usize,
+    cell: rich_art::graphics::CellPixels,
+    now: Instant,
+) -> (Option<Picture>, Pixels) {
+    if view != View::Projection {
+        return (None, pacing.pixels(frame.node));
+    }
+    pacing.set_cell_pixels(cell);
+    let picture = pacing.offer(frame, cols, rows, now, picture_bytes);
+    (picture, pacing.pixels(frame.node))
+}
+
 /// A video's frame from the tab: offered to its pacing, and drawn when due.
 fn video_frame(b: Browser, frame: &VideoFrame) {
     let Some(rect) = b.page.with_untracked(|p| {
@@ -848,10 +956,22 @@ fn video_frame(b: Browser, frame: &VideoFrame) {
     };
     let cols = ((rect.width / CELL.0 as f64).ceil() as usize).clamp(1, 400);
     let rows = ((rect.height / CELL.1 as f64).ceil() as usize).clamp(1, 200);
+    let (cols, rows) = drawn_cells(b, frame.node).unwrap_or((cols, rows));
+    let metrics = rich_intuituive::cell_pixels().get_untracked();
+    let cell = metrics
+        .map(|(w, h)| rich_art::graphics::CellPixels::new(w.into(), h.into()))
+        .unwrap_or_default();
+    let view = b.view.get_untracked();
     let (picture, pixels) = b.pacing.with_untracked(|p| {
-        let mut pacing = p.borrow_mut();
-        let picture = pacing.offer(frame, cols, rows, Instant::now(), picture_bytes);
-        (picture, pacing.pixels(frame.node))
+        offer_video_frame(
+            view,
+            &mut p.borrow_mut(),
+            frame,
+            cols,
+            rows,
+            cell,
+            Instant::now(),
+        )
     });
     match picture {
         // Cells are made as they are drawn, and cheaply.
@@ -861,16 +981,17 @@ fn video_frame(b: Browser, frame: &VideoFrame) {
         // Pixels are encoded on the encoder's thread first, in the cells
         // the region is drawn in, so the painter finds the escape made.
         Some(picture) => {
-            let (cols, rows) = drawn_cells(b, frame.node).unwrap_or((cols, rows));
-            b.encoder.with_untracked(|e| {
-                e.encode(Job {
-                    node: frame.node,
-                    picture,
-                    pixels,
-                    cols,
-                    rows,
-                })
-            });
+            let job = Job {
+                node: frame.node,
+                picture,
+                pixels,
+                cols,
+                rows,
+            };
+            b.prepared
+                .with_untracked(|queue| queue.lock().unwrap().admit(&job));
+            b.encoder
+                .with_untracked(|encoder| encoder.encode_with_metrics(job, metrics));
         }
         None => {}
     }
@@ -893,16 +1014,11 @@ fn drawn_cells(b: Browser, node: NodeId) -> Option<(usize, usize)> {
 /// Show a video's frame in its region, with the moving GIFs: unless the
 /// region is gone (a new document) or shows a newer frame already.
 fn show_frame(b: Browser, node: NodeId, live: Live) {
-    if !b.pacing.with_untracked(|p| p.borrow().has(node)) {
-        return;
-    }
-    let newer = b.videos.with_untracked(|v| {
-        v.get(&node).is_some_and(|shown| {
-            shown.picture.id() == live.picture.id()
-                && shown.picture.version() > live.picture.version()
-        })
-    });
-    if newer {
+    let shown = b.videos.with_untracked(|v| v.get(&node).cloned());
+    let accepted = b
+        .pacing
+        .with_untracked(|p| accepts_frame(&p.borrow(), shown.as_ref(), node, &live));
+    if !accepted {
         return;
     }
     let mut videos = (*b.videos.get_untracked()).clone();
@@ -911,6 +1027,15 @@ fn show_frame(b: Browser, node: NodeId, live: Live) {
     let mut shown = (*b.live.get_untracked()).clone();
     shown.insert(node, live);
     b.live.set(Rc::new(shown));
+}
+
+fn accepts_frame(pacing: &Pacing, shown: Option<&Live>, node: NodeId, live: &Live) -> bool {
+    pacing.owns_picture(node, &live.picture)
+        && pacing.pixels(node) == live.pixels
+        && !shown.is_some_and(|shown| {
+            shown.picture.id() == live.picture.id()
+                && shown.picture.version() > live.picture.version()
+        })
 }
 
 /// The moving regions the view shows (videos, and canvases, which the
@@ -1235,7 +1360,12 @@ fn activate(b: Browser, index: usize, cx: &mut Ctx) {
     }
     let node = control.node;
     let title = markup(&crate::tab::describe(&control));
-    cx.modal(Size::Percent(70), Size::Fixed(3 + 2), move || {
+    let height = if control.role.is_text() {
+        Size::Auto
+    } else {
+        Size::Fixed(3 + 2)
+    };
+    cx.modal(Size::Percent(70), height, move || {
         web_widget(b, vec![node])
             .on_key("esc", |cx| cx.pop())
             .panel(&title)
@@ -1932,21 +2062,113 @@ fn apply_site(b: Browser, url: &str) {
     {
         b.view.set(view);
     }
-    let (columns, rows) = b.viewport.get_untracked();
-    let width = site.as_ref().and_then(|s| s.width).unwrap_or(columns);
-    b.send(Command::Resize(width, rows.saturating_sub(CHROME_ROWS)));
+}
+
+/// Source CSS layout and terminal layout are separate. Narrow source flex
+/// layouts can collapse a video to zero pixels before projection can reflow it.
+/// Only the adapted projection requests a wider source; pixel/faithful views
+/// retain their real viewport, and no physical cell metric is changed.
+fn source_viewport(b: Browser) -> (u16, u16) {
+    let (columns, rows) = b.viewport.get();
+    let view = b.view.get();
+    let reflow = view == View::Projection
+        && !b.faithful.get()
+        && b.adapt.get().on(crate::adapt::Rule::SnapGrids);
+    let configured = b.page.with(|page| {
+        page.as_ref()
+            .and_then(|page| b.config.with(|c| c.site(&page.url).and_then(|s| s.width)))
+    });
+    let columns = if reflow {
+        configured.unwrap_or(columns).max(80)
+    } else if view == View::Pixels {
+        columns
+    } else {
+        configured.unwrap_or(columns)
+    };
+    (columns, rows.saturating_sub(CHROME_ROWS))
+}
+
+fn reconcile_view_media(
+    projection: bool,
+    pacing: &mut Pacing,
+    videos: &mut HashMap<NodeId, Live>,
+    live: &mut HashMap<NodeId, Live>,
+) {
+    if !projection {
+        pacing.clear();
+        videos.clear();
+        live.clear();
+    }
+}
+
+/// Reconcile media state at a page transition.
+fn reconcile_page_media(
+    new_document: bool,
+    nodes: &std::collections::HashSet<NodeId>,
+    pacing: &mut Pacing,
+    videos: &mut HashMap<NodeId, Live>,
+    live: &mut HashMap<NodeId, Live>,
+) {
+    if new_document {
+        pacing.clear();
+        videos.clear();
+        live.clear();
+    } else {
+        pacing.retain_regions(nodes);
+        videos.retain(|node, _| nodes.contains(node));
+        live.retain(|node, _| nodes.contains(node));
+    }
 }
 
 /// Apply one of the tab's updates, on the app's thread.
+#[cfg(test)]
 fn apply(b: Browser, update: Update, cx: &mut Ctx) {
+    apply_pair(b, update, None, cx);
+}
+
+fn apply_pair(b: Browser, update: Update, source: Option<crate::model::SourcePage>, cx: &mut Ctx) {
+    assert!(
+        source
+            .as_ref()
+            .is_none_or(|s| matches!(&update, Update::Page(p) if Arc::ptr_eq(p, s.page())))
+    );
+    if crate::diagnostics::enabled() {
+        match &update {
+            Update::Frame(f) => eprintln!(
+                "RICH_MEDIA {{\"stage\":\"frame_apply\",\"seq\":{},\"bytes\":{}}}",
+                f.seq,
+                f.pixels.rgb.len()
+            ),
+            Update::Page(_) => eprintln!("RICH_MEDIA {{\"stage\":\"page_apply\"}}"),
+            _ => {}
+        }
+    }
     match update {
         Update::Page(page) => {
             let new_document =
                 b.page.with_untracked(|p| p.as_ref().map(|p| p.document)) != Some(page.document);
+            let nodes = page.media.iter().map(|media| media.node).collect();
+            prune_media_work(b, new_document, &nodes);
+            let mut videos = (*b.videos.get_untracked()).clone();
+            let mut live = (*b.live.get_untracked()).clone();
+            b.pacing.with_untracked(|p| {
+                reconcile_page_media(
+                    new_document,
+                    &nodes,
+                    &mut p.borrow_mut(),
+                    &mut videos,
+                    &mut live,
+                )
+            });
+            if *b.videos.get_untracked() != videos {
+                b.videos.set(Rc::new(videos));
+            }
+            if *b.live.get_untracked() != live {
+                b.live.set(Rc::new(live));
+            }
             if new_document {
+                crate::pixel_view::invalidate(b);
                 b.controls.update(HashMap::clear);
-                b.videos.set(Rc::new(HashMap::new()));
-                b.pacing.with_untracked(|p| p.borrow_mut().clear());
                 b.logs.update(HashMap::clear);
                 b.scroll.set(0);
                 b.hints.set(None);
@@ -1969,7 +2191,11 @@ fn apply(b: Browser, update: Update, cx: &mut Ctx) {
                     }
                 }
             }
-            b.page.set(Some(page));
+            // Signal::update batches nested writes: observers see one exact pair.
+            b.source.update(|current| {
+                *current = source;
+                b.page.replace(Some(page));
+            });
             b.reads.update(|n| *n += 1);
             b.refresh_controls();
             if new_document {
@@ -1990,7 +2216,15 @@ fn apply(b: Browser, update: Update, cx: &mut Ctx) {
                 }
             }
         }
-        Update::Frame(frame) => video_frame(b, &frame),
+        Update::Frame(frame) => {
+            video_frame(b, &frame);
+            if crate::diagnostics::enabled() {
+                eprintln!(
+                    "RICH_MEDIA {{\"stage\":\"frame_done\",\"seq\":{}}}",
+                    frame.seq
+                );
+            }
+        }
         Update::Screen(frame) => crate::pixel_view::frame(b, &frame),
         Update::Still(node) => {
             b.pacing.with_untracked(|p| p.borrow_mut().still(node));
@@ -2002,6 +2236,141 @@ fn apply(b: Browser, update: Update, cx: &mut Ctx) {
         )),
         Update::DownloadDone { .. } => {}
         Update::About { answers, product } => about(b, answers, product, cx),
+    }
+}
+
+// One marker holds no image. It consumes only the initial bounded batch;
+// newly arriving frames stay replaceable until the next UI turn.
+fn forward_updates(
+    b: Browser,
+    receive: mpsc::Receiver<()>,
+    updates: Arc<std::sync::Mutex<crate::delivery::Mailbox>>,
+    proxy: rich_intuituive::Proxy,
+) {
+    while receive.recv().is_ok() {
+        while !updates.lock().unwrap().queue.is_empty() {
+            let inbox = updates.clone();
+            let (done, wait) = mpsc::sync_channel(1);
+            if !proxy.run_with(move |cx| {
+                let count = inbox.lock().unwrap().queue.len().min(16);
+                let started = Instant::now();
+                for _ in 0..count {
+                    let next = inbox.lock().unwrap().pop_envelope();
+                    let Some((document, envelope)) = next else {
+                        break;
+                    };
+                    let crate::delivery::Envelope { update, source } = envelope;
+                    let frame = matches!(update, Update::Frame(_) | Update::Screen(_));
+                    if !frame
+                        || b.page
+                            .with_untracked(|p| p.as_ref().is_some_and(|p| p.document == document))
+                    {
+                        apply_pair(b, update, source, cx);
+                    }
+                    if started.elapsed() >= Duration::from_millis(8) {
+                        break;
+                    }
+                }
+                let _ = done.send(());
+            }) {
+                return;
+            }
+            if wait.recv().is_err() {
+                return;
+            }
+        }
+    }
+}
+
+#[derive(Default)]
+struct Prepared {
+    waiting: std::collections::VecDeque<Job>,
+    admitted: HashMap<NodeId, (u32, Option<u32>)>,
+}
+
+impl Prepared {
+    fn admit(&mut self, job: &Job) {
+        let id = job.picture.id();
+        let entry = self.admitted.entry(job.node).or_insert((id, None));
+        if entry.0 != id {
+            *entry = (id, None);
+            self.waiting.retain(|old| old.node != job.node);
+        }
+    }
+
+    fn complete(&mut self, job: Job) -> bool {
+        let Some((id, completed)) = self.admitted.get_mut(&job.node) else {
+            return false;
+        };
+        if *id != job.picture.id()
+            || completed.is_some_and(|version| version > job.picture.version())
+        {
+            return false;
+        }
+        // An executing frame can finish while a newer one waits. Requiring the
+        // latest requested version here would starve a codec slower than offers.
+        *completed = Some(job.picture.version());
+        self.waiting.retain(|old| old.node != job.node);
+        self.waiting.push_back(job);
+        true
+    }
+
+    fn retain(&mut self, nodes: &std::collections::HashSet<NodeId>) {
+        self.admitted.retain(|node, _| nodes.contains(node));
+        self.waiting.retain(|job| nodes.contains(&job.node));
+    }
+}
+
+fn prune_media_work(b: Browser, clear: bool, nodes: &std::collections::HashSet<NodeId>) {
+    b.encoder.with_untracked(|encoder| {
+        if clear {
+            encoder.clear_waiting();
+        } else {
+            encoder.retain_waiting(nodes);
+        }
+    });
+    b.prepared.with_untracked(|queue| {
+        let mut queue = queue.lock().unwrap();
+        if clear {
+            *queue = Prepared::default();
+        } else {
+            queue.retain(nodes);
+        }
+    });
+}
+
+// Prepared pictures retain their original identity; show_frame rejects a
+// completion invalidated by navigation, a view change or a newer picture.
+fn forward_prepared(
+    b: Browser,
+    ready: mpsc::Receiver<()>,
+    prepared: Arc<std::sync::Mutex<Prepared>>,
+    proxy: rich_intuituive::Proxy,
+) {
+    while ready.recv().is_ok() {
+        while !prepared.lock().unwrap().waiting.is_empty() {
+            let inbox = prepared.clone();
+            let (done, wait) = mpsc::sync_channel(1);
+            if !proxy.run_with(move |_| {
+                let next = inbox.lock().unwrap().waiting.pop_front();
+                if let Some(job) = next {
+                    show_frame(
+                        b,
+                        job.node,
+                        Live {
+                            picture: job.picture,
+                            pixels: job.pixels,
+                        },
+                    );
+                }
+                let _ = done.send(());
+            }) {
+                return;
+            }
+            if wait.recv().is_err() {
+                return;
+            }
+        }
     }
 }
 
@@ -2040,7 +2409,7 @@ fn piece_keys(page: &Page, pieces: &[Piece], images: Images) -> Vec<PieceKey> {
 /// drawn with: a moving picture's live frame, else its decoded picture.
 fn shown_picture(b: Browser, node: NodeId) -> Option<(Picture, Pixels)> {
     if let Some(live) = b.live.with(|l| l.get(&node).cloned()) {
-        return Some((live.picture, live.pixels));
+        return Some((b.presentation.picture(&live.picture), live.pixels));
     }
     let (picture, video) = b.page.with(|p| {
         let media = p.as_ref()?.media.iter().find(|m| m.node == node)?;
@@ -2054,9 +2423,9 @@ fn shown_picture(b: Browser, node: NodeId) -> Option<(Picture, Pixels)> {
     // drawn into them (cells over a Sixel or iTerm2 picture would be
     // covered); in cells, the mark is cells ([`play_marks`]).
     if video && pixels != Pixels::Cells {
-        return Some((marked(&picture), pixels));
+        return Some((b.presentation.picture(&marked(&picture)), pixels));
     }
-    Some((picture, pixels))
+    Some((b.presentation.picture(&picture), pixels))
 }
 
 thread_local! {
@@ -2112,6 +2481,7 @@ fn play_marks(
 }
 
 fn reader_view(b: Browser) -> Node {
+    let retained = RefCell::new(crate::presentation::Reading::default());
     // The pieces and their keys, made together so they always agree.
     let reading = memo(move || {
         let width = b.viewport.get().0;
@@ -2120,7 +2490,9 @@ fn reader_view(b: Browser) -> Node {
         b.page.with(|p| {
             p.as_ref()
                 .map(|p| {
-                    let pieces = layout::reader(p, width.saturating_sub(2), &marks);
+                    let pieces = retained
+                        .borrow_mut()
+                        .update(p, width.saturating_sub(2), &marks);
                     let keys = piece_keys(p, &pieces, images);
                     (pieces, keys)
                 })
@@ -2353,9 +2725,9 @@ fn click_control(b: Browser, index: usize, cx: &mut Ctx) {
 }
 
 /// The page's own colours as a backdrop for its rows, when the page
-/// colours rule is off: on white (a light terminal) or black; with
-/// `--transparent`, on the page's own background, or the terminal's where
-/// it sets none.
+/// colours rule is off: transform the source background together with its
+/// foreground. Where no source background is set, use the configured terminal
+/// fallback, or the terminal's own surface with `--transparent`.
 fn backdrop(b: Browser) -> Option<String> {
     if b.effective_adapt().on(crate::adapt::Rule::PageColors) {
         return None;
@@ -2417,13 +2789,23 @@ fn draw_row(
             .with(|p| p.as_ref()?.inline_pictures.get(src).cloned())?;
         Some((picture, pixels))
     };
-    let mut spliced = pictures::splice(console, cells, segments, width, row, &on_row, |region| {
-        if region.media == usize::MAX {
-            return small(region);
-        }
-        let at = l.regions.iter().position(|r| r == region)?;
-        shown_picture(b, nodes.get(at).copied().flatten()?)
-    });
+    let metrics = rich_intuituive::cell_pixels().get();
+    let mut spliced = pictures::splice_with_metrics(
+        console,
+        cells,
+        segments,
+        width,
+        row,
+        &on_row,
+        |region| {
+            if region.media == usize::MAX {
+                return small(region);
+            }
+            let at = l.regions.iter().position(|r| r == region)?;
+            shown_picture(b, nodes.get(at).copied().flatten()?)
+        },
+        metrics,
+    );
     // A badge over a picture stays on it: its cells are text again.
     for (_, column, over) in l.overlays.iter().filter(|(r, _, _)| *r == row) {
         let drawn = render(over, &Marks::default());
@@ -2466,7 +2848,7 @@ fn strip_view(b: Browser, docked: bool) -> Node {
             l.pinned.as_deref()
         }
     }
-    let cells = Rc::new(pictures::Cells::default());
+    let cells = Rc::new(pictures::Cells::with_presentation(b.presentation));
     let rows = move || {
         b.layout
             .with(|l| strip(l, docked).map_or(0, |s| s.lines.len()))
@@ -2507,9 +2889,210 @@ fn strip_view(b: Browser, docked: bool) -> Node {
     .name(if docked { "docked" } else { "pinned" })
 }
 
+fn segment_columns(segments: Vec<rich::Segment>, start: usize, width: usize) -> Vec<rich::Segment> {
+    let mut out = Vec::new();
+    let mut at = 0usize;
+    let end = start.saturating_add(width);
+    for segment in segments {
+        let next = at.saturating_add(segment.cell_length());
+        if next > start && at < end {
+            let (_, right) = segment.split_cells(start.saturating_sub(at));
+            let (part, _) = right.split_cells(end.min(next).saturating_sub(start.max(at)));
+            out.push(part);
+        }
+        at = next;
+        if at >= end {
+            break;
+        }
+    }
+    out
+}
+
+// Source-controlled fixed dialogs compose over the page without changing
+// the source's dismiss behavior or inferring modality from geometry.
+// Paint source blocks above a fixed surface without moving or removing their
+// underlay model. Their visible rectangle and pointer target share one node.
+fn source_foreground(b: Browser, nodes: Vec<NodeId>, bounds: (u16, u16, u16, u16)) -> Node {
+    keyed(
+        move || {
+            let (columns, height) = b.viewport.get();
+            let rows = height.saturating_sub(CHROME_ROWS).max(1);
+            let scroll = b.scroll.get() as usize;
+            let y = if scroll == 0 {
+                0.0
+            } else {
+                b.layout.with(|layout| layout.y_of(scroll))
+            };
+            b.page.with(|page| {
+                page.as_ref()
+                    .map(|page| {
+                        nodes
+                            .iter()
+                            .filter_map(|node| {
+                                let block = page.blocks.iter().find(|block| block.node == *node)?;
+                                let x = (block.rect.x / f64::from(CELL.0)).floor() as i32;
+                                let y = ((block.rect.y - y) / f64::from(CELL.1)).floor() as i32;
+                                let width =
+                                    (block.rect.width / f64::from(CELL.0)).ceil().max(1.0) as u16;
+                                let height =
+                                    (block.rect.height / f64::from(CELL.1)).ceil().max(1.0) as u16;
+                                let (bound_left, bound_top, bound_right, bound_bottom) = bounds;
+                                let left = x.max(i32::from(bound_left)).max(0);
+                                let top = y.max(i32::from(bound_top)).max(0);
+                                let right = (x + i32::from(width))
+                                    .min(i32::from(columns.saturating_sub(bound_right)));
+                                let bottom = (y + i32::from(height))
+                                    .min(i32::from(rows.saturating_sub(bound_bottom)));
+                                if right <= left || bottom <= top {
+                                    return None;
+                                }
+                                Some((
+                                    *node,
+                                    left as u16,
+                                    top as u16,
+                                    columns - right as u16,
+                                    rows - bottom as u16,
+                                    width,
+                                    (left - x) as usize,
+                                    (top - y) as usize,
+                                ))
+                            })
+                            .collect::<Vec<_>>()
+                    })
+                    .unwrap_or_default()
+            })
+        },
+        move |specs| {
+            layers(specs.into_iter().map(
+                move |(node, left, top, right, bottom, full_width, skip_x, skip)| {
+                    let projection = memo(move || {
+                        let mut marks = b.hint_marks();
+                        marks.adapt.set(crate::adapt::Rule::WrapActionLabels, false);
+                        b.page.with(|page| {
+                            page.as_ref()
+                                .map(|page| {
+                                    b.source.with(|source| {
+                                        match source
+                                            .as_ref()
+                                            .filter(|s| Arc::ptr_eq(s.page(), page))
+                                        {
+                                            Some(source) => layout::project_source_foreground(
+                                                source,
+                                                node,
+                                                full_width,
+                                                (CELL.0 as f64, CELL.1 as f64),
+                                                &marks,
+                                            ),
+                                            None => layout::project_foreground(
+                                                page,
+                                                node,
+                                                full_width,
+                                                (CELL.0 as f64, CELL.1 as f64),
+                                                &marks,
+                                            ),
+                                        }
+                                    })
+                                })
+                                .unwrap_or_default()
+                        })
+                    });
+                    let cells = Rc::new(pictures::Cells::with_presentation(b.presentation));
+                    leaf(move |console, width, height| {
+                        projection.with(|p| {
+                            (skip..skip + usize::from(height))
+                                .map(|i| {
+                                    if i < p.lines.len() {
+                                        let line = draw_row(
+                                            b,
+                                            console,
+                                            &cells,
+                                            p,
+                                            i,
+                                            usize::from(full_width),
+                                            &Marks::default(),
+                                        );
+                                        segment_columns(line, skip_x, usize::from(width))
+                                    } else {
+                                        Vec::new()
+                                    }
+                                })
+                                .collect()
+                        })
+                    })
+                    .on_click_at(move |cx, column, row| {
+                        if let Some(index) = projection.with_untracked(|p| {
+                            p.lines.get(skip + usize::from(row)).and_then(|line| {
+                                layout::control_at(line, skip_x + usize::from(column))
+                            })
+                        }) {
+                            click_control(b, index, cx);
+                        }
+                        true
+                    })
+                    .inset(top, right, bottom, left)
+                },
+            ))
+            .children_cover_only()
+        },
+    )
+    .children_cover_only()
+}
+
+// Adapted text uses the terminal's foreground/surface pair. Faithful text
+// and the source surface share exactly the same documented colour transform.
+fn popup_fill(adapt: Adapt, source: &str, background: crate::adapt::Background) -> String {
+    if adapt.on(crate::adapt::Rule::PageColors) {
+        String::new()
+    } else {
+        crate::adapt::page_backdrop(Some(source), true, background).unwrap_or_default()
+    }
+}
+
+fn source_position(b: Browser) -> f64 {
+    let scroll = b.scroll.get() as usize;
+    if scroll == 0 {
+        0.0
+    } else {
+        b.layout.with(|layout| layout.y_of(scroll))
+    }
+}
+
+fn document_surface(
+    layer: &crate::model::Layer,
+    source_y: f64,
+    rows: u16,
+) -> Option<(u16, u16, u64)> {
+    let at = ((layer.top - source_y) / f64::from(CELL.1)).round() as i64;
+    let full_height = (layer.rect.height / f64::from(CELL.1)).ceil().max(1.0) as i64;
+    if at >= i64::from(rows) || at + full_height <= 0 {
+        return None;
+    }
+    let skip = at.min(0).unsigned_abs();
+    let height = (full_height - skip as i64).min(i64::from(rows) - at.max(0)) as u16;
+    Some((at.max(0) as u16, height, skip))
+}
+
+fn visible_source_dialog(b: Browser) -> bool {
+    let rows = b.viewport.get().1.saturating_sub(CHROME_ROWS).max(1);
+    let source_y = source_position(b);
+    b.page.with(|page| {
+        page.as_ref().is_some_and(|page| {
+            page.dialogs().any(|dialog| {
+                page.layers.get(dialog.layer).is_some_and(|layer| {
+                    layer.fixed || document_surface(layer, source_y, rows).is_some()
+                })
+            })
+        })
+    })
+}
+
+fn source_dialogs(b: Browser) -> Node {
+    labels::source_dialogs(b)
+}
+
 fn projection_view(b: Browser) -> Node {
     // The pictures' cells, made once per frame and size, shared by rows.
-    let cells = Rc::new(pictures::Cells::default());
+    let cells = Rc::new(pictures::Cells::with_presentation(b.presentation));
     // One item per row of the shared layout, built only near the view and
     // keyed by the row's node, so the row in view stays when the page
     // grows above it.
@@ -2597,7 +3180,10 @@ fn projection_view(b: Browser) -> Node {
     .autofocus()
     .name("page")
     .flex(1);
-    column([strip_view(b, false), page, strip_view(b, true)])
+    layers([
+        column([strip_view(b, false), page, strip_view(b, true)]),
+        source_dialogs(b),
+    ])
 }
 
 /// The rows the header and the status bar take.
@@ -2702,11 +3288,22 @@ impl OutputRate {
 /// the protocol the user asked for, else character art over SSH, else
 /// what the terminal speaks. [`step_motion`] replaces the budget with
 /// [`byte_budget`]'s on its first look.
-fn video_pacing(config: &Config, images: Images) -> Pacing {
+fn video_pacing(
+    config: &Config,
+    images: Images,
+    presentation: rich_intuituive::ImagePresentation,
+) -> Pacing {
     let mut budget = rich_art::picture::ByteBudget::guess();
     budget.max_fps = (config.fps as f64).clamp(1.0, crate::video::MAX_FPS as f64);
     let asked = (images != Images::Auto).then(|| pictures::pixels(images));
-    Pacing::new(budget, Pacing::start_for(asked, Pixels::detect()))
+    Pacing::with_formats(
+        budget,
+        Pacing::start_for(
+            asked.map(|p| presentation.with_pixels(p).pixels()),
+            presentation.pixels(),
+        ),
+        presentation.formats(),
+    )
 }
 
 /// How often the app looks at `--ssh`'s tunnel.
@@ -2787,6 +3384,20 @@ impl TunnelWatch {
 
 /// The browser app over `engine`.
 pub fn app(engine: Box<dyn Engine>, options: Options) -> App {
+    app_with_presentation(
+        engine,
+        options,
+        rich_intuituive::ImagePresentation::detect(),
+    )
+}
+
+/// Construct with explicit independent terminal features, useful for embedded
+/// clients and deterministic tests without changing the process environment.
+pub fn app_with_presentation(
+    engine: Box<dyn Engine>,
+    options: Options,
+    media_presentation: rich_intuituive::ImagePresentation,
+) -> App {
     let Options {
         config,
         bookmarks,
@@ -2803,15 +3414,35 @@ pub fn app(engine: Box<dyn Engine>, options: Options) -> App {
     let first_view = view.unwrap_or(config.view);
     let images = images.unwrap_or(config.images);
     let configured_adapt = config.adapt;
+    let media_presentation = if images == Images::Auto {
+        media_presentation
+    } else {
+        media_presentation.with_pixels(pictures::pixels(images))
+    };
     let app = App::new(move || {
         let (keymap, warnings) = actions::keymap(config.preset, &config.keys);
         let mut warnings = [config.warnings.clone(), warnings].concat();
         warnings.truncate(3);
-        let (send, receive) = mpsc::channel::<Update>();
-        let tab = Tab::spawn(engine, move |update| {
-            let _ = send.send(update);
+        let updates = Arc::new(std::sync::Mutex::new(crate::delivery::Mailbox::default()));
+        let (send, receive) = mpsc::sync_channel(1);
+        let inbox = updates.clone();
+        let offer = Arc::new(move |update, source| {
+            let trace = {
+                let mut inbox = inbox.lock().unwrap();
+                inbox.push_source(update, source);
+                crate::diagnostics::enabled().then(|| inbox.trace())
+            };
+            let _ = send.try_send(());
+            if let Some(trace) = trace { trace.emit(); }
         });
+        #[cfg(test)]
+        TEST_OFFER.with(|slot| {
+            let offer = offer.clone();
+            *slot.borrow_mut() = Some(Arc::new(move |update| offer(update, None)));
+        });
+        let tab = Tab::spawn_with_source(engine, move |update, source| offer(update, source));
         let page: Signal<Option<Arc<Page>>> = signal(None);
+        let source: Signal<Option<crate::model::SourcePage>> = signal(None);
         let view: Signal<View> = signal(if first_view == View::Raster {
             View::Projection
         } else {
@@ -2824,6 +3455,7 @@ pub fn app(engine: Box<dyn Engine>, options: Options) -> App {
         let faithful = signal(false);
         let logs: Signal<HashMap<NodeId, LogScroll>> = signal(HashMap::new());
         let port = viewport();
+        let presentation = RefCell::new(crate::presentation::Presentation::default());
         let layout = memo(move || {
             let width = port.get().0;
             let marks = Marks {
@@ -2842,11 +3474,15 @@ pub fn app(engine: Box<dyn Engine>, options: Options) -> App {
                 ..Marks::default()
             };
             let view = view.get();
-            Rc::new(page.with(|p| {
-                p.as_ref()
-                    .map(|p| lay_out(p, view, width, &marks))
-                    .unwrap_or_default()
-            }))
+            page.with(|p| match p {
+                Some(p) => source.with(|source| {
+                    match source.as_ref().filter(|s| Arc::ptr_eq(s.page(), p)) {
+                        Some(source) => presentation.borrow_mut().update_source(source, view, width, &marks),
+                        None => presentation.borrow_mut().update_shared(p, view, width, &marks),
+                    }
+                }),
+                None => Rc::new(Projection::default()),
+            })
         });
         let images_signal = signal(images);
         let found = memo(move || {
@@ -2864,11 +3500,26 @@ pub fn app(engine: Box<dyn Engine>, options: Options) -> App {
                 None => Vec::new(),
             })
         });
-        let pacing = video_pacing(&config, images);
-        let (prepared, ready) = mpsc::channel::<Job>();
-        let encoder = Encoder::spawn(move |job| drop(prepared.send(job)));
+        let pacing = video_pacing(&config, images, media_presentation);
+        let prepared = Arc::new(std::sync::Mutex::new(Prepared::default()));
+        let completions = prepared.clone();
+        let (wake_prepared, ready) = mpsc::sync_channel(1);
+        let encoder = Encoder::spawn_with_presentation(media_presentation, move |job| {
+            let trace = {
+                let mut q = completions.lock().unwrap();
+                if !q.complete(job) { return; }
+                crate::diagnostics::enabled().then(|| (q.waiting.len(), q.waiting.iter().map(|job| job.picture.image().as_bytes().len()).sum::<usize>()))
+            };
+            let _ = wake_prepared.try_send(());
+            if let Some((waiting, bytes)) = trace {
+                eprintln!("RICH_MEDIA {{\"stage\":\"prepared_queue\",\"waiting\":{waiting},\"decoded_bytes\":{bytes}}}");
+            }
+        });
         let b = Browser {
+            label_details: signal(None),
+            presentation: media_presentation,
             page,
+            source,
             state: signal(PageState::default()),
             view,
             hints,
@@ -2895,7 +3546,7 @@ pub fn app(engine: Box<dyn Engine>, options: Options) -> App {
             adapt,
             faithful,
             logs,
-            pixels: memo(move || pictures::pixels(images_signal.get())),
+            pixels: memo(move || { let images = images_signal.get(); if images == Images::Auto { media_presentation.pixels() } else { media_presentation.with_pixels(pictures::pixels(images)).pixels() } }),
             frozen: signal(false),
             live: signal(Rc::new(HashMap::new())),
             tab: signal(tab),
@@ -2904,6 +3555,7 @@ pub fn app(engine: Box<dyn Engine>, options: Options) -> App {
             videos: signal(Rc::new(HashMap::new())),
             pacing: signal(Rc::new(RefCell::new(pacing))),
             encoder: signal(Rc::new(encoder)),
+            prepared: signal(prepared.clone()),
             regions_sent: signal((Vec::new(), Vec::new(), 1.0)),
             start: signal(false),
             tunnel: signal(None),
@@ -2915,20 +3567,29 @@ pub fn app(engine: Box<dyn Engine>, options: Options) -> App {
             screen_tiles: signal(Vec::new()),
             screen_stats: signal(crate::pixel_view::ScreenStats::default()),
         };
+        #[cfg(test)]
+        TEST_BROWSER.with(|slot| slot.set(Some(b)));
         // The pixel view needs Kitty graphics; without them it says so and
         // the projection shows.
         if b.view.get_untracked() == View::Pixels && !crate::pixel_view::available(b) {
             b.view.set(View::Projection);
             b.say(format!("[yellow]{}[/]", crate::pixel_view::NEEDS_KITTY));
         }
-        // The tab runs the screencast for the pixel view while it shows.
-        if b.view.get_untracked() == View::Pixels {
-            b.send(Command::Pixels(true));
-        }
         watch(
-            move || b.view.get() == View::Pixels,
-            move |on, _| {
-                b.send(Command::Pixels(on));
+            move || b.view.get() == View::Projection,
+            move |projection, _| {
+                if !projection { prune_media_work(b, true, &Default::default()); }
+                let mut videos = (*b.videos.get_untracked()).clone();
+                let mut live = (*b.live.get_untracked()).clone();
+                b.pacing.with_untracked(|p| {
+                    reconcile_view_media(projection, &mut p.borrow_mut(), &mut videos, &mut live)
+                });
+                if *b.videos.get_untracked() != videos {
+                    b.videos.set(Rc::new(videos));
+                }
+                if *b.live.get_untracked() != live {
+                    b.live.set(Rc::new(live));
+                }
             },
         );
         if let Some(server) = control.as_ref().and_then(|c| c.take()) {
@@ -2939,39 +3600,24 @@ pub fn app(engine: Box<dyn Engine>, options: Options) -> App {
             b.tunnel.set(Some(watch.says(&crate::ssh::TunnelState::Up)));
             every(TUNNEL_LOOK, move |_| watch.look(b));
         }
-        spawn_stream(move |stream| {
-            let proxy = stream.proxy().clone();
-            while let Ok(update) = receive.recv() {
-                if !proxy.run_with(move |cx| apply(b, update, cx)) {
-                    break;
-                }
-            }
-        });
-        // Video frames, once encoded, are shown.
-        spawn_stream(move |stream| {
-            let proxy = stream.proxy().clone();
-            while let Ok(job) = ready.recv() {
-                let live = Live {
-                    picture: job.picture,
-                    pixels: job.pixels,
-                };
-                if !proxy.run_with(move |_| show_frame(b, job.node, live)) {
-                    break;
-                }
-            }
-        });
+        spawn_stream(move |stream| forward_updates(b, receive, updates, stream.proxy().clone()));
+        spawn_stream(move |stream| forward_prepared(b, ready, prepared, stream.proxy().clone()));
         // Moving pictures in view step within the byte budget.
-        let motion = Rc::new(std::cell::RefCell::new(pictures::Motion::new(byte_budget(
-            b,
-        ))));
+        let motion = Rc::new(std::cell::RefCell::new(pictures::Motion::with_presentation(byte_budget(b), media_presentation)));
         every(MOTION, move |_| step_motion(b, &mut motion.borrow_mut()));
-        // Chrome lays the page out at the terminal's size.
+        // Queue the desired source viewport BEFORE enabling pixel forwarding.
+        // The engine keeps scoped reads blocked until Chrome applies its metrics.
         watch(
-            move || b.viewport.get(),
-            move |(columns, rows), _| {
-                b.send(Command::Resize(columns, rows.saturating_sub(CHROME_ROWS)));
+            move || (source_viewport(b), b.view.get() == View::Pixels),
+            move |((columns, rows), pixels), _| {
+                crate::pixel_view::invalidate(b);
+                b.send(Command::Resize(columns, rows));
+                b.send(Command::Pixels(pixels));
             },
         );
+        let (columns, rows) = source_viewport(b);
+        b.send(Command::Resize(columns, rows));
+        b.send(Command::Pixels(b.view.get_untracked() == View::Pixels));
         b.send(Command::Open(start.clone()));
         b.start.set(start_page);
         // The tab hears which video regions the view shows, so only those
@@ -2984,6 +3630,9 @@ pub fn app(engine: Box<dyn Engine>, options: Options) -> App {
             move |row, cx| follow_scroll(b, row, cx),
         );
 
+        watch(move || labels::details_owner_alive(b), move |alive, _| {
+            if !alive { b.label_details.set(None); }
+        });
         let address = crate::bars::header(b);
         let status = crate::bars::status(b);
         // Built again on each switch: a view kept while hidden could miss
@@ -3009,7 +3658,7 @@ pub fn app(engine: Box<dyn Engine>, options: Options) -> App {
         })
         .flex(1)
         .shown_when(move || b.start.get());
-        let mut root = column([address, start, body, status]);
+        let mut root = layers([column([address, start, body, status]), labels::details(b)]);
         for action in ACTIONS {
             let Some((keys, sequence)) = actions::keys_of(&keymap, action.id) else {
                 continue;
@@ -3044,6 +3693,20 @@ pub fn app(engine: Box<dyn Engine>, options: Options) -> App {
                     b.send(Command::Key(key));
                     return true;
                 }
+                if key.code == KeyCode::Escape && b.label_details.with_untracked(Option::is_some) {
+                    b.label_details.set(None);
+                    return true;
+                }
+                // Source-owned projection dialogs decide whether Escape closes
+                // them. Hints and pushed editors/actions consume it first.
+                if key.code == KeyCode::Escape
+                    && !key.modifiers.ctrl && !key.modifiers.alt
+                    && b.view.with_untracked(|v| *v == View::Projection)
+                    && visible_source_dialog(b)
+                {
+                    b.send(Command::Key(key));
+                    return true;
+                }
                 if let Some(target) = site_key(b, key) {
                     b.message.set(String::new());
                     run_target(b, &target, cx);
@@ -3052,7 +3715,7 @@ pub fn app(engine: Box<dyn Engine>, options: Options) -> App {
                 false
             })
     })
-    .graphics(image_graphics());
+    .graphics(media_presentation.graphics());
     let stats = app.stats_handle();
     OUTPUT.with(|o| o.borrow_mut().stats = Some(stats));
     app
@@ -3061,6 +3724,1099 @@ pub fn app(engine: Box<dyn Engine>, options: Options) -> App {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn popup_underlay_retains_configured_semantic_twins_through_scroll_and_close() {
+        use crate::adapt::Rule;
+        let engine = crate::testing::FakeEngine::from_dir(
+            &std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/snapshots"),
+        )
+        .unwrap();
+        let visible = crate::model::build(
+            &crate::testing::snapshot_file(
+                &std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+                    .join("tests/snapshots/product-grid.json"),
+            )
+            .unwrap(),
+            &mut crate::model::Revisions::new(),
+        );
+        let application = app(
+            Box::new(engine),
+            Options {
+                config: Config::default(),
+                bookmarks: Bookmarks::default(),
+                url: None,
+                view: Some(View::Projection),
+                images: Some(Images::None),
+                tunnel: None,
+                control: None,
+            },
+        );
+        let proxy = application.proxy();
+        let mut driver = application.driver(160, 60);
+        driver.settle();
+        let b = TEST_BROWSER.with(|slot| slot.get().unwrap());
+        b.start.set(false);
+        assert!(!visible.overlays.is_empty());
+        let mut closed = visible.clone();
+        for overlay in closed.overlays.drain(..) {
+            closed.layers[overlay.layer].place = crate::model::Place::Off;
+        }
+        for (adapt, faithful, canonical) in [
+            (Adapt::default(), false, true),
+            (
+                Adapt::default().with(Rule::ScreenReaderTwins, false),
+                false,
+                false,
+            ),
+            (Adapt::default(), true, false),
+        ] {
+            b.adapt.set(adapt);
+            b.faithful.set(faithful);
+            for open in [true, false, true] {
+                let page = if open { &visible } else { &closed }.clone();
+                proxy.run_with(move |cx| apply(b, Update::Page(Arc::new(page)), cx));
+                for scroll in [0, 1, 0] {
+                    b.scroll.set(scroll);
+                    driver.settle();
+                    let text = driver.screen().plain().join("\n");
+                    assert_eq!(text.contains("We use cookies"), open, "{text}");
+                    for (spoken, shown) in [
+                        ("$29.99", "$2999"),
+                        ("$24.49", "$2449"),
+                        ("$49.00", "$4900"),
+                    ] {
+                        let (wanted, excluded) = if canonical {
+                            (spoken, shown)
+                        } else {
+                            (shown, spoken)
+                        };
+                        assert!(
+                            text.contains(wanted) && !text.contains(excluded),
+                            "open={open}, scroll={scroll}, faithful={faithful}, adapt={adapt:?}: {text}"
+                        );
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn popup_underlay_keeps_nonprice_accessible_twins_without_changing_their_match() {
+        use crate::{adapt::Rule, engine::Rect, testing::PageBuilder};
+        let mut p = PageBuilder::new("https://example.test/", "Revision", 800.0, 640.0);
+        let line = p.element(
+            p.body(),
+            "P",
+            &[],
+            &[],
+            Some(Rect::new(8.0, 8.0, 240.0, 24.0)),
+        );
+        let spoken = p.element(
+            line,
+            "SPAN",
+            &[],
+            &[
+                ("position", "absolute"),
+                ("clip", "rect(0px, 0px, 0px, 0px)"),
+            ],
+            Some(Rect::new(8.0, 8.0, 1.0, 1.0)),
+        );
+        p.text(spoken, "Revision v2.03", Rect::new(8.0, 8.0, 100.0, 20.0));
+        let shown = p.element(
+            line,
+            "SPAN",
+            &[("aria-hidden", "true")],
+            &[],
+            Some(Rect::new(8.0, 8.0, 120.0, 24.0)),
+        );
+        p.text(shown, "Revision v203", Rect::new(8.0, 8.0, 120.0, 24.0));
+        let popup = p.element(
+            p.body(),
+            "DIV",
+            &[("role", "dialog")],
+            &[("position", "fixed")],
+            Some(Rect::new(400.0, 200.0, 300.0, 200.0)),
+        );
+        p.text(popup, "Popup", Rect::new(408.0, 208.0, 80.0, 20.0));
+        let page = crate::model::build(&p.snapshot(), &mut crate::model::Revisions::new());
+        assert!(page.text().contains("Revision v2.03"));
+        assert_eq!(page.overlays.len(), 1);
+        for enabled in [true, false] {
+            let marks = Marks {
+                adapt: Adapt::none().with(Rule::ScreenReaderTwins, enabled),
+                ..Marks::default()
+            };
+            let text = lay_out(&page, View::Projection, 100, &marks)
+                .lines
+                .iter()
+                .map(Line::plain)
+                .collect::<Vec<_>>()
+                .join("\n");
+            let wanted = if enabled {
+                "Revision v2.03"
+            } else {
+                "Revision v203"
+            };
+            assert!(text.contains(wanted), "enabled={enabled}: {text}");
+        }
+    }
+
+    #[test]
+    fn popup_underlay_retains_shelf_strip_after_image_decode() {
+        let snapshot = crate::testing::snapshot_file(
+            &std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("tests/snapshots/product-grid.json"),
+        )
+        .unwrap();
+        let page = crate::model::build(&snapshot, &mut crate::model::Revisions::new());
+        let projection = lay_out(&page, View::Projection, 100, &Marks::default());
+        assert!(
+            projection
+                .lines
+                .iter()
+                .any(|line| line.plain().contains("1–3 of 6")),
+            "overlays={:?}, shelves={}, lines={:?}",
+            page.overlays,
+            page.shelves.len(),
+            projection
+                .lines
+                .iter()
+                .map(|line| line.plain())
+                .collect::<Vec<_>>()
+        );
+        let engine = crate::testing::FakeEngine::from_dir(
+            &std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/snapshots"),
+        )
+        .unwrap();
+        let mut driver = app(
+            Box::new(engine),
+            Options {
+                config: Config::default(),
+                bookmarks: Bookmarks::default(),
+                url: Some("product-grid.html".into()),
+                view: Some(View::Projection),
+                images: Some(Images::Ansi),
+                tunnel: None,
+                control: None,
+            },
+        )
+        .driver(100, 60);
+        let deadline = Instant::now() + Duration::from_secs(2);
+        let b = TEST_BROWSER.with(|slot| slot.get().unwrap());
+        while b.page.get_untracked().is_none() {
+            driver.settle();
+            assert!(Instant::now() < deadline);
+            std::thread::sleep(Duration::from_millis(2));
+        }
+        let projected = b.layout.get_untracked();
+        let stripe = projected
+            .lines
+            .iter()
+            .position(|line| line.plain().contains("1–3 of 6"));
+        assert!(
+            stripe.is_some(),
+            "active={:?}, layout={:?}",
+            b.adapt.get_untracked(),
+            projected
+                .lines
+                .iter()
+                .map(|line| line.plain())
+                .collect::<Vec<_>>()
+        );
+        driver.settle();
+        assert!(
+            driver.find_text("1–3 of 6").is_some(),
+            "stripe={stripe:?}, overlays={:?}, rows={:?}",
+            b.page.get_untracked().unwrap().overlays,
+            driver.screen().plain()
+        );
+    }
+
+    #[test]
+    fn prepared_results_are_bounded_by_current_region_incarnations() {
+        let job = |node| Job {
+            node,
+            picture: Picture::from_rgba(1, 1, vec![255; 4]).unwrap(),
+            pixels: Pixels::Iterm,
+            cols: 1,
+            rows: 1,
+        };
+        let mut queue = Prepared::default();
+        let mut held = None;
+        for node in 1..=64 {
+            let current = job(node);
+            queue.admit(&current);
+            assert!(queue.complete(current));
+            queue.retain(&std::collections::HashSet::from([node]));
+            assert_eq!(queue.waiting.len(), 1);
+            assert_eq!(queue.admitted.len(), 1);
+            held = queue.waiting.pop_front();
+        }
+        queue.retain(&Default::default());
+        assert!(
+            !queue.complete(held.unwrap()),
+            "removed region repopulated prepared work"
+        );
+        let old = job(7);
+        queue.admit(&old);
+        let new = Job {
+            picture: old.picture.next_rgba(1, 1, vec![0; 4]).unwrap(),
+            ..job(7)
+        };
+        queue.admit(&new);
+        assert!(
+            queue.complete(old.clone()),
+            "executing current-incarnation frame was starved by newer waiting work"
+        );
+        assert!(queue.complete(new));
+        assert!(
+            !queue.complete(old),
+            "older completion replaced a newer prepared result"
+        );
+        assert_eq!(queue.waiting.len(), 1);
+        queue = Prepared::default();
+        assert!(queue.waiting.is_empty());
+        assert!(queue.admitted.is_empty());
+    }
+
+    #[test]
+    fn slow_executing_encode_progresses_while_continuous_same_region_offers_coalesce() {
+        let prepared = Arc::new(std::sync::Mutex::new(Prepared::default()));
+        let completed = prepared.clone();
+        let (entered, started) = mpsc::channel();
+        let (release, resume) = mpsc::channel();
+        let (sent, received) = mpsc::channel();
+        let first = std::cell::Cell::new(true);
+        let encoder = Encoder::spawn(move |job| {
+            if first.replace(false) {
+                entered.send(()).unwrap();
+                resume.recv().unwrap();
+            }
+            let version = job.picture.version();
+            let accepted = completed.lock().unwrap().complete(job);
+            sent.send((version, accepted)).unwrap();
+        });
+        let mut picture = Picture::from_rgba(1, 1, vec![255; 4]).unwrap();
+        let job = |picture| Job {
+            node: 7,
+            picture,
+            pixels: Pixels::Cells,
+            cols: 1,
+            rows: 1,
+        };
+        let initial = job(picture.clone());
+        prepared.lock().unwrap().admit(&initial);
+        encoder.encode(initial);
+        started.recv_timeout(Duration::from_secs(3)).unwrap();
+        for value in 1..=60 {
+            picture = picture.next_rgba(1, 1, vec![value; 4]).unwrap();
+            let next = job(picture.clone());
+            prepared.lock().unwrap().admit(&next);
+            encoder.encode(next);
+        }
+        release.send(()).unwrap();
+        assert_eq!(
+            received.recv_timeout(Duration::from_secs(3)).unwrap(),
+            (0, true),
+            "executing current-incarnation frame was starved"
+        );
+        assert_eq!(
+            received.recv_timeout(Duration::from_secs(3)).unwrap(),
+            (60, true)
+        );
+        assert!(
+            received.recv_timeout(Duration::from_millis(50)).is_err(),
+            "more than newest waiting encode survived"
+        );
+        let prepared = prepared.lock().unwrap();
+        assert_eq!(prepared.waiting.len(), 1);
+        assert_eq!(prepared.waiting[0].picture.version(), 60);
+    }
+
+    #[test]
+    fn document_churn_prunes_encoder_waiting_work_before_fresh_media() {
+        let engine = crate::testing::FakeEngine::from_dir(
+            &std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/snapshots"),
+        )
+        .unwrap();
+        let app = app(
+            Box::new(engine),
+            Options {
+                config: Config::default(),
+                bookmarks: Bookmarks::default(),
+                url: Some("reader.html".into()),
+                view: Some(View::Projection),
+                images: Some(Images::None),
+                tunnel: None,
+                control: None,
+            },
+        );
+        let proxy = app.proxy();
+        let mut driver = app.driver(80, 24);
+        driver.settle();
+        let b = TEST_BROWSER.with(|slot| slot.get().unwrap());
+        let (entered, ready) = mpsc::channel();
+        let (release, held) = mpsc::channel();
+        let (completed, results) = mpsc::channel();
+        let first = std::cell::Cell::new(true);
+        let encoder = Rc::new(Encoder::spawn(move |job| {
+            if first.replace(false) {
+                entered.send(()).unwrap();
+                held.recv().unwrap();
+            }
+            completed.send(job.node).unwrap();
+        }));
+        b.encoder.update(|value| *value = encoder.clone());
+        let job = |node| Job {
+            node,
+            picture: Picture::from_rgba(1, 1, vec![255; 4]).unwrap(),
+            pixels: Pixels::Cells,
+            cols: 1,
+            rows: 1,
+        };
+        encoder.encode(job(0));
+        ready.recv_timeout(Duration::from_secs(3)).unwrap();
+        for document in 1..=64 {
+            encoder.encode(job(document as i64));
+            proxy.run_with(move |cx| {
+                apply(
+                    b,
+                    Update::Page(Arc::new(Page {
+                        document,
+                        ..Page::default()
+                    })),
+                    cx,
+                )
+            });
+            driver.settle();
+        }
+        encoder.encode(job(999));
+        encoder.encode(job(999));
+        release.send(()).unwrap();
+        assert_eq!(results.recv_timeout(Duration::from_secs(3)).unwrap(), 0);
+        assert_eq!(
+            results.recv_timeout(Duration::from_secs(3)).unwrap(),
+            999,
+            "historical regions delayed fresh media"
+        );
+        assert!(
+            results.recv_timeout(Duration::from_millis(50)).is_err(),
+            "superseded waiting frame survived"
+        );
+        let ready = job(77);
+        b.prepared.with_untracked(|queue| {
+            let mut queue = queue.lock().unwrap();
+            queue.admit(&ready);
+            assert!(queue.complete(ready));
+        });
+        b.view.set(View::Reader);
+        driver.settle();
+        b.prepared.with_untracked(|queue| {
+            let queue = queue.lock().unwrap();
+            assert!(queue.waiting.is_empty());
+            assert!(queue.admitted.is_empty());
+        });
+    }
+
+    #[test]
+    fn document_dialog_scrolls_with_the_page_and_hidden_dialog_stays_absent() {
+        use crate::{
+            engine::Rect,
+            testing::{FakeEngine, PageBuilder},
+        };
+        let mut p = PageBuilder::new(
+            "https://example.test/dialog-scroll.html",
+            "Scroll",
+            960.0,
+            3000.0,
+        );
+        p.view(0.0, 720.0);
+        for row in 0..100 {
+            let rect = Rect::new(0.0, f64::from(row) * 24.0, 200.0, 18.0);
+            let node = p.element(p.body(), "P", &[], &[], Some(rect));
+            p.text(node, &format!("Underlay row {row}"), rect);
+        }
+        let dialog = p.element(
+            p.body(),
+            "DIV",
+            &[("role", "dialog")],
+            &[("position", "absolute")],
+            Some(Rect::new(400.0, 360.0, 300.0, 180.0)),
+        );
+        p.text(
+            dialog,
+            "Document popup",
+            Rect::new(408.0, 378.0, 180.0, 18.0),
+        );
+        let hidden = p.element(
+            p.body(),
+            "DIALOG",
+            &[("open", "")],
+            &[("visibility", "hidden")],
+            Some(Rect::new(400.0, 400.0, 300.0, 180.0)),
+        );
+        p.text(hidden, "Hidden popup", Rect::new(408.0, 418.0, 180.0, 18.0));
+        let engine = FakeEngine::from_dir(
+            &std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/snapshots"),
+        )
+        .unwrap();
+        engine
+            .state
+            .lock()
+            .unwrap()
+            .pages
+            .insert("dialog-scroll".into(), p.snapshot());
+        let state = engine.state.clone();
+        let app = app(
+            Box::new(engine),
+            Options {
+                config: Config::default(),
+                bookmarks: Bookmarks::default(),
+                url: Some("dialog-scroll.html".into()),
+                view: Some(View::Projection),
+                images: Some(Images::None),
+                tunnel: None,
+                control: None,
+            },
+        );
+        let mut driver = app.driver(120, 40);
+        let deadline = Instant::now() + Duration::from_secs(3);
+        let first = loop {
+            driver.settle();
+            if let Some((_, row)) = driver.find_text("Document popup") {
+                break row;
+            }
+            assert!(Instant::now() < deadline, "popup never appeared");
+            std::thread::sleep(Duration::from_millis(2));
+        };
+        assert!(driver.find_text("Hidden popup").is_none());
+        let b = TEST_BROWSER.with(|slot| slot.get().unwrap());
+        b.scroll.set(10);
+        driver.settle();
+        let second = driver.find_text("Document popup").unwrap().1;
+        assert!(
+            second < first,
+            "document popup stayed fixed: {first} -> {second}"
+        );
+        b.scroll.set(65);
+        driver.settle();
+        assert!(
+            driver.find_text("Document popup").is_none(),
+            "offscreen popup was pinned into view"
+        );
+        driver.press("esc");
+        std::thread::sleep(Duration::from_millis(50));
+        driver.settle();
+        assert!(
+            !state
+                .lock()
+                .unwrap()
+                .actions
+                .iter()
+                .any(|action| matches!(action, crate::engine::PageAction::Key(_))),
+            "offscreen dialog intercepted owner Escape"
+        );
+        b.scroll.set(0);
+        driver.settle();
+        assert_eq!(driver.find_text("Document popup").unwrap().1, first);
+    }
+
+    #[test]
+    fn popup_fill_uses_the_same_foreground_background_policy() {
+        use crate::adapt::{Background, Rule};
+        for terminal in [Background::Dark, Background::Light] {
+            for source in ["rgb(255, 255, 255)", "rgb(17, 17, 17)"] {
+                let faithful = popup_fill(Adapt::none(), source, terminal);
+                assert_eq!(
+                    faithful,
+                    format!("on {}", crate::adapt::raw_color(source, terminal).unwrap())
+                );
+                assert_eq!(popup_fill(Adapt::default(), source, terminal), "");
+                assert_eq!(
+                    popup_fill(Adapt::none().with(Rule::PageColors, true), source, terminal),
+                    ""
+                );
+            }
+            assert_eq!(popup_fill(Adapt::none(), "rgba(0, 0, 0, 0)", terminal), "");
+        }
+    }
+
+    #[test]
+    fn popup_preserves_the_underlay_foreground_policy() {
+        use crate::{
+            engine::Rect,
+            model::{Revisions, build},
+            testing::PageBuilder,
+        };
+        let mut p = PageBuilder::new("https://example.test/", "Colours", 800.0, 640.0);
+        let body = p.body();
+        let text = p.element(
+            body,
+            "P",
+            &[],
+            &[("color", "rgb(17, 17, 17)")],
+            Some(Rect::new(0.0, 0.0, 200.0, 20.0)),
+        );
+        p.text(text, "Source foreground", Rect::new(0.0, 0.0, 200.0, 20.0));
+        let dialog = p.element(
+            body,
+            "DIV",
+            &[("role", "dialog")],
+            &[
+                ("position", "fixed"),
+                ("background-color", "rgb(255, 255, 255)"),
+            ],
+            Some(Rect::new(300.0, 100.0, 300.0, 300.0)),
+        );
+        p.text(dialog, "Popup", Rect::new(310.0, 120.0, 100.0, 20.0));
+        let visible = build(&p.snapshot(), &mut Revisions::new());
+        p.set_style(dialog, "opacity", "0");
+        let closed = build(&p.snapshot(), &mut Revisions::new());
+        for adapt in [Adapt::default(), Adapt::none()] {
+            let marks = Marks {
+                adapt,
+                ..Marks::default()
+            };
+            let foreground = |page: &Page| {
+                lay_out(page, View::Projection, 100, &marks)
+                    .lines
+                    .into_iter()
+                    .flat_map(|line| line.spans)
+                    .find(|span| span.text.contains("Source foreground"))
+                    .unwrap()
+                    .style
+            };
+            assert_eq!(
+                foreground(&visible),
+                foreground(&closed),
+                "popup changed foreground without changing backdrop"
+            );
+        }
+    }
+
+    #[test]
+    fn producer_frame_taken_before_resize_cannot_enter_new_pixel_coordinates() {
+        use crate::engine::{Format, Frame, HistoryStep, PageAction, PageSnapshot, TabId};
+        use rich_embed::{FrameMeta, ScreencastFrame};
+        use std::io;
+        struct Gated {
+            inner: crate::testing::FakeEngine,
+            taken: mpsc::Sender<()>,
+            resume: mpsc::Receiver<()>,
+            first: bool,
+        }
+        impl Engine for Gated {
+            fn resize(&mut self, c: u16, r: u16) -> io::Result<()> {
+                self.inner.resize(c, r)
+            }
+            fn open(&mut self, t: TabId, u: &str) -> io::Result<()> {
+                self.inner.open(t, u)
+            }
+            fn history(&mut self, t: TabId, h: HistoryStep) -> io::Result<()> {
+                self.inner.history(t, h)
+            }
+            fn state(&self, t: TabId) -> PageState {
+                self.inner.state(t)
+            }
+            fn snapshot(&mut self, t: TabId) -> io::Result<PageSnapshot> {
+                self.inner.snapshot(t)
+            }
+            fn capture(
+                &mut self,
+                t: TabId,
+                r: crate::engine::Rect,
+                f: Format,
+            ) -> io::Result<Frame> {
+                self.inner.capture(t, r, f)
+            }
+            fn act(&mut self, t: TabId, a: &PageAction) -> io::Result<()> {
+                self.inner.act(t, a)
+            }
+            fn events(&mut self) -> Vec<crate::engine::EngineEvent> {
+                self.inner.events()
+            }
+            fn set_screencast(&mut self, t: TabId, on: bool) -> io::Result<()> {
+                self.inner.set_screencast(t, on)
+            }
+            fn screencast_frame(&mut self, t: TabId) -> Option<ScreencastFrame> {
+                let frame = self.inner.screencast_frame(t)?;
+                if std::mem::take(&mut self.first) {
+                    self.taken.send(()).unwrap();
+                    self.resume.recv_timeout(Duration::from_secs(5)).unwrap();
+                }
+                Some(frame)
+            }
+        }
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/snapshots");
+        let inner = crate::testing::FakeEngine::from_dir(&root).unwrap();
+        let state = inner.state.clone();
+        let make_frame = |width, height| ScreencastFrame {
+            pixels: rich_embed::Pixels::new(
+                width,
+                height,
+                [10, 70, 200].repeat(width as usize * height as usize),
+            )
+            .unwrap(),
+            meta: FrameMeta {
+                device_width: f64::from(width),
+                device_height: f64::from(height),
+                page_scale: 1.0,
+                ..FrameMeta::default()
+            },
+        };
+        state.lock().unwrap().frames.push(make_frame(
+            120 * crate::cdp::CELL.0,
+            36 * crate::cdp::CELL.1,
+        ));
+        let (taken, receive) = mpsc::channel();
+        let (resume, gate) = mpsc::channel();
+        let engine = Gated {
+            inner,
+            taken,
+            resume: gate,
+            first: true,
+        };
+        let policy = rich_intuituive::ImagePresentation::new(
+            Pixels::Kitty,
+            rich_intuituive::KittyFeatures {
+                unicode_placeholders: true,
+                native_animation: false,
+            },
+            rich_intuituive::PixelFormats::cells().with(Pixels::Kitty),
+        );
+        let options = Options {
+            url: Some("https://example.test/stream-with-log.html".into()),
+            view: Some(View::Pixels),
+            images: Some(Images::Kitty),
+            config: Config::default(),
+            bookmarks: Bookmarks::default(),
+            tunnel: None,
+            control: None,
+        };
+        let app = app_with_presentation(Box::new(engine), options, policy);
+        let mut driver = app.driver(120, 40);
+        let deadline = Instant::now() + Duration::from_secs(3);
+        loop {
+            driver.update(Duration::ZERO);
+            driver.render();
+            driver.output_written();
+            if receive.try_recv().is_ok() {
+                break;
+            }
+            assert!(
+                Instant::now() < deadline,
+                "producer never reached the capture gate"
+            );
+            std::thread::sleep(Duration::from_millis(2));
+        }
+        let b = TEST_BROWSER.with(|slot| slot.get().unwrap());
+        driver.resize(40, 24);
+        driver.render();
+        driver.output_written();
+        assert_eq!(b.viewport.get_untracked(), (40, 24));
+        resume.send(()).unwrap();
+        for _ in 0..40 {
+            driver.update(Duration::ZERO);
+            driver.render();
+            driver.output_written();
+            std::thread::sleep(Duration::from_millis(2));
+        }
+        assert_eq!(
+            b.screen_stats.get_untracked().frames,
+            0,
+            "old-width producer frame was squeezed into new coordinates"
+        );
+        state
+            .lock()
+            .unwrap()
+            .frames
+            .push(make_frame(40 * crate::cdp::CELL.0, 20 * crate::cdp::CELL.1));
+        let deadline = Instant::now() + Duration::from_secs(2);
+        while b.screen_stats.get_untracked().frames == 0 {
+            driver.update(Duration::ZERO);
+            driver.render();
+            driver.output_written();
+            assert!(
+                Instant::now() < deadline,
+                "matching fresh frame never reached the pixel view"
+            );
+            std::thread::sleep(Duration::from_millis(2));
+        }
+        assert_eq!(b.screen_stats.get_untracked().frames, 1);
+    }
+
+    #[test]
+    fn old_encoder_completion_cannot_replace_recreated_region() {
+        let mut pacing = Pacing::new(
+            rich_art::picture::ByteBudget::new(10_000_000),
+            Pixels::Kitty,
+        );
+        let (send, receive) = mpsc::channel();
+        let encoder = Encoder::spawn(move |job| {
+            send.send(job).unwrap();
+        });
+        let frame = |seq| crate::video::VideoFrame {
+            node: 7,
+            seq,
+            pixels: rich_embed::Pixels::new(4, 4, vec![255; 48]).unwrap(),
+        };
+        let offer = |pacing: &mut Pacing, seq| {
+            pacing
+                .offer(&frame(seq), 2, 2, Instant::now(), |_| 0)
+                .unwrap()
+        };
+        let old = offer(&mut pacing, 1);
+        encoder.encode(Job {
+            node: 7,
+            picture: old,
+            pixels: Pixels::Kitty,
+            cols: 2,
+            rows: 2,
+        });
+        let old = receive.recv_timeout(Duration::from_secs(5)).unwrap();
+        pacing.clear();
+        let current = offer(&mut pacing, 1);
+        encoder.encode(Job {
+            node: 7,
+            picture: current.clone(),
+            pixels: Pixels::Kitty,
+            cols: 2,
+            rows: 2,
+        });
+        let current_job = receive.recv_timeout(Duration::from_secs(5)).unwrap();
+        let current_live = Live {
+            picture: current_job.picture,
+            pixels: current_job.pixels,
+        };
+        assert!(accepts_frame(&pacing, None, 7, &current_live));
+        let old_live = Live {
+            picture: old.picture,
+            pixels: old.pixels,
+        };
+        assert!(!accepts_frame(&pacing, Some(&current_live), 7, &old_live));
+        let newer = pacing
+            .offer(
+                &frame(2),
+                2,
+                2,
+                Instant::now() + Duration::from_secs(1),
+                |_| 0,
+            )
+            .unwrap();
+        assert!(accepts_frame(&pacing, None, 7, &current_live));
+        let newer_live = Live {
+            picture: newer,
+            pixels: Pixels::Kitty,
+        };
+        assert!(!accepts_frame(&pacing, Some(&newer_live), 7, &current_live));
+        pacing.forget(7);
+        assert!(!accepts_frame(&pacing, None, 7, &current_live));
+    }
+
+    #[test]
+    fn queued_video_frame_does_not_recreate_pacing_outside_projection() {
+        let mut pacing = Pacing::new(
+            rich_art::picture::ByteBudget::new(10_000_000),
+            Pixels::Kitty,
+        );
+        let frame = VideoFrame {
+            node: 7,
+            seq: 1,
+            pixels: rich_embed::Pixels::new(4, 4, vec![255; 48]).unwrap(),
+        };
+        for view in [View::Reader, View::Pixels] {
+            let (picture, _) = offer_video_frame(
+                view,
+                &mut pacing,
+                &frame,
+                2,
+                2,
+                Default::default(),
+                Instant::now(),
+            );
+            assert!(
+                picture.is_none(),
+                "queued frame recreated pacing in {view:?}"
+            );
+            assert!(!pacing.has(7));
+        }
+        let (picture, _) = offer_video_frame(
+            View::Projection,
+            &mut pacing,
+            &frame,
+            2,
+            2,
+            Default::default(),
+            Instant::now(),
+        );
+        assert!(picture.is_some());
+        assert!(pacing.has(7));
+    }
+
+    #[test]
+    fn old_encoder_completion_is_invalidated_by_leaving_projection() {
+        let mut pacing = Pacing::new(
+            rich_art::picture::ByteBudget::new(10_000_000),
+            Pixels::Kitty,
+        );
+        let (send, receive) = mpsc::channel();
+        let encoder = Encoder::spawn(move |job| {
+            send.send(job).unwrap();
+        });
+        let frame = |seq| VideoFrame {
+            node: 7,
+            seq,
+            pixels: rich_embed::Pixels::new(4, 4, vec![255; 48]).unwrap(),
+        };
+        let picture = pacing
+            .offer(&frame(1), 2, 2, Instant::now(), |_| 0)
+            .unwrap();
+        encoder.encode(Job {
+            node: 7,
+            picture,
+            pixels: Pixels::Kitty,
+            cols: 2,
+            rows: 2,
+        });
+        let held = receive.recv_timeout(Duration::from_secs(5)).unwrap();
+        let old = Live {
+            picture: held.picture,
+            pixels: held.pixels,
+        };
+        let mut videos = HashMap::from([(7, old.clone())]);
+        let mut live = videos.clone();
+        reconcile_view_media(false, &mut pacing, &mut videos, &mut live);
+        reconcile_view_media(true, &mut pacing, &mut videos, &mut live);
+        assert!(
+            !accepts_frame(&pacing, None, 7, &old),
+            "old prepared frame survived the view transition"
+        );
+        assert!(videos.is_empty());
+        assert!(live.is_empty());
+        let current = pacing
+            .offer(
+                &frame(2),
+                2,
+                2,
+                Instant::now() + Duration::from_secs(1),
+                |_| 0,
+            )
+            .unwrap();
+        let current = Live {
+            picture: current,
+            pixels: Pixels::Kitty,
+        };
+        assert!(accepts_frame(&pacing, None, 7, &current));
+        assert!(!accepts_frame(&pacing, None, 7, &old));
+    }
+
+    #[test]
+    fn held_encoder_completion_is_rejected_after_protocol_steps_down() {
+        let mut pacing = Pacing::new(
+            rich_art::picture::ByteBudget::new(10_000_000),
+            Pixels::Kitty,
+        );
+        let (send, receive) = mpsc::channel();
+        let encoder = Encoder::spawn(move |job| {
+            send.send(job).unwrap();
+        });
+        let frame = |seq| VideoFrame {
+            node: 7,
+            seq,
+            pixels: rich_embed::Pixels::new(4, 4, vec![255; 48]).unwrap(),
+        };
+        let now = Instant::now();
+        let picture = pacing.offer(&frame(1), 20, 10, now, |_| 0).unwrap();
+        encoder.encode(Job {
+            node: 7,
+            picture,
+            pixels: Pixels::Kitty,
+            cols: 20,
+            rows: 10,
+        });
+        let held = receive.recv_timeout(Duration::from_secs(5)).unwrap();
+        let old = Live {
+            picture: held.picture,
+            pixels: held.pixels,
+        };
+        assert!(accepts_frame(&pacing, None, 7, &old));
+        pacing.budget = rich_art::picture::ByteBudget::new(1);
+        let _ = pacing.offer(&frame(2), 20, 10, now + Duration::from_secs(30), |_| 0);
+        assert_ne!(pacing.pixels(7), Pixels::Kitty);
+        assert!(!accepts_frame(&pacing, None, 7, &old));
+    }
+
+    #[test]
+    fn held_encoder_preparation_is_rebuilt_for_current_paint_context() {
+        use rich_art::graphics::CellPixels;
+        use rich_ext::frame::Frame;
+        let (send, receive) = mpsc::channel();
+        let encoder = Encoder::spawn(move |job| {
+            send.send(job).unwrap();
+        });
+        let rgba = vec![255; 4 * 4 * 4];
+        let picture = Picture::from_rgba(4, 4, rgba.clone()).unwrap();
+        encoder.encode_with_metrics(
+            Job {
+                node: 7,
+                picture: picture.clone(),
+                pixels: Pixels::Iterm,
+                cols: 2,
+                rows: 2,
+            },
+            Some((8, 16)),
+        );
+        let held = receive.recv_timeout(Duration::from_secs(5)).unwrap();
+        assert!(held.picture.is_prepared_with_metrics(
+            pictures::view(Pixels::Iterm),
+            2,
+            2,
+            CellPixels::new(8, 16)
+        ));
+        let console = rich::Console::builder()
+            .width(3)
+            .color_system(Some(rich::ColorSystem::Truecolor))
+            .build();
+        let paint = |picture: &Picture, pixels: Pixels| {
+            let cells = pictures::Cells::default();
+            let lines = cells.of_with_metrics(&console, picture, pixels, 3, 4, Some((10, 20)));
+            let mut segments = Vec::new();
+            for line in lines.iter() {
+                segments.extend(line.clone());
+                segments.push(rich::Segment::line());
+            }
+            let source = image_graphics();
+            let placements =
+                source.placements_with_metrics(&Frame::from_segments(&segments), Some((10, 20)));
+            assert_eq!(placements.len(), 1);
+            placements[0].graphic.draw(0)
+        };
+        assert!(!held.picture.is_prepared_with_metrics(
+            pictures::view(Pixels::Iterm),
+            3,
+            4,
+            CellPixels::new(10, 20)
+        ));
+        let transitioned = paint(&held.picture, Pixels::Iterm);
+        let clean = Picture::from_rgba(4, 4, rgba).unwrap();
+        assert_eq!(transitioned, paint(&clean, Pixels::Iterm));
+        assert!(held.picture.is_prepared_with_metrics(
+            pictures::view(Pixels::Iterm),
+            3,
+            4,
+            CellPixels::new(10, 20)
+        ));
+        assert_eq!(
+            paint(&held.picture, Pixels::Sixel),
+            paint(&clean, Pixels::Sixel)
+        );
+        let kitty = paint(&held.picture, Pixels::Kitty);
+        assert!(kitty.contains("s=30,v=80"), "{kitty:?}");
+    }
+
+    #[test]
+    fn page_transition_removes_old_live_pixels_immediately() {
+        let mut pacing = Pacing::new(
+            rich_art::picture::ByteBudget::new(10_000_000),
+            Pixels::Kitty,
+        );
+        let picture = Picture::from_rgba(1, 1, vec![255; 4]).unwrap();
+        let old = Live {
+            picture,
+            pixels: Pixels::Kitty,
+        };
+        let mut videos = HashMap::from([(7, old.clone())]);
+        let mut live = HashMap::from([(7, old)]);
+        reconcile_page_media(
+            true,
+            &std::collections::HashSet::from([7]),
+            &mut pacing,
+            &mut videos,
+            &mut live,
+        );
+        assert!(videos.is_empty());
+        assert!(
+            live.is_empty(),
+            "previous document's live image was retained"
+        );
+    }
+
+    #[test]
+    fn removal_then_readd_rejects_held_encoder_completion() {
+        let mut pacing = Pacing::new(
+            rich_art::picture::ByteBudget::new(10_000_000),
+            Pixels::Kitty,
+        );
+        let (send, receive) = mpsc::channel();
+        let encoder = Encoder::spawn(move |job| {
+            send.send(job).unwrap();
+        });
+        let frame = |seq| crate::video::VideoFrame {
+            node: 7,
+            seq,
+            pixels: rich_embed::Pixels::new(4, 4, vec![255; 48]).unwrap(),
+        };
+        let old = pacing
+            .offer(&frame(1), 2, 2, Instant::now(), |_| 0)
+            .unwrap();
+        encoder.encode(Job {
+            node: 7,
+            picture: old,
+            pixels: Pixels::Kitty,
+            cols: 2,
+            rows: 2,
+        });
+        let old = receive.recv_timeout(Duration::from_secs(5)).unwrap();
+        let old_live = Live {
+            picture: old.picture,
+            pixels: old.pixels,
+        };
+        let mut videos = HashMap::from([(7, old_live.clone())]);
+        let mut live = HashMap::from([(7, old_live.clone())]);
+        reconcile_page_media(
+            false,
+            &std::collections::HashSet::from([7]),
+            &mut pacing,
+            &mut videos,
+            &mut live,
+        );
+        assert!(accepts_frame(&pacing, videos.get(&7), 7, &old_live));
+        reconcile_page_media(
+            false,
+            &std::collections::HashSet::new(),
+            &mut pacing,
+            &mut videos,
+            &mut live,
+        );
+        assert!(videos.is_empty());
+        assert!(live.is_empty());
+        reconcile_page_media(
+            false,
+            &std::collections::HashSet::from([7]),
+            &mut pacing,
+            &mut videos,
+            &mut live,
+        );
+        let current = pacing
+            .offer(
+                &frame(2),
+                2,
+                2,
+                Instant::now() + Duration::from_secs(1),
+                |_| 0,
+            )
+            .unwrap();
+        let current_live = Live {
+            picture: current,
+            pixels: Pixels::Kitty,
+        };
+        assert!(accepts_frame(&pacing, None, 7, &current_live));
+        assert!(
+            !accepts_frame(&pacing, None, 7, &old_live),
+            "old encoder completion survived region removal"
+        );
+    }
 
     #[test]
     fn the_output_rate_is_measured_once_enough_was_written() {
@@ -3078,5 +4834,610 @@ mod tests {
         // Writes that took no time say nothing.
         rate.observe(900_000, Duration::from_secs(2));
         assert_eq!(rate.rate(), Some(now));
+    }
+}
+
+#[cfg(test)]
+thread_local! {
+    static TEST_OFFER: RefCell<Option<UpdateSink>> = const { RefCell::new(None) };
+    static TEST_BROWSER: std::cell::Cell<Option<Browser>> = const { std::cell::Cell::new(None) };
+    pub(crate) static TEST_READER_LAYOUTS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+    static TEST_LAYOUTS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+#[cfg(test)]
+mod update_measurements {
+    use super::*;
+    use crate::model::{Entry, Revisions, Run, build};
+    use rich_intuituive::{Driver, Proxy};
+    fn setup() -> (Driver, Browser, Page, Proxy) {
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/snapshots");
+        let engine = crate::testing::FakeEngine::from_dir(&root).unwrap();
+        let mut page = build(
+            &crate::testing::snapshot_file(&root.join("stream-with-log.json")).unwrap(),
+            &mut Revisions::new(),
+        );
+        for run in page.blocks.iter().flat_map(|b| b.runs.iter()).chain(
+            page.logs
+                .iter()
+                .flat_map(|l| l.entries.iter().flat_map(|e| e.runs.iter())),
+        ) {
+            if let Some(inline) = &run.picture
+                && let Some(bytes) = engine.state.lock().unwrap().resource(&inline.src)
+                && let Ok(picture) = Picture::decode(&bytes)
+            {
+                page.inline_pictures.insert(inline.src.clone(), picture);
+            }
+        }
+        let images = match std::env::var("NOCTILUCA_MEASURE_PROTOCOL").as_deref() {
+            Ok("kitty") => Images::Kitty,
+            Ok("sixel") => Images::Sixel,
+            _ => Images::Ansi,
+        };
+        let options = Options {
+            config: Config::default(),
+            bookmarks: Bookmarks::default(),
+            url: None,
+            view: Some(View::Projection),
+            images: Some(images),
+            tunnel: None,
+            control: None,
+        };
+        let app = app(Box::new(engine), options);
+        let proxy = app.proxy();
+        let mut driver = app.driver(120, 40);
+        driver.settle();
+        let b = TEST_BROWSER.with(|slot| slot.get().unwrap());
+        proxy.run_with({
+            let page = page.clone();
+            move |cx| {
+                b.start.set(false);
+                apply(b, Update::Page(Arc::new(page)), cx);
+            }
+        });
+        driver.settle();
+        (driver, b, page, proxy)
+    }
+    #[test]
+    fn source_pair_is_atomic_and_external_legacy_replacement_cannot_reuse_it() {
+        let (mut driver, b, _, proxy) = setup();
+        let mut builder =
+            crate::testing::PageBuilder::new("https://example.test/source", "source", 400.0, 400.0);
+        let left = builder.element(builder.body(), "DIV", &[], &[], None);
+        let right = builder.element(builder.body(), "DIV", &[], &[], None);
+        let text = builder.text(
+            left,
+            "Source words",
+            crate::engine::Rect::new(0.0, 0.0, 100.0, 18.0),
+        );
+        let mut snapshot = builder.snapshot();
+        let first = crate::model::build_source(&snapshot, &mut Revisions::new());
+        let offer = |source: crate::model::SourcePage| {
+            proxy.run_with(move |cx| {
+                apply_pair(b, Update::Page(source.page().clone()), Some(source), cx)
+            });
+        };
+        offer(first.clone());
+        driver.settle();
+        TEST_LAYOUTS.with(|n| n.set(0));
+        snapshot.dom["documents"][0]["nodes"]["parentIndex"][text] = serde_json::json!(right);
+        let changed = crate::model::build_source(&snapshot, &mut Revisions::new());
+        assert_eq!(first.page(), changed.page());
+        offer(changed.clone());
+        driver.settle();
+        assert_eq!(
+            TEST_LAYOUTS.with(|n| n.get()),
+            1,
+            "source-only change has one layout, no transient legacy pair"
+        );
+        proxy.run_with(move |_| {
+            let page = b.page.get_untracked().unwrap();
+            b.source
+                .with_untracked(|s| assert!(Arc::ptr_eq(s.as_ref().unwrap().page(), &page)));
+        });
+        TEST_LAYOUTS.with(|n| n.set(0));
+        // Public callers can replace the legacy signal directly.
+        proxy.run_with(move |_| {
+            b.page.replace(Some(Arc::new(Page {
+                document: 900,
+                ..Default::default()
+            })));
+        });
+        driver.settle();
+        assert_eq!(TEST_LAYOUTS.with(|n| n.get()), 1);
+        proxy.run_with(move |cx| apply(b, Update::Page(first.page().clone()), cx));
+        driver.settle();
+        proxy.run_with(move |_| assert!(b.source.with_untracked(Option::is_none)));
+        driver.settle();
+    }
+
+    fn put(driver: &mut Driver, proxy: &Proxy, b: Browser, page: Page) -> usize {
+        TEST_LAYOUTS.with(|n| n.set(0));
+        proxy.run_with(move |cx| apply(b, Update::Page(Arc::new(page)), cx));
+        driver.update(Duration::ZERO);
+        driver.render();
+        TEST_LAYOUTS.with(|n| n.get())
+    }
+    #[test]
+    fn playback_update_does_no_unrelated_layout() {
+        let (mut d, b, mut p, proxy) = setup();
+        p.media[1].playback = Some(Playback {
+            time: 42.0,
+            ..Playback::default()
+        });
+        assert_eq!(put(&mut d, &proxy, b, p), 0);
+    }
+    #[test]
+    fn reader_playback_and_decode_reuse_reading_pieces() {
+        let (mut d, b, mut p, proxy) = setup();
+        proxy.run(move || b.view.set(View::Reader));
+        d.settle();
+        TEST_READER_LAYOUTS.with(|n| n.set(0));
+        p.media[1].playback = Some(Playback {
+            time: 42.0,
+            ..Playback::default()
+        });
+        p.media[1].picture = Picture::from_rgba(1, 1, vec![10, 20, 30, 255]);
+        assert_eq!(put(&mut d, &proxy, b, p), 0);
+        assert_eq!(TEST_READER_LAYOUTS.with(|n| n.get()), 0);
+    }
+    #[test]
+    fn unchanged_rectangle_decode_does_no_unrelated_layout() {
+        let (mut d, b, mut p, proxy) = setup();
+        p.media[1].picture = Picture::from_rgba(1, 1, vec![10, 20, 30, 255]);
+        assert_eq!(put(&mut d, &proxy, b, p), 0);
+    }
+    #[test]
+    fn side_by_side_log_append_preserves_scrollback_without_unrelated_layout() {
+        let (mut d, b, mut p, proxy) = setup();
+        let node = p.logs[0].node;
+        p.logs[0].entries = (1..=20)
+            .map(|key| Entry {
+                key,
+                runs: vec![Run::plain(format!("message {key}"))],
+            })
+            .collect();
+        put(&mut d, &proxy, b, p.clone());
+        proxy.run(move || {
+            b.logs.update(|logs| {
+                logs.insert(node, LogScroll::Paused(12));
+            })
+        });
+        d.settle();
+        p.logs[0].entries.push(Entry {
+            key: 21,
+            runs: vec![Run::plain("new message")],
+        });
+        assert_eq!(put(&mut d, &proxy, b, p.clone()), 0);
+        proxy.run(move || {
+            assert_eq!(
+                *b.layout.get(),
+                lay_out(&p, View::Projection, 120, &b.hint_marks())
+            );
+            assert_eq!(b.logs.get()[&node], LogScroll::Paused(12));
+        });
+        d.update(Duration::ZERO);
+    }
+
+    #[test]
+    fn log_follow_inline_edits_and_geometry_match_full_composition() {
+        let (_d, _b, mut p, _proxy) = setup();
+        let mut retained = crate::presentation::Presentation::default();
+        let marks = Marks::default();
+        retained.update(&p, View::Projection, 120, &marks);
+        let original = p.logs[0]
+            .entries
+            .iter()
+            .find(|e| e.runs.iter().any(|r| r.picture.is_some()))
+            .unwrap()
+            .clone();
+        for n in 0..10 {
+            let mut entry = original.clone();
+            entry.key = 500 + n;
+            entry
+                .runs
+                .insert(0, Run::plain(format!("new 👩\u{200d}💻 e\u{301} {n} ")));
+            p.logs[0].entries.push(entry);
+            TEST_LAYOUTS.with(|n| n.set(0));
+            let actual = retained.update(&p, View::Projection, 120, &marks);
+            assert_eq!(TEST_LAYOUTS.with(|n| n.get()), 0);
+            assert_eq!(*actual, lay_out(&p, View::Projection, 120, &marks));
+        }
+        p.logs[0].rect.width -= 16.0;
+        TEST_LAYOUTS.with(|n| n.set(0));
+        let actual = retained.update(&p, View::Projection, 120, &marks);
+        assert_eq!(TEST_LAYOUTS.with(|n| n.get()), 1);
+        assert_eq!(*actual, lay_out(&p, View::Projection, 120, &marks));
+        p.media[1].rect.height += 18.0;
+        let actual = retained.update(&p, View::Projection, 120, &marks);
+        assert_eq!(*actual, lay_out(&p, View::Projection, 120, &marks));
+        for playing in [false, true, false] {
+            p.media[1].playback = Some(Playback {
+                paused: !playing,
+                ready: 4,
+                ..Playback::default()
+            });
+            TEST_LAYOUTS.with(|n| n.set(0));
+            let actual = retained.update(&p, View::Projection, 120, &marks);
+            assert_eq!(TEST_LAYOUTS.with(|n| n.get()), 0);
+            assert_eq!(*actual, lay_out(&p, View::Projection, 120, &marks));
+        }
+    }
+
+    #[test]
+    fn draft_and_focus_survive_combined_frame_and_chat_delivery() {
+        let (mut d, b, mut p, proxy) = setup();
+        let offer = TEST_OFFER.with(|slot| slot.borrow().as_ref().unwrap().clone());
+        let index = p.controls.iter().position(|c| c.role.is_text()).unwrap();
+        proxy.run_with(move |cx| activate(b, index, cx));
+        d.settle();
+        d.type_text("unsent draft");
+        let focus = d.focused();
+        assert!(focus.is_some());
+        assert!(d.screen().plain().join("\n").contains("unsent draft"));
+        let initial = b.reads.get_untracked();
+        p.media[1].playback = Some(Playback {
+            ready: 4,
+            ..Playback::default()
+        });
+        for n in 1..=20 {
+            p.logs[0].entries.push(Entry {
+                key: 1000 + n,
+                runs: vec![Run::plain(format!("chat {n}"))],
+            });
+            offer(Update::Page(Arc::new(p.clone())));
+            offer(Update::Frame(Arc::new(VideoFrame {
+                node: p.media[1].node,
+                seq: n,
+                pixels: rich_embed::Pixels::new(2, 2, vec![n as u8; 12]).unwrap(),
+            })));
+        }
+        let until = Instant::now() + Duration::from_secs(2);
+        while b.reads.get_untracked() < initial + 20 {
+            d.update(Duration::ZERO);
+            d.render();
+            assert!(Instant::now() < until, "semantic pages were lost");
+            std::thread::yield_now();
+        }
+        assert_eq!(d.focused(), focus);
+        assert!(d.screen().plain().join("\n").contains("unsent draft"));
+        let web = b
+            .controls
+            .with_untracked(|c| c[&p.controls[index].node].clone());
+        assert!(web.draft.borrow().draft().contains("unsent draft"));
+        assert_eq!(
+            b.page.get_untracked().unwrap().logs[0]
+                .entries
+                .last()
+                .unwrap()
+                .key,
+            1020
+        );
+    }
+
+    #[test]
+    fn retained_logs_match_full_projection_in_narrow_and_pinned_views() {
+        let (_d, _b, original, _proxy) = setup();
+        for width in [0, 8, 10, 80, 120] {
+            for place in [
+                crate::model::Place::Flow,
+                crate::model::Place::Pinned,
+                crate::model::Place::Docked,
+            ] {
+                let mut p = original.clone();
+                if place != crate::model::Place::Flow {
+                    let log = &p.logs[0];
+                    p.layers.push(crate::model::Layer {
+                        node: log.node,
+                        fixed: true,
+                        rect: log.rect,
+                        top: 0.0,
+                        place,
+                    });
+                    p.blocks
+                        .iter_mut()
+                        .find(|b| matches!(b.kind, crate::model::BlockKind::Log(0)))
+                        .unwrap()
+                        .stack
+                        .layer = Some(p.layers.len() - 1);
+                }
+                let mut retained = crate::presentation::Presentation::default();
+                let marks = Marks::default();
+                retained.update(&p, View::Projection, width, &marks);
+                let mut entry = p.logs[0]
+                    .entries
+                    .iter()
+                    .find(|e| e.runs.iter().any(|r| r.picture.is_some()))
+                    .unwrap()
+                    .clone();
+                entry.key = 991;
+                p.logs[0].entries.push(entry);
+                let actual = retained.update(&p, View::Projection, width, &marks);
+                assert_eq!(*actual, lay_out(&p, View::Projection, width, &marks));
+            }
+        }
+    }
+
+    #[test]
+    fn control_meaning_and_document_boundaries_invalidate_retained_layout() {
+        let (_d, _b, mut p, _proxy) = setup();
+        let mut retained = crate::presentation::Presentation::default();
+        let marks = Marks::default();
+        retained.update(&p, View::Projection, 120, &marks);
+        p.controls[0].disabled = !p.controls[0].disabled;
+        TEST_LAYOUTS.with(|n| n.set(0));
+        let actual = retained.update(&p, View::Projection, 120, &marks);
+        assert_eq!(TEST_LAYOUTS.with(|n| n.get()), 1);
+        assert_eq!(*actual, lay_out(&p, View::Projection, 120, &marks));
+        p.document += 1;
+        TEST_LAYOUTS.with(|n| n.set(0));
+        retained.update(&p, View::Projection, 120, &marks);
+        assert_eq!(TEST_LAYOUTS.with(|n| n.get()), 1);
+        retained.update(&p, View::Reader, 120, &marks);
+        p.logs[0].entries.push(Entry {
+            key: 9999,
+            runs: vec![Run::plain("reader grows")],
+        });
+        TEST_LAYOUTS.with(|n| n.set(0));
+        let actual = retained.update(&p, View::Reader, 120, &marks);
+        assert_eq!(TEST_LAYOUTS.with(|n| n.get()), 1);
+        assert_eq!(*actual, lay_out(&p, View::Reader, 120, &marks));
+    }
+
+    #[test]
+    #[ignore = "measured update/render baseline; run with --ignored --nocapture"]
+    fn combined_update_baseline() {
+        let (mut d, b, mut p, proxy) = setup();
+        let start = d.stats();
+        eprintln!("RICH_MEDIA {{\"window\":\"begin\"}}");
+        let mut latency = Vec::new();
+        let mut layouts = 0;
+        let mut bytes = 0;
+        let mut emitted = 0;
+        for n in 1..=100 {
+            p.media[0].playback = Some(Playback {
+                time: n as f64,
+                ..Playback::default()
+            });
+            if n % 5 == 0 {
+                p.media[0].picture = Picture::from_rgba(2, 2, vec![n as u8; 16]);
+            }
+            if n % 4 == 0 {
+                p.logs[0].entries.push(Entry {
+                    key: 1000 + n,
+                    runs: vec![Run::plain(format!("message {n}"))],
+                });
+            }
+            let page = Arc::new(p.clone());
+            let at = Instant::now();
+            TEST_LAYOUTS.with(|n| n.set(0));
+            proxy.run_with(move |cx| apply(b, Update::Page(page), cx));
+            d.update(Duration::ZERO);
+            if let Some(out) = d.render() {
+                bytes += out.len();
+                emitted += 1;
+                latency.push(at.elapsed().as_secs_f64() * 1000.0);
+            }
+            layouts += TEST_LAYOUTS.with(|n| n.get());
+        }
+        latency.sort_by(f64::total_cmp);
+        let q = |p: f64| latency[((latency.len() - 1) as f64 * p).round() as usize];
+        let end = d.stats();
+        eprintln!("RICH_MEDIA {{\"window\":\"end\"}}");
+        println!(
+            "combined: config=120x40/visible-body/saved-stream-with-log/100-serial-updates reads=100 playback=100 decode=20 log=25 layouts={layouts} emitted={emitted} censored={} exact_bytes={bytes} latency_ms p50={} p95={} p99={} widget_draw_ms={} paint_encode_ms={}",
+            100 - emitted,
+            q(0.5),
+            q(0.95),
+            q(0.99),
+            (end.total_draw - start.total_draw).as_secs_f64() * 1000.0,
+            (end.total_paint - start.total_paint).as_secs_f64() * 1000.0
+        );
+    }
+    #[test]
+    #[ignore = "combined frame/chat pipeline; emitted bytes, not native presentation"]
+    fn combined_frame_pipeline() {
+        use std::sync::Mutex;
+        let (mut d, b, mut p, _proxy) = setup();
+        let stream = p
+            .media
+            .iter()
+            .position(|m| m.kind == MediaKind::Video)
+            .unwrap();
+        let offer = TEST_OFFER.with(|slot| slot.borrow().as_ref().unwrap().clone());
+        p.media[stream].playback = Some(Playback {
+            ready: 4,
+            volume: 1.0,
+            ..Playback::default()
+        });
+        let template = p.logs[0]
+            .entries
+            .iter()
+            .find(|e| e.runs.iter().any(|r| r.picture.is_some()))
+            .unwrap()
+            .runs
+            .clone();
+        p.logs[0].entries = (1..=30)
+            .map(|key| {
+                let mut runs = vec![Run::plain(format!("chat {key} "))];
+                runs.extend(template.clone());
+                Entry { key, runs }
+            })
+            .collect();
+        offer(Update::Page(Arc::new(p.clone())));
+        for _ in 0..20 {
+            d.update(Duration::ZERO);
+            d.render();
+            std::thread::sleep(Duration::from_millis(2));
+        }
+        let node = p.media[stream].node;
+        assert_eq!(p.media[stream].kind, MediaKind::Video);
+        assert!(!b.start.get_untracked());
+        let region = b
+            .layout
+            .get_untracked()
+            .regions
+            .iter()
+            .find(|r| r.media == stream)
+            .copied()
+            .unwrap();
+        assert_eq!(
+            (region.cols, region.rows),
+            (41, 14),
+            "fixture stream cells changed"
+        );
+        assert!(region.row + region.rows < 40 && region.column < p.logs[0].rect.x as usize / 8);
+        assert!(!b.layout.get_untracked().inline.is_empty());
+        assert!(d.screen().plain().join("\n").contains("chat"));
+        assert!(!p.inline_pictures.is_empty());
+        let visible_tags: Vec<_> = d
+            .screen()
+            .lines()
+            .into_iter()
+            .flatten()
+            .filter_map(|s| s.style.as_ref().and_then(rich_art::picture::PictureTag::of))
+            .collect();
+        if b.images.get_untracked() == Images::Kitty {
+            assert!(
+                visible_tags.iter().any(|tag| p
+                    .inline_pictures
+                    .values()
+                    .any(|picture| picture.id() == tag.id)),
+                "no inline picture in rendered body"
+            );
+        }
+        eprintln!(
+            "workload: stream_node={node} kind={:?} rect={:?} cells={}x{} inline_tags={}",
+            p.media[stream].kind,
+            p.media[stream].rect,
+            region.cols,
+            region.rows,
+            visible_tags.len()
+        );
+        let stamps = Arc::new(Mutex::new(HashMap::<u64, Instant>::new()));
+        let emitted = Arc::new(Mutex::new(std::collections::HashSet::<u64>::new()));
+        let sent = stamps.clone();
+        let begun = Instant::now();
+        TEST_LAYOUTS.with(|n| n.set(0));
+        let start = d.stats();
+        let initial_reads = b.reads.get_untracked();
+        eprintln!("RICH_MEDIA {{\"window\":\"begin\",\"workload\":\"frames+chat\"}}");
+        let producer = std::thread::spawn(move || {
+            for seq in 1..=60u64 {
+                sent.lock().unwrap().insert(seq, Instant::now());
+                let pixels =
+                    rich_embed::Pixels::new(480, 270, [seq as u8, 77, 91].repeat(480 * 270))
+                        .unwrap();
+                eprintln!(
+                    "RICH_MEDIA {{\"stage\":\"frame_offer\",\"seq\":{seq},\"bytes\":{}}}",
+                    pixels.rgb.len()
+                );
+                offer(Update::Frame(Arc::new(VideoFrame { node, pixels, seq })));
+                if seq % 3 == 0 {
+                    let mut runs = vec![Run::plain(format!("new chat {seq} "))];
+                    runs.extend(template.clone());
+                    p.logs[0].entries.push(Entry {
+                        key: 1000 + seq,
+                        runs,
+                    });
+                    p.media[stream].playback.as_mut().unwrap().time = seq as f64 / 30.0;
+                    offer(Update::Page(Arc::new(p.clone())));
+                }
+                std::thread::sleep(Duration::from_millis(33));
+            }
+        });
+        let mut bytes = 0usize;
+        let mut nonempty = 0;
+        let mut empty = 0;
+        let mut latency = Vec::new();
+        let mut updates = Vec::new();
+        let mut inputs = Vec::new();
+        let mut last_frame = 0;
+        let mut next_input = Duration::from_millis(200);
+        let mut input = None;
+        let mut input_count = 0;
+        while begun.elapsed() < Duration::from_millis(2400) {
+            let elapsed = begun.elapsed();
+            if elapsed >= next_input && input_count < 8 {
+                input = Some(Instant::now());
+                let key = if input_count % 2 == 0 { "{" } else { "}" };
+                d.event(rich_intuituive::interact::Event::Key(
+                    Key::parse(key).unwrap(),
+                ));
+                input_count += 1;
+                next_input += Duration::from_millis(200);
+            }
+            let at = Instant::now();
+            d.update(elapsed);
+            updates.push(at.elapsed().as_secs_f64() * 1000.0);
+            if let Some(out) = d.render() {
+                if out.is_empty() {
+                    empty += 1;
+                } else {
+                    nonempty += 1;
+                    bytes += out.len();
+                    if let Some(at) = input.take() {
+                        inputs.push(at.elapsed().as_secs_f64() * 1000.0);
+                    }
+                    if let Some(live) = b.videos.get_untracked().get(&node) {
+                        let seq = live.picture.image().to_rgb8().get_pixel(0, 0).0[0] as u64;
+                        let visible = if live.pixels == Pixels::Cells {
+                            out.contains(&format!(";2;{seq};77;91"))
+                        } else {
+                            let tag = rich_art::picture::PictureTag {
+                                id: live.picture.id(),
+                                version: live.picture.version(),
+                                cols: region.cols,
+                                rows: region.rows,
+                                row: 0,
+                                pixels: live.pixels,
+                                fit: Some(rich_art::ImageFit::Cover),
+                                anchor: rich_art::ImageAnchor::Center,
+                            };
+                            live.picture
+                                .encode_tag(&tag, 0, region.rows)
+                                .is_some_and(|encoded| out.contains(&encoded))
+                        };
+                        if visible && seq != last_frame && stamps.lock().unwrap().contains_key(&seq)
+                        {
+                            last_frame = seq;
+                            emitted.lock().unwrap().insert(seq);
+                            latency.push(
+                                stamps.lock().unwrap()[&seq].elapsed().as_secs_f64() * 1000.0,
+                            );
+                        }
+                    }
+                }
+            }
+            std::thread::sleep(Duration::from_millis(1));
+        }
+        producer.join().unwrap();
+        eprintln!("RICH_MEDIA {{\"window\":\"end\"}}");
+        let q = |values: &mut Vec<f64>| {
+            values.sort_by(f64::total_cmp);
+            [0.5, 0.95, 0.99].map(|p| {
+                values
+                    .get(((values.len().saturating_sub(1)) as f64 * p).round() as usize)
+                    .copied()
+                    .unwrap_or(0.0)
+            })
+        };
+        let end = d.stats();
+        let update_total_ms: f64 = updates.iter().sum();
+        println!(
+            "pipeline: config=120x40/480x270-RGB/30fps/2s-source/2.4s-drain applied_pages={} actual_layouts={} offered_frames=60 emitted_frame_ids={} dropped_or_censored={} nonempty_outputs={nonempty} empty_outputs={empty} exact_bytes={bytes} frame_latency_ms={:?} update_latency_ms={:?} input_population={} input_censored={} input_latency_ms={:?} update_total_ms={update_total_ms} widget_draw_ms={} paint_encode_ms={}",
+            b.reads.get_untracked() - initial_reads,
+            TEST_LAYOUTS.with(|n| n.get()),
+            latency.len(),
+            60 - latency.len(),
+            q(&mut latency),
+            q(&mut updates),
+            inputs.len(),
+            input_count - inputs.len(),
+            q(&mut inputs),
+            (end.total_draw - start.total_draw).as_secs_f64() * 1000.0,
+            (end.total_paint - start.total_paint).as_secs_f64() * 1000.0
+        );
+        assert!(nonempty > 0);
+        assert!(!latency.is_empty(), "no real frame emitted");
     }
 }

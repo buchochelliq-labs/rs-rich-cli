@@ -37,13 +37,13 @@ use crate::cdp::CELL;
 use crate::tab::Command;
 
 /// Why the pixel view cannot show.
-pub const NEEDS_KITTY: &str = "The pixel view needs Kitty graphics (kitty, WezTerm, Ghostty, or --images kitty): \
+pub const NEEDS_KITTY: &str = "The pixel view needs Kitty graphics and Unicode placeholders: \
      showing the projection.";
 
 /// What the pixel view has sent, for the status bar and tests.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct ScreenStats {
-    /// Frames shown.
+    /// Source frames accepted by the tiler (not native displayed frames).
     pub frames: u64,
     /// Frames dropped: the byte budget had no room for them.
     pub dropped: u64,
@@ -88,18 +88,50 @@ impl Screen {
         budget: &ByteBudget,
         now: Instant,
     ) -> Option<Vec<usize>> {
+        if !self.accept(cols, rows, budget, now) {
+            return None;
+        }
+        Some(self.update_tiles(frame, cols, rows, now))
+    }
+
+    fn accept(&mut self, cols: usize, rows: usize, budget: &ByteBudget, now: Instant) -> bool {
         self.pacer.resize(cols, rows);
         if !self.pacer.due(now, budget, 1.0) {
             self.stats.dropped += 1;
-            return None;
+            return false;
         }
+        true
+    }
+
+    fn update_tiles(
+        &mut self,
+        frame: &RgbaImage,
+        cols: usize,
+        rows: usize,
+        now: Instant,
+    ) -> Vec<usize> {
         let changed = self.tiler.update(frame, cols, rows);
         let bytes = self.tiler.estimate(&changed, Pixels::Kitty);
         self.pacer.sent(now, Some(bytes.max(1)));
         self.stats.frames += 1;
         self.stats.tiles += changed.len() as u64;
         self.stats.bytes += bytes;
-        Some(changed)
+        changed
+    }
+
+    fn take_lazy(
+        &mut self,
+        cols: usize,
+        rows: usize,
+        budget: &ByteBudget,
+        now: Instant,
+        convert: impl FnOnce() -> Option<RgbaImage>,
+    ) -> Option<Vec<usize>> {
+        if !self.accept(cols, rows, budget, now) {
+            return None;
+        }
+        let frame = convert()?;
+        Some(self.update_tiles(&frame, cols, rows, now))
     }
 
     /// The tiles, as shown.
@@ -136,50 +168,83 @@ pub fn available(b: Browser) -> bool {
     b.pixels.get_untracked() == Pixels::Kitty
 }
 
+/// Discard the last document or view's tiles and restart pacing.
+pub(crate) fn invalidate(b: Browser) {
+    let screen = b.screen.get_untracked();
+    *screen.borrow_mut() = Screen::new();
+    b.screen_tiles.set(Vec::new());
+    b.screen_stats.set(ScreenStats::default());
+}
+
 /// A screencast frame for the pixel view: cut into tiles and shown, if
 /// the view shows and the budget lets it through.
 pub fn frame(b: Browser, frame: &rich_embed::ScreencastFrame) {
     if b.view.get_untracked() != crate::config::View::Pixels {
         return;
     }
-    let Some(image) = rgba(frame) else { return };
     let (cols, rows) = b.viewport.get_untracked();
     let rows = rows.saturating_sub(CHROME_ROWS);
+    // A frame can already be in the producer/UI queue when the view resizes.
+    // Known source dimensions must match the new pixel-coordinate viewport;
+    // legacy engines with unknown metadata retain their existing behavior.
+    let expected = (
+        u32::from(cols.max(20)) * CELL.0,
+        u32::from(rows.max(5)) * CELL.1,
+    );
+    if (frame.meta.device_width > 0.0 && frame.meta.device_width != f64::from(expected.0))
+        || (frame.meta.device_height > 0.0 && frame.meta.device_height != f64::from(expected.1))
+    {
+        return;
+    }
     let budget = byte_budget(b);
     let screen = b.screen.get_untracked();
     let mut screen = screen.borrow_mut();
     if screen
-        .take(&image, cols.into(), rows.into(), &budget, Instant::now())
+        .take_lazy(cols.into(), rows.into(), &budget, Instant::now(), || {
+            rgba(frame)
+        })
         .is_some()
     {
         b.screen_tiles.set(screen.tiles());
-        b.screen_stats.set(screen.stats);
     }
+    b.screen_stats.set(screen.stats);
 }
 
 /// The view: the tiles, in Kitty graphics; a click and the wheel go to
 /// the page.
 pub fn view(b: Browser) -> Node {
-    tiles_of(move || b.screen_tiles.get(), Pixels::Kitty)
-        .on_mouse(move |_, mouse| match mouse.kind {
-            MouseKind::Down(Button::Left) => {
-                let (x, y) = mouse.precise();
-                let (x, y) = point(x, y);
-                b.send(Command::Point { x, y });
-                true
-            }
-            MouseKind::ScrollDown => {
-                b.send(Command::Wheel(3.0 * CELL.1 as f64));
-                true
-            }
-            MouseKind::ScrollUp => {
-                b.send(Command::Wheel(-3.0 * CELL.1 as f64));
-                true
-            }
-            _ => false,
-        })
-        .flex(1)
-        .name("pixels")
+    tiles_of(
+        move || {
+            b.screen_tiles
+                .get()
+                .into_iter()
+                .map(|mut tile| {
+                    tile.picture = b.presentation.picture(&tile.picture);
+                    tile
+                })
+                .collect()
+        },
+        Pixels::Kitty,
+    )
+    .on_mouse(move |_, mouse| match mouse.kind {
+        MouseKind::Down(Button::Left) => {
+            let (x, y) = mouse.precise();
+            let (x, y) = point(x, y);
+            b.send(Command::Point { x, y });
+            true
+        }
+        MouseKind::ScrollDown => {
+            b.send(Command::Wheel(3.0 * CELL.1 as f64));
+            true
+        }
+        MouseKind::ScrollUp => {
+            b.send(Command::Wheel(-3.0 * CELL.1 as f64));
+            true
+        }
+        _ => false,
+    })
+    .flex(1)
+    .name("pixels")
 }
 
 /// The state the browser keeps for the view.
@@ -192,6 +257,12 @@ mod tests {
     use super::*;
     use rich_art::image::Rgba;
     use std::time::Duration;
+
+    #[test]
+    fn unavailable_hint_names_the_required_placeholder_support() {
+        assert!(NEEDS_KITTY.contains("Unicode placeholders"));
+        assert!(!NEEDS_KITTY.contains("WezTerm"));
+    }
 
     #[test]
     fn a_frame_the_budget_has_no_room_for_is_dropped_not_queued() {
@@ -209,6 +280,36 @@ mod tests {
         // Later, the same frame: shown, and nothing changed.
         let later = now + Duration::from_secs(3);
         assert_eq!(screen.take(&white, 80, 16, &budget, later), Some(vec![]));
+        assert_eq!(screen.stats.frames, 2);
+    }
+
+    #[test]
+    fn rejected_frame_does_not_convert_and_invalid_frame_is_not_sent() {
+        let mut screen = Screen::new();
+        let budget = ByteBudget::new(4 << 20);
+        let now = Instant::now();
+        let calls = std::cell::Cell::new(0);
+        let convert = || {
+            calls.set(calls.get() + 1);
+            Some(RgbaImage::from_pixel(64, 64, Rgba([255; 4])))
+        };
+        assert!(screen.take_lazy(8, 4, &budget, now, convert).is_some());
+        assert!(screen.take_lazy(8, 4, &budget, now, convert).is_none());
+        assert_eq!(calls.get(), 1);
+        assert_eq!(screen.stats.frames, 1);
+        assert_eq!(screen.stats.dropped, 1);
+        assert!(
+            screen
+                .take_lazy(8, 4, &budget, now + Duration::from_secs(3), || None)
+                .is_none()
+        );
+        assert_eq!(screen.stats.frames, 1);
+        assert!(
+            screen
+                .take_lazy(8, 4, &budget, now + Duration::from_secs(3), convert)
+                .is_some()
+        );
+        assert_eq!(calls.get(), 2);
         assert_eq!(screen.stats.frames, 2);
     }
 

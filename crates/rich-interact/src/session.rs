@@ -1189,6 +1189,10 @@ fn input_before_wake(
 pub trait Backend {
     /// (columns, rows).
     fn size(&self) -> (u16, u16);
+    /// Measured physical cell width and height, or `None` when unknown.
+    fn cell_pixels(&self) -> Option<(u16, u16)> {
+        None
+    }
     /// The next event, or `None` when `timeout` passes first. `None` for
     /// `timeout` waits as long as it takes.
     fn read(&mut self, timeout: Option<Duration>) -> io::Result<Option<Event>>;
@@ -1317,6 +1321,7 @@ pub struct Session {
     /// The cells' size in pixels while the mouse is reported in pixels
     /// (mode 1016): each report is read back into cells with it.
     cell: Option<(u16, u16)>,
+    metrics: Option<(u16, u16)>,
     /// `None` until the first `enter`.
     input: Option<Input>,
     /// The [`Waker`] handed out, once one was.
@@ -1393,6 +1398,7 @@ impl Session {
             kitty: false,
             sync: false,
             cell: None,
+            metrics: None,
             input: None,
             waker: None,
             typed: Default::default(),
@@ -1449,6 +1455,7 @@ impl Session {
         if self.sync {
             ACTIVE.fetch_or(SYNC, Ordering::SeqCst);
         }
+        self.metrics = cell_size();
         let (mouse, paste) = self.capable();
         if self.options.mouse && mouse {
             out.push_str("\x1b[?1000h\x1b[?1002h\x1b[?1015h\x1b[?1006h");
@@ -1588,6 +1595,9 @@ impl Session {
     /// `event` with a pixel report read back into cells, while the mouse
     /// is reported in pixels; a resize measures the cells again.
     fn in_cells(&mut self, event: Event) -> Event {
+        if matches!(event, Event::Resize { .. }) {
+            self.metrics = cell_size();
+        }
         let Some(cell) = self.cell else {
             return event;
         };
@@ -1737,6 +1747,12 @@ impl Session {
     /// A resize to the current size, which repaints the whole view: after a
     /// suspend, what is on the screen is the shell's.
     fn repaint(&mut self) -> Event {
+        self.metrics = cell_size();
+        if self.cell.is_some()
+            && let Some(cell) = self.metrics
+        {
+            self.cell = Some(cell);
+        }
         if self.options.mouse
             && !self.options.alternate_screen
             && self.options.output == Output::Stdout
@@ -1759,6 +1775,10 @@ impl Drop for Session {
 }
 
 impl Backend for Session {
+    fn cell_pixels(&self) -> Option<(u16, u16)> {
+        self.metrics
+    }
+
     fn size(&self) -> (u16, u16) {
         self.measure().unwrap_or((80, 24))
     }
@@ -2016,6 +2036,34 @@ mod tests {
             assert_ne!(answers.encode(), 0);
             assert_eq!(Answers::decode(answers.encode()), answers);
         }
+    }
+
+    #[test]
+    fn repaint_remeasures_physical_cells_without_pixel_mouse() {
+        // Exercise the real repaint measurement path without entering raw mode.
+        let mut session = std::mem::ManuallyDrop::new(Session {
+            options: SessionOptions::default(),
+            start: Instant::now(),
+            active: false,
+            origin: 0,
+            clipboard: rich_ext::clipboard::Clipboard::detect(
+                &crate::clipboard::SessionEnvironment,
+            ),
+            kitty: false,
+            sync: false,
+            cell: None,
+            metrics: Some((u16::MAX, u16::MAX)),
+            input: None,
+            waker: None,
+            typed: Default::default(),
+            looked: Instant::now(),
+            #[cfg(unix)]
+            tty: None,
+        });
+        let expected = cell_size();
+        session.repaint();
+        assert_eq!(session.metrics, expected);
+        assert_eq!(session.cell, None);
     }
 
     #[test]

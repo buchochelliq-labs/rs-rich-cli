@@ -78,6 +78,10 @@ pub enum Rule {
     /// and count, `‹ 1–3 of 6 ›`, and the shelf keys page it. Off, it
     /// shows the items in view, as Chrome does, with nothing to page it.
     Shelves,
+    /// Stack genuine source figures, captions and surrounding ordinary flow by measured terminal height.
+    FigureFlow,
+    /// Wrap complete action names in the terminal and source popups.
+    WrapActionLabels,
 }
 
 /// What a rule is, for the config, the command line and the about page.
@@ -183,6 +187,18 @@ pub const RULES: &[RuleInfo] = &[
         rule: Rule::Bandwidth,
         name: "bandwidth",
         what: "lower frame rate and tier when the terminal is short of bandwidth",
+        default: true,
+    },
+    RuleInfo {
+        rule: Rule::FigureFlow,
+        name: "figure-flow",
+        what: "stack source figures and captions with surrounding ordinary flow",
+        default: true,
+    },
+    RuleInfo {
+        rule: Rule::WrapActionLabels,
+        name: "wrap-action-labels",
+        what: "wrap complete action names; Shift+F1 lists names in compact mode",
         default: true,
     },
 ];
@@ -314,8 +330,8 @@ pub const ICON_PX: f64 = 16.0;
 pub const MAX_PICTURE_ROWS: usize = 14;
 /// Below this many columns a terminal is narrow: navigation collapses.
 pub const NARROW_COLUMNS: u16 = 100;
-/// A grid's column is at least this many cells wide when grids snap.
-pub const MIN_GRID_CELLS: usize = 16;
+/// A grid card is at least this many cells wide when grids snap.
+pub const MIN_GRID_CELLS: usize = 32;
 /// A picture of text is a banner at least this many times wider than
 /// tall.
 pub const BANNER_RATIO: f64 = 4.0;
@@ -507,21 +523,19 @@ pub fn backdrop(background: Background) -> &'static str {
 }
 
 /// The background drawn behind the projected page with the page colours
-/// rule off. Without `transparent`, the [`backdrop`]. With it, the page's
-/// own background (`page`, its CSS, as [`raw_color`] draws colours), and
-/// none where the page sets none: the terminal's own background shows.
-/// Raw colours already follow the terminal's background, so the page's
-/// text stays readable on it.
+/// rule off. A source background uses the same [`raw_color`] transform as
+/// its foreground, preserving their contrast on both light and dark pages.
+/// Without a source background, use [`backdrop`] unless `transparent` asks
+/// for the terminal's own surface. Inverting a dark page's light text onto
+/// an unrelated black fallback would make both text and surface dark.
 pub fn page_backdrop(
     page: Option<&str>,
     transparent: bool,
     background: Background,
 ) -> Option<String> {
-    if !transparent {
-        return Some(backdrop(background).to_string());
-    }
     page.and_then(|css| raw_color(css, background))
         .map(|colour| format!("on {colour}"))
+        .or_else(|| (!transparent).then(|| backdrop(background).to_string()))
 }
 
 /// sRGB (0 to 255) to OKLab.
@@ -628,7 +642,7 @@ mod tests {
         assert!(adapt.on(Rule::DecorativeImages) && adapt.on(Rule::LiveTail));
         assert!(!adapt.on(Rule::TextOverPictures));
         assert!(Adapt::none().is_none());
-        assert_eq!(RULES.len(), 15);
+        assert_eq!(RULES.len(), 17);
         for info in RULES {
             assert_eq!(Rule::parse(info.name), Some(info.rule));
         }

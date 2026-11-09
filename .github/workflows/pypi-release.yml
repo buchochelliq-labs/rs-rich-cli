@@ -61,8 +61,10 @@ jobs:
       matrix:
         include:
           - { name: linux-x86_64, os: ubuntu-latest, target: x86_64 }
-          - { name: linux-aarch64, os: ubuntu-24.04-arm, target: aarch64 }
-          - { name: macos-arm64, os: macos-14, target: aarch64 }
+          # Cross-build from x86_64: maturin-action's aarch64 musl bootstrap
+          # download fails inside the native ARM manylinux container.
+          - { name: linux-aarch64, os: ubuntu-latest, target: aarch64 }
+          - { name: macos-arm64, os: macos-15, target: aarch64 }
           - { name: macos-x86_64, os: macos-15-intel, target: x86_64 }
           - { name: windows-x86_64, os: windows-latest, target: x64 }
     steps:
@@ -73,6 +75,8 @@ jobs:
         with:
           python-version: "3.12"
       - uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
+        env:
+          CFLAGS_aarch64_unknown_linux_gnu: -D__ARM_ARCH=8
         with:
           target: ${{ matrix.target }}
           manylinux: auto
@@ -81,12 +85,14 @@ jobs:
         with:
           python-version: "3.9"
       - name: Install and import on Python 3.9
+        if: matrix.name != 'linux-aarch64'
         shell: bash
         run: python crates/rich-py/tests/smoke.py dist
       - uses: actions/setup-python@v7
         with:
           python-version: "3.13"
       - name: Install and import on Python 3.13
+        if: matrix.name != 'linux-aarch64'
         shell: bash
         run: python crates/rich-py/tests/smoke.py dist
       - uses: actions/upload-artifact@v7
@@ -94,6 +100,29 @@ jobs:
           name: wheel-${{ matrix.name }}
           path: dist/*.whl
           if-no-files-found: error
+
+  aarch64-wheel-smoke:
+    name: smoke (linux-aarch64 wheel)
+    needs: wheels
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: refs/tags/${{ inputs.tag }}
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.9"
+      - uses: actions/download-artifact@v8
+        with:
+          name: wheel-linux-aarch64
+          path: dist
+      - name: Install and import on Python 3.9
+        run: python crates/rich-py/tests/smoke.py dist
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+      - name: Install and import on Python 3.13
+        run: python crates/rich-py/tests/smoke.py dist
 
   sdist:
     name: sdist
@@ -143,7 +172,7 @@ jobs:
 
   publish:
     name: publish to PyPI
-    needs: [wheels, sdist, test]
+    needs: [wheels, aarch64-wheel-smoke, sdist, test]
     runs-on: ubuntu-latest
     environment: pypi          # PyPI's trusted publisher is bound to this environment
     permissions:

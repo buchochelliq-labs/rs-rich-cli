@@ -34,6 +34,10 @@ use std::sync::Arc;
 
 use serde_json::Value;
 
+pub(crate) mod source;
+pub use source::SourcePage;
+use source::{Extraction, Origins, RunLocation};
+
 use crate::clean::{clean, clean_inline, clean_pre, truncate};
 use crate::engine::{NodeId, PageSnapshot, Rect};
 
@@ -49,6 +53,8 @@ const MAX_OPTIONS: usize = 500;
 
 /// Where `overflow-x` is in [`SNAPSHOT_STYLES`](crate::cdp::SNAPSHOT_STYLES).
 const SNAPSHOT_OVERFLOW_X: usize = 15;
+/// Optional appended fact; older snapshots have no clip-margin proof.
+const SNAPSHOT_OVERFLOW_CLIP_MARGIN: usize = 16;
 
 /// A run of text with one style.
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -225,6 +231,23 @@ pub struct Layer {
     /// the viewport (pinned and docked).
     pub top: f64,
     pub place: Place,
+}
+
+/// A source-declared dialog or an opaque, large fixed visual layer.
+/// `dialog` and `modal` reflect source semantics, never geometry alone.
+#[derive(Clone, Debug, PartialEq)]
+pub struct SourceOverlay {
+    pub node: NodeId,
+    pub layer: usize,
+    pub dialog: bool,
+    pub modal: bool,
+    pub name: String,
+    /// Source surface background when it is proven fully opaque.
+    pub background: Option<String>,
+    /// Chrome paint order for compositing sibling dialogs.
+    pub paint_order: i64,
+    /// Ordinary source blocks painted above this surface, in paint order.
+    pub foreground: Vec<NodeId>,
 }
 
 impl Block {
@@ -415,8 +438,8 @@ pub struct Media {
     /// worker: what the projection and reader mode draw. An animated GIF
     /// carries its frames.
     pub picture: Option<rich_intuituive::Picture>,
-    /// Whether the page captions it (a `<figure>` with a `<figcaption>`):
-    /// then it gets no `Image:` line of ours.
+    /// Whether a source figure caption supplies the complete normalized alt.
+    /// Reader view always retains the original alternative text.
     pub captioned: bool,
     /// A video's or an audio's playback, read from the element.
     pub playback: Option<crate::engine::Playback>,
@@ -649,7 +672,8 @@ pub struct Region {
     pub collapsible: bool,
 }
 
-/// A grid, or a flex row that wraps: its items' boxes in order.
+/// A source grid, wrapping flex row, or two named video/log sections in
+/// a flex container: its direct items' boxes in source order.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Grid {
     pub node: NodeId,
@@ -781,6 +805,8 @@ pub struct Page {
     pub shelves: Vec<Shelf>,
     /// Its fixed and sticky boxes ([`Stack::layer`]).
     pub layers: Vec<Layer>,
+    /// Visible source dialogs and opaque large fixed layers.
+    pub overlays: Vec<SourceOverlay>,
     /// How far down the page Chrome was scrolled when it was read, in CSS
     /// pixels.
     pub scroll_y: f64,
@@ -790,6 +816,11 @@ pub struct Page {
 }
 
 impl Page {
+    /// Source-declared dialogs, distinct from purely visual fixed layers.
+    pub fn dialogs(&self) -> impl Iterator<Item = &SourceOverlay> {
+        self.overlays.iter().filter(|overlay| overlay.dialog)
+    }
+
     /// The control on `node`, if the page has one.
     pub fn control(&self, node: NodeId) -> Option<&Control> {
         self.controls.iter().find(|c| c.node == node)
@@ -898,6 +929,7 @@ impl Revisions {
 
 /// The snapshot's first document, in arrays.
 struct Dom {
+    source_formatting: HashMap<NodeId, (String, String)>,
     parent: Vec<i64>,
     kind: Vec<i64>,
     name: Vec<String>,
@@ -928,8 +960,11 @@ struct Dom {
     faded: Vec<bool>,
     /// Concealed another way ([`veils`]): clipped or shrunk away.
     veiled: Vec<bool>,
+    /// This node alone is proven outside an ordinary overflow clip.
+    /// Never inherited: positioned descendants can escape that clip.
+    overflow_clipped: Vec<bool>,
     /// The [screen-reader twins](Twin): each element of a pair.
-    twins: HashMap<usize, Twin>,
+    twins: HashMap<usize, (Twin, usize)>,
     /// Elements by their `id`, the first of each.
     ids: HashMap<String, usize>,
     /// Each layout object's paint order (`paintOrders`): boxes painted
@@ -1068,7 +1103,22 @@ impl Dom {
         };
         let bounds = rects("bounds");
         let (scrolls, clients) = (rects("scrollRects"), rects("clientRects"));
+        let source_formatting = snapshot["sourceFormatting"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(|v| {
+                Some((
+                    v["node"].as_i64()?,
+                    (
+                        v["display"].as_str()?.to_string(),
+                        v["position"].as_str()?.to_string(),
+                    ),
+                ))
+            })
+            .collect();
         let mut dom = Dom {
+            source_formatting,
             parent,
             kind,
             name,
@@ -1094,6 +1144,7 @@ impl Dom {
             concealed: Vec::new(),
             faded: Vec::new(),
             veiled: Vec::new(),
+            overflow_clipped: Vec::new(),
             twins: HashMap::new(),
             ids: HashMap::new(),
             paint: ints(&layout_tree["paintOrders"]),
@@ -1112,6 +1163,7 @@ impl Dom {
         dom.concealed = faded.iter().zip(&veiled).map(|(f, v)| *f || *v).collect();
         dom.faded = faded;
         dom.veiled = veiled;
+        dom.overflow_clipped = (0..n).map(|i| overflow_clipped(&dom, i)).collect();
         for i in 0..n {
             if let Some(id) = dom.attr(i, "id").filter(|id| !id.is_empty()) {
                 dom.ids.entry(id.to_string()).or_insert(i);
@@ -1150,9 +1202,10 @@ impl Dom {
         self.kind[i] == 1
     }
 
-    /// Whether a laid-out node shows: not hidden, not transparent.
+    /// Whether a laid-out node shows: not hidden, transparent, or fully clipped.
     fn shows(&self, i: usize) -> bool {
         self.layout[i].is_some()
+            && !self.overflow_clipped[i]
             && !matches!(self.style(i, 1), "hidden" | "collapse")
             && self.style(i, 8) != "0"
     }
@@ -1286,6 +1339,65 @@ fn veils(dom: &Dom, i: usize) -> bool {
     false
 }
 
+/// Reject only a whole source box outside a known clipped axis. Snapshot
+/// bounds already include scrolling. The outer border box is conservative
+/// for hidden overflow, or clip overflow with a captured zero clip margin.
+/// Missing/unknown or nonzero margins cannot prove that border-box edge.
+/// Containing blocks and transforms are not captured, so stop at a nonstatic
+/// positioned chain rather than guessing whether it escapes an older clip.
+/// Explicit veils keep their existing semantic-twin/name-only policy.
+fn overflow_clipped(dom: &Dom, i: usize) -> bool {
+    let valid = |r: Rect| {
+        [r.x, r.y, r.width, r.height, r.right(), r.bottom()]
+            .into_iter()
+            .all(f64::is_finite)
+            && !r.is_empty()
+    };
+    let Some(rect) = dom.rect(i).filter(|&r| valid(r)) else {
+        return false;
+    };
+    let mut child = i;
+    while let Some(parent) = usize::try_from(dom.parent[child])
+        .ok()
+        .filter(|&p| p < child)
+    {
+        if dom.is_element(child) && dom.layout[child].is_some() && dom.style(child, 14) != "static"
+        {
+            return false;
+        }
+        let display = dom.style(parent, 0);
+        let clips = |axis| match dom.style(parent, axis) {
+            "hidden" => true,
+            "clip" => matches!(
+                dom.style(parent, SNAPSHOT_OVERFLOW_CLIP_MARGIN).trim(),
+                "0px" | "border-box 0px" | "padding-box 0px" | "content-box 0px"
+            ),
+            _ => false,
+        };
+        if dom.is_element(parent)
+            && !veils(dom, parent)
+            && !matches!(dom.name[parent].as_str(), "HTML" | "BODY")
+            && matches!(
+                display,
+                "block"
+                    | "flow-root"
+                    | "inline-block"
+                    | "flex"
+                    | "inline-flex"
+                    | "grid"
+                    | "inline-grid"
+            )
+            && let Some(clip) = dom.rect(parent).filter(|&r| valid(r))
+            && ((clips(SNAPSHOT_OVERFLOW_X) && (rect.x >= clip.right() || rect.right() <= clip.x))
+                || (clips(10) && (rect.y >= clip.bottom() || rect.bottom() <= clip.y)))
+        {
+            return true;
+        }
+        child = parent;
+    }
+    false
+}
+
 /// The digits of `text`, in order.
 fn digits(text: &str) -> String {
     text.chars().filter(char::is_ascii_digit).collect()
@@ -1296,7 +1408,7 @@ fn digits(text: &str) -> String {
 /// marked `aria-hidden="true"` that shows, whose texts have the same
 /// digits, at least one. A hidden hint has no digits its sibling shows,
 /// so it stays hidden.
-fn twins(dom: &Dom) -> HashMap<usize, Twin> {
+fn twins(dom: &Dom) -> HashMap<usize, (Twin, usize)> {
     let mut out = HashMap::new();
     let hidden = |n: usize| {
         dom.attr(n, "aria-hidden")
@@ -1322,11 +1434,14 @@ fn twins(dom: &Dom) -> HashMap<usize, Twin> {
                 && hidden(s)
                 && dom.layout[s].is_some()
                 && !dom.concealed[s]
+                // The hidden representation cannot revive a source pair
+                // whose shown counterpart is wholly overflow-clipped.
+                && !dom.overflow_clipped[s]
                 && digits(&dom.raw_text(s)) == said
         });
         if let Some(shown) = shown {
-            out.insert(i, Twin::Spoken);
-            out.insert(shown, Twin::Shown);
+            out.insert(i, (Twin::Spoken, shown));
+            out.insert(shown, (Twin::Shown, i));
         }
     }
     out
@@ -1361,24 +1476,78 @@ fn opaque(css: &str) -> bool {
     }
 }
 
+/// Whether a computed colour is fully opaque, for occlusion rather than
+/// merely checking whether it paints anything.
+fn fully_opaque_color(css: &str) -> bool {
+    let css = css.trim();
+    let Some(inner) = css
+        .strip_prefix("rgb(")
+        .or_else(|| css.strip_prefix("rgba("))
+        .and_then(|value| value.strip_suffix(')'))
+    else {
+        // Unknown computed syntax is not positive evidence of occlusion.
+        return false;
+    };
+    let parts: Vec<_> = inner
+        .split([',', ' ', '/'])
+        .filter(|part| !part.is_empty())
+        .collect();
+    if !(3..=4).contains(&parts.len())
+        || parts[..3].iter().any(|part| {
+            part.trim_end_matches('%')
+                .parse::<f64>()
+                .ok()
+                .is_none_or(|value| !value.is_finite())
+        })
+    {
+        return false;
+    }
+    parts.get(3).is_none_or(|alpha| {
+        let scale = if alpha.ends_with('%') { 100.0 } else { 1.0 };
+        alpha
+            .trim_end_matches('%')
+            .parse::<f64>()
+            .ok()
+            .is_some_and(|value| value.is_finite() && value >= scale)
+    })
+}
+
 /// Whether anything in node `i` shows that is not visually hidden: text,
 /// or a picture or other media.
 fn shows_anything(dom: &Dom, i: usize) -> bool {
-    dom.descendants(i).into_iter().any(|d| {
-        dom.layout[d].is_some()
-            && dom.shows(d)
-            && !dom.concealed[d]
-            && match dom.kind[d] {
-                3 => dom.text[d].as_deref().is_some_and(|t| !t.trim().is_empty()),
-                1 => {
-                    matches!(
-                        dom.name[d].as_str(),
-                        "IMG" | "SVG" | "VIDEO" | "CANVAS" | "PICTURE"
-                    ) || background_picture(dom, d).is_some()
-                }
-                _ => false,
+    dom.descendants(i)
+        .into_iter()
+        .any(|d| shows_content(dom, d))
+}
+
+fn shows_content(dom: &Dom, i: usize) -> bool {
+    dom.shows(i)
+        && !dom.concealed[i]
+        && match dom.kind[i] {
+            3 => dom.text[i].as_deref().is_some_and(|t| !t.trim().is_empty()),
+            1 => {
+                matches!(
+                    dom.name[i].as_str(),
+                    "IMG" | "SVG" | "VIDEO" | "CANVAS" | "PICTURE"
+                ) || background_picture(dom, i).is_some()
             }
-    })
+            _ => false,
+        }
+}
+
+/// A boxless link's footprint comes from its visible content, never an
+/// empty wrapper's box or the hidden words of its accessible name.
+fn visible_footprint(dom: &Dom, i: usize) -> Option<Rect> {
+    dom.descendants(i)
+        .into_iter()
+        // PICTURE's wrapper alone draws no media, but its CSS background can.
+        .filter(|&d| {
+            shows_content(dom, d)
+                && (dom.name[d] != "PICTURE" || background_picture(dom, d).is_some())
+        })
+        .filter_map(|d| dom.rect(d))
+        .filter(|rect| !rect.is_empty())
+        .fold(None, |bounds, rect| Some(union(bounds, rect)))
 }
 
 /// Whether a computed `clip` (`rect(top, right, bottom, left)`) has no
@@ -1519,9 +1688,14 @@ fn svg_content(dom: &Dom, svg: usize) -> (u64, String, String) {
     (hasher.finish(), clean(&words.join(" ")), title)
 }
 
-/// Whether node `i` is inside a `<figure>` (up to three levels up) that
-/// has a `<figcaption>`.
-fn captioned(dom: &Dom, i: usize) -> bool {
+/// Whether a source figure caption (up to three ancestors) supplies all
+/// of the alternative text. Mere proximity or a partial title is insufficient.
+fn captioned(dom: &Dom, i: usize, alt: &str) -> bool {
+    let normalize = |s: &str| s.split_whitespace().collect::<Vec<_>>().join(" ");
+    let alt = normalize(alt);
+    if alt.is_empty() {
+        return false;
+    }
     let mut at = i;
     for _ in 0..3 {
         let Some(parent) = usize::try_from(dom.parent[at])
@@ -1534,7 +1708,19 @@ fn captioned(dom: &Dom, i: usize) -> bool {
             return dom
                 .descendants(parent)
                 .into_iter()
-                .any(|d| dom.name[d] == "FIGCAPTION");
+                .filter(|&d| dom.name[d] == "FIGCAPTION" && dom.shows(d) && !dom.concealed[d])
+                .any(|d| {
+                    // Compare what the text walker can show, not raw DOM text
+                    // hidden in a descendant. Missing rendered text is uncertain:
+                    // keep the image's alternative instead of assuming equivalence.
+                    let text: Option<String> = dom
+                        .descendants(d)
+                        .into_iter()
+                        .filter(|&t| dom.kind[t] == 3 && dom.shows(t) && !dom.concealed[t])
+                        .map(|t| dom.text[t].as_deref().map(clean_inline))
+                        .collect();
+                    text.is_some_and(|text| normalize(&text) == alt)
+                });
         }
         at = parent;
     }
@@ -1650,6 +1836,7 @@ const SKIPPED: &[&str] = &[
 ];
 
 struct Walker<'a> {
+    source: Option<Extraction>,
     dom: &'a Dom,
     ax: &'a Ax<'a>,
     page: Page,
@@ -1665,7 +1852,7 @@ struct Walker<'a> {
 }
 
 impl Walker<'_> {
-    fn push(&mut self, run: Run, rect: Option<Rect>) {
+    fn push(&mut self, run: Run, rect: Option<Rect>, node: usize) {
         // A box with no area (Chrome gives some text, an empty inline or
         // an icon's pseudo-element one at the page's origin) says nothing
         // about where the text is: in the union it would stretch the block
@@ -1686,6 +1873,9 @@ impl Walker<'_> {
                     && !run.text.starts_with(char::is_whitespace)
                 {
                     self.runs.push(Run::plain(" "));
+                    if let Some(source) = &mut self.source {
+                        source.runs.push(vec![None]);
+                    }
                 }
             }
             self.last = Some(rect);
@@ -1702,19 +1892,34 @@ impl Walker<'_> {
                     && last.picture.is_none()
                     && run.picture.is_none() =>
             {
-                last.text.push_str(&run.text)
+                last.text.push_str(&run.text);
+                if let Some(source) = &mut self.source {
+                    source
+                        .runs
+                        .last_mut()
+                        .unwrap()
+                        .extend(run.text.chars().map(|_| Some(node)));
+                }
             }
-            _ => self.runs.push(run),
+            _ => {
+                if let Some(source) = &mut self.source {
+                    source
+                        .runs
+                        .push(run.text.chars().map(|_| Some(node)).collect());
+                }
+                self.runs.push(run);
+            }
         }
     }
 
     /// End the block being gathered, as `context` says what it is.
     fn flush(&mut self, context: &Context) {
         let mut runs = std::mem::take(&mut self.runs);
+        let mut origins = self.source.as_mut().map(|s| std::mem::take(&mut s.runs));
         let rect = self.rect.take();
         self.last = None;
         if !context.pre {
-            tidy(&mut runs);
+            tidy_origins(&mut runs, origins.as_mut());
         }
         if runs.iter().all(|r| r.text.trim().is_empty()) {
             return;
@@ -1731,6 +1936,9 @@ impl Walker<'_> {
             other => other.clone(),
         };
         let rect = rect.unwrap_or(context.frame);
+        if let (Some(source), Some(origins)) = (&mut self.source, origins) {
+            source.blocks.insert(self.page.blocks.len(), origins);
+        }
         self.page.blocks.push(Block {
             kind,
             runs,
@@ -1759,6 +1967,19 @@ impl Walker<'_> {
 
     fn walk(&mut self, i: usize, context: &Context) {
         let dom = self.dom;
+        if dom.overflow_clipped[i] {
+            // A clipped ancestor is not a subtree veil. Keep looking for
+            // escaping descendants, including their original source links.
+            let link_with_content = dom.is_element(i)
+                && self.ax.role(dom.backend[i]).or_else(|| dom_role(dom, i)) == Some(Role::Link)
+                && visible_footprint(dom, i).is_some();
+            if !link_with_content {
+                for &child in &dom.children[i] {
+                    self.walk(child, context);
+                }
+                return;
+            }
+        }
         match dom.kind[i] {
             3 => {
                 if context.silent
@@ -1793,7 +2014,7 @@ impl Walker<'_> {
                     picture: None,
                     twin: context.twin,
                 };
-                self.push(run, dom.rect(i));
+                self.push(run, dom.rect(i), i);
             }
             1 => self.element(i, context),
             // The document, shadow roots, and anything else with children.
@@ -1829,6 +2050,7 @@ impl Walker<'_> {
                         ..Run::default()
                     },
                     None,
+                    i,
                 );
             }
             return;
@@ -1898,11 +2120,20 @@ impl Walker<'_> {
                 self.page.controls[index].hover_only = true;
                 return;
             }
-            if !laid_out || !dom.shows(i) && role != Role::Link || dom.concealed[i] {
+            let footprint = ((!laid_out || dom.overflow_clipped[i]) && role == Role::Link)
+                .then(|| visible_footprint(dom, i))
+                .flatten();
+            if !laid_out && footprint.is_none()
+                || !dom.shows(i) && role != Role::Link
+                || dom.concealed[i]
+            {
                 return;
             }
             let index = self.control(i, role.clone());
             if role == Role::Link {
+                if let Some(rect) = footprint {
+                    self.page.controls[index].rect = rect;
+                }
                 let inner = Context {
                     control: Some(index),
                     name_only: !shows_anything(dom, i),
@@ -1941,7 +2172,7 @@ impl Walker<'_> {
         }
         let mut inner = context.clone();
         if let Some(twin) = dom.twins.get(&i) {
-            inner.twin = Some(*twin);
+            inner.twin = Some(twin.0);
         }
         let role_attr = dom.attr(i, "role").unwrap_or_default().to_ascii_lowercase();
         if dom
@@ -1977,11 +2208,53 @@ impl Walker<'_> {
                 });
             }
         }
-        // Grids, and flex rows that wrap: their items, for snapping.
+        // Reflow an actual source container, never nearby independent boxes.
+        // A nonwrapping flex row qualifies only for two named source sections,
+        // one containing video and the other a live log. This establishes layout
+        // containment, not a shared playback/chat state or application meaning.
         let display = dom.style(i, 0);
+        let paired_sections = if laid_out && matches!(display, "flex" | "inline-flex") {
+            let panes: Vec<_> = dom.children[i]
+                .iter()
+                .copied()
+                .filter(|&c| {
+                    dom.is_element(c) && dom.shows(c) && dom.rect(c).is_some_and(|r| !r.is_empty())
+                })
+                .collect();
+            let named_section = |c| {
+                (dom.name[c] == "SECTION" || dom.attr(c, "role") == Some("region"))
+                    && ["aria-label", "aria-labelledby"]
+                        .iter()
+                        .any(|a| dom.attr(c, a).is_some_and(|v| !v.trim().is_empty()))
+                    && !self.label(c).is_empty()
+            };
+            let contains = |c, video| {
+                dom.descendants(c).into_iter().any(|d| {
+                    if video {
+                        dom.name[d] == "VIDEO"
+                    } else {
+                        self.log_kind(d).is_some()
+                    }
+                })
+            };
+            panes.len() == 2
+                && panes.iter().all(|&c| named_section(c))
+                && ((contains(panes[0], true)
+                    && !contains(panes[0], false)
+                    && contains(panes[1], false)
+                    && !contains(panes[1], true))
+                    || (contains(panes[1], true)
+                        && !contains(panes[1], false)
+                        && contains(panes[0], false)
+                        && !contains(panes[0], true)))
+        } else {
+            false
+        };
+        // Grids, wrapping flex rows, and the explicit two-pane source layout.
         if laid_out
             && (matches!(display, "grid" | "inline-grid")
-                || (matches!(display, "flex" | "inline-flex") && dom.style(i, 11) == "wrap"))
+                || (matches!(display, "flex" | "inline-flex") && dom.style(i, 11) == "wrap")
+                || paired_sections)
         {
             let items: Vec<Rect> = dom.children[i]
                 .iter()
@@ -2121,7 +2394,8 @@ impl Walker<'_> {
             .source
             .get(&i)
             .map(String::as_str)
-            .or_else(|| dom.attr(i, "src"))
+            .filter(|s| !s.trim().is_empty())
+            .or_else(|| dom.attr(i, "src").filter(|s| !s.trim().is_empty()))
             .map(str::to_string)
             .or_else(|| background_picture(dom, i))
             .map(|s| clean(&crate::url::resolve(&dom.url, &s)))
@@ -2144,7 +2418,7 @@ impl Walker<'_> {
             src: truncate(&src, 2000),
             still: None,
             picture: None,
-            captioned: captioned(dom, i),
+            captioned: captioned(dom, i, &alt),
             playback: None,
             poster: truncate(&poster, 2000),
             controls,
@@ -2532,7 +2806,7 @@ impl Walker<'_> {
                 silent: false,
                 ..context.clone()
             };
-            let mut runs = self.inline(child, &inner);
+            let (mut runs, _) = self.inline(child, &inner);
             tidy(&mut runs);
             if runs.is_empty() {
                 continue;
@@ -2768,18 +3042,30 @@ impl Walker<'_> {
     fn table(&mut self, i: usize, context: &Context) -> Option<Table> {
         let dom = self.dom;
         let mut table = Table::default();
+        let block = self.page.blocks.len();
+        let mut cells = Vec::new();
         let mut stack: Vec<usize> = dom.children[i].iter().rev().copied().collect();
         while let Some(n) = stack.pop() {
             match dom.name[n].as_str() {
                 "TABLE" => continue,
                 "CAPTION" => {
-                    table.caption = self
-                        .inline(n, context)
-                        .iter()
-                        .map(|r| r.text.as_str())
-                        .collect::<String>()
-                        .trim()
-                        .to_string()
+                    let (runs, origins) = self.inline(n, context);
+                    let text: String = runs.iter().map(|r| r.text.as_str()).collect();
+                    let start = text.chars().take_while(|c| c.is_whitespace()).count();
+                    table.caption = text.trim().to_string();
+                    // Like the caption text, its provenance belongs to the last caption.
+                    cells.retain(|(location, _)| !matches!(location, RunLocation::Caption { .. }));
+                    if let Some(origins) = origins {
+                        cells.push((
+                            RunLocation::Caption { block },
+                            origins
+                                .into_iter()
+                                .flatten()
+                                .skip(start)
+                                .take(table.caption.chars().count())
+                                .collect(),
+                        ));
+                    }
                 }
                 "TR" => {
                     let mut row = Vec::new();
@@ -2788,8 +3074,21 @@ impl Walker<'_> {
                         if !(header || dom.name[cell] == "TD") || dom.layout[cell].is_none() {
                             continue;
                         }
-                        let mut runs = self.inline(cell, context);
-                        tidy(&mut runs);
+                        let (mut runs, mut origins) = self.inline(cell, context);
+                        tidy_origins(&mut runs, origins.as_mut());
+                        if let Some(origins) = origins {
+                            for (run, origins) in origins.into_iter().enumerate() {
+                                cells.push((
+                                    RunLocation::Cell {
+                                        block,
+                                        row: table.rows.len(),
+                                        cell: row.len(),
+                                        run,
+                                    },
+                                    origins,
+                                ));
+                            }
+                        }
                         row.push(Cell {
                             runs,
                             header,
@@ -2803,12 +3102,22 @@ impl Walker<'_> {
                 _ => stack.extend(dom.children[n].iter().rev()),
             }
         }
-        (!table.rows.is_empty()).then_some(table)
+        if !table.rows.is_empty() {
+            if let Some(source) = &mut self.source {
+                source.cells.extend(cells);
+            }
+            Some(table)
+        } else {
+            None
+        }
     }
 
     /// The text runs of node `i`, its blocks run together: a cell's.
-    fn inline(&mut self, i: usize, context: &Context) -> Vec<Run> {
+    fn inline(&mut self, i: usize, context: &Context) -> (Vec<Run>, Option<Origins>) {
         let saved_runs = std::mem::take(&mut self.runs);
+        let saved_cells = self.source.as_ref().map_or(0, |s| s.cells.len());
+        let saved_origins = self.source.as_mut().map(|s| std::mem::take(&mut s.runs));
+        let mut origins = self.source.as_ref().map(|_| Origins::new());
         let saved_rect = self.rect.take();
         let blocks = self.page.blocks.len();
         let inner = Context {
@@ -2822,7 +3131,16 @@ impl Walker<'_> {
         // its text.
         let made: Vec<Block> = self.page.blocks.drain(blocks..).collect();
         let mut runs = Vec::new();
-        for block in made {
+        for (index, block) in made.into_iter().enumerate() {
+            let original = self
+                .source
+                .as_mut()
+                .and_then(|s| s.blocks.remove(&(blocks + index)));
+            let start = runs.len();
+            let node = self
+                .source
+                .as_ref()
+                .and_then(|_| self.dom.backend.iter().position(|&n| n == block.node));
             match block.kind {
                 BlockKind::Control(index) => runs.push(Run {
                     text: format!("[{}] ", self.page.controls[index].name),
@@ -2849,11 +3167,29 @@ impl Walker<'_> {
                     runs.push(Run::plain(" "));
                 }
             }
+            if let Some(origins) = &mut origins {
+                if let Some(original) = original {
+                    origins.extend(original);
+                    origins.push(vec![None]);
+                } else {
+                    origins.extend(
+                        runs[start..]
+                            .iter()
+                            .map(|r| r.text.chars().map(|_| node).collect()),
+                    );
+                }
+            }
+        }
+        if let Some(source) = &mut self.source {
+            origins.as_mut().unwrap().append(&mut source.runs);
+            source.runs = saved_origins.unwrap();
+            // Nested tables folded into inline text have no final table address.
+            source.cells.truncate(saved_cells);
         }
         runs.append(&mut self.runs);
         self.runs = saved_runs;
         self.rect = saved_rect;
-        runs
+        (runs, origins)
     }
 }
 
@@ -3156,40 +3492,75 @@ fn dom_role(dom: &Dom, i: usize) -> Option<Role> {
 /// Collapse whitespace across runs as a browser does: one space between
 /// words, none at the ends; line breaks of the page stay.
 fn tidy(runs: &mut Vec<Run>) {
+    tidy_origins(runs, None);
+}
+
+fn tidy_origins(runs: &mut Vec<Run>, mut origins: Option<&mut Origins>) {
     let mut space = true;
-    for run in runs.iter_mut() {
+    for (index, run) in runs.iter_mut().enumerate() {
         let mut text = String::with_capacity(run.text.len());
-        for c in run.text.chars() {
+        let mut kept = origins.as_ref().map(|_| Vec::new());
+        for (character, c) in run.text.chars().enumerate() {
             if c == '\n' {
                 while text.ends_with(' ') {
                     text.pop();
+                    if let Some(kept) = &mut kept {
+                        kept.pop();
+                    }
                 }
                 text.push('\n');
                 space = true;
             } else if c == ' ' {
-                if !space {
-                    text.push(' ');
-                    space = true;
+                if space {
+                    continue;
                 }
+                text.push(' ');
+                space = true;
             } else {
                 text.push(c);
                 space = false;
             }
+            if let (Some(kept), Some(origins)) = (&mut kept, &origins) {
+                kept.push(origins[index][character]);
+            }
         }
         run.text = text;
+        if let (Some(origins), Some(kept)) = (&mut origins, kept) {
+            origins[index] = kept;
+        }
     }
     while let Some(last) = runs.last_mut() {
         let trimmed = last.text.trim_end_matches([' ', '\n']).len();
         last.text.truncate(trimmed);
+        if let Some(origins) = &mut origins {
+            origins
+                .last_mut()
+                .unwrap()
+                .truncate(last.text.chars().count());
+        }
         if last.text.is_empty() {
             runs.pop();
+            if let Some(origins) = &mut origins {
+                origins.pop();
+            }
         } else {
             break;
         }
     }
-    runs.retain(|r| !r.text.is_empty());
+    for i in (0..runs.len()).rev() {
+        if runs[i].text.is_empty() {
+            runs.remove(i);
+            if let Some(origins) = &mut origins {
+                origins.remove(i);
+            }
+        }
+    }
     if let Some(first) = runs.first_mut() {
+        let count = first.text.chars().take_while(|&c| c == '\n').count();
         first.text = first.text.trim_start_matches(['\n']).to_string();
+        if let Some(origins) = &mut origins {
+            origins[0].drain(..count);
+        }
     }
 }
 
@@ -3225,18 +3596,44 @@ fn holds(outer: Rect, inner: Rect) -> bool {
 ///   ancestors or descendants, nor a fixed or sticky one (they move);
 /// - a block wholly inside a picture's box and painted above it is
 ///   `over` it.
-fn stack(dom: &Dom, page: &mut Page) {
+fn stack(dom: &Dom, ax: &Ax<'_>, page: &mut Page) {
     page.scroll_y = dom.scroll_y;
     page.view_height = dom.view_height;
     let n = dom.parent.len();
     let parent = |i: usize| usize::try_from(dom.parent[i]).ok().filter(|&p| p < i);
     let shell = shell_bars(dom);
+    // Source semantics establish a surface independently of fixed/opaque boxes.
+    // The inherited fixed root still includes the container around a nested dialog.
+    let declared: Vec<_> = (0..n)
+        .filter(|&i| {
+            if !dom.is_element(i)
+                || dom.concealed[i]
+                || !dom.shows(i)
+                || !dom
+                    .rect(i)
+                    .is_some_and(|rect| rect.width > 0.0 && rect.height > 0.0)
+            {
+                return false;
+            }
+            let role = dom.attr(i, "role").unwrap_or_default();
+            role.split_whitespace().any(|role| {
+                role.eq_ignore_ascii_case("dialog") || role.eq_ignore_ascii_case("alertdialog")
+            }) || ax
+                .get(dom.backend[i])
+                .and_then(|node| node["role"]["value"].as_str())
+                .is_some_and(|role| matches!(role, "dialog" | "alertdialog"))
+                || dom.name[i] == "DIALOG" && dom.attr(i, "open").is_some()
+        })
+        .collect();
+    let semantic: HashSet<_> = declared.iter().copied().collect();
     let mut root: Vec<Option<usize>> = vec![None; n];
     for i in 0..n {
         root[i] = parent(i).and_then(|p| root[p]).or_else(|| {
             (dom.is_element(i)
                 && dom.layout[i].is_some()
-                && (matches!(dom.style(i, 14), "fixed" | "sticky") || shell.contains(&i)))
+                && (matches!(dom.style(i, 14), "fixed" | "sticky")
+                    || shell.contains(&i)
+                    || semantic.contains(&i)))
             .then_some(i)
         });
     }
@@ -3258,6 +3655,8 @@ fn stack(dom: &Dom, page: &mut Page) {
             let rect = dom.rect(r).unwrap_or_default();
             let top = if fixed_at(r) {
                 rect.y - dom.scroll_y
+            } else if semantic.contains(&r) {
+                rect.y
             } else {
                 static_top(dom, r, rect)
             };
@@ -3278,7 +3677,7 @@ fn stack(dom: &Dom, page: &mut Page) {
         let fixed = fixed_at(r);
         let place = if fixed && view > 0.0 && (top >= view || top + rect.height <= 0.0) {
             Place::Off
-        } else if rect.height > quarter {
+        } else if (!fixed && semantic.contains(&r)) || rect.height > quarter {
             Place::Flow
         } else if top <= pinned_to + TOUCH {
             pinned_to = pinned_to.max(top + rect.height);
@@ -3302,6 +3701,118 @@ fn stack(dom: &Dom, page: &mut Page) {
             place,
         });
     }
+    // A role belongs to source semantics, never inferred from a rectangle.
+    // Keep the fixed root as the composited surface, including descendants
+    // around a nested dialog, and avoid duplicate surfaces for one root.
+    let mut dialog_roots = HashSet::new();
+    for i in declared {
+        let ax_node = ax.get(dom.backend[i]);
+        let Some(r) = root[i] else { continue };
+        let Some(&layer) = layer_of.get(&r) else {
+            continue;
+        };
+        if page.layers[layer].place == Place::Off || !dialog_roots.insert(r) {
+            continue;
+        }
+        let modal = dom
+            .attr(i, "aria-modal")
+            .is_some_and(|v| v.eq_ignore_ascii_case("true"))
+            || ax_node
+                .and_then(|n| property(n, "modal"))
+                .and_then(Value::as_bool)
+                == Some(true);
+        let name = ax_node
+            .and_then(|n| ax_string(n, "name"))
+            .or_else(|| dom.attr(i, "aria-label").map(clean))
+            .unwrap_or_default();
+        let colour = dom.style(r, 3).trim().to_ascii_lowercase();
+        let mut node = Some(r);
+        let mut solid = fully_opaque_color(&colour);
+        while let Some(at) = node {
+            if number(Some(dom.style(at, 8))).is_some_and(|alpha| alpha < 1.0) {
+                solid = false;
+            }
+            node = parent(at);
+        }
+        let background = solid.then_some(colour);
+        let paint_order = dom.layout[r]
+            .and_then(|k| dom.paint.get(k))
+            .copied()
+            .unwrap_or_default();
+        page.overlays.push(SourceOverlay {
+            node: dom.backend[i],
+            layer,
+            dialog: true,
+            modal,
+            name,
+            background,
+            paint_order,
+            foreground: Vec::new(),
+        });
+    }
+
+    let is_descendant = |ancestor: usize, mut node: usize| {
+        while let Some(next) = parent(node) {
+            if next == ancestor {
+                return true;
+            }
+            node = next;
+        }
+        false
+    };
+    // Large opaque fixed boxes without dialog semantics are visual layers,
+    // but never gain modal focus or a dialog accessibility role from geometry.
+    for (&r, &layer) in &layer_of {
+        if dialog_roots.contains(&r) || !fixed_at(r) || page.layers[layer].place != Place::Flow {
+            continue;
+        }
+        let colour = dom.style(r, 3).trim().to_ascii_lowercase();
+        let mut solid = fully_opaque_color(&colour);
+        let mut node = Some(r);
+        while let Some(at) = node {
+            if number(Some(dom.style(at, 8))).is_some_and(|alpha| alpha < 1.0) {
+                solid = false;
+            }
+            node = parent(at);
+        }
+        if !solid {
+            continue;
+        }
+        let paint_order = dom.layout[r]
+            .and_then(|k| dom.paint.get(k))
+            .copied()
+            .unwrap_or_default();
+        let rect = page.layers[layer].rect;
+        let overlaps_lower = page.blocks.iter().any(|block| {
+            let Some(&i) = index.get(&block.node) else {
+                return false;
+            };
+            let Some(order) = dom.layout[i].and_then(|k| dom.paint.get(k)).copied() else {
+                return false;
+            };
+            !is_descendant(r, i)
+                && !is_descendant(i, r)
+                && order < paint_order
+                && block.rect.x < rect.right()
+                && rect.x < block.rect.right()
+                && block.rect.y < rect.bottom()
+                && rect.y < block.rect.bottom()
+        });
+        if !overlaps_lower {
+            continue;
+        }
+        page.overlays.push(SourceOverlay {
+            node: dom.backend[r],
+            layer,
+            dialog: false,
+            modal: false,
+            name: String::new(),
+            background: Some(colour),
+            paint_order,
+            foreground: Vec::new(),
+        });
+    }
+    page.overlays.sort_by_key(|dialog| dialog.paint_order);
     let order = |i: usize| dom.layout[i].and_then(|k| dom.paint.get(k)).copied();
     let under = |a: usize, mut i: usize| {
         while let Some(p) = parent(i) {
@@ -3387,6 +3898,30 @@ fn stack(dom: &Dom, page: &mut Page) {
             })
             .min_by(|a, b| area(&a.1).total_cmp(&area(&b.1)))
             .map(|(m, _, _)| *m);
+    }
+    // Preserve ordinary blocks above a fixed surface that can overlap it
+    // horizontally while scrolling. They remain in the underlay; this bounded association allows
+    // their visible cells and hit targets to be painted in source order.
+    let mut foreground = Vec::new();
+    for block in &page.blocks {
+        let Some(&i) = index.get(&block.node) else {
+            continue;
+        };
+        let Some(paint) = order(i) else { continue };
+        if block.stack.layer.is_some() || block.stack.covered {
+            continue;
+        }
+        let rect = block.rect;
+        for (owner, overlay) in page.overlays.iter().enumerate() {
+            let surface = page.layers[overlay.layer].rect;
+            if paint > overlay.paint_order && rect.x < surface.right() && surface.x < rect.right() {
+                foreground.push((owner, paint, block.node));
+            }
+        }
+    }
+    foreground.sort_by_key(|(_, paint, _)| *paint);
+    for (owner, _, node) in foreground {
+        page.overlays[owner].foreground.push(node);
     }
 }
 
@@ -3483,11 +4018,39 @@ pub fn build_with(
     revisions: &mut Revisions,
     appended: &HashSet<NodeId>,
 ) -> Page {
+    build_parts(snapshot, revisions, appended, false).0
+}
+
+/// Build an immutable page paired with its exact source relationships.
+pub fn build_source(snapshot: &PageSnapshot, revisions: &mut Revisions) -> SourcePage {
+    build_source_with(snapshot, revisions, &HashSet::new())
+}
+
+/// [`build_source`], recognizing the engine's appended scroll boxes as live logs.
+pub fn build_source_with(
+    snapshot: &PageSnapshot,
+    revisions: &mut Revisions,
+    appended: &HashSet<NodeId>,
+) -> SourcePage {
+    let (page, relations) = build_parts(snapshot, revisions, appended, true);
+    SourcePage {
+        page: Arc::new(page),
+        relations: Arc::new(relations.unwrap()),
+    }
+}
+
+fn build_parts(
+    snapshot: &PageSnapshot,
+    revisions: &mut Revisions,
+    appended: &HashSet<NodeId>,
+    source: bool,
+) -> (Page, Option<source::SourceRelations>) {
     let dom = Dom::parse(&snapshot.dom);
     let ax = Ax::parse(&snapshot.ax);
     let root = dom.backend.first().copied().unwrap_or(-1);
     let document = revisions.document(&dom.url, root);
     let mut walker = Walker {
+        source: source.then(Extraction::default),
         dom: &dom,
         ax: &ax,
         page: Page {
@@ -3530,7 +4093,7 @@ pub fn build_with(
     }
     walker.flush(&top);
     let mut page = walker.page;
-    stack(&dom, &mut page);
+    stack(&dom, &ax, &mut page);
     // A landmark with a field or a live log in it is not only links: it
     // never collapses.
     for block in &page.blocks {
@@ -3543,11 +4106,13 @@ pub fn build_with(
             page.regions[r].collapsible = false;
         }
     }
-    page
+    let relations = walker.source.map(|s| s.finish(&dom, &page));
+    (page, relations)
 }
 
 #[cfg(test)]
 mod tests {
+    include!("model/source_projection_tests.rs");
     use super::*;
     use serde_json::json;
 
@@ -3678,6 +4243,1070 @@ mod tests {
             };
             build(&snapshot, &mut Revisions::new())
         }
+    }
+
+    fn clip_style(f: &mut Fake, node: i64, at: usize, value: &str) {
+        let k = f.layout.iter().position(|&n| n == node).unwrap();
+        let empty = f.s("");
+        let value = f.s(value);
+        let count = f.styles[k].len().max(16).max(at + 1);
+        f.styles[k].resize(count, empty);
+        f.styles[k][at] = value;
+    }
+
+    fn clip_bounds(f: &mut Fake, node: i64, bounds: [f64; 4]) {
+        let k = f.layout.iter().position(|&n| n == node).unwrap();
+        f.bounds[k] = bounds.to_vec();
+        clip_style(f, node, 14, "static");
+    }
+
+    fn clip_link(f: &mut Fake, parent: i64, text: &str, bounds: [f64; 4]) -> (i64, i64) {
+        let link = f.el(parent, "A", &[("href", "/story")], "block");
+        clip_bounds(f, link, bounds);
+        let words = f.text(link, text);
+        clip_bounds(f, words, bounds);
+        let image = f.el(link, "IMG", &[("src", "/photo.png")], "block");
+        clip_bounds(f, image, bounds);
+        (100 + link, 100 + image)
+    }
+
+    #[test]
+    fn overflow_clip_margin_requires_known_zero_before_rejecting_content() {
+        for (margin, retained) in [
+            (Some("40px"), true),
+            (None, true),
+            (Some(""), true),
+            (Some("unknown"), true),
+            (Some("border-box 40px"), true),
+            (Some("0px"), false),
+            (Some("border-box 0px"), false),
+            (Some("padding-box 0px"), false),
+            (Some("content-box 0px"), false),
+        ] {
+            for bounds in [[130.0, 40.0, 20.0, 18.0], [30.0, 100.0, 20.0, 18.0]] {
+                for overflow in ["clip", "hidden"] {
+                    let mut f = Fake::new();
+                    let strip = f.el(0, "DIV", &[], "block");
+                    clip_bounds(&mut f, strip, [20.0, 30.0, 100.0, 60.0]);
+                    clip_style(&mut f, strip, 10, overflow);
+                    clip_style(&mut f, strip, 15, overflow);
+                    if let Some(margin) = margin {
+                        clip_style(&mut f, strip, 16, margin);
+                    }
+                    let (link, image) = clip_link(&mut f, strip, "Margin", bounds);
+                    let page = f.page(json!({"nodes": []}));
+                    let visible = overflow == "clip" && retained;
+                    assert_eq!(
+                        page.controls.len(),
+                        usize::from(visible),
+                        "{overflow} {margin:?} {bounds:?}"
+                    );
+                    assert_eq!(page.media.len(), usize::from(visible));
+                    if visible {
+                        let c = &page.controls[0];
+                        assert_eq!(page.check(&c.binding(&page)).unwrap().node, link);
+                        assert_eq!(c.href.as_deref(), Some("/story"));
+                        assert_eq!(page.media[0].node, image);
+                    }
+                    let marks = crate::layout::Marks {
+                        hints: HashMap::from([(0, "m".into())]),
+                        ..Default::default()
+                    };
+                    for columns in [40, 80, 120] {
+                        let projected = crate::layout::project(&page, columns, (8.0, 18.0), &marks);
+                        let spans: Vec<_> = projected.lines.iter().flat_map(|l| &l.spans).collect();
+                        assert_eq!(spans.iter().any(|s| s.text.contains("Margin")), visible);
+                        assert_eq!(
+                            spans
+                                .iter()
+                                .any(|s| s.control == Some(0) && s.text.contains("[m]")),
+                            visible
+                        );
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn uncertain_clip_margin_does_not_mask_an_independent_hidden_clip() {
+        for hidden_axis in [10, 15] {
+            let mut f = Fake::new();
+            let outer = f.el(0, "DIV", &[], "block");
+            clip_bounds(&mut f, outer, [20.0, 30.0, 100.0, 60.0]);
+            clip_style(&mut f, outer, hidden_axis, "hidden");
+            clip_style(&mut f, outer, 16, "40px");
+            let inner = f.el(outer, "DIV", &[], "block");
+            clip_bounds(&mut f, inner, [20.0, 30.0, 100.0, 60.0]);
+            clip_style(&mut f, inner, 10, "clip");
+            clip_style(&mut f, inner, 15, "clip");
+            clip_link(&mut f, inner, "Outside hidden", [130.0, 100.0, 20.0, 18.0]);
+            let page = f.page(json!({"nodes": []}));
+            assert!(page.controls.is_empty());
+            assert!(page.media.is_empty());
+            assert!(page.blocks.is_empty());
+        }
+    }
+
+    #[test]
+    fn overflow_clipped_content_is_absent_but_partial_and_other_axis_survive() {
+        // An outer bound is a conservative clip edge; content touching it
+        // from outside is hidden, but even a subpixel intersection survives.
+        for (axis, hidden, partial, other_axis) in [
+            (
+                15,
+                [120.0, 40.0, 20.0, 18.0],
+                [119.375, 40.0, 20.0, 18.0],
+                [30.0, 100.0, 20.0, 18.0],
+            ),
+            (
+                10,
+                [30.0, 90.0, 20.0, 18.0],
+                [30.0, 89.375, 20.0, 18.0],
+                [140.0, 40.0, 20.0, 18.0],
+            ),
+            (
+                15,
+                [0.0, 40.0, 20.0, 18.0],
+                [0.625, 40.0, 20.0, 18.0],
+                [30.0, 100.0, 20.0, 18.0],
+            ),
+            (
+                10,
+                [30.0, 12.0, 20.0, 18.0],
+                [30.0, 12.625, 20.0, 18.0],
+                [140.0, 40.0, 20.0, 18.0],
+            ),
+        ] {
+            for overflow in ["hidden", "clip"] {
+                let mut f = Fake::new();
+                let strip = f.el(0, "DIV", &[], "block");
+                clip_bounds(&mut f, strip, [20.0, 30.0, 100.0, 60.0]);
+                clip_style(&mut f, strip, axis, overflow);
+                clip_style(&mut f, strip, 16, "0px");
+                let wrapper = f.node(strip, 1, "DIV", None, &[], None);
+                let (hidden_link, hidden_image) = clip_link(&mut f, wrapper, "Concealed", hidden);
+                let (partial_link, _) = clip_link(&mut f, wrapper, "Partial", partial);
+                let (other_link, _) = clip_link(&mut f, wrapper, "Other axis", other_axis);
+                let page = f.page(json!({"nodes": []}));
+                assert_eq!(
+                    page.controls.iter().map(|c| c.node).collect::<Vec<_>>(),
+                    vec![partial_link, other_link]
+                );
+                assert_eq!(page.media.len(), 2);
+                assert!(page.media.iter().all(|m| m.node != hidden_image));
+                assert!(page.blocks.iter().all(|b| !b.text().contains("Concealed")));
+                let marks = crate::layout::Marks {
+                    hints: HashMap::from([(0, "p".into()), (1, "o".into())]),
+                    ..Default::default()
+                };
+                for columns in [40, 80, 120] {
+                    let projection = crate::layout::project(&page, columns, (8.0, 18.0), &marks);
+                    let spans: Vec<_> = projection.lines.iter().flat_map(|l| &l.spans).collect();
+                    assert!(spans.iter().all(|s| !s.text.contains("Concealed")));
+                    assert!(
+                        spans
+                            .iter()
+                            .any(|s| s.control == Some(0) && s.text.contains("Partial"))
+                    );
+                    assert!(
+                        spans
+                            .iter()
+                            .any(|s| s.control == Some(0) && s.text.contains("[p]"))
+                    );
+                    assert!(
+                        spans
+                            .iter()
+                            .filter_map(|s| s.control)
+                            .all(|c| page.controls[c].node != hidden_link)
+                    );
+                    assert!(
+                        projection
+                            .regions
+                            .iter()
+                            .all(|r| page.media[r.media].node != hidden_image)
+                    );
+                }
+                for c in &page.controls {
+                    assert_eq!(c.href.as_deref(), Some("/story"));
+                    assert_eq!(c.revision, 1);
+                    assert_eq!(page.check(&c.binding(&page)).unwrap().node, c.node);
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn overflow_clips_use_nested_current_bounds_without_reapplying_scroll() {
+        let mut f = Fake::new();
+        let outer = f.el(0, "DIV", &[], "block");
+        clip_bounds(&mut f, outer, [20.0, 30.0, 100.0, 60.0]);
+        clip_style(&mut f, outer, 15, "hidden");
+        let inner = f.el(outer, "DIV", &[], "block");
+        clip_bounds(&mut f, inner, [0.0, 30.0, 300.0, 60.0]);
+        clip_style(&mut f, inner, 10, "hidden");
+        clip_link(&mut f, inner, "Outside x", [130.0, 40.0, 20.0, 18.0]);
+        clip_link(&mut f, inner, "Outside y", [30.0, 100.0, 20.0, 18.0]);
+        let (kept, _) = clip_link(&mut f, inner, "Scrolled visible", [30.0, 40.0, 40.0, 18.0]);
+        let mut snapshot = PageSnapshot {
+            dom: f.snapshot(),
+            ax: json!({"nodes": []}),
+        };
+        snapshot.dom["documents"][0]["scrollOffsetY"] = json!(200.0);
+        snapshot.dom["documents"][0]["layout"]["scrollRects"] =
+            json!(vec![[80.0, 200.0, 1000.0, 800.0]; f.layout.len()]);
+        snapshot.dom["documents"][0]["layout"]["clientRects"] = json!(f.bounds);
+        let page = build(&snapshot, &mut Revisions::new());
+        assert_eq!(
+            page.controls.iter().map(|c| c.node).collect::<Vec<_>>(),
+            vec![kept]
+        );
+        assert_eq!(page.media.len(), 1);
+        assert!(
+            page.blocks
+                .iter()
+                .any(|b| b.text().contains("Scrolled visible"))
+        );
+    }
+
+    #[test]
+    fn overflow_clipped_static_ancestor_preserves_positioned_descendant_actions() {
+        for position in ["fixed", "absolute", "relative", ""] {
+            for ancestor_is_link in [false, true] {
+                let mut f = Fake::new();
+                let strip = f.el(0, "DIV", &[], "block");
+                clip_bounds(&mut f, strip, [20.0, 30.0, 100.0, 60.0]);
+                clip_style(&mut f, strip, 15, "hidden");
+                let ancestor = f.el(
+                    strip,
+                    if ancestor_is_link { "A" } else { "DIV" },
+                    &[("href", "/ancestor")],
+                    "block",
+                );
+                clip_bounds(&mut f, ancestor, [200.0, 30.0, 100.0, 60.0]);
+                let clipped_text = f.text(ancestor, "Hidden ancestor words");
+                clip_bounds(&mut f, clipped_text, [200.0, 30.0, 100.0, 18.0]);
+                let positioned = f.el(ancestor, "DIV", &[], "block");
+                clip_bounds(&mut f, positioned, [240.0, 40.0, 60.0, 40.0]);
+                clip_style(&mut f, positioned, 14, position);
+                let (link, image, href) = if ancestor_is_link {
+                    let text = f.text(positioned, "Escaped");
+                    clip_bounds(&mut f, text, [240.0, 40.0, 60.0, 18.0]);
+                    let image = f.el(positioned, "IMG", &[("src", "/photo.png")], "block");
+                    clip_bounds(&mut f, image, [240.0, 40.0, 60.0, 18.0]);
+                    (100 + ancestor, 100 + image, "/ancestor")
+                } else {
+                    let (link, image) =
+                        clip_link(&mut f, positioned, "Escaped", [240.0, 40.0, 60.0, 18.0]);
+                    (link, image, "/story")
+                };
+                let page = f.page(json!({"nodes": []}));
+                assert!(
+                    page.blocks
+                        .iter()
+                        .all(|b| !b.text().contains("Hidden ancestor words"))
+                );
+                let c = page
+                    .controls
+                    .iter()
+                    .find(|c| c.node == link)
+                    .expect("escaped source link");
+                assert_eq!(page.check(&c.binding(&page)).unwrap().node, link);
+                assert_eq!(c.href.as_deref(), Some(href));
+                assert_eq!(c.revision, 1);
+                assert!(page.media.iter().any(|m| m.node == image));
+                assert!(
+                    page.blocks
+                        .iter()
+                        .flat_map(|b| &b.runs)
+                        .any(|r| r.text == "Escaped"
+                            && r.control.is_some_and(|c| page.controls[c].node == link))
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn overflow_on_inline_or_table_row_does_not_hide_descendants() {
+        for display in ["inline", "table-row"] {
+            let mut f = Fake::new();
+            let ancestor = f.el(0, "DIV", &[], display);
+            clip_bounds(&mut f, ancestor, [20.0, 30.0, 100.0, 60.0]);
+            clip_style(&mut f, ancestor, 10, "hidden");
+            clip_style(&mut f, ancestor, 15, "hidden");
+            let (link, _) = clip_link(&mut f, ancestor, "Unclipped", [200.0, 200.0, 60.0, 18.0]);
+            let page = f.page(json!({"nodes": []}));
+            assert_eq!(
+                page.controls.iter().map(|c| c.node).collect::<Vec<_>>(),
+                vec![link]
+            );
+            assert_eq!(page.media.len(), 1);
+            assert!(page.blocks.iter().any(|b| b.text().contains("Unclipped")));
+        }
+    }
+
+    #[test]
+    fn overflow_clipped_price_pair_stays_absent_with_twins_on_or_off() {
+        use crate::adapt::{Adapt, Rule};
+        for group_x in [20.0, 200.0] {
+            for spoken_x in [group_x, -10000.0] {
+                let mut f = Fake::new();
+                let strip = f.el(0, "DIV", &[], "block");
+                clip_bounds(&mut f, strip, [0.0, 0.0, 120.0, 90.0]);
+                clip_style(&mut f, strip, 15, "hidden");
+                let row = f.el(strip, "DIV", &[], "block");
+                clip_bounds(&mut f, row, [group_x, 30.0, 60.0, 30.0]);
+                let spoken = f.el(row, "SPAN", &[], "block");
+                clip_bounds(&mut f, spoken, [spoken_x, 30.0, 1.0, 1.0]);
+                clip_style(&mut f, spoken, 14, "absolute");
+                clip_style(&mut f, spoken, 12, "rect(0px, 0px, 0px, 0px)");
+                clip_style(&mut f, spoken, 10, "hidden");
+                let words = f.text(spoken, "$29.99");
+                clip_bounds(&mut f, words, [spoken_x, 31.0, 40.0, 18.0]);
+                let shown = f.el(row, "SPAN", &[("aria-hidden", "true")], "block");
+                clip_bounds(&mut f, shown, [group_x, 30.0, 40.0, 18.0]);
+                let parts = f.text(shown, "$2999");
+                clip_bounds(&mut f, parts, [group_x, 30.0, 40.0, 18.0]);
+                let page = f.page(json!({"nodes": []}));
+                if group_x == 20.0 {
+                    // The original canonical text survives even if its hidden
+                    // source representation is positioned offscreen.
+                    assert!(page.text().contains("$29.99"));
+                }
+                for twins in [true, false] {
+                    let marks = crate::layout::Marks {
+                        adapt: Adapt::default().with(Rule::ScreenReaderTwins, twins),
+                        ..Default::default()
+                    };
+                    for columns in [40, 80, 120] {
+                        let projection =
+                            crate::layout::project(&page, columns, (8.0, 18.0), &marks);
+                        let text = projection
+                            .lines
+                            .iter()
+                            .map(|l| l.plain())
+                            .collect::<Vec<_>>()
+                            .join("\n");
+                        if group_x == 200.0 {
+                            assert!(!text.contains("29"), "clipped price: {text}");
+                        } else if spoken_x == group_x || !twins {
+                            // Relocating an independently blocked offscreen
+                            // canonical representation is a separate layout concern.
+                            let (wanted, excluded) = if twins {
+                                ("$29.99", "$2999")
+                            } else {
+                                ("$2999", "$29.99")
+                            };
+                            assert!(
+                                text.contains(wanted) && !text.contains(excluded),
+                                "visible price: {text}"
+                            );
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn overflow_clip_preserves_explicit_veil_semantic_twins() {
+        let mut f = Fake::new();
+        let row = f.el(0, "DIV", &[], "block");
+        clip_bounds(&mut f, row, [20.0, 30.0, 100.0, 60.0]);
+        let spoken = f.el(row, "SPAN", &[], "block");
+        clip_bounds(&mut f, spoken, [20.0, 30.0, 1.0, 1.0]);
+        clip_style(&mut f, spoken, 14, "absolute");
+        clip_style(&mut f, spoken, 12, "rect(0px, 0px, 0px, 0px)");
+        clip_style(&mut f, spoken, 10, "hidden");
+        clip_style(&mut f, spoken, 15, "hidden");
+        let words = f.text(spoken, "$29.99");
+        clip_bounds(&mut f, words, [20.0, 31.0, 40.0, 18.0]);
+        let shown = f.el(row, "SPAN", &[("aria-hidden", "true")], "block");
+        clip_bounds(&mut f, shown, [20.0, 30.0, 40.0, 18.0]);
+        let parts = f.text(shown, "$2999");
+        clip_bounds(&mut f, parts, [20.0, 30.0, 40.0, 18.0]);
+        let page = f.page(json!({"nodes": []}));
+        assert!(
+            page.blocks
+                .iter()
+                .flat_map(|b| &b.runs)
+                .any(|r| { r.text == "$29.99" && r.twin == Some(Twin::Spoken) })
+        );
+        assert!(
+            page.blocks
+                .iter()
+                .flat_map(|b| &b.runs)
+                .any(|r| { r.text == "$2999" && r.twin == Some(Twin::Shown) })
+        );
+        assert!(page.text().contains("$29.99"));
+        assert!(!page.text().contains("$2999"));
+    }
+
+    #[test]
+    fn overflow_on_root_body_or_boxless_ancestor_does_not_clip_to_viewport() {
+        for tag in ["HTML", "BODY", "DIV"] {
+            let mut f = Fake::new();
+            let ancestor = if tag == "DIV" {
+                f.node(0, 1, tag, None, &[], None)
+            } else {
+                let n = f.el(0, tag, &[], "block");
+                clip_bounds(&mut f, n, [0.0, 0.0, 100.0, 60.0]);
+                clip_style(&mut f, n, 10, "hidden");
+                clip_style(&mut f, n, 15, "hidden");
+                n
+            };
+            let (link, _) = clip_link(&mut f, ancestor, "Adaptable", [200.0, 200.0, 60.0, 18.0]);
+            let page = f.page(json!({"nodes": []}));
+            assert_eq!(page.controls[0].node, link);
+            assert_eq!(page.media.len(), 1);
+            assert!(page.blocks.iter().any(|b| b.text().contains("Adaptable")));
+        }
+    }
+
+    #[test]
+    fn boxless_link_retains_visible_descendants_and_source_binding() {
+        let mut f = Fake::new();
+        let link = f.node(0, 1, "A", None, &[("href", "/story")], None);
+        let wrapper = f.node(link, 1, "DIV", None, &[], None);
+        let image = f.el(
+            wrapper,
+            "IMG",
+            &[("src", "/photo.png"), ("alt", "Scene")],
+            "block",
+        );
+        *f.bounds.last_mut().unwrap() = vec![16.0, 36.0, 160.0, 90.0];
+        let text = f.text(wrapper, "Read the story");
+        *f.bounds.last_mut().unwrap() = vec![16.0, 144.0, 160.0, 18.0];
+        let hidden = f.text(wrapper, "Hidden extra words");
+        let hidden_style = f.s("hidden");
+        f.styles.last_mut().unwrap()[1] = hidden_style;
+        *f.bounds.last_mut().unwrap() = vec![500.0, 500.0, 160.0, 18.0];
+        let url = f.s("https://example.test/news/");
+        let mut snapshot = PageSnapshot {
+            dom: f.snapshot(),
+            ax: json!({"nodes": [{"backendDOMNodeId": 100 + link,
+                "role": {"value": "link"}, "name": {"value": "Read the full original story"}}]}),
+        };
+        snapshot.dom["documents"][0]["documentURL"] = json!(url);
+        let mut revisions = Revisions::new();
+        let page = build(&snapshot, &mut revisions);
+        assert_eq!(page.media.len(), 1);
+        assert_eq!(page.media[0].node, 100 + image);
+        assert_eq!(page.media[0].src, "https://example.test/photo.png");
+        assert!(page.media[0].in_label);
+        assert_eq!(page.controls.len(), 1);
+        let control = &page.controls[0];
+        assert_eq!(control.node, 100 + link);
+        assert_eq!(control.role, Role::Link);
+        assert_eq!(control.name, "Read the full original story");
+        assert_eq!(control.href.as_deref(), Some("https://example.test/story"));
+        assert_eq!(control.rect, Rect::new(16.0, 36.0, 160.0, 126.0));
+        assert_eq!(control.revision, 1);
+        assert!(control.from_ax);
+        let binding = control.binding(&page);
+        assert_eq!(page.check(&binding).unwrap().node, 100 + link);
+        let runs: Vec<_> = page.blocks.iter().flat_map(|b| &b.runs).collect();
+        assert_eq!(runs.len(), 1);
+        assert_eq!(runs[0].text, "Read the story");
+        assert_eq!(runs[0].control, Some(0));
+        let marks = crate::layout::Marks {
+            hints: HashMap::from([(0, "a".into())]),
+            ..Default::default()
+        };
+        for columns in [40, 80, 120] {
+            let projection = crate::layout::project(&page, columns, (8.0, 18.0), &marks);
+            let spans: Vec<_> = projection.lines.iter().flat_map(|l| &l.spans).collect();
+            assert!(
+                spans
+                    .iter()
+                    .any(|s| s.control == Some(0) && s.text.contains("Read"))
+            );
+            assert!(
+                spans
+                    .iter()
+                    .any(|s| s.control == Some(0) && s.text.contains("[a]"))
+            );
+        }
+        // A geometry-only change keeps the source action's revision.
+        let text_layout = f.layout.iter().position(|&n| n == text).unwrap();
+        snapshot.dom["documents"][0]["layout"]["bounds"][text_layout][1] = json!(180.0);
+        let moved = build(&snapshot, &mut revisions);
+        assert_eq!(moved.check(&binding).unwrap().revision, 1);
+        // A new destination invalidates the old action, on the same source node.
+        let destination = f.s("/other");
+        snapshot.dom["strings"] = json!(f.strings);
+        snapshot.dom["documents"][0]["nodes"]["attributes"][link as usize][1] = json!(destination);
+        let changed = build(&snapshot, &mut revisions);
+        assert_eq!(changed.controls[0].node, 100 + link);
+        assert_eq!(changed.controls[0].revision, 2);
+        assert!(changed.check(&binding).is_err());
+        assert!(page.blocks.iter().all(|b| b.node != 100 + hidden));
+        // An image-only link still exposes the original guarded action.
+        snapshot.dom["documents"][0]["layout"]["styles"][text_layout][1] = json!(hidden_style);
+        let image_only = build(&snapshot, &mut revisions);
+        assert_eq!(image_only.media.len(), 1);
+        let control = &image_only.controls[0];
+        assert_eq!(control.rect, Rect::new(16.0, 36.0, 160.0, 90.0));
+        assert_eq!(
+            image_only
+                .check(&control.binding(&image_only))
+                .unwrap()
+                .node,
+            100 + link
+        );
+    }
+
+    #[test]
+    fn boxless_link_retains_picture_background_and_source_binding() {
+        let mut f = Fake::new();
+        let link = f.node(0, 1, "A", None, &[("href", "/story")], None);
+        let picture = f.el(link, "PICTURE", &[], "block");
+        *f.bounds.last_mut().unwrap() = vec![16.0, 36.0, 160.0, 90.0];
+        let background = f.s("url(/photo.png)");
+        f.styles.last_mut().unwrap().push(background);
+        let url = f.s("https://example.test/news/");
+        let mut snapshot = PageSnapshot {
+            dom: f.snapshot(),
+            ax: json!({"nodes": [{"backendDOMNodeId": 100 + link,
+                "role": {"value": "link"}, "name": {"value": "Read the original story"}}]}),
+        };
+        snapshot.dom["documents"][0]["documentURL"] = json!(url);
+        let page = build(&snapshot, &mut Revisions::new());
+        assert_eq!(page.media.len(), 1);
+        assert_eq!(page.media[0].node, 100 + picture);
+        assert_eq!(page.media[0].kind, MediaKind::Image);
+        assert_eq!(page.media[0].src, "https://example.test/photo.png");
+        assert_eq!(page.media[0].rect, Rect::new(16.0, 36.0, 160.0, 90.0));
+        assert!(page.media[0].in_label);
+        assert_eq!(page.controls.len(), 1);
+        let control = &page.controls[0];
+        assert_eq!(control.node, 100 + link);
+        assert_eq!(control.role, Role::Link);
+        assert_eq!(control.name, "Read the original story");
+        assert_eq!(control.href.as_deref(), Some("https://example.test/story"));
+        assert_eq!(control.rect, Rect::new(16.0, 36.0, 160.0, 90.0));
+        assert_eq!(control.revision, 1);
+        assert!(control.from_ax);
+        assert_eq!(
+            page.check(&control.binding(&page)).unwrap().node,
+            100 + link
+        );
+    }
+
+    #[test]
+    fn boxless_link_without_visible_content_emits_no_action_or_content() {
+        for visibility in [
+            "no-layout",
+            "hidden",
+            "transparent",
+            "empty-wrapper",
+            "empty-picture",
+        ] {
+            let mut f = Fake::new();
+            let link = f.node(0, 1, "A", None, &[("href", "/story")], None);
+            let wrapper = f.el(
+                link,
+                if visibility == "empty-picture" {
+                    "PICTURE"
+                } else {
+                    "DIV"
+                },
+                &[],
+                "block",
+            );
+            if !visibility.starts_with("empty-") {
+                let display = (visibility != "no-layout").then_some("inline");
+                f.node(wrapper, 1, "IMG", None, &[("src", "/photo.png")], display);
+                f.node(wrapper, 3, "#text", Some("Not visible"), &[], display);
+                if matches!(visibility, "hidden" | "transparent") {
+                    let (offset, value) = if visibility == "hidden" {
+                        (1, "hidden")
+                    } else {
+                        (8, "0")
+                    };
+                    let style = f.s(value);
+                    for styles in &mut f.styles[1..] {
+                        styles[offset] = style;
+                    }
+                }
+            }
+            let page = f.page(Value::Null);
+            assert!(page.controls.is_empty(), "{visibility}");
+            assert!(page.media.is_empty(), "{visibility}");
+            assert!(page.blocks.is_empty(), "{visibility}");
+        }
+    }
+
+    #[test]
+    fn image_source_ignores_empty_selected_urls_and_preserves_real_selections() {
+        const TINY: &str =
+            "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7";
+        for (selected, declared, expected) in [
+            (
+                Some(""),
+                Some("../photo.png"),
+                "https://example.test/photo.png",
+            ),
+            (
+                Some(" \t\n"),
+                Some("../photo.png"),
+                "https://example.test/photo.png",
+            ),
+            (None, Some("../photo.png"), "https://example.test/photo.png"),
+            (
+                Some("https://images.test/responsive.png"),
+                Some("../photo.png"),
+                "https://images.test/responsive.png",
+            ),
+            (Some(TINY), Some("../photo.png"), TINY),
+            (Some(""), Some(""), ""),
+            (Some(" \t"), Some(" \t"), ""),
+            (None, None, ""),
+        ] {
+            let mut f = Fake::new();
+            let attrs: Vec<_> = declared.map(|src| ("src", src)).into_iter().collect();
+            let image = f.el(0, "IMG", &attrs, "block");
+            let url = f.s("https://example.test/news/");
+            let selected = selected.map(|src| f.s(src));
+            let mut snapshot = PageSnapshot {
+                dom: f.snapshot(),
+                ax: Value::Null,
+            };
+            snapshot.dom["documents"][0]["documentURL"] = json!(url);
+            if let Some(selected) = selected {
+                snapshot.dom["documents"][0]["nodes"]["currentSourceURL"] =
+                    json!({"index": [image], "value": [selected]});
+            }
+            let page = build(&snapshot, &mut Revisions::new());
+            assert_eq!(page.media.len(), 1);
+            assert_eq!(
+                page.media[0].src, expected,
+                "selected={selected:?}, declared={declared:?}"
+            );
+            assert_eq!(page.media[0].pending, expected.is_empty());
+        }
+    }
+
+    #[test]
+    fn small_image_without_a_source_stays_absent_without_a_reservation() {
+        for source in [None, Some(""), Some(" \t\n")] {
+            let mut f = Fake::new();
+            let attrs: Vec<_> = source.map(|src| ("src", src)).into_iter().collect();
+            let image = f.el(0, "IMG", &attrs, "inline");
+            *f.bounds.last_mut().unwrap() = vec![16.0, 36.0, 1.0, 1.0];
+            f.text(0, "Adjacent content");
+            let url = f.s("https://example.test/news/");
+            let selected = source.map(|src| f.s(src));
+            let mut snapshot = PageSnapshot {
+                dom: f.snapshot(),
+                ax: Value::Null,
+            };
+            snapshot.dom["documents"][0]["documentURL"] = json!(url);
+            if let Some(selected) = selected {
+                snapshot.dom["documents"][0]["nodes"]["currentSourceURL"] =
+                    json!({"index": [image], "value": [selected]});
+            }
+            let page = build(&snapshot, &mut Revisions::new());
+            assert_eq!(page.media.len(), 1);
+            assert_eq!(page.media[0].src, "");
+            assert!(!page.media[0].pending);
+        }
+    }
+
+    #[test]
+    fn source_flow_eligibility_requires_known_block_flow_and_position() {
+        let mut f = Fake::new();
+        let ordinary = f.el(0, "DIV", &[], "block");
+        clip_style(&mut f, ordinary, 14, "static");
+        let positioned = f.el(ordinary, "DIV", &[], "block");
+        clip_style(&mut f, positioned, 14, "absolute");
+        let grid = f.el(ordinary, "DIV", &[], "grid");
+        clip_style(&mut f, grid, 14, "static");
+        let flex = f.el(ordinary, "DIV", &[], "flex");
+        clip_style(&mut f, flex, 14, "static");
+        let boxless = f.node(ordinary, 1, "DIV", None, &[], None);
+        let unknown_position = f.el(ordinary, "DIV", &[], "block");
+        let source = build_source(
+            &PageSnapshot {
+                dom: f.snapshot(),
+                ax: Value::Null,
+            },
+            &mut Revisions::new(),
+        );
+        assert!(source.relations.nodes[ordinary as usize].ordinary);
+        assert_eq!(
+            source.relations.nodes[grid as usize].position,
+            source::SourcePosition::Flow
+        );
+        assert_eq!(
+            source.relations.nodes[positioned as usize].position,
+            source::SourcePosition::Positioned
+        );
+        assert_eq!(
+            source.relations.nodes[unknown_position as usize].position,
+            source::SourcePosition::Unknown
+        );
+        for node in [positioned, grid, flex, boxless, unknown_position] {
+            assert!(
+                !source.relations.nodes[node as usize].ordinary,
+                "uncertain/nonordinary flow on {node}"
+            );
+        }
+    }
+
+    #[test]
+    fn source_saved_snapshots_match_legacy_and_all_final_ranges_resolve() {
+        let directory = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/snapshots");
+        let mut count = 0;
+        for entry in std::fs::read_dir(directory).unwrap() {
+            let path = entry.unwrap().path();
+            if path.extension().is_none_or(|e| e != "json") {
+                continue;
+            }
+            let snapshot = crate::testing::snapshot_file(&path).unwrap();
+            let source = build_source(&snapshot, &mut Revisions::new());
+            assert_eq!(
+                source.page().as_ref(),
+                &build(&snapshot, &mut Revisions::new()),
+                "{}",
+                path.display()
+            );
+            for range in &source.relations.runs {
+                assert!(!range.text(source.page()).is_empty());
+            }
+            for piece in &source.relations.blocks {
+                assert_eq!(
+                    source.relations.nodes[piece.node].node,
+                    source.page().blocks[piece.block].node
+                );
+            }
+            count += 1;
+        }
+        assert!(count >= 24);
+    }
+
+    #[test]
+    fn source_interactive_log_retains_control_and_media_ancestry() {
+        let mut f = Fake::new();
+        let log = f.el(0, "DIV", &[("role", "log")], "block");
+        let entry = f.el(log, "DIV", &[], "block");
+        let link = f.el(entry, "A", &[("href", "/guarded")], "inline");
+        let image = f.el(link, "IMG", &[("src", "/a.png")], "block");
+        let sibling = f.el(log, "DIV", &[], "block");
+        f.text(sibling, "another entry");
+        let source = build_source(
+            &PageSnapshot {
+                dom: f.snapshot(),
+                ax: Value::Null,
+            },
+            &mut Revisions::new(),
+        );
+        assert_eq!(source.page().controls.len(), 1);
+        assert_eq!(source.relations.media_controls, [Some(0)]);
+        let index = |node| {
+            source
+                .relations
+                .nodes
+                .iter()
+                .position(|n| n.node == node)
+                .expect("interactive log source remains available")
+        };
+        assert!(
+            source
+                .relations
+                .contains(index(100 + link), index(100 + image))
+        );
+        assert!(
+            source
+                .relations
+                .contains(index(100 + log), index(100 + link))
+        );
+    }
+
+    #[test]
+    fn source_fixed_log_contents_do_not_change_outer_memberships() {
+        let mut f = Fake::new();
+        let log = f.el(0, "DIV", &[("role", "log")], "block");
+        let entry = f.el(log, "DIV", &[], "block");
+        f.text(entry, "first");
+        let paragraph = f.el(0, "P", &[], "block");
+        f.text(paragraph, "Outside");
+        let a = build_source(
+            &PageSnapshot {
+                dom: f.snapshot(),
+                ax: Value::Null,
+            },
+            &mut Revisions::new(),
+        );
+        let next = f.el(log, "DIV", &[], "block");
+        f.text(next, "second");
+        let b = build_source(
+            &PageSnapshot {
+                dom: f.snapshot(),
+                ax: Value::Null,
+            },
+            &mut Revisions::new(),
+        );
+        assert_ne!(a.page().logs, b.page().logs);
+        assert_eq!(
+            a.relations, b.relations,
+            "fixed log contents are an opaque layout unit"
+        );
+    }
+
+    #[test]
+    fn source_table_cell_ranges_follow_inline_folding_and_caption_trimming() {
+        let mut f = Fake::new();
+        let table = f.el(0, "TABLE", &[], "table");
+        let caption = f.el(table, "CAPTION", &[], "table-caption");
+        let caption_text = f.node(caption, 3, "#text", Some("  Résumé  "), &[], Some("inline"));
+        let row = f.el(table, "TR", &[], "table-row");
+        let cell = f.el(row, "TD", &[], "table-cell");
+        let p = f.el(cell, "P", &[], "block");
+        let first = f.node(p, 3, "#text", Some("  naïve  "), &[], Some("inline"));
+        let strong = f.el(p, "STRONG", &[], "inline");
+        let second = f.node(strong, 3, "#text", Some(" 世界 "), &[], Some("inline"));
+        let p = f.el(cell, "P", &[], "block");
+        let third = f.node(p, 3, "#text", Some(" fin "), &[], Some("inline"));
+        let snapshot = PageSnapshot {
+            dom: f.snapshot(),
+            ax: Value::Null,
+        };
+        let source = build_source(&snapshot, &mut Revisions::new());
+        assert_eq!(
+            source.page().as_ref(),
+            &build(&snapshot, &mut Revisions::new())
+        );
+        let read = |node| {
+            source
+                .relations
+                .runs
+                .iter()
+                .filter(|r| r.node == node)
+                .map(|r| r.text(source.page()))
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(read(caption_text as usize), ["Résumé"]);
+        assert_eq!(read(first as usize), ["naïve "]);
+        assert_eq!(read(second as usize), ["世界"]);
+        assert_eq!(read(third as usize), ["fin"]);
+    }
+
+    #[test]
+    fn source_replaced_table_caption_keeps_only_surviving_origins() {
+        for (discarded, retained) in [
+            ("  discarded é  ", " 世界 "),
+            (" 界 ", " café Unicode "),
+            ("old", " "),
+        ] {
+            let mut f = Fake::new();
+            let table = f.el(0, "TABLE", &[], "table");
+            let first = f.el(table, "CAPTION", &[], "table-caption");
+            let discarded_node = f.node(first, 3, "#text", Some(discarded), &[], Some("inline"));
+            let row = f.el(table, "TR", &[], "table-row");
+            let cell = f.el(row, "TD", &[], "table-cell");
+            let cell_node = f.node(cell, 3, "#text", Some("Cell survives"), &[], Some("inline"));
+            let last = f.el(table, "CAPTION", &[], "table-caption");
+            let retained_node = f.node(last, 3, "#text", Some(retained), &[], Some("inline"));
+            let snapshot = PageSnapshot {
+                dom: f.snapshot(),
+                ax: Value::Null,
+            };
+            let source = build_source(&snapshot, &mut Revisions::new());
+            let legacy = build(&snapshot, &mut Revisions::new());
+            assert_eq!(source.page().as_ref(), &legacy);
+            let BlockKind::Table(table) = &source.page().blocks[0].kind else {
+                panic!("table expected")
+            };
+            assert_eq!(
+                table.caption,
+                retained.trim(),
+                "legacy keeps the last caption"
+            );
+            assert!(
+                source
+                    .relations
+                    .runs
+                    .iter()
+                    .all(|piece| piece.node != discarded_node as usize),
+                "discarded caption has no final provenance"
+            );
+            let mut coverage = vec![0; table.caption.len()];
+            for piece in source
+                .relations
+                .runs
+                .iter()
+                .filter(|piece| matches!(piece.location, RunLocation::Caption { block: 0 }))
+            {
+                assert_eq!(piece.node, retained_node as usize);
+                assert!(
+                    table.caption.get(piece.bytes.clone()).is_some(),
+                    "caption addresses remain valid UTF-8 ranges"
+                );
+                for byte in &mut coverage[piece.bytes.clone()] {
+                    *byte += 1;
+                }
+            }
+            assert_eq!(
+                coverage,
+                vec![1; table.caption.len()],
+                "every final caption byte has exactly one source"
+            );
+            let cell_text: String = source
+                .relations
+                .runs
+                .iter()
+                .filter(|piece| piece.node == cell_node as usize)
+                .map(|piece| piece.text(source.page()))
+                .collect();
+            assert_eq!(cell_text, "Cell survives");
+        }
+    }
+
+    #[test]
+    fn source_tables_folded_inside_logs_leave_no_dangling_cell_addresses() {
+        let mut f = Fake::new();
+        let log = f.el(0, "DIV", &[("role", "log")], "block");
+        let entry = f.el(log, "DIV", &[], "block");
+        let table = f.el(entry, "TABLE", &[], "table");
+        let row = f.el(table, "TR", &[], "table-row");
+        let cell = f.el(row, "TD", &[], "table-cell");
+        f.text(cell, "A cell");
+        let second = f.el(entry, "TABLE", &[], "table");
+        let row = f.el(second, "TR", &[], "table-row");
+        let cell = f.el(row, "TD", &[], "table-cell");
+        f.text(cell, "Another cell");
+        let sibling = f.el(log, "DIV", &[], "block");
+        f.text(sibling, "An ordinary entry");
+        let snapshot = PageSnapshot {
+            dom: f.snapshot(),
+            ax: Value::Null,
+        };
+        let source = build_source(&snapshot, &mut Revisions::new());
+        assert_eq!(
+            source.page().as_ref(),
+            &build(&snapshot, &mut Revisions::new())
+        );
+        assert!(source.relations.runs.is_empty());
+    }
+
+    #[test]
+    fn source_retains_the_existing_twin_match_and_only_its_exact_run_ranges() {
+        let mut f = Fake::new();
+        let p = f.el(0, "P", &[], "block");
+        f.text(p, "Before ");
+        let spoken = f.el(p, "SPAN", &[], "inline");
+        clip_style(&mut f, spoken, 8, "0");
+        let said = f.node(spoken, 3, "#text", Some("$29.99"), &[], Some("inline"));
+        let shown = f.el(p, "SPAN", &[("aria-hidden", "true")], "inline");
+        let visual = f.node(shown, 3, "#text", Some("$2999"), &[], Some("inline"));
+        f.text(p, " After");
+        let source = build_source(
+            &PageSnapshot {
+                dom: f.snapshot(),
+                ax: Value::Null,
+            },
+            &mut Revisions::new(),
+        );
+        assert_eq!(source.relations.twins, [(spoken as usize, shown as usize)]);
+        let ranges = |node| {
+            source
+                .relations
+                .runs
+                .iter()
+                .filter(|r| r.node == node)
+                .map(|r| r.text(source.page()))
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(ranges(said as usize), ["$29.99"]);
+        assert_eq!(ranges(visual as usize), ["$2999"]);
+        assert!(source.page().text().contains("Before"));
+        assert!(source.page().text().contains("After"));
+    }
+
+    #[test]
+    fn source_pieces_survive_unicode_cleaning_merging_and_block_splits() {
+        let mut f = Fake::new();
+        let figure = f.el(0, "FIGURE", &[], "block");
+        let p = f.el(figure, "P", &[], "block");
+        let first = f.node(p, 3, "#text", Some("  café\u{1b}  "), &[], Some("inline"));
+        let second = f.node(p, 3, "#text", Some(" 世界 "), &[], Some("inline"));
+        let image = f.el(p, "IMG", &[("src", "/a.png")], "block");
+        let third = f.node(p, 3, "#text", Some(" après "), &[], Some("inline"));
+        let caption = f.el(figure, "FIGCAPTION", &[], "block");
+        f.text(caption, "Caption");
+        let snapshot = PageSnapshot {
+            dom: f.snapshot(),
+            ax: Value::Null,
+        };
+        let source = build_source(&snapshot, &mut Revisions::new());
+        let legacy = build(&snapshot, &mut Revisions::new());
+        assert_eq!(source.page().as_ref(), &legacy);
+        let clone = source.clone();
+        assert!(Arc::ptr_eq(source.page(), clone.page()));
+        assert!(Arc::ptr_eq(&source.relations, &clone.relations));
+        let pieces = &source.relations.runs;
+        let texts = |node| {
+            pieces
+                .iter()
+                .filter(|p| p.node == node)
+                .map(|p| p.text(source.page()).to_string())
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(texts(first as usize), ["café "]);
+        assert_eq!(texts(second as usize), ["世界"]);
+        assert_eq!(texts(third as usize), ["après"]);
+        let owned = &source.relations.figures[0];
+        assert_eq!(owned.node, figure as usize);
+        assert_eq!(owned.captions, [caption as usize]);
+        assert!(owned.blocks.iter().any(|&b| matches!(source.page().blocks[b].kind, BlockKind::Media(m) if source.page().media[m].node == 100 + image)));
+        assert_eq!(
+            source
+                .relations
+                .blocks
+                .iter()
+                .filter(|b| b.node == p as usize)
+                .count(),
+            2
+        );
+    }
+
+    #[test]
+    fn source_relationship_only_changes_are_distinct_and_boxless_ownership_is_exact() {
+        let mut f = Fake::new();
+        let grid = f.el(0, "DIV", &[], "grid");
+        let left = f.node(grid, 1, "DIV", None, &[], None);
+        let right = f.node(grid, 1, "DIV", None, &[], None);
+        let link = f.node(left, 1, "A", None, &[("href", "/original")], None);
+        let figure = f.el(link, "FIGURE", &[], "block");
+        let image = f.el(figure, "IMG", &[("src", "/a.png")], "block");
+        let inner_grid = f.el(figure, "DIV", &[], "grid");
+        let nested = f.el(inner_grid, "FIGURE", &[], "block");
+        f.el(nested, "IMG", &[("src", "/b.png")], "block");
+        let neighbor = f.el(inner_grid, "DIV", &[], "block");
+        f.text(neighbor, "Unrelated neighbor");
+        let caption = f.el(figure, "FIGCAPTION", &[], "block");
+        f.text(caption, "Caption");
+        let mut snapshot = PageSnapshot {
+            dom: f.snapshot(),
+            ax: Value::Null,
+        };
+        let a = build_source(&snapshot, &mut Revisions::new());
+        assert_eq!(a.relations.grids[0].node, grid as usize);
+        assert_eq!(a.relations.grids[0].items, [left as usize, right as usize]);
+        assert_eq!(a.relations.grids[1].node, inner_grid as usize);
+        assert_eq!(
+            a.relations.grids[1].items,
+            [nested as usize, neighbor as usize]
+        );
+        assert!(a.relations.contains(left as usize, inner_grid as usize));
+        assert_eq!(a.relations.media_controls[0], Some(0));
+        assert_eq!(a.page().media[0].node, 100 + image);
+        assert_eq!(a.relations.figures[1].parent, Some(figure as usize));
+        snapshot.dom["documents"][0]["nodes"]["parentIndex"][link as usize] = json!(right);
+        let b = build_source(&snapshot, &mut Revisions::new());
+        assert_eq!(a.page(), b.page());
+        assert_ne!(a.relations, b.relations);
     }
 
     #[test]

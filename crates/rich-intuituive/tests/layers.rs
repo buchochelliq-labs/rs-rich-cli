@@ -4,7 +4,7 @@ use std::time::Duration;
 
 use intuituive::interact::{Button, Event, Mouse, MouseKind};
 use intuituive::prelude::*;
-use intuituive::{Driver, assert_screen};
+use intuituive::{Driver, assert_screen, button};
 
 fn shown(app: App, width: u16, height: u16) -> Driver {
     let mut driver = app.driver(width, height);
@@ -117,4 +117,484 @@ fn a_layer_placed_by_its_content_sits_where_it_says() {
     });
     let rows = shown(app, 7, 3).screen().plain();
     assert_eq!(rows, ["tl·····", "···c···", "·····br"]);
+}
+
+#[test]
+fn dynamic_layer_wrapper_can_leave_outside_pointer_hits_to_underlay() {
+    let hits = std::rc::Rc::new(std::cell::Cell::new(0));
+    let h = hits.clone();
+    let app = App::new(move || {
+        let h = h.clone();
+        layers([
+            label("under").on_click(move |_| h.set(h.get() + 1)),
+            keyed(
+                || true,
+                |_| {
+                    layers([label("dialog").on_click(|_| {}).inset(1, 4, 1, 4)])
+                        .children_cover_only()
+                },
+            )
+            .children_cover_only(),
+        ])
+    });
+    let mut d = shown(app, 20, 5);
+    let names = d
+        .accessibility()
+        .iter()
+        .map(|node| node.name.clone())
+        .collect::<Vec<_>>();
+    assert!(
+        names.iter().any(|name| name.contains("under")),
+        "outside content lost from accessibility: {names:?}"
+    );
+    click(&mut d, 0, 0);
+    assert_eq!(hits.get(), 1, "the wrapper blocked a hit outside its child");
+}
+
+#[test]
+fn owner_controlled_modal_scope_traps_focus_and_restores_it() {
+    use std::{cell::Cell, rc::Rc};
+    let state = Rc::new(Cell::new(None));
+    let handle = state.clone();
+    let hits = Rc::new(Cell::new(0));
+    let h = hits.clone();
+    let app = App::new(move || {
+        let h = h.clone();
+        let open = signal(false);
+        handle.set(Some(open));
+        layers([
+            label("under")
+                .focusable()
+                .name("under")
+                .on_click(move |_| h.set(h.get() + 1)),
+            column([
+                label("first").focusable().name("first"),
+                label("second").focusable().name("second"),
+            ])
+            .controlled_modal()
+            .inset(1, 2, 1, 2)
+            .shown_when(move || open.get()),
+        ])
+    });
+    let mut driver = shown(app, 20, 5);
+    driver.assert_focused("under");
+    state.get().unwrap().set(true);
+    driver.settle();
+    driver.assert_focused("first");
+    click(&mut driver, 0, 0);
+    assert_eq!(hits.get(), 0, "modal allowed an outside pointer action");
+    driver.press("tab");
+    driver.assert_focused("second");
+    driver.press("tab");
+    driver.assert_focused("first");
+    driver.press("escape");
+    assert!(driver.screen().plain().join("\n").contains("first"));
+    state.get().unwrap().set(false);
+    driver.settle();
+    driver.assert_focused("under");
+    click(&mut driver, 0, 0);
+    assert_eq!(hits.get(), 1);
+}
+
+#[test]
+fn nested_owner_modals_restore_each_focus_and_preserve_a_live_draft() {
+    use std::{cell::Cell, rc::Rc};
+    let states = Rc::new(Cell::new(None));
+    let handles = states.clone();
+    let app = App::new(move || {
+        let outer = signal(false);
+        let inner = signal(false);
+        let draft = signal(String::new());
+        let caption = signal(String::from("before"));
+        handles.set(Some((outer, inner, draft, caption)));
+        layers([
+            label("base").focusable().name("base"),
+            layers([
+                input(draft).name("draft"),
+                text(move || caption.get()),
+                label("inner")
+                    .focusable()
+                    .name("inner")
+                    .controlled_modal()
+                    .inset(1, 2, 1, 2)
+                    .shown_when(move || inner.get()),
+            ])
+            .controlled_modal()
+            .inset(1, 60, 1, 60)
+            .shown_when(move || outer.get()),
+        ])
+    });
+    let mut driver = shown(app, 160, 12);
+    let (outer, inner, draft, caption) = states.get().unwrap();
+    driver.assert_focused("base");
+    outer.set(true);
+    driver.settle();
+    driver.assert_focused("draft");
+    driver.press("x");
+    assert_eq!(draft.get_untracked(), "x");
+    caption.set("updated".into());
+    driver.settle();
+    driver.assert_focused("draft");
+    assert_eq!(draft.get_untracked(), "x");
+    inner.set(true);
+    driver.settle();
+    driver.assert_focused("inner");
+    driver.press("tab");
+    driver.assert_focused("inner");
+    inner.set(false);
+    driver.settle();
+    driver.assert_focused("draft");
+    assert_eq!(draft.get_untracked(), "x");
+    outer.set(false);
+    driver.settle();
+    driver.assert_focused("base");
+}
+
+#[test]
+fn controlled_modal_releases_stock_button_capture_outside() {
+    use std::{cell::Cell, rc::Rc};
+    let hits = Rc::new(Cell::new(0));
+    let under = Rc::new(Cell::new(0));
+    let (h, u) = (hits.clone(), under.clone());
+    let app = App::new(move || {
+        let (h, u) = (h.clone(), u.clone());
+        layers([
+            label("under").on_click(move |_| u.set(u.get() + 1)),
+            button("Save", move |_| h.set(h.get() + 1))
+                .controlled_modal()
+                .inset(1, 4, 1, 4),
+        ])
+    });
+    let mut driver = shown(app, 20, 5);
+    driver.event(Event::Mouse(Mouse::new(
+        MouseKind::Down(Button::Left),
+        6,
+        2,
+    )));
+    driver.event(Event::Mouse(Mouse::new(
+        MouseKind::Drag(Button::Left),
+        0,
+        0,
+    )));
+    driver.event(Event::Mouse(Mouse::new(MouseKind::Up(Button::Left), 0, 0)));
+    driver.event(Event::Mouse(Mouse::new(MouseKind::Up(Button::Left), 6, 2)));
+    driver.settle();
+    assert_eq!(hits.get(), 0, "stale capture accepted a later release");
+    assert_eq!(under.get(), 0, "modal leaked a pointer event");
+    click(&mut driver, 6, 2);
+    assert_eq!(hits.get(), 1, "subsequent normal click failed");
+}
+
+#[test]
+fn text_only_controlled_modal_routes_owner_escape_and_restores_focus() {
+    use std::{cell::Cell, rc::Rc};
+    let state = Rc::new(Cell::new(None));
+    let handle = state.clone();
+    let app = App::new(move || {
+        let open = signal(false);
+        handle.set(Some(open));
+        layers([
+            label("under").focusable().name("under"),
+            label("Information")
+                .controlled_modal()
+                .on_key("esc", move |_| open.set(false))
+                .inset(1, 2, 1, 2)
+                .shown_when(move || open.get()),
+        ])
+    });
+    let mut driver = shown(app, 20, 5);
+    driver.assert_focused("under");
+    driver.event(Event::Mouse(Mouse::new(MouseKind::Moved, 0, 0)));
+    state.get().unwrap().set(true);
+    driver.settle();
+    driver.press("esc");
+    driver.settle();
+    assert!(
+        !state.get().unwrap().get_untracked(),
+        "owner did not receive Escape"
+    );
+    driver.assert_focused("under");
+}
+
+#[test]
+fn controlled_modal_does_not_route_old_underlay_capture_into_its_scope() {
+    use std::{cell::Cell, rc::Rc};
+    let open = Rc::new(Cell::new(None));
+    let handle = open.clone();
+    let hits = Rc::new(Cell::new(0));
+    let h = hits.clone();
+    let routed = Rc::new(Cell::new(0));
+    let routed_handle = routed.clone();
+    let app = App::new(move || {
+        let shown = signal(false);
+        handle.set(Some(shown));
+        let h = h.clone();
+        let routed_handle = routed_handle.clone();
+        layers([
+            button("under", move |_| h.set(h.get() + 1)).on_mouse(move |_, mouse| {
+                if matches!(mouse.kind, MouseKind::Up(_)) {
+                    routed_handle.set(routed_handle.get() + 1);
+                }
+                false
+            }),
+            label("Information")
+                .controlled_modal()
+                .inset(1, 2, 1, 2)
+                .shown_when(move || shown.get()),
+        ])
+    });
+    let mut d = shown(app, 20, 5);
+    d.event(Event::Mouse(Mouse::new(
+        MouseKind::Down(Button::Left),
+        6,
+        2,
+    )));
+    open.get().unwrap().set(true);
+    d.settle();
+    d.event(Event::Mouse(Mouse::new(MouseKind::Up(Button::Left), 6, 2)));
+    d.settle();
+    assert_eq!(
+        hits.get(),
+        0,
+        "capture belonging to underlay received a modal event"
+    );
+    assert_eq!(routed.get(), 0, "underlay received the modal release");
+}
+
+#[test]
+fn controlled_modal_slider_drag_left_keeps_direction_and_releases() {
+    use intuituive::slider;
+    use std::{cell::Cell, rc::Rc};
+    let value = Rc::new(Cell::new(None));
+    let handle = value.clone();
+    let app = App::new(move || {
+        let volume = signal(50.0);
+        handle.set(Some(volume));
+        layers([
+            label("under"),
+            slider(volume, 0.0..=100.0, 1.0)
+                .controlled_modal()
+                .inset(1, 4, 1, 4),
+        ])
+    });
+    let mut d = shown(app, 20, 5);
+    d.event(Event::Mouse(Mouse::new(
+        MouseKind::Down(Button::Left),
+        12,
+        2,
+    )));
+    d.event(Event::Mouse(Mouse::new(
+        MouseKind::Drag(Button::Left),
+        0,
+        2,
+    )));
+    d.settle();
+    assert_eq!(
+        value.get().unwrap().get_untracked(),
+        0.0,
+        "left drag went to the maximum"
+    );
+    d.event(Event::Mouse(Mouse::new(MouseKind::Up(Button::Left), 0, 2)));
+    d.event(Event::Mouse(Mouse::new(MouseKind::Moved, 14, 2)));
+    d.settle();
+    assert_eq!(
+        value.get().unwrap().get_untracked(),
+        0.0,
+        "released slider continued dragging"
+    );
+}
+
+#[test]
+fn a_dynamically_created_controlled_scope_is_discovered_and_removed() {
+    use std::{cell::Cell, rc::Rc};
+    let state = Rc::new(Cell::new(None));
+    let handle = state.clone();
+    let app = App::new(move || {
+        let open = signal(false);
+        handle.set(Some(open));
+        layers([
+            label("base").focusable().name("base"),
+            keyed(
+                move || open.get(),
+                move |visible| {
+                    if visible {
+                        label("dynamic modal")
+                            .controlled_modal()
+                            .on_key("esc", move |_| open.set(false))
+                            .inset(1, 2, 1, 2)
+                    } else {
+                        label("")
+                    }
+                },
+            )
+            .children_cover_only(),
+        ])
+    });
+    let mut d = shown(app, 20, 5);
+    d.assert_focused("base");
+    state.get().unwrap().set(true);
+    d.settle();
+    assert!(d.find_text("dynamic modal").is_some());
+    d.press("esc");
+    d.settle();
+    assert!(!state.get().unwrap().get_untracked());
+    d.assert_focused("base");
+}
+
+#[test]
+fn controlled_modal_blocks_holes_and_later_sibling_actions() {
+    use std::{cell::Cell, rc::Rc};
+    for later in [false, true] {
+        let hits = Rc::new(Cell::new(0));
+        let h = hits.clone();
+        let app = App::new(move || {
+            let h = h.clone();
+            let under = label("outside").on_click(move |_| h.set(h.get() + 1));
+            let scope = layers([label("inside").inset(1, 4, 1, 4)])
+                .children_cover_only()
+                .controlled_modal();
+            if later {
+                layers([scope, under])
+            } else {
+                layers([under, scope])
+            }
+        });
+        let mut d = shown(app, 20, 5);
+        click(&mut d, 0, 0);
+        assert_eq!(hits.get(), 0, "outside path dispatched (later={later})");
+    }
+}
+
+#[test]
+fn controlled_modal_cancels_underlay_drag_before_drop() {
+    use std::{cell::Cell, rc::Rc};
+    let state = Rc::new(Cell::new(None));
+    let handle = state.clone();
+    let drops = Rc::new(Cell::new(0));
+    let target = drops.clone();
+    let app = App::new(move || {
+        let open = signal(false);
+        handle.set(Some(open));
+        let target = target.clone();
+        layers([
+            label("source").draggable(1u8),
+            label("target")
+                .on_drop(move |_: &u8, _| target.set(target.get() + 1))
+                .controlled_modal()
+                .inset(1, 4, 1, 4)
+                .shown_when(move || open.get()),
+        ])
+    });
+    let mut d = shown(app, 20, 5);
+    d.event(Event::Mouse(Mouse::new(
+        MouseKind::Down(Button::Left),
+        0,
+        0,
+    )));
+    d.event(Event::Mouse(Mouse::new(
+        MouseKind::Drag(Button::Left),
+        1,
+        0,
+    )));
+    state.get().unwrap().set(true);
+    d.settle();
+    d.event(Event::Mouse(Mouse::new(
+        MouseKind::Drag(Button::Left),
+        6,
+        2,
+    )));
+    d.event(Event::Mouse(Mouse::new(MouseKind::Up(Button::Left), 6, 2)));
+    assert_eq!(drops.get(), 0, "old underlay drag entered the modal");
+}
+
+#[test]
+fn maximized_pane_ignores_sibling_modal_but_keeps_its_own_text_scope() {
+    use std::{cell::Cell, rc::Rc};
+    let state = Rc::new(Cell::new(None));
+    let handle = state.clone();
+    let app = App::new(move || {
+        let sibling = signal(false);
+        let inside = signal(false);
+        handle.set(Some((sibling, inside)));
+        row([
+            layers([
+                label("visible")
+                    .focusable()
+                    .name("visible")
+                    .on_key("i", move |_| inside.set(true)),
+                label("inside modal")
+                    .controlled_modal()
+                    .on_key("esc", move |_| inside.set(false))
+                    .shown_when(move || inside.get()),
+            ])
+            .maximizable(),
+            label("sibling modal")
+                .controlled_modal()
+                .on_key("esc", move |_| sibling.set(false))
+                .shown_when(move || sibling.get()),
+        ])
+    })
+    .maximize_key("ctrl+m");
+    let mut d = shown(app, 30, 4);
+    d.press("ctrl+m");
+    let (sibling, inside) = state.get().unwrap();
+    sibling.set(true);
+    d.settle();
+    d.press("tab");
+    d.assert_focused("visible");
+    d.press("i");
+    assert!(
+        inside.get_untracked(),
+        "hidden sibling intercepted visible pane key"
+    );
+    d.press("esc");
+    assert!(
+        !inside.get_untracked(),
+        "text-only modal did not receive owner Escape"
+    );
+    assert!(sibling.get_untracked());
+    d.press("esc"); // minimize; sibling is now the active scope
+    d.press("esc"); // source-owned close
+    assert!(!sibling.get_untracked());
+    d.assert_focused("visible");
+}
+
+#[test]
+fn controlled_scope_pointer_hits_follow_scrolled_clipped_content() {
+    use std::{cell::Cell, rc::Rc};
+    let hits = Rc::new(Cell::new((0, 0)));
+    let handles = hits.clone();
+    let app = App::new(move || {
+        let outside = handles.clone();
+        let inside = handles.clone();
+        layers([
+            label("under").on_click(move |_| {
+                let (a, b) = outside.get();
+                outside.set((a + 1, b));
+            }),
+            scroll_with(
+                column([
+                    label("spacer").fixed(3),
+                    label("modal")
+                        .on_click(move |_| {
+                            let (a, b) = inside.get();
+                            inside.set((a, b + 1));
+                        })
+                        .controlled_modal()
+                        .fixed(4),
+                ]),
+                signal(4),
+            )
+            .inset(1, 2, 1, 2),
+        ])
+    });
+    let mut d = shown(app, 20, 5);
+    click(&mut d, 3, 1);
+    click(&mut d, 0, 0);
+    click(&mut d, 3, 4);
+    assert_eq!(
+        hits.get(),
+        (0, 1),
+        "scope did not track viewport translation/clipping"
+    );
 }

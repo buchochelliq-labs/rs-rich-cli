@@ -223,7 +223,7 @@ pub fn web_widget(browser: Browser, nodes: Vec<NodeId>) -> Node {
     let disabled = move || {
         browser
             .page
-            .with(|p| control_of(p, first).is_none_or(|c| c.disabled))
+            .with(|p| control_of(p, first).is_none_or(|c| c.disabled || c.readonly))
     };
     let name = markup(&control.name);
     let node = match control.role {
@@ -245,7 +245,12 @@ pub fn web_widget(browser: Browser, nodes: Vec<NodeId>) -> Node {
                 &web,
                 stock_button(face, move |cx| {
                     act(browser, &web2, first, Intent::Click, cx)
-                }),
+                })
+                .wrap_label(
+                    browser
+                        .effective_adapt()
+                        .on(crate::adapt::Rule::WrapActionLabels),
+                ),
             )
             .disabled_when(disabled)
             .auto();
@@ -422,11 +427,17 @@ pub fn web_widget(browser: Browser, nodes: Vec<NodeId>) -> Node {
                 })
                 .flex(1);
             let status = web.status;
-            row([
-                label(format!("{name} ")).auto(),
-                field,
-                text(move || status.get()).auto(),
-            ])
+            grid(
+                [],
+                [
+                    label(format!("{name} ")).auto(),
+                    field,
+                    text(move || status.get()).auto(),
+                ],
+            )
+            .adaptive_columns(28, 3)
+            .rows([Size::Auto])
+            .gap(1)
         }
     };
     // Link hints label widgets too: the hint of each control of the group.
@@ -453,7 +464,16 @@ pub fn web_widget(browser: Browser, nodes: Vec<NodeId>) -> Node {
     })
     .auto();
     let node = row([tag, node.flex(1)]).name(&format!("web-{first}"));
-    node.fixed(rows)
+    if control.role.is_text()
+        || matches!(
+            control.role,
+            Role::Button | Role::Tab | Role::MenuItem | Role::Link
+        )
+    {
+        node.auto()
+    } else {
+        node.fixed(rows)
+    }
 }
 
 /// Keep `node`'s id as the widget to focus for its control.

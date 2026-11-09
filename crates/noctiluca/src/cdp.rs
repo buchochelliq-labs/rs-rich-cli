@@ -19,7 +19,8 @@ use std::sync::mpsc::Receiver;
 use std::time::Duration;
 
 use rich_embed::{
-    ChromeEngine, DevTools, DevToolsEvent, Downloads, PageState, ScreencastFrame, WebEngine,
+    ChromeEngine, DevTools, DevToolsEvent, Downloads, PageState, ScreencastFrame, ScreencastScope,
+    WebEngine,
 };
 use serde_json::{Value, json};
 
@@ -29,6 +30,8 @@ use crate::engine::{
 };
 
 /// How long one DevTools call may take.
+mod source_formatting;
+
 const CALL: Duration = Duration::from_secs(30);
 
 /// The isolated world Noctiluca's script runs in.
@@ -55,6 +58,7 @@ pub const SNAPSHOT_STYLES: &[&str] = &[
     "clip-path",
     "position",
     "overflow-x",
+    "overflow-clip-margin",
 ];
 
 /// The script of the isolated world. It reports only that something
@@ -335,6 +339,7 @@ pub fn find_chrome() -> Option<PathBuf> {
 
 /// The [`Engine`] over a headless Chrome, sandboxed, through rs-rich-embed.
 pub struct ChromeBackend {
+    model_scope: Option<ScreencastScope>,
     engine: ChromeEngine,
     devtools: DevTools,
     events: Receiver<DevToolsEvent>,
@@ -404,6 +409,7 @@ impl ChromeBackend {
             )?;
         }
         Ok(ChromeBackend {
+            model_scope: None,
             engine,
             devtools,
             events,
@@ -414,6 +420,23 @@ impl ChromeBackend {
     /// The page's DevTools, for calls of one's own.
     pub fn devtools(&self) -> &DevTools {
         &self.devtools
+    }
+
+    fn capture_region(&self, region: Rect, format: Format) -> io::Result<Frame> {
+        let result = self.call(
+            "Page.captureScreenshot",
+            json!({
+                "format": match format { Format::Png => "png", Format::Jpeg => "jpeg" },
+                "clip": {"x": region.x, "y": region.y, "width": region.width,
+                         "height": region.height, "scale": 1},
+                "captureBeyondViewport": true,
+            }),
+        )?;
+        let bytes = result["data"]
+            .as_str()
+            .and_then(base64_decode)
+            .ok_or_else(|| io::Error::other("a capture that is not base64"))?;
+        Ok(Frame { format, bytes })
     }
 
     fn call(&self, method: &str, params: Value) -> io::Result<Value> {
@@ -602,6 +625,28 @@ pub fn base64_decode(text: &str) -> Option<Vec<u8>> {
     Some(out)
 }
 
+// The same check surrounds synchronous screenshot work: an event can arrive
+// while DevTools is answering even when no invalidation was pending at entry.
+fn capture_when_current<T>(
+    current: impl Fn() -> bool,
+    capture: impl FnOnce() -> io::Result<T>,
+) -> io::Result<T> {
+    let stale = || {
+        io::Error::new(
+            ErrorKind::WouldBlock,
+            "model document or applied viewport changed",
+        )
+    };
+    if !current() {
+        return Err(stale());
+    }
+    let captured = capture()?;
+    if !current() {
+        return Err(stale());
+    }
+    Ok(captured)
+}
+
 impl Engine for ChromeBackend {
     fn resize(&mut self, columns: u16, rows: u16) -> io::Result<()> {
         self.engine.resize(columns.max(20), rows.max(5))
@@ -624,33 +669,60 @@ impl Engine for ChromeBackend {
     }
 
     fn snapshot(&mut self, _tab: TabId) -> io::Result<PageSnapshot> {
-        let dom = self.call(
+        let scope = self.engine.screencast_scope().ok_or_else(|| {
+            io::Error::new(ErrorKind::WouldBlock, "viewport metrics not applied yet")
+        })?;
+        let context = self.world().ok().filter(|&context| {
+            source_formatting::begin(&|method, args| self.call(method, args), context).is_ok()
+        });
+        let captured = self.call(
             "DOMSnapshot.captureSnapshot",
             json!({"computedStyles": SNAPSHOT_STYLES, "includeDOMRects": true,
                    "includePaintOrder": true}),
-        )?;
+        );
+        let mut dom = match captured {
+            Ok(dom) => dom,
+            Err(error) => {
+                if let Some(context) = context {
+                    source_formatting::finish(
+                        &|method, args| self.call(method, args),
+                        context,
+                        &mut Value::Null,
+                    );
+                }
+                return Err(error);
+            }
+        };
         // The page reads without its AX tree when Chrome refuses one.
         let ax = self
             .call("Accessibility.getFullAXTree", json!({}))
             .unwrap_or(Value::Null);
+        if let Some(context) = context {
+            source_formatting::finish(&|method, args| self.call(method, args), context, &mut dom);
+        }
+        if !self.engine.screencast_scope_is_current(&scope) {
+            return Err(io::Error::new(
+                ErrorKind::WouldBlock,
+                "document or viewport changed during model read",
+            ));
+        }
+        self.model_scope = Some(scope);
         Ok(PageSnapshot { dom, ax })
     }
 
     fn capture(&mut self, _tab: TabId, region: Rect, format: Format) -> io::Result<Frame> {
-        let result = self.call(
-            "Page.captureScreenshot",
-            json!({
-                "format": match format { Format::Png => "png", Format::Jpeg => "jpeg" },
-                "clip": {"x": region.x, "y": region.y, "width": region.width,
-                         "height": region.height, "scale": 1},
-                "captureBeyondViewport": true,
-            }),
-        )?;
-        let bytes = result["data"]
-            .as_str()
-            .and_then(base64_decode)
-            .ok_or_else(|| io::Error::other("a capture that is not base64"))?;
-        Ok(Frame { format, bytes })
+        self.capture_region(region, format)
+    }
+
+    fn capture_model(&mut self, _tab: TabId, region: Rect, format: Format) -> io::Result<Frame> {
+        capture_when_current(
+            || {
+                self.model_scope
+                    .as_ref()
+                    .is_some_and(|scope| self.engine.screencast_scope_is_current(scope))
+            },
+            || self.capture_region(region, format),
+        )
     }
 
     fn act(&mut self, _tab: TabId, action: &PageAction) -> io::Result<()> {
@@ -776,6 +848,32 @@ impl Engine for ChromeBackend {
             return Err(io::Error::new(ErrorKind::NotFound, "an empty resource"));
         }
         Ok(bytes)
+    }
+
+    fn optional_resources(&mut self) -> Option<crate::engine::ResourceReader> {
+        let devtools = self.devtools.clone();
+        Some(Box::new(move |url| {
+            let tree = devtools.call("Page.getFrameTree", json!({}), CALL)?;
+            let frame = tree["frameTree"]["frame"]["id"]
+                .as_str()
+                .ok_or_else(|| io::Error::other("no main frame"))?;
+            let result = devtools.call(
+                "Page.getResourceContent",
+                json!({"frameId":frame,"url":url}),
+                CALL,
+            )?;
+            let content = result["content"].as_str().unwrap_or_default();
+            let bytes = if result["base64Encoded"].as_bool() == Some(true) {
+                base64_decode(content)
+                    .ok_or_else(|| io::Error::other("a resource that is not base64"))?
+            } else {
+                content.as_bytes().to_vec()
+            };
+            if bytes.is_empty() {
+                return Err(io::Error::new(ErrorKind::NotFound, "an empty resource"));
+            }
+            Ok(bytes)
+        }))
     }
 
     fn image_ready(&mut self, _tab: TabId, node: i64) -> io::Result<bool> {
@@ -915,7 +1013,7 @@ impl Engine for ChromeBackend {
     }
 
     fn screencast_frame(&mut self, _tab: TabId) -> Option<ScreencastFrame> {
-        self.engine.take_screencast()
+        self.engine.take_screencast_for(self.model_scope.as_ref()?)
     }
 
     fn can_play(&mut self, _tab: TabId, types: &[&str]) -> io::Result<Vec<String>> {
@@ -992,6 +1090,66 @@ impl Engine for ChromeBackend {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn snapshot_styles_append_clip_margin_without_reindexing_legacy_captures() {
+        // Saved snapshots encode these positions, not property names.
+        assert_eq!(
+            &SNAPSHOT_STYLES[..16],
+            &[
+                "display",
+                "visibility",
+                "color",
+                "background-color",
+                "font-weight",
+                "font-style",
+                "text-decoration-line",
+                "white-space",
+                "opacity",
+                "background-image",
+                "overflow-y",
+                "flex-wrap",
+                "clip",
+                "clip-path",
+                "position",
+                "overflow-x",
+            ]
+        );
+        assert_eq!(SNAPSHOT_STYLES.get(16), Some(&"overflow-clip-margin"));
+    }
+
+    #[test]
+    fn model_capture_checks_before_and_after_screenshot_for_both_fallback_formats() {
+        use std::cell::Cell;
+        for format in [Format::Png, Format::Jpeg] {
+            for (before, during, succeeds) in [
+                (false, false, false),
+                (true, true, false),
+                (true, false, true),
+            ] {
+                let revision = Cell::new(if before { 1 } else { 2 });
+                let calls = Cell::new(0);
+                let result = capture_when_current(
+                    || revision.get() == 1,
+                    || {
+                        calls.set(calls.get() + 1);
+                        if during {
+                            revision.set(2);
+                        }
+                        Ok(Frame {
+                            format,
+                            bytes: vec![1],
+                        })
+                    },
+                );
+                assert_eq!(result.is_ok(), succeeds);
+                assert_eq!(calls.get(), usize::from(before));
+                if !succeeds {
+                    assert_eq!(result.unwrap_err().kind(), ErrorKind::WouldBlock);
+                }
+            }
+        }
+    }
 
     #[test]
     fn captures_decode_from_base64() {

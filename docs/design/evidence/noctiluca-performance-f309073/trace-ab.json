@@ -1,0 +1,233 @@
+{
+  "source_commit": "f3090737be9d569fd29b0260ba18148b65caa57b",
+  "binary_sha256": "8b81bf72cc895711b899d0bb5d9e57a30b28476ae3df0331a0e155012d4c5406",
+  "runner": "task6-run-recorded.py workload/filter, with only RICH_MEDIA_TRACE toggled; wrapper repeated child CPU accounting and separate protocol decoder",
+  "protocol": "Iterm2",
+  "gate_ceilings": {
+    "p95_ms": 13.67,
+    "p99_ms": 15.734,
+    "input_max_ms": 5.417,
+    "child_cpu_s": 0.806
+  },
+  "diagnostic_only": true,
+  "runs": [
+    {
+      "pair": 1,
+      "trace": true,
+      "p95_ms": 11.925186,
+      "p99_ms": 12.76924,
+      "input_max_ms": 3.501259,
+      "input_samples_ms": [
+        1.599683,
+        1.686073,
+        1.7258149999999999,
+        1.785337,
+        1.902289,
+        1.927455,
+        2.181251,
+        3.501259
+      ],
+      "child_user_s": 0.6296579999999999,
+      "child_sys_s": 0.09752899999999999,
+      "child_cpu_s": 0.7271869999999999,
+      "wall_s": 2.522896423994098,
+      "loadavg_at_end": [
+        0.01513671875,
+        0.052734375,
+        0.21728515625
+      ],
+      "emitted": 59,
+      "missing": [
+        59
+      ],
+      "sha256": {
+        "log": "28ff40b751272b44c98175bed3266e142dce3f70c719c92332e2d6f228a33a58",
+        "output": "3c54a50d17f864c0539de3bbddee8ceb99c9fd9a6218467a29f1ebf3fcf7d32d",
+        "decoded": "acc31ca53b23f1253a09cfb7f645054c2885468baf98ba1ff0a4eae8c4fcb5e0",
+        "meta": "f01938e6568a182bbdae1394bd36730690d59a3a71d33c4785428ebd6c66f667"
+      },
+      "workspace_artifacts": "/workspace/work/noctiluca-perf-current-f309073"
+    },
+    {
+      "pair": 1,
+      "trace": false,
+      "p95_ms": 12.421179,
+      "p99_ms": 13.639637,
+      "input_max_ms": 3.951275,
+      "input_samples_ms": [
+        1.898442,
+        2.273478,
+        2.2797709999999998,
+        2.312426,
+        2.334034,
+        2.4604190000000004,
+        3.3470090000000003,
+        3.951275
+      ],
+      "child_user_s": 0.6837420000000001,
+      "child_sys_s": 0.06687100000000001,
+      "child_cpu_s": 0.7506130000000001,
+      "wall_s": 2.513587554989499,
+      "loadavg_at_end": [
+        0.01513671875,
+        0.052734375,
+        0.21728515625
+      ],
+      "emitted": 59,
+      "missing": [
+        54
+      ],
+      "sha256": {
+        "log": "a1b110944d6a8791b209c9dba0e7ce530c71c53454e70c5067fd45538ddfcf67",
+        "output": "0aa49f6a550812213bc14b77c31763f9f82815362f53aa82ae328ab5f83dd505",
+        "decoded": "d24938d135d6e6f6b9025c6c1481de9b615e777dbfd60937678014df5d1bd1af",
+        "meta": "4e20dc5c5ce3d571d0290d5d3442aa0a1768c6f02a22db00e45b1484d488f718"
+      },
+      "workspace_artifacts": "/workspace/work/noctiluca-perf-current-f309073"
+    },
+    {
+      "pair": 2,
+      "trace": true,
+      "p95_ms": 13.689546,
+      "p99_ms": 31.230473,
+      "input_max_ms": 2.740649,
+      "input_samples_ms": [
+        1.610165,
+        1.6633380000000002,
+        1.682403,
+        1.685107,
+        1.695071,
+        1.722178,
+        2.574989,
+        2.740649
+      ],
+      "child_user_s": 0.7178300000000002,
+      "child_sys_s": 0.047358999999999984,
+      "child_cpu_s": 0.7651890000000002,
+      "wall_s": 2.5184795649984153,
+      "loadavg_at_end": [
+        0.013671875,
+        0.0517578125,
+        0.2158203125
+      ],
+      "emitted": 60,
+      "missing": [],
+      "sha256": {
+        "log": "0d615c99de317aa0d30885fe44e63c6f8ec1aade35e23c533497fc3773cd3a61",
+        "output": "d51df0686ddf3667fc8f4e8c1c6382c7879847211d0b83dfdde498215bdafef1",
+        "decoded": "996a9477b05a1701bf2b15bb9256ef1ce8c369c6e0cf7ba1e11028cb15d323db",
+        "meta": "916de14a8ea9d11a40c5de53cb7222074dd6374056b76b5cd0f69efeeb83f55f"
+      },
+      "workspace_artifacts": "/workspace/work/noctiluca-perf-current-f309073"
+    },
+    {
+      "pair": 2,
+      "trace": false,
+      "p95_ms": 12.377624,
+      "p99_ms": 13.133437,
+      "input_max_ms": 3.973974,
+      "input_samples_ms": [
+        1.7830560000000002,
+        1.9185249999999998,
+        2.019601,
+        2.109985,
+        2.121182,
+        2.5237559999999997,
+        3.9303630000000003,
+        3.973974
+      ],
+      "child_user_s": 0.635516,
+      "child_sys_s": 0.06431799999999999,
+      "child_cpu_s": 0.6998340000000001,
+      "wall_s": 2.518969463009853,
+      "loadavg_at_end": [
+        0.013671875,
+        0.0517578125,
+        0.2158203125
+      ],
+      "emitted": 59,
+      "missing": [
+        54
+      ],
+      "sha256": {
+        "log": "ec04266d6eea834ff5a1cb4fcc81fbdbdd3e1d17e76397e32cb66329e3d9fba4",
+        "output": "4bd0401b6f7f9368831abfa48b6dc3de5925b4485c6215a7eb2360c83d9b7a93",
+        "decoded": "d5989516ec151e39471437fe91ae45655fd2cca39666ee6f95b0cc28e39f7006",
+        "meta": "3fd926d07a6f4490f962e26156401b06da91346d4ad52af58498967aae3ba134"
+      },
+      "workspace_artifacts": "/workspace/work/noctiluca-perf-current-f309073"
+    },
+    {
+      "pair": 3,
+      "trace": true,
+      "p95_ms": 11.492892,
+      "p99_ms": 11.919926,
+      "input_max_ms": 3.8761300000000003,
+      "input_samples_ms": [
+        1.58244,
+        1.6275510000000002,
+        1.628167,
+        1.756765,
+        1.767035,
+        2.0953120000000003,
+        2.357465,
+        3.8761300000000003
+      ],
+      "child_user_s": 0.6529269999999996,
+      "child_sys_s": 0.04304399999999997,
+      "child_cpu_s": 0.6959709999999997,
+      "wall_s": 2.5181801989965606,
+      "loadavg_at_end": [
+        0.01220703125,
+        0.05078125,
+        0.21435546875
+      ],
+      "emitted": 60,
+      "missing": [],
+      "sha256": {
+        "log": "3f8898a2cd5c7dc2a438138ecfacc671ce91c4fbc70d33ec260d3ef25520309e",
+        "output": "41fe68bfd7652aa4f84ff7942633e76938d84a7dac15356e04b22fd033eb78a6",
+        "decoded": "51c726c8405e1942499b9f17ebabf377047e4e176ccca6456123e243c5c284c6",
+        "meta": "a0de6677e1d7ffeb3194c27a2f11e5e35de537247e8ce028285aada04809c9e8"
+      },
+      "workspace_artifacts": "/workspace/work/noctiluca-perf-current-f309073"
+    },
+    {
+      "pair": 3,
+      "trace": false,
+      "p95_ms": 11.600419,
+      "p99_ms": 11.645358,
+      "input_max_ms": 3.458353,
+      "input_samples_ms": [
+        1.530666,
+        1.56514,
+        1.5900459999999998,
+        1.606647,
+        1.615319,
+        1.9407910000000002,
+        3.3729609999999997,
+        3.458353
+      ],
+      "child_user_s": 0.6111000000000004,
+      "child_sys_s": 0.060023999999999966,
+      "child_cpu_s": 0.6711240000000005,
+      "wall_s": 2.5170541510015028,
+      "loadavg_at_end": [
+        0.01220703125,
+        0.05078125,
+        0.21435546875
+      ],
+      "emitted": 59,
+      "missing": [
+        52
+      ],
+      "sha256": {
+        "log": "d95dfc638f53faadaea1d8cc93830aa727b23dda0e2177a20dbf4c3e72232f79",
+        "output": "6023d99c3c2a30f67d9ff2d5e286b1a963f4d8afe2882cd03b2ba81ab8704b86",
+        "decoded": "822ba41cc75a4cc3d91e61f067ebd72ec4e019df63573621d24063996361763b",
+        "meta": "a5275b0a7c43e074e0f6b3d745d80aebb55d83a0080cd6e7b563ee28d240e27e"
+      },
+      "workspace_artifacts": "/workspace/work/noctiluca-perf-current-f309073"
+    }
+  ]
+}

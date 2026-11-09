@@ -137,6 +137,8 @@ tracing-subscriber = { version = "0.3", default-features = false, features = ["r
 alsa-sys = { version = "0.4", optional = true }
 
 [dev-dependencies]
+# Decode actual public widget output in the terminal recorder, including alpha.
+rich-record = { package = "rs-rich-record", path = "../rich-record", default-features = false }
 # A tap's WAV read back (tests/audio_null.rs).
 hound = "3.5"
 # The Yazi example (examples/files.rs) shows times in the local time zone
@@ -250,3 +252,7 @@ required-features = ["audio"]
 [[test]]
 name = "audio_record_env"
 required-features = ["audio"]
+
+[[example]]
+name = "metric_pictures"
+required-features = ["art"]

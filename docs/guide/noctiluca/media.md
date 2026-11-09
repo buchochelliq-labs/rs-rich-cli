@@ -167,13 +167,21 @@ has no real pixels to show.
 | `ansi` | Half blocks: two pixels a cell, in colour, in any terminal |
 | `none` | No pictures: alt text only |
 
+Kitty image placement requires Unicode placeholders as well as the graphics protocol.
+WezTerm defaults to iTerm2 inline images; forcing Kitty requires placeholder support.
+Multiplexers may block or alter graphics transport, so use half blocks when
+passthrough is unavailable. A forced mode cannot add a missing terminal feature.
+Ghostty 1.4 supports native Kitty animation; older or unknown Ghostty versions
+use software frame stepping. A byte budget falls back only through formats
+known to be supported by the selected terminal.
+
 If pictures come out as half blocks in a terminal that can do better,
 name its protocol. A site's table can turn pictures off there with
 `images = false`.
 
 ## The pixel view
 
-In a terminal with Kitty graphics (kitty, WezTerm, Ghostty), `Alt+X`
+In a terminal with Kitty graphics and Unicode placeholders, `Alt+X`
 (`view.pixels`), `--pixels` or `--view pixels` shows the page as Chrome
 paints it, pixel for pixel, instead of the projection: a canvas, a map, a
 page whose layout the projection gets wrong. `Alt+X` again goes back. The
@@ -210,3 +218,38 @@ Scrolling moves every row, so nearly every tile changes and tiles save
 only a quarter; a page that holds still while something small moves costs
 next to nothing. Scrolling in the projection, which sends text, stays far
 cheaper.
+
+Terminal cell dimensions are measured at session startup and on resize when
+reported by the terminal. If they are unavailable, picture rendering uses
+8×16 pixels per cell. Physical cell dimensions affect raster fitting, while
+Noctiluca's separate CSS-to-cell projection calibration remains 8×18.
+
+Framework users can run the independent `metric_pictures` example with
+`cargo run -p rs-rich-intuituive --features art --example metric_pictures --
+kitty 8x16 cover left change`. It changes metrics with the same picture and
+cell grid; `clip` shows a scrolled portion, and `cells`, `iterm`, and `sixel`
+select the fallback or another protocol. For programmatic use,
+`Driver::set_cell_pixels` updates metrics and `intuituive::cell_pixels()`
+provides the reactive value. Existing placement sources can ignore metrics;
+`PlacementSource::placements_with_metrics` lets sources use them.
+
+`overlay` covers the left half of the framework example with a dialog; `restore`
+dismisses it. Stock `Picture::lines` / `picture_of` now preserve rectangular
+native image fragments around covered cells. Fitting and anchoring happen before
+cropping, using the measured physical cell size. Older hand-written `PictureTag`
+styles without source-column metadata retain conservative whole-width clipping.
+
+Sixel/iTerm overlays clear the accepted rectangle to `ImageView.background`
+(or the terminal default) before drawing transparent native pixels. This avoids
+half-block fallback colors showing through alpha; cells rejected by the encoder
+or fragment budget keep their fallback. This does not reconstruct arbitrary
+previous layers. Sixel has binary alpha and a limited palette; iTerm preserves
+PNG alpha. Encoder/recorder tests are separate from native-terminal verification.
+
+Overlay work is bounded to 32 rectangles per image instance and 128 per frame;
+over-budget shapes retain cells. The encoding cache keeps at most 128 entries
+and 16 MiB of escape data. Kitty placeholders crop in cells and reuse an unchanged
+retained upload when moved. Removal followed by reappearance uploads again.
+Simultaneous different fits of one Kitty picture still share an upload id; data
+reuse is conservatively disabled for observed conflicting variants. Use distinct
+`Picture`s for simultaneous independently fitted Kitty views.

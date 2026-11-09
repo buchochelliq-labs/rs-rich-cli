@@ -131,17 +131,26 @@ fn tall_pictures_are_capped_and_what_is_under_moves_up() {
 #[test]
 fn grids_snap_their_columns_to_the_cells() {
     let page = page("adapt");
-    // At 72 columns the grid's five 80 px tracks are 10 cells each: too
-    // narrow, so it snaps to three of 17 cells, in two rows.
+    // At 72 columns this source grid has room for one 32-cell card track.
+    // Its five 80 px tracks are too narrow, so cards stack in source order.
     let on = lines(&page, 72, only(Rule::SnapGrids));
-    let first = &on[row_of(&on, "Card one")];
-    assert!(first.contains("Card two") && first.contains("Card three"));
-    assert!(!first.contains("Card four"), "{first:?}");
-    let second = &on[row_of(&on, "Card four")];
-    assert!(second.contains("Card five"));
-    assert_eq!(
-        first.find("Card two").unwrap() - first.find("Card one").unwrap(),
-        18
+    let labels = [
+        "Card one",
+        "Card two",
+        "Card three",
+        "Card four",
+        "Card five",
+    ];
+    let card_rows: Vec<_> = labels
+        .iter()
+        .map(|label| {
+            assert_eq!(on.iter().filter(|line| line.contains(label)).count(), 1);
+            row_of(&on, label)
+        })
+        .collect();
+    assert!(
+        card_rows.windows(2).all(|rows| rows[0] < rows[1]),
+        "{on:#?}"
     );
     let off = lines(&page, 72, Adapt::none());
     assert!(off[row_of(&off, "Card one")].contains("Card five"));

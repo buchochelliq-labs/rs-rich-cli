@@ -183,6 +183,33 @@ cover.get(), view)` draw an image in memory (a cover embedded in a song).
   app's source a Sixel or iTerm2 view is plain half blocks, so the
   frame stays exact in any terminal.
 
+- **Independent fitted views:** construct an `ImagePresentation` from the
+  terminal feature facts and supported `PixelFormats`, then use
+  `presentation.picture(&picture)` and `presentation.graphics()` for pictures
+  that can appear in multiple fitted sizes or versions at once. This opts into
+  distinct Kitty resources while retaining the logical picture ID. Keep the bound
+  picture alive while using prebuilt lines. The legacy `Picture` lines and
+  encode/prepare APIs retain their original ID pairing; callers using them
+  directly should avoid simultaneous different fitted views of the same ID.
+  Logical IDs prefer the representable 24-bit Kitty range and wrap to free IDs;
+  bindings are bounded, and unavailable Kitty resources fall back to cells.
+
+  Bound native lines carry compact checked provenance, including exact source
+  columns, so cropping, moving and adjacent copies retain their picture identity
+  and background policy through `Screen` writes and blits. Read it with
+  `PictureTag::of`, `column_of`, `background_of` and `binding_of`; its metadata
+  representation is private. Values outside the compact range use legacy
+  metadata. Public `PictureTag::style()` / `style_at()` and unbound picture lines
+  keep their existing representation, and unrelated styles and metadata survive.
+
+  A manual `Driver` loop must call `driver.output_written()` after each returned
+  frame output has been successfully consumed in order. Use
+  `driver.finish_output()` for final cleanup: its `write_to(&mut writer)` retains
+  reservations across a failed or partial write and resumes on retry. For a
+  sink with its own write operation, write `as_str()` in order and call the
+  token's `output_written()` only after success. The legacy `finish()` returns
+  a string; it cannot retain reservations while those bytes are pending.
+
 - **A whole frame as tiles:** `tiles_of(|| tiles, Pixels::Kitty)` draws
   the tiles of rs-rich-art's `tiles::Tiler`, which fits each frame (a
   browser's screencast, an emulator's screen) to its cells and cuts it
@@ -198,6 +225,16 @@ each frame, as rs-rich-ext's `Surface` does: placements that are new,
 moved, on another animation frame or written over are drawn again, and an
 overlay that went away has its cells repainted. The cells under a
 placement are what a terminal without graphics shows.
+
+Graphics sources receive the composed `Screen` through
+`PlacementSource::placements_from_screen(&screen, cell_pixels)`. The stock
+`image_graphics()` source borrows surviving cells and their styles to find
+placements, including clipping and overlays. Manual painters can call this
+method too. Existing sources need no changes: its provided implementation
+exports the screen to a `Frame` and calls `placements_with_metrics`, which
+continues to default to the required `placements` method. Frame-based callers
+remain supported. As before, manual painters must call `output_written()` only
+after successfully writing the ordered drawing and cleanup output.
 
 A file manager's other parts are in rs-rich-ext: `rich_ext::filetype`
 (Yazi's icons and type colours, MIME types, a Nerd Font check) and

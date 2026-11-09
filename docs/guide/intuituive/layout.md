@@ -378,3 +378,42 @@ App::new(build).min_size_forms(
     ["Terminal window is too small ¯\\_(ツ)_/¯", "Window too small ¯\\_(ツ)_/¯", "!!!"],
 )
 ```
+
+### Owner-controlled overlays
+
+Use `layers` to place a popup over existing content. For an owner-controlled
+modal, mark its visible subtree with `controlled_modal()`: focus stays within
+that subtree while it is shown, and returns to the previous valid focus when
+it closes. The owner remains responsible for changing the open state and
+handling Escape; the scope does not dismiss itself.
+
+```rust
+use intuituive::prelude::*;
+
+let app = App::new(|| {
+    let open = signal(false);
+    layers([
+        label("Open details").focusable().on_click(move |_| open.set(true)),
+        column([
+            label("Details"),
+            label("Close").focusable().on_click(move |_| open.set(false)),
+        ])
+        .controlled_modal()
+        .inset(1, 4, 1, 4)
+        .shown_when(move || open.get()),
+    ])
+});
+```
+
+Omit `controlled_modal()` for a nonmodal popup so outside content can still
+receive focus and input. When a dynamic wrapper around a popup fills the whole
+host, `children_cover_only()` makes its visible children determine the covered
+and interactive region. Put it on each such wrapper; keep the popup itself
+inset to its intended bounds. Nested controlled scopes restore focus at each
+depth when their owner closes them.
+
+Pointer input also stays in the active scope: holes and overlapping sibling
+nodes cannot dispatch to outside content. Opening a scope cancels an outside
+drag or pointer capture; a capture started inside can still receive its release
+outside the popup. Maximizing a pane considers scopes in that pane and its
+ancestors, so a hidden sibling popup cannot take its focus or keyboard input.
