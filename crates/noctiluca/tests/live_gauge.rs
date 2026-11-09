@@ -133,22 +133,24 @@ fn canvas_dials_get_pictures_and_frames_while_they_draw() {
             .map(|m| m.node)
             .collect()
     };
-    let page = live.wait("the canvases' pictures", |p| {
+    // Start watching as soon as the canvases are in the page model. Waiting
+    // for their initial stills first can consume most of the fixture's
+    // twelve-second animation on a slow browser runner.
+    let page = live.wait("the canvases", |p| {
         p.url == url
             && p.media
                 .iter()
                 .filter(|m| m.kind == MediaKind::Canvas)
-                .filter(|m| m.picture.is_some())
                 .count()
                 == 3
     });
-    let opened = Instant::now();
     let nodes = canvases(&page);
     live.tab.send(Command::Regions {
         on_screen: nodes.clone(),
         intervals: Vec::new(),
         scale: 1.0,
     });
+    let opened = Instant::now();
     // While the script draws (about twelve seconds): frames, each one new.
     live.pump(Duration::from_secs(3));
     for node in &nodes {
@@ -160,6 +162,15 @@ fn canvas_dials_get_pictures_and_frames_while_they_draw() {
         let all = &live.frames[node];
         assert!(all.windows(2).all(|w| w[0] != w[1]), "a frame repeated");
     }
+    live.wait("the canvases' pictures", |p| {
+        p.url == url
+            && p.media
+                .iter()
+                .filter(|m| m.kind == MediaKind::Canvas)
+                .filter(|m| m.picture.is_some())
+                .count()
+                == 3
+    });
     // Once it has stopped, so do the frames.
     live.pump(Duration::from_secs(14).saturating_sub(opened.elapsed()));
     let sent: usize = live.frames.values().map(Vec::len).sum();
