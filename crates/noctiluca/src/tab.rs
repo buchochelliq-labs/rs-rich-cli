@@ -455,7 +455,11 @@ struct Worker<'a> {
     /// Stills to decode, to the decoder thread.
     decode: Sender<Job>,
     /// Pictures decoded, from the decoder thread.
-    decoded: Receiver<((u64, StillKey), Picture)>,
+    decoded: Receiver<(StillAttempt, Option<Picture>)>,
+    /// Bounded to live keys; transport IDs remain until stale jobs complete.
+    recovery: HashMap<StillKey, StillRecovery>,
+    outstanding: HashSet<u64>,
+    next_attempt: u64,
     /// The small pictures in lines, decoded by source, and those asked for.
     inline: HashMap<String, Picture>,
     inline_asked: HashSet<String>,
@@ -632,12 +636,19 @@ impl Worker<'_> {
             self.live.clear();
             self.stills.clear();
             self.pictures.clear();
+            self.recovery.clear();
             self.inline.clear();
             self.inline_asked.clear();
             self.latest.clear();
             self.drawn.clear();
             self.canvases.clear();
         }
+        let live: HashSet<_> = page.media.iter().map(key_of).collect();
+        self.recovery.retain(|key, _| live.contains(key));
+        self.stills.retain(|key, _| live.contains(key));
+        self.pictures.retain(|key, _| live.contains(key));
+        self.latest.retain(|_, key| live.contains(key));
+        self.drawn.retain(|_, key| live.contains(key));
         self.follow_logs(&mut page);
         self.dress_inline(&mut page);
         self.stale.clear();
@@ -771,30 +782,13 @@ impl Worker<'_> {
         }
     }
 
-    /// The still and picture to show for `key`, and whether they are of
-    /// an older revision of it (a drawing that changed, captured again at
-    /// the next batch): its last still shows until the new one comes, and
-    /// its last picture until the new one is decoded.
+    /// Retain good pixels only for the exact current source, size and revision.
     fn shown(&self, key: &StillKey) -> (Option<Arc<[u8]>>, Option<Picture>, bool) {
-        let same = |k: &&StillKey| k.1 == key.1 && k.2 == key.2 && k.3 == key.3;
-        let drawn = || {
-            self.drawn
-                .get(&key.0)
-                .filter(same)
-                .and_then(|k| self.pictures.get(k))
-                .cloned()
-        };
-        if let Some(still) = self.stills.get(key) {
-            let picture = self.pictures.get(key).cloned().or_else(drawn);
-            return (Some(still.clone()), picture, false);
-        }
-        match self.latest.get(&key.0).filter(same) {
-            Some(old) => {
-                let picture = self.pictures.get(old).cloned().or_else(drawn);
-                (self.stills.get(old).cloned(), picture, true)
-            }
-            None => (None, None, false),
-        }
+        (
+            self.stills.get(key).cloned(),
+            self.pictures.get(key).cloned(),
+            false,
+        )
     }
 
     /// Read the live logs' new and changed entries into `page`. An engine
@@ -958,21 +952,20 @@ impl Worker<'_> {
         }
     }
 
-    /// Capture the images that have no still yet, and publish the page
-    /// again with them.
+    /// Capture new or due sources after the current model's ownership checks.
     fn capture_stills(&mut self) {
+        self.capture_stills_at(Instant::now());
+    }
+
+    fn still_retry_due(&self, now: Instant) -> bool {
+        self.recovery.values().any(|state| state.due(now))
+    }
+
+    fn capture_stills_at(&mut self, now: Instant) {
         let Some(page) = self.page.clone() else {
             return;
         };
-        // Nearest Chrome's view first; an image with no picture yet (a lazy
-        // one far from the view) waits: its load pings, and it is captured
-        // at the reading after.
         let view = self.metrics.map_or(0.0, |m| m.scroll_y);
-        // A video with no poster to fetch shows what Chrome paints in its
-        // region: its poster, or its first frame. An inline `<svg>` is a
-        // drawing Noctiluca does not decode, and a `<canvas>` has no file:
-        // Chrome's pixels of them too. A drawing that changed since its
-        // still is captured again.
         let mut candidates: Vec<_> = page
             .media
             .iter()
@@ -980,94 +973,154 @@ impl Worker<'_> {
                 matches!(
                     m.kind,
                     MediaKind::Image | MediaKind::Video | MediaKind::Svg | MediaKind::Canvas
-                ) && (m.still.is_none() || self.stale.contains(&m.node))
+                ) && m.rect.width >= 4.0
+                    && m.rect.height >= 4.0
+                    && self
+                        .recovery
+                        .get(&key_of(m))
+                        .is_none_or(|state| state.due(now))
             })
-            .filter(|m| m.rect.width >= 4.0 && m.rect.height >= 4.0)
             .collect();
         candidates.sort_by(|a, b| (a.rect.y - view).abs().total_cmp(&(b.rect.y - view).abs()));
-        let mut wanted = Vec::new();
         self.stills_pending = false;
-        for m in candidates {
-            if wanted.len() == STILLS_PER_READ {
+        let mut admitted = 0;
+        for media in candidates {
+            if admitted == STILLS_PER_READ || self.outstanding.len() == STILLS_PER_READ {
                 self.stills_pending = true;
                 break;
             }
-            if self.engine.image_ready(TabId(0), m.node).unwrap_or(true) {
-                wanted.push((m.node, picture_source(m).to_string(), m.rect, key_of(m)));
+            if !self
+                .engine
+                .image_ready(TabId(0), media.node)
+                .unwrap_or(true)
+            {
+                continue;
             }
-        }
-        if wanted.is_empty() {
-            return;
-        }
-        let mut page = (*page).clone();
-        let mut any = false;
-        for (node, src, rect, key) in wanted {
-            if let Some(bytes) = self.picture_bytes(&src, rect) {
-                let still: Arc<[u8]> = bytes.into();
-                self.stale.remove(&node);
-                self.latest.insert(node, key.clone());
-                self.stills.insert(key.clone(), still.clone());
-                let _ = self.decode.send(((page.document, key), still.clone()));
-                for media in page.media.iter_mut().filter(|m| m.node == node) {
-                    media.still = Some(still.clone());
+            admitted += 1;
+            let key = key_of(media);
+            let mut state = self.recovery.remove(&key).unwrap_or_default();
+            let original = !state.started || state.original_due.is_some_and(|due| due <= now);
+            state.started = true;
+            let bytes = if original {
+                state.original_due = None;
+                let src = picture_source(media);
+                let original = if let Some(data) = src.strip_prefix("data:") {
+                    data_bytes(data)
+                } else if src.is_empty() {
+                    None
+                } else {
+                    match self.engine.resource(TabId(0), src) {
+                        Ok(bytes) => Some(bytes),
+                        Err(error) => {
+                            if error.kind() != std::io::ErrorKind::Unsupported {
+                                state.original_due =
+                                    Some(now + retry_delay(&mut state.original_failures));
+                            }
+                            None
+                        }
+                    }
+                };
+                match original.filter(|bytes| decodable(bytes)) {
+                    Some(bytes) => Some((bytes, StillOrigin::Original)),
+                    // A good screenshot need not be captured on each cache miss.
+                    None if state.original_due.is_some() && self.pictures.contains_key(&key) => {
+                        None
+                    }
+                    None => self.screenshot_bytes(media.rect, &mut state, now),
                 }
-                any = true;
+            } else {
+                self.screenshot_bytes(media.rect, &mut state, now)
+            };
+            if let Some((bytes, origin)) = bytes {
+                self.next_attempt += 1;
+                let attempt = self.next_attempt;
+                let bytes: Arc<[u8]> = bytes.into();
+                let job = (page.document, key.clone(), attempt, origin);
+                if self.decode.send((job, bytes.clone())).is_ok() {
+                    self.outstanding.insert(attempt);
+                    state.pending = Some((attempt, origin, bytes.clone()));
+                    // Retain the last successful bytes/picture until replacement
+                    // actually decodes. First bytes still publish asynchronously.
+                    if !self.pictures.contains_key(&key) {
+                        self.stills.insert(key.clone(), bytes);
+                    }
+                    self.latest.insert(key.0, key.clone());
+                } else {
+                    state.screenshot_due = Some(now + retry_delay(&mut state.screenshot_failures));
+                }
             }
+            self.recovery.insert(key, state);
         }
-        if any {
-            self.publish(Arc::new(page), None);
+        let mut next = (*page).clone();
+        for media in &mut next.media {
+            media.still = self.stills.get(&key_of(media)).cloned();
         }
+        self.publish(Arc::new(next), None);
     }
 
-    /// An image's bytes: the original file the page loaded (from the
-    /// browser's cache, so animated GIFs keep their frames), a `data:`
-    /// address's own bytes, else a still of Chrome's pixels of `rect` (an
-    /// SVG, or a picture no longer in the cache).
-    fn picture_bytes(&mut self, src: &str, rect: Rect) -> Option<Vec<u8>> {
-        let original = if let Some(data) = src.strip_prefix("data:") {
-            data_bytes(data)
-        } else if src.is_empty() {
-            None
-        } else {
-            self.engine.resource(TabId(0), src).ok()
-        };
-        if let Some(bytes) = original.filter(|b| decodable(b)) {
-            return Some(bytes);
-        }
+    fn screenshot_bytes(
+        &mut self,
+        rect: Rect,
+        state: &mut StillRecovery,
+        now: Instant,
+    ) -> Option<(Vec<u8>, StillOrigin)> {
+        state.screenshot_due = None;
         let region = Rect::new(
             rect.x,
             rect.y,
             rect.width.min(4000.0),
             rect.height.min(4000.0),
         );
-        self.engine
-            .capture_model(TabId(0), region, Format::Png)
-            .ok()
-            .map(|frame| frame.bytes)
+        match self.engine.capture_model(TabId(0), region, Format::Png) {
+            Ok(frame) => Some((frame.bytes, StillOrigin::Screenshot)),
+            Err(_) => {
+                state.screenshot_due = Some(now + retry_delay(&mut state.screenshot_failures));
+                None
+            }
+        }
     }
 
     /// Put the pictures decoded since the last look on the page, and
     /// publish it again.
     fn take_decoded(&mut self) {
+        self.take_decoded_at(Instant::now());
+    }
+
+    fn take_decoded_at(&mut self, now: Instant) {
         let mut any = false;
         let mut inline_progress = false;
-        while let Ok(((document, key), picture)) = self.decoded.try_recv() {
-            if self.page.as_ref().map(|p| p.document) != Some(document) {
+        while let Ok(((document, key, attempt, origin), picture)) = self.decoded.try_recv() {
+            if !self.outstanding.remove(&attempt)
+                || self.page.as_ref().map(|p| p.document) != Some(document)
+            {
                 continue;
             }
-            // A still a newer one already replaced: not shown again.
-            if !self.stills.contains_key(&key) {
+            let Some(state) = self.recovery.get_mut(&key) else {
+                continue;
+            };
+            if state.pending.as_ref().map(|(id, source, _)| (*id, *source))
+                != Some((attempt, origin))
+            {
                 continue;
             }
-            // The newest of its node: the older revisions go.
-            if self.latest.get(&key.0) == Some(&key) {
-                let older = |k: &StillKey| k.0 == key.0 && k.1 == key.1 && *k != key;
-                self.stills.retain(|k, _| !older(k));
-                self.pictures.retain(|k, _| !older(k));
+            let (_, _, bytes) = state.pending.take().unwrap();
+            if let Some(picture) = picture {
+                self.stills.insert(key.clone(), bytes);
+                state.screenshot_due = None;
+                if origin == StillOrigin::Original {
+                    state.original_due = None;
+                }
+                self.drawn.insert(key.0, key.clone());
+                self.pictures.insert(key, picture);
+                any = true;
+            } else if origin == StillOrigin::Original {
+                // Header recognition did not guarantee valid pixels. Use the
+                // guarded screenshot once; this original is not polled again.
+                state.original_due = None;
+                state.screenshot_due = Some(now);
+            } else {
+                state.screenshot_due = Some(now + retry_delay(&mut state.screenshot_failures));
             }
-            self.drawn.insert(key.0, key.clone());
-            self.pictures.insert(key, picture);
-            any = true;
         }
         loop {
             let decoded = self
@@ -1111,10 +1164,9 @@ impl Worker<'_> {
         };
         let mut next = (*page).clone();
         for media in &mut next.media {
-            let (_, picture, _) = self.shown(&key_of(media));
-            if picture.is_some() {
-                media.picture = picture;
-            }
+            let (still, picture, _) = self.shown(&key_of(media));
+            media.still = still;
+            media.picture = picture;
         }
         self.dress_inline(&mut next);
         if next != *page {
@@ -1616,12 +1668,46 @@ const MAX_INLINE: usize = 512;
 /// What a still is kept by: the node, its address, its size and its
 /// content's revision (a drawing's).
 type StillKey = (NodeId, String, u64, u64, u64);
-/// Pictures decoded, by what they were asked for by.
-type Decoded<K> = Receiver<(K, Picture)>;
 /// Bytes to decode, by what asks for them.
 type ToDecode<K> = Sender<(K, Arc<[u8]>)>;
 /// A still for the decoder thread.
-type Job = ((u64, StillKey), Arc<[u8]>);
+type StillAttempt = (u64, StillKey, u64, StillOrigin);
+type Job = (StillAttempt, Arc<[u8]>);
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum StillOrigin {
+    Original,
+    Screenshot,
+}
+
+#[derive(Default)]
+struct StillRecovery {
+    started: bool,
+    pending: Option<(u64, StillOrigin, Arc<[u8]>)>,
+    original_due: Option<Instant>,
+    screenshot_due: Option<Instant>,
+    original_failures: u8,
+    screenshot_failures: u8,
+}
+
+impl StillRecovery {
+    fn due(&self, now: Instant) -> bool {
+        self.pending.is_none()
+            && (self.original_due.is_some_and(|due| due <= now)
+                || self.screenshot_due.is_some_and(|due| due <= now))
+    }
+}
+
+fn retry_delay(failures: &mut u8) -> Duration {
+    let delay = [
+        Duration::from_millis(500),
+        Duration::from_secs(2),
+        Duration::from_secs(8),
+        Duration::from_secs(30),
+    ][usize::from((*failures).min(3))];
+    *failures = failures.saturating_add(1);
+    delay
+}
 
 /// Whether rs-rich-art can decode `bytes`: a format it recognises *and*
 /// reads (PNG, JPEG, GIF, WebP). An SVG or an AVIF (which Chrome asks for,
@@ -1653,16 +1739,14 @@ pub(crate) fn data_bytes(data: &str) -> Option<Vec<u8>> {
     crate::cdp::base64_decode(body)
 }
 
-/// The decoder thread: each still into a picture, an animated GIF with its
-/// frames. It ends when the tab does.
-fn decoder<K: Send + 'static>() -> (ToDecode<K>, Decoded<K>) {
-    let (send, jobs) = mpsc::channel::<(K, Arc<[u8]>)>();
+/// Unlike the legacy inline channel, every still job releases admission.
+fn still_decoder() -> (Sender<Job>, Receiver<(StillAttempt, Option<Picture>)>) {
+    let (send, jobs) = mpsc::channel::<Job>();
     let (done, decoded) = mpsc::channel();
     thread::spawn(move || {
-        while let Ok((key, bytes)) = jobs.recv() {
-            if let Ok(picture) = Picture::decode_animated(&bytes)
-                && done.send((key, picture)).is_err()
-            {
+        while let Ok((attempt, bytes)) = jobs.recv() {
+            let picture = Picture::decode_animated(&bytes).ok();
+            if done.send((attempt, picture)).is_err() {
                 return;
             }
         }
@@ -1708,7 +1792,7 @@ fn run_with_source(
     update: &dyn Fn(Update),
     source_update: Option<&dyn Fn(Update, Option<SourcePage>)>,
 ) {
-    let (decode, decoded) = decoder();
+    let (decode, decoded) = still_decoder();
     // The optional worker owns actual inline decoding. These channels keep
     // the controlled completion seam used by the document-lifecycle tests.
     let (decode_inline, _unused_inline_jobs) = mpsc::channel();
@@ -1728,6 +1812,9 @@ fn run_with_source(
         pictures: HashMap::new(),
         decode,
         decoded,
+        recovery: HashMap::new(),
+        outstanding: HashSet::new(),
+        next_attempt: 0,
         inline: HashMap::new(),
         inline_asked: HashSet::new(),
         inline_loader: Some(inline_loader),
@@ -1831,7 +1918,7 @@ fn run_with_source(
                 worker.video();
                 worker.poll_canvases();
             }
-            if worker.stills_pending {
+            if worker.stills_pending || worker.still_retry_due(Instant::now()) {
                 worker.capture_stills();
             }
         }
@@ -1864,9 +1951,14 @@ mod tests {
     use super::*;
     use crate::testing::FakeEngine;
 
-    fn recovery_worker<'a>(engine: FakeEngine, update: &'a dyn Fn(Update)) ->
-        (Worker<'a>, Receiver<Job>, Sender<((u64, StillKey), Picture)>)
-    {
+    fn recovery_worker<'a>(
+        engine: FakeEngine,
+        update: &'a dyn Fn(Update),
+    ) -> (
+        Worker<'a>,
+        Receiver<Job>,
+        Sender<(StillAttempt, Option<Picture>)>,
+    ) {
         let engine: Box<dyn Engine> = Box::new(engine);
         let (decode, jobs) = mpsc::channel();
         let (done, decoded) = mpsc::channel();
@@ -1885,6 +1977,9 @@ mod tests {
             pictures: HashMap::new(),
             decode,
             decoded,
+            recovery: HashMap::new(),
+            outstanding: HashSet::new(),
+            next_attempt: 0,
             inline: HashMap::new(),
             inline_asked: HashSet::new(),
             inline_loader: None,
@@ -1918,10 +2013,15 @@ mod tests {
     fn recovery_engine(count: usize) -> FakeEngine {
         use crate::testing::PageBuilder;
         let engine = FakeEngine::from_dir(std::path::Path::new("tests/fixtures")).unwrap();
-        let mut builder = PageBuilder::new("https://example.test/recovery", "recovery", 400.0, 800.0);
+        let mut builder =
+            PageBuilder::new("https://example.test/recovery", "recovery", 400.0, 800.0);
         for n in 0..count {
-            builder.image(builder.body(), &format!("https://example.test/{n}.png"), "image",
-                Rect::new(0.0, n as f64 * 20.0, 16.0, 16.0));
+            builder.image(
+                builder.body(),
+                &format!("https://example.test/{n}.png"),
+                "image",
+                Rect::new(0.0, n as f64 * 20.0, 16.0, 16.0),
+            );
         }
         {
             let mut state = engine.state.lock().unwrap();
@@ -1934,7 +2034,8 @@ mod tests {
     fn recovery_png() -> Vec<u8> {
         let mut bytes = std::io::Cursor::new(Vec::new());
         image::RgbaImage::from_pixel(2, 2, image::Rgba([1, 2, 3, 255]))
-            .write_to(&mut bytes, image::ImageFormat::Png).unwrap();
+            .write_to(&mut bytes, image::ImageFormat::Png)
+            .unwrap();
         bytes.into_inner()
     }
 
@@ -1943,9 +2044,14 @@ mod tests {
         {
             let mut encoder = image::codecs::gif::GifEncoder::new(&mut bytes);
             for color in [[255, 0, 0, 255], [0, 255, 0, 255]] {
-                encoder.encode_frame(image::Frame::from_parts(
-                    image::RgbaImage::from_pixel(2, 2, image::Rgba(color)), 0, 0,
-                    image::Delay::from_numer_denom_ms(100, 1))).unwrap();
+                encoder
+                    .encode_frame(image::Frame::from_parts(
+                        image::RgbaImage::from_pixel(2, 2, image::Rgba(color)),
+                        0,
+                        0,
+                        image::Delay::from_numer_denom_ms(100, 1),
+                    ))
+                    .unwrap();
             }
         }
         bytes
@@ -1956,10 +2062,15 @@ mod tests {
         let bytes: Arc<[u8]> = recovery_png()[..41].into();
         assert!(decodable(&bytes));
         assert!(Picture::decode_animated(&bytes).is_err());
-        let (decode, decoded) = decoder();
-        decode.send((0_u64, bytes)).unwrap();
-        assert!(decoded.recv_timeout(Duration::from_secs(2)).is_ok(),
-            "actual decoder must complete rejected pixels too");
+        let (decode, decoded) = still_decoder();
+        let id = (1, (1, "source".into(), 2, 2, 0), 1, StillOrigin::Original);
+        decode.send((id.clone(), bytes)).unwrap();
+        let (completed, picture) = decoded.recv_timeout(Duration::from_secs(2)).unwrap();
+        assert_eq!(completed, id);
+        assert!(
+            picture.is_none(),
+            "actual decoder must complete rejected pixels too"
+        );
     }
 
     #[test]
@@ -1969,18 +2080,38 @@ mod tests {
         let update = |_: Update| {};
         let (mut worker, jobs, done) = recovery_worker(engine, &update);
         worker.read().unwrap();
-        worker.capture_stills();
+        let now = Instant::now();
+        worker.capture_stills_at(now);
         let (id, bytes) = jobs.try_recv().unwrap();
-        done.send((id, Picture::decode_animated(&bytes).unwrap())).unwrap();
-        worker.take_decoded();
+        done.send((id, Some(Picture::decode_animated(&bytes).unwrap())))
+            .unwrap();
+        worker.take_decoded_at(now);
         assert!(worker.page.as_ref().unwrap().media[0].picture.is_some());
-        state.lock().unwrap().resources.insert("https://example.test/0.png".into(), recovery_animation());
+        state
+            .lock()
+            .unwrap()
+            .resources
+            .insert("https://example.test/0.png".into(), recovery_animation());
         worker.read().unwrap();
-        worker.capture_stills();
-        let (id, bytes) = jobs.try_recv().expect("same-key original must be retried after temporary miss");
-        done.send((id, Picture::decode_animated(&bytes).unwrap())).unwrap();
+        worker.capture_stills_at(now + Duration::from_millis(499));
+        assert!(jobs.try_recv().is_err());
+        worker.capture_stills_at(now + Duration::from_millis(500));
+        let (id, bytes) = jobs
+            .try_recv()
+            .expect("same-key original must be retried after temporary miss");
+        done.send((id, Some(Picture::decode_animated(&bytes).unwrap())))
+            .unwrap();
         worker.take_decoded();
-        assert_eq!(worker.page.as_ref().unwrap().media[0].picture.as_ref().unwrap().frames().unwrap().len(), 2);
+        assert_eq!(
+            worker.page.as_ref().unwrap().media[0]
+                .picture
+                .as_ref()
+                .unwrap()
+                .frames()
+                .unwrap()
+                .len(),
+            2
+        );
     }
 
     #[test]
@@ -2112,6 +2243,9 @@ mod tests {
             pictures: HashMap::new(),
             decode,
             decoded,
+            recovery: HashMap::new(),
+            outstanding: HashSet::new(),
+            next_attempt: 0,
             inline: HashMap::new(),
             inline_asked: HashSet::new(),
             inline_loader: None,
@@ -2158,7 +2292,7 @@ mod tests {
         let (job, _) = jobs.try_recv().unwrap();
         done.send((
             job.clone(),
-            Picture::from_rgba(1, 1, vec![255, 0, 0, 255]).unwrap(),
+            Some(Picture::from_rgba(1, 1, vec![255, 0, 0, 255]).unwrap()),
         ))
         .unwrap();
         worker.take_decoded();
@@ -2211,8 +2345,11 @@ mod tests {
         worker.read().unwrap();
         let nav = updates.borrow().last().unwrap().clone();
         assert_ne!(nav.page().document, first.page().document);
-        done.send((job, Picture::from_rgba(1, 1, vec![0, 255, 0, 255]).unwrap()))
-            .unwrap();
+        done.send((
+            job,
+            Some(Picture::from_rgba(1, 1, vec![0, 255, 0, 255]).unwrap()),
+        ))
+        .unwrap();
         worker.take_decoded();
         assert_eq!(
             updates.borrow().len(),
@@ -2350,6 +2487,9 @@ mod tests {
                 pictures: HashMap::new(),
                 decode,
                 decoded,
+                recovery: HashMap::new(),
+                outstanding: HashSet::new(),
+                next_attempt: 0,
                 inline: HashMap::new(),
                 inline_asked: HashSet::new(),
                 inline_loader: None,
@@ -2690,6 +2830,9 @@ mod tests {
             pictures: HashMap::new(),
             decode,
             decoded,
+            recovery: HashMap::new(),
+            outstanding: HashSet::new(),
+            next_attempt: 0,
             inline: HashMap::new(),
             inline_asked: HashSet::new(),
             inline_loader: None,
@@ -2727,11 +2870,11 @@ mod tests {
         worker.capture_stills();
         let (new_key, _) = jobs.try_recv().unwrap();
         let old = Picture::from_rgba(1, 1, vec![255, 0, 0, 255]).unwrap();
-        done.send((old_key, old)).unwrap();
+        done.send((old_key, Some(old))).unwrap();
         worker.take_decoded();
         assert!(worker.page.as_ref().unwrap().media[0].picture.is_none());
         let new = Picture::from_rgba(1, 1, vec![0, 255, 0, 255]).unwrap();
-        done.send((new_key, new.clone())).unwrap();
+        done.send((new_key, Some(new.clone()))).unwrap();
         worker.take_decoded();
         assert_eq!(
             worker.page.as_ref().unwrap().media[0].picture.as_ref(),
@@ -2740,7 +2883,7 @@ mod tests {
     }
 
     #[test]
-    fn same_document_still_revisions_keep_latest_decoded_fallback() {
+    fn same_document_still_revisions_reject_previous_key_pixels() {
         use crate::testing::PageBuilder;
         for newest_first in [false, true] {
             let dir = std::env::temp_dir().join(format!("tab-revisions-{}", std::process::id()));
@@ -2782,6 +2925,9 @@ mod tests {
                 pictures: HashMap::new(),
                 decode,
                 decoded,
+                recovery: HashMap::new(),
+                outstanding: HashSet::new(),
+                next_attempt: 0,
                 inline: HashMap::new(),
                 inline_asked: HashSet::new(),
                 inline_loader: None,
@@ -2821,18 +2967,19 @@ mod tests {
             let one = Picture::from_rgba(1, 1, vec![255, 0, 0, 255]).unwrap();
             let two = Picture::from_rgba(1, 1, vec![0, 255, 0, 255]).unwrap();
             if newest_first {
-                done.send((key_two, two.clone())).unwrap();
+                done.send((key_two, Some(two.clone()))).unwrap();
                 worker.take_decoded();
-                done.send((key_one, one)).unwrap();
+                done.send((key_one, Some(one))).unwrap();
                 worker.take_decoded();
             } else {
-                done.send((key_one, one.clone())).unwrap();
+                done.send((key_one, Some(one.clone()))).unwrap();
                 worker.take_decoded();
                 assert_eq!(
                     worker.page.as_ref().unwrap().media[0].picture.as_ref(),
-                    Some(&one)
+                    None,
+                    "an older revision cannot publish into the current key"
                 );
-                done.send((key_two, two.clone())).unwrap();
+                done.send((key_two, Some(two.clone()))).unwrap();
                 worker.take_decoded();
             }
             assert_eq!(
@@ -2841,7 +2988,10 @@ mod tests {
             );
             state.lock().unwrap().current = Some("three".into());
             let page_three = worker.read().unwrap();
-            assert_eq!(page_three.media[0].picture.as_ref(), Some(&two));
+            assert!(
+                page_three.media[0].picture.is_none(),
+                "a changed revision must not inherit stale pixels"
+            );
         }
     }
 
@@ -2908,6 +3058,9 @@ mod tests {
             pictures: HashMap::new(),
             decode,
             decoded,
+            recovery: HashMap::new(),
+            outstanding: HashSet::new(),
+            next_attempt: 0,
             inline: HashMap::new(),
             inline_asked: HashSet::new(),
             inline_loader: None,
@@ -3152,6 +3305,9 @@ mod tests {
             pictures: HashMap::new(),
             decode,
             decoded,
+            recovery: HashMap::new(),
+            outstanding: HashSet::new(),
+            next_attempt: 0,
             inline: HashMap::new(),
             inline_asked: HashSet::new(),
             inline_loader: Some(loader),
