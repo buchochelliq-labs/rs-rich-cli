@@ -416,9 +416,12 @@ fn a_key_toggles_the_adapted_and_the_faithful_projection_and_about_lists_the_rul
     driver.press("?");
     wait_for(&mut driver, "active rules");
     let text = screen(&driver);
-    // One about page: the rules and the browser's codec table.
-    assert!(text.contains("Codecs"), "{text}");
-    assert!(text.contains("H.264 (MP4)"), "{text}");
+    // The growing rules list scrolls independently to the codec table.
+    driver.press("end");
+    let codecs = screen(&driver);
+    assert!(codecs.contains("Codecs"), "{codecs}");
+    assert!(codecs.contains("H.264 (MP4)"), "{codecs}");
+    driver.press("home");
     for rule in ["decorative-images", "collapse-nav", "live-tail"] {
         let line = text.lines().find(|l| l.contains(rule)).unwrap();
         assert!(line.contains("on "), "{line}");

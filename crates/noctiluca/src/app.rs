@@ -3658,7 +3658,7 @@ pub fn app_with_presentation(
         })
         .flex(1)
         .shown_when(move || b.start.get());
-        let mut root = column([address, start, body, status]);
+        let mut root = layers([column([address, start, body, status]), labels::details(b)]);
         for action in ACTIONS {
             let Some((keys, sequence)) = actions::keys_of(&keymap, action.id) else {
                 continue;
@@ -3681,7 +3681,7 @@ pub fn app_with_presentation(
         }
         // Hints and site keys see keys before the page and its widgets
         // (a text box keeps what is typed into it).
-        layers([column([root.flex(1)]), labels::details(b)])
+        column([root.flex(1)])
             .previews_keys()
             .on_any_key(move |cx, key| {
                 if b.hints.with_untracked(Option::is_some) {

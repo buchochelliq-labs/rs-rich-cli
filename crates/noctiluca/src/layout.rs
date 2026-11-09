@@ -1798,14 +1798,20 @@ fn project_part(
                 }
                 let style = if control.disabled { "dim" } else { "reverse" };
                 // Adaptive action names wrap; compact faces retain their density.
-                let wrap_action = adapt.on(Rule::WrapActionLabels)
+                // Source-positioned bars/foreground retain compact spatial faces.
+                let action_adapt = if part == Part::Flow {
+                    adapt
+                } else {
+                    adapt.with(Rule::WrapActionLabels, false)
+                };
+                let wrap_action = action_adapt.on(Rule::WrapActionLabels)
                     && matches!(
                         control.role,
                         Role::Button | Role::Tab | Role::MenuItem | Role::Link
                     );
                 let (c0, c1) = snap(control.rect.x, control.rect.right());
                 let room = (c1 - c0).max(3);
-                let mut text = face_in(control, adapt, c1 - c0);
+                let mut text = face_in(control, action_adapt, c1 - c0);
                 if cell_len(&text) > room {
                     text = compact_face(&text);
                 }

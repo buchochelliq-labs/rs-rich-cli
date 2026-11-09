@@ -73,6 +73,7 @@ enum ItemKey {
 struct Items {
     paint: Projection,
     items: Vec<(ItemKey, usize)>,
+    groups: HashMap<NodeId, Vec<NodeId>>,
     ordinary: bool,
 }
 fn items(page: &Page, projection: &Projection) -> Items {
@@ -100,6 +101,7 @@ fn items(page: &Page, projection: &Projection) -> Items {
     let mut paint = projection.clone();
     let mut result = Vec::new();
     let mut seen = HashSet::new();
+    let mut groups = HashMap::new();
     let mut bound = 0usize;
     for (row, line) in paint.lines.iter_mut().enumerate() {
         let controls: Vec<_> = line
@@ -108,11 +110,12 @@ fn items(page: &Page, projection: &Projection) -> Items {
             .filter_map(|s| s.control)
             .filter(|i| adopted.contains(i))
             .collect();
+        let mut group = Vec::new();
         for i in controls {
             if seen.insert(i)
                 && let Some(control) = page.controls.get(i)
             {
-                result.push((ItemKey::Control(control.node), row));
+                group.push(control.node);
                 // A conservative height bound, not a copy of button measurement.
                 bound = bound.saturating_add(control.name.len().saturating_add(16));
             }
@@ -142,10 +145,15 @@ fn items(page: &Page, projection: &Projection) -> Items {
             ));
             bound = bound.saturating_add(1);
         }
+        if let Some(&first) = group.first() {
+            result.push((ItemKey::Control(first), row));
+            groups.insert(first, group);
+        }
     }
     Items {
         paint,
         items: result,
+        groups,
         ordinary: bound <= 3900,
     }
 }
@@ -387,6 +395,7 @@ fn popup(b: Browser, document: u64, owner: NodeId) -> Node {
                 .unwrap_or_else(|| Items {
                     paint: Projection::default(),
                     items: Vec::new(),
+                    groups: HashMap::new(),
                     ordinary: true,
                 })
         })
@@ -395,15 +404,32 @@ fn popup(b: Browser, document: u64, owner: NodeId) -> Node {
     let cells = Rc::new(pictures::Cells::with_presentation(b.presentation));
     let build = Rc::new(move |key| match key {
         ItemKey::Paint(_) => paint_row(b, plan, key, cells.clone(), fitted),
-        ItemKey::Control(node) => keyed(
-            move || {
-                (
-                    b.effective_adapt().on(crate::adapt::Rule::WrapActionLabels),
-                    b.page
-                        .with(|p| p.as_ref().and_then(|p| p.control(node)).map(|c| c.revision)),
+        ItemKey::Control(first) => keyed(
+            move || plan.with(|p| p.groups.get(&first).cloned().unwrap_or_default()),
+            move |nodes| {
+                let max = nodes.len().max(1);
+                grid(
+                    [],
+                    nodes.into_iter().map(move |node| {
+                        keyed(
+                            move || {
+                                (
+                                    b.effective_adapt().on(crate::adapt::Rule::WrapActionLabels),
+                                    b.page.with(|p| {
+                                        p.as_ref().and_then(|p| p.control(node)).map(|c| c.revision)
+                                    }),
+                                )
+                            },
+                            move |(wrap, _)| action(b, document, owner, node, wrap, focused),
+                        )
+                        .auto()
+                    }),
                 )
+                .adaptive_columns(18, max)
+                .rows([Size::Auto])
+                .gap(1)
+                .auto()
             },
-            move |(wrap, _)| action(b, document, owner, node, wrap, focused),
         )
         .auto(),
     });
@@ -603,5 +629,6 @@ pub(super) fn details(b: Browser) -> Node {
             .controlled_modal()
         },
     )
+    .no_focus()
     .children_cover_only()
 }
