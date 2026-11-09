@@ -391,9 +391,10 @@ pub(super) fn allocate(
     columns: usize,
     cell: (f64, f64),
     marks: &Marks,
-) {
+) -> Vec<(usize, f64)> {
     let rel = &source.relations;
     let (cw, ch) = cell;
+    let mut stacked = Vec::new();
     let mut allocations = Vec::<Allocation>::new();
     let flow_roots = if marks.adapt.on(Rule::FigureFlow) {
         containers(rel)
@@ -430,10 +431,6 @@ pub(super) fn allocate(
             if boxes.len() < 2
                 || first.width <= 0.0
                 || first.height <= 0.0
-                || (!paired
-                    && boxes.iter().any(|r| {
-                        (r.width - first.width).abs() > 1.0 || (r.height - first.height).abs() > 1.0
-                    }))
                 || grid
                     .items
                     .iter()
@@ -475,16 +472,32 @@ pub(super) fn allocate(
             }
             let x0 = ((target.x / cw).round().max(0.0) as usize).min(columns - 1);
             let x1 = ((target.right() / cw).round().max(0.0) as usize).clamp(x0 + 1, columns);
-            let fit = adaptive_columns(
-                (x1 - x0) as u16,
-                if paired {
-                    32
-                } else {
-                    crate::adapt::MIN_GRID_CELLS as u16
-                },
-                1,
-                count,
-            );
+            let unequal = !paired
+                && boxes.iter().any(|r| {
+                    (r.width - first.width).abs() > 1.0 || (r.height - first.height).abs() > 1.0
+                });
+            // Spanning/unequal groups retain source columns when they fit. At a
+            // narrower allocation each actual item is one vertical unit.
+            if unequal && target.width <= (x1 - x0) as f64 * cw + 1.0 {
+                continue;
+            }
+            let fit = if unequal {
+                1
+            } else {
+                adaptive_columns(
+                    (x1 - x0) as u16,
+                    if paired {
+                        32
+                    } else {
+                        crate::adapt::MIN_GRID_CELLS as u16
+                    },
+                    1,
+                    count,
+                )
+            };
+            if fit == 1 {
+                stacked.push((grid.node, target.bottom()));
+            }
             let tracks = vec![Track::new(Size::Flex(1)); fit];
             let cells = split(
                 Cells::new(x0 as u16, 0, (x1 - x0) as u16, 1),
@@ -568,6 +581,85 @@ pub(super) fn allocate(
                     item.x1 = x1;
                     item.allocation = Some((x0, x1));
                 }
+            }
+        }
+    }
+    stacked
+}
+
+// After wrapping, measure each actual item subtree as one atomic unit. Nested
+// grids have already been measured. Source anchors and actions never move.
+pub(super) fn stack_grids(
+    source: &Context<'_>,
+    items: &mut [Item],
+    roots: &[(usize, f64)],
+    columns: usize,
+    cell: (f64, f64),
+) {
+    let rel = source.relations;
+    for &(root, old_bottom) in roots.iter().rev() {
+        let grid = rel
+            .grids
+            .iter()
+            .find(|g| g.node == root)
+            .expect("allocated grid");
+        let group = members(rel, root, items);
+        if group.is_empty() {
+            continue;
+        }
+        let top = group
+            .iter()
+            .map(|&i| items[i].top)
+            .fold(f64::INFINITY, f64::min);
+        let measured: Vec<_> = grid
+            .items
+            .iter()
+            .map(|&unit| {
+                let unit: Vec<_> = group
+                    .iter()
+                    .copied()
+                    .filter(|&i| items[i].source.is_some_and(|n| rel.contains(unit, n)))
+                    .collect();
+                measure_grid(items, &unit, columns, cell.1)
+            })
+            .collect();
+        let total: usize = measured.iter().map(|(_, h)| *h).sum();
+        if total > u16::MAX as usize {
+            continue;
+        }
+        let tracks: Vec<_> = measured
+            .iter()
+            .map(|(_, h)| Track::new(Size::Fixed(*h as u16)))
+            .collect();
+        let slots = split(
+            Cells::new(0, 0, 1, total as u16),
+            Axis::Vertical,
+            &tracks,
+            StackLayout::default(),
+        );
+        for ((unit, _), slot) in measured.iter().zip(slots) {
+            for &(i, row) in unit {
+                items[i].top = top + (slot.y as usize + row) as f64 * cell.1;
+                items[i].bottom = items[i].top + items[i].lines.len() as f64 * cell.1;
+            }
+        }
+        let extra = (top + total as f64 * cell.1 - old_bottom).max(0.0);
+        // Flow siblings after the expanded subtree must follow its full occupied
+        // height. Ancestry/order identify them, not their source rectangles.
+        let parent = roots
+            .iter()
+            .rev()
+            .find(|(other, _)| *other != root && rel.contains(*other, root))
+            .map(|(other, _)| *other);
+        for item in items.iter_mut() {
+            if item.source.is_some_and(|n| {
+                n > root
+                    && !rel.contains(root, n)
+                    && flow_context(rel, n)
+                    && parent.is_none_or(|parent| rel.contains(parent, n))
+            }) {
+                item.top += extra;
+                item.bottom += extra;
             }
         }
     }

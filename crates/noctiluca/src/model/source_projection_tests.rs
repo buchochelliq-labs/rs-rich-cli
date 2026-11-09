@@ -605,10 +605,11 @@ fn source_projection_faithful_keeps_mixed_boxless_figure_runs_in_their_original_
 }
 
 fn native_source() -> SourcePage {
-    let snapshot = PageSnapshot {
+    let mut snapshot = PageSnapshot {
         dom: serde_json::from_str(include_str!("../../tests/snapshots/source-native/dom.json")).unwrap(),
         ax: serde_json::from_str(include_str!("../../tests/snapshots/source-native/ax.json")).unwrap(),
     };
+    snapshot.dom["sourceFormatting"] = serde_json::from_str(include_str!("../../tests/snapshots/source-native/formatting.json")).unwrap();
     let mut source = build_source(&snapshot, &mut Revisions::new());
     let page = Arc::make_mut(&mut source.page);
     for media in &mut page.media {
@@ -618,7 +619,9 @@ fn native_source() -> SourcePage {
 }
 
 fn native_projection(source: &SourcePage) -> crate::layout::Projection {
-    let projection = crate::layout::project_source(source, 40, (8., 18.), &crate::layout::Marks::default());
+    let mut marks = crate::layout::Marks::default();
+    marks.adapt.set(crate::adapt::Rule::CollapseNav, false);
+    let projection = crate::layout::project_source(source, 40, (8., 18.), &marks);
     if let Ok(path) = std::env::var("NOCT_SOURCE_EVIDENCE") {
         std::fs::write(path, format!("SOURCE {source:#?}\nREGIONS {:#?}\nLINES\n{}", projection.regions, projection.lines.iter().enumerate().map(|(i,l)|format!("{i}: {}",l.plain())).collect::<Vec<_>>().join("\n"))).unwrap();
     }
@@ -629,6 +632,9 @@ fn native_projection(source: &SourcePage) -> crate::layout::Projection {
 fn source_native_captured_figure_images_keep_broad_reservations_and_hits() {
     let source = native_source();
     let p = native_projection(&source);
+    let mut undecoded = source.clone();
+    for media in &mut Arc::make_mut(&mut undecoded.page).media {media.picture=None;}
+    assert_eq!(p,native_projection(&undecoded),"decode must preserve reservations, control hits and anchors");
     assert_eq!(p.regions.len(), 2);
     for r in &p.regions {
         let media = &source.page().media[r.media];
@@ -657,5 +663,6 @@ fn source_native_captured_boxless_spanning_grid_keeps_complete_words_and_links()
             assert_eq!(rendered,c.name.chars().filter(|c|!c.is_whitespace()).collect::<String>());
         }
     }
+    assert!(words.find("MAIN-TEXT-02").unwrap() < words.find("AFTER-01").unwrap(), "outside neighbor must follow the whole grid: {words}");
     assert!(p.lines.iter().all(|l|l.width() <= 40));
 }

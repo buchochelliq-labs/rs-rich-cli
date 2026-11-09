@@ -929,6 +929,7 @@ impl Revisions {
 
 /// The snapshot's first document, in arrays.
 struct Dom {
+    source_formatting: HashMap<NodeId, (String, String)>,
     parent: Vec<i64>,
     kind: Vec<i64>,
     name: Vec<String>,
@@ -1102,7 +1103,22 @@ impl Dom {
         };
         let bounds = rects("bounds");
         let (scrolls, clients) = (rects("scrollRects"), rects("clientRects"));
+        let source_formatting = snapshot["sourceFormatting"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(|v| {
+                Some((
+                    v["node"].as_i64()?,
+                    (
+                        v["display"].as_str()?.to_string(),
+                        v["position"].as_str()?.to_string(),
+                    ),
+                ))
+            })
+            .collect();
         let mut dom = Dom {
+            source_formatting,
             parent,
             kind,
             name,

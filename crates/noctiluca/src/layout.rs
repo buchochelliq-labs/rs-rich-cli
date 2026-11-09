@@ -932,6 +932,43 @@ pub fn play_mark(media: &crate::model::Media, width: usize) -> Option<Line> {
 
 /// Pictures at least this many rows tall get an `Image:` line.
 const CAPTIONED_ROWS: usize = 3;
+fn picture_lines(
+    media: &crate::model::Media,
+    rows: usize,
+    width: usize,
+    captioned: bool,
+    control: Option<usize>,
+) -> Vec<Line> {
+    let mut lines: Vec<_> = (0..rows)
+        .map(|r| {
+            let label = if r == rows / 2 && !captioned {
+                crate::clean::truncate(&media.alt, width)
+            } else {
+                String::new()
+            };
+            let pad = width.saturating_sub(cell_len(&label));
+            Line {
+                spans: vec![
+                    Span {
+                        control,
+                        ..Span::new(label, "italic")
+                    },
+                    Span {
+                        control,
+                        ..Span::new("░".repeat(pad), "bright_black")
+                    },
+                ],
+            }
+        })
+        .collect();
+    if let Some(mark) = play_mark(media, width)
+        && let Some(last) = lines.last_mut()
+    {
+        *last = mark;
+    }
+    lines
+}
+
 /// The most rows a media region takes in the projection.
 const MAX_MEDIA_ROWS: usize = 200;
 
@@ -1707,32 +1744,7 @@ fn project_part(
                     && !media.captioned
                     && !media.alt.is_empty()
                     && rows >= CAPTIONED_ROWS;
-                let mut lines: Vec<Line> = (0..rows)
-                    .map(|r| {
-                        // The alt text once: in the box until the picture
-                        // comes, unless the caption under it says it.
-                        let label = if r == rows / 2 && !captioned {
-                            crate::clean::truncate(&media.alt, w)
-                        } else {
-                            String::new()
-                        };
-                        let pad = w.saturating_sub(cell_len(&label));
-                        Line {
-                            spans: vec![
-                                Span::new(label, "italic"),
-                                Span::new("░".repeat(pad), "bright_black"),
-                            ],
-                        }
-                    })
-                    .collect();
-                // A picture the page does not caption gets its alt text
-                // under it, as the PoC showed it; not a small one (an
-                // avatar, an icon), whose alt text is noise.
-                if let Some(mark) = play_mark(media, w)
-                    && let Some(last) = lines.last_mut()
-                {
-                    *last = mark;
-                }
+                let lines = picture_lines(media, rows, w, captioned, None);
                 let x1 = if captioned { wide.max(m1) } else { m1 };
                 let caption =
                     captioned.then(|| vec![Span::new(format!("Image: {}", media.alt), "italic")]);
@@ -1898,10 +1910,33 @@ fn project_part(
             overlaid.push((m, item));
         }
     }
+    let mut stacked_grids = Vec::new();
     // A grid snaps first, on Chrome's own places.
     if let Some(source) = source {
         if part == Part::Flow {
-            source::allocate(source, &mut items, columns, (cw, ch), marks);
+            stacked_grids = source::allocate(source, &mut items, columns, (cw, ch), marks);
+            for item in &mut items {
+                let Some((index, _, _)) = item.media.filter(|_| item.allocation.is_some()) else {
+                    continue;
+                };
+                let media = &page.media[index];
+                let original = (media.rect.width / cw).round().max(1.0) as usize;
+                let width = original.min(item.x1 - item.x0).max(1);
+                let mut rect = media.rect;
+                rect.height *= width as f64 / original as f64;
+                let (rows, width) =
+                    crate::adapt::picture_cells(rect, width, ch, adapt, MAX_MEDIA_ROWS);
+                item.media = Some((index, rows, width));
+                item.lines = picture_lines(
+                    media,
+                    rows,
+                    width,
+                    item.caption.is_some(),
+                    source.relations.media_controls[index]
+                        .filter(|_| media.kind == MediaKind::Image),
+                );
+                item.bottom = item.top + rows as f64 * ch;
+            }
         }
     } else if adapt.on(Rule::SnapGrids) {
         for grid in &page.grids {
@@ -2226,6 +2261,7 @@ fn project_part(
     if let Some(source) = source
         && part == Part::Flow
     {
+        source::stack_grids(source, &mut items, &stacked_grids, columns, (cw, ch));
         source::stack_figures(source, &mut items, columns, (cw, ch), marks);
     }
     // Reading order: top, then left. A table's rows keep their order, even

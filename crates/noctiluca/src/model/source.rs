@@ -76,6 +76,8 @@ pub(crate) struct SourceNode {
     pub position: SourcePosition,
     /// Proven ordinary block flow; absent/unknown styles are ineligible.
     pub ordinary: bool,
+    /// Explicit computed display: contents; absence of a box alone is not proof.
+    pub contents: bool,
 }
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct BlockPiece {
@@ -272,7 +274,7 @@ impl Extraction {
             .enumerate()
             .map(|(i, &n)| (n, i))
             .collect();
-        let nodes = dom
+        let nodes: Vec<SourceNode> = dom
             .backend
             .iter()
             .enumerate()
@@ -280,7 +282,18 @@ impl Extraction {
                 node,
                 parent: usize::try_from(dom.parent[i]).ok().filter(|&p| p < i),
                 rect: dom.rect(i),
-                position: match dom.style(i, 14) {
+                contents: dom
+                    .source_formatting
+                    .get(&node)
+                    .is_some_and(|(display, position)| {
+                        display == "contents" && matches!(position.as_str(), "static" | "relative")
+                    }),
+                position: match dom
+                    .source_formatting
+                    .get(&node)
+                    .map(|(_, p)| p.as_str())
+                    .unwrap_or_else(|| dom.style(i, 14))
+                {
                     "static" | "relative" => SourcePosition::Flow,
                     "absolute" | "fixed" | "sticky" => SourcePosition::Positioned,
                     _ => SourcePosition::Unknown,
@@ -356,6 +369,18 @@ impl Extraction {
             };
             add(&mut runs, location, text, &origins);
         }
+        fn grid_items(dom: &Dom, nodes: &[SourceNode], root: usize, out: &mut Vec<usize>) {
+            for &child in &dom.children[root] {
+                if !dom.is_element(child) {
+                    continue;
+                }
+                if nodes[child].contents {
+                    grid_items(dom, nodes, child, out);
+                } else {
+                    out.push(child);
+                }
+            }
+        }
         let grids = (0..dom.name.len())
             .filter(|&i| {
                 matches!(dom.style(i, 0), "grid" | "inline-grid")
@@ -363,11 +388,11 @@ impl Extraction {
             })
             .map(|node| SourceGrid {
                 node,
-                items: dom.children[node]
-                    .iter()
-                    .copied()
-                    .filter(|&i| dom.is_element(i))
-                    .collect(),
+                items: {
+                    let mut items = Vec::new();
+                    grid_items(dom, &nodes, node, &mut items);
+                    items
+                },
             })
             .collect();
         let mut relations = SourceRelations {

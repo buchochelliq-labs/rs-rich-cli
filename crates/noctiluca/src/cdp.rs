@@ -30,6 +30,8 @@ use crate::engine::{
 };
 
 /// How long one DevTools call may take.
+mod source_formatting;
+
 const CALL: Duration = Duration::from_secs(30);
 
 /// The isolated world Noctiluca's script runs in.
@@ -670,15 +672,34 @@ impl Engine for ChromeBackend {
         let scope = self.engine.screencast_scope().ok_or_else(|| {
             io::Error::new(ErrorKind::WouldBlock, "viewport metrics not applied yet")
         })?;
-        let dom = self.call(
+        let context = self.world().ok().filter(|&context| {
+            source_formatting::begin(&|method, args| self.call(method, args), context).is_ok()
+        });
+        let captured = self.call(
             "DOMSnapshot.captureSnapshot",
             json!({"computedStyles": SNAPSHOT_STYLES, "includeDOMRects": true,
                    "includePaintOrder": true}),
-        )?;
+        );
+        let mut dom = match captured {
+            Ok(dom) => dom,
+            Err(error) => {
+                if let Some(context) = context {
+                    source_formatting::finish(
+                        &|method, args| self.call(method, args),
+                        context,
+                        &mut Value::Null,
+                    );
+                }
+                return Err(error);
+            }
+        };
         // The page reads without its AX tree when Chrome refuses one.
         let ax = self
             .call("Accessibility.getFullAXTree", json!({}))
             .unwrap_or(Value::Null);
+        if let Some(context) = context {
+            source_formatting::finish(&|method, args| self.call(method, args), context, &mut dom);
+        }
         if !self.engine.screencast_scope_is_current(&scope) {
             return Err(io::Error::new(
                 ErrorKind::WouldBlock,
