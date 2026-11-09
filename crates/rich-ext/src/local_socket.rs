@@ -327,6 +327,7 @@ mod tests {
             LocalListener::bind(&path).unwrap_err().kind(),
             io::ErrorKind::AddrInUse
         );
+        drop(client);
         drop(listener);
         // Its endpoint, left behind, is replaced.
         let again = LocalListener::bind(&path).unwrap();

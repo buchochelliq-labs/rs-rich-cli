@@ -12,6 +12,9 @@ Set Title "Noctiluca · a video page"
 Set Size 100x40
 Set TypingDelay 40ms
 Mask /\d:\d\d \/ \d:\d\d/ "<time>"
+# Keep decoder-dependent frame pixels out of the deterministic text grid;
+# the PNG and SVG screenshots still capture the actual image.
+Mask /▀/ " "
 Hide
 Type "export NOCTILUCA_FAKE_ENGINE=$REPO/crates/noctiluca/tests/snapshots XDG_CONFIG_HOME=$PWD/config; clear"
 Enter
@@ -27,10 +30,12 @@ Wait /PLAYING/
 # Capture the first playing frame. Waiting several seconds made this text
 # screenshot depend on the decoded video's playback clock on each runner.
 Screenshot playing
+# Freeze the decoder's frame before switching to the gallery so the grid
+# capture cannot race video playback.
+Type "p"
+Wait /PAUSED/
 Type "G"
 Wait /^(?![\s\S]*░)[\s\S]*Harbour time-lapse/ 60s
-# Wait for the decoded frame as well as its title before capturing the grid.
-Wait /▀{10}/ 60s
 Screenshot grid
 Type "q"
 Wait /❯\s*$/
