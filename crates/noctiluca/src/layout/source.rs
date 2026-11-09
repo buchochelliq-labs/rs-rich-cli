@@ -246,11 +246,20 @@ fn containers(rel: &SourceRelations) -> Vec<usize> {
     roots.dedup();
     let all = roots.clone();
     roots.retain(|&r| {
-        !all.iter()
-            .any(|&other| other != r && rel.contains(other, r))
+        !all.iter().any(|&other| {
+            other != r && rel.contains(other, r) && grid_unit(rel, other, r).is_none()
+        })
     });
     roots
 }
+// Outermost grid below this ordinary container: one independently allocated unit.
+fn grid_unit(rel: &SourceRelations, root: usize, node: usize) -> Option<usize> {
+    rel.grids
+        .iter()
+        .find(|g| g.node != root && rel.contains(root, g.node) && rel.contains(g.node, node))
+        .map(|g| g.node)
+}
+
 fn members(rel: &SourceRelations, root: usize, items: &[Item]) -> Vec<usize> {
     items
         .iter()
@@ -273,6 +282,11 @@ pub(super) fn allocate(
     let rel = &source.relations;
     let (cw, ch) = cell;
     let mut allocations = Vec::<Allocation>::new();
+    let flow_roots = if marks.adapt.on(Rule::FigureFlow) {
+        containers(rel)
+    } else {
+        Vec::new()
+    };
     if marks.adapt.on(Rule::SnapGrids) {
         for grid in &rel.grids {
             let Some(rect) = rel.nodes[grid.node].rect else {
@@ -345,7 +359,17 @@ pub(super) fn allocate(
             if count < 2 {
                 continue;
             }
-            let target = inherited(rel, &allocations, grid.node, rect);
+            let mut target = inherited(rel, &allocations, grid.node, rect);
+            if let Some(&root) = flow_roots
+                .iter()
+                .rev()
+                .find(|&&root| grid_unit(rel, root, grid.node) == Some(grid.node))
+                && let Some(parent) = rel.nodes[root].rect
+            {
+                let parent = inherited(rel, &allocations, root, parent);
+                target.x = parent.x;
+                target.width = parent.width;
+            }
             let x0 = ((target.x / cw).round().max(0.0) as usize).min(columns - 1);
             let x1 = ((target.right() / cw).round().max(0.0) as usize).clamp(x0 + 1, columns);
             let fit = adaptive_columns(
@@ -409,7 +433,7 @@ pub(super) fn allocate(
         }
     }
     if marks.adapt.on(Rule::FigureFlow) {
-        for root in containers(rel) {
+        for root in flow_roots {
             let Some(rect) = rel.nodes[root].rect else {
                 continue;
             };
@@ -418,8 +442,21 @@ pub(super) fn allocate(
             let x1 = ((rect.right() / cw).round().max(0.0) as usize).clamp(x0 + 1, columns);
             for i in members(rel, root, items) {
                 let item = &mut items[i];
-                if item.row.is_some() {
-                    let original = item.source.and_then(|n| rel.nodes[n].rect).unwrap_or(rect);
+                if item
+                    .source
+                    .is_some_and(|node| grid_unit(rel, root, node).is_some())
+                {
+                    continue;
+                }
+                if let Some((table, _)) = item.row {
+                    // A cell fragment may alias a different run root; its column
+                    // allocation still belongs to the exact source table row.
+                    let original = rel
+                        .nodes
+                        .iter()
+                        .find(|n| n.node == table)
+                        .and_then(|n| n.rect)
+                        .unwrap_or(rect);
                     let scale = |x: usize| {
                         x0 + (((x as f64 * cw - original.x).max(0.0) / original.width.max(1.0))
                             * (x1 - x0) as f64)
@@ -441,7 +478,7 @@ pub(super) fn allocate(
 pub(super) fn stack_figures(
     source: &SourcePage,
     items: &mut [Item],
-    _columns: usize,
+    columns: usize,
     cell: (f64, f64),
     marks: &Marks,
 ) {
@@ -449,7 +486,7 @@ pub(super) fn stack_figures(
         return;
     }
     let rel = &source.relations;
-    for root in containers(rel) {
+    for root in containers(rel).into_iter().rev() {
         let mut group = members(rel, root, items);
         if group.is_empty() {
             continue;
@@ -459,38 +496,53 @@ pub(super) fn stack_figures(
             .iter()
             .map(|&i| items[i].top)
             .fold(f64::INFINITY, f64::min);
-        // Cells of one source table row occupy one measured vertical track.
-        let mut units: Vec<Vec<usize>> = Vec::new();
-        for i in group {
-            if let Some(row) = items[i].row {
-                if let Some(unit) = units
-                    .iter_mut()
-                    .find(|unit| items[unit[0]].row == Some(row))
-                {
-                    unit.push(i);
-                    continue;
-                }
-            }
-            units.push(vec![i]);
+        #[derive(Clone, Copy, PartialEq, Eq)]
+        enum Unit {
+            Grid(usize),
+            Row(NodeId, usize),
+            Single(usize),
         }
-        let heights: Vec<_> = units
+        let mut units: Vec<(Unit, Vec<usize>)> = Vec::new();
+        for i in group {
+            let key =
+                if let Some(grid) = items[i].source.and_then(|node| grid_unit(rel, root, node)) {
+                    Unit::Grid(grid)
+                } else if let Some((node, row)) = items[i].row {
+                    Unit::Row(node, row)
+                } else {
+                    Unit::Single(i)
+                };
+            if let Some((_, unit)) = units.iter_mut().find(|(k, _)| *k == key) {
+                unit.push(i);
+            } else {
+                units.push((key, vec![i]));
+            }
+        }
+        let measured: Vec<_> = units
             .iter()
-            .map(|unit| {
-                unit.iter()
-                    .map(|&i| items[i].lines.len())
-                    .max()
-                    .unwrap_or(0)
-                    .min(u16::MAX as usize) as u16
+            .map(|(key, unit)| {
+                if matches!(key, Unit::Grid(_)) {
+                    measure_grid(items, unit, columns, cell.1)
+                } else {
+                    (
+                        unit.iter().map(|&i| (i, 0)).collect(),
+                        unit.iter()
+                            .map(|&i| items[i].lines.len())
+                            .max()
+                            .unwrap_or(0),
+                    )
+                }
             })
             .collect();
-        let total: usize = heights.iter().map(|&h| h as usize).sum();
+        let heights: Vec<_> = measured.iter().map(|(_, h)| *h).collect();
+        let total: usize = heights.iter().sum();
         // Unrepresentably large groups keep their source placement.
         if total > u16::MAX as usize {
             continue;
         }
         let tracks: Vec<_> = heights
             .iter()
-            .map(|&h| Track::new(Size::Fixed(h)))
+            .map(|&h| Track::new(Size::Fixed(h as u16)))
             .collect();
         let slots = split(
             Cells::new(0, 0, 1, total as u16),
@@ -498,11 +550,60 @@ pub(super) fn stack_figures(
             &tracks,
             StackLayout::default(),
         );
-        for (unit, slot) in units.iter().zip(slots) {
-            for &i in unit {
-                items[i].top = top + slot.y as f64 * cell.1;
-                items[i].bottom = items[i].top + slot.height as f64 * cell.1;
+        for ((unit, _), slot) in measured.iter().zip(slots) {
+            for &(i, row) in unit {
+                items[i].top = top + (slot.y as usize + row) as f64 * cell.1;
+                items[i].bottom = items[i].top + items[i].lines.len() as f64 * cell.1;
             }
         }
     }
+}
+
+// Measure the existing grid's local rectangular placement after wrapping, without
+// painting or changing its source membership, columns or internal offsets.
+fn measure_grid(
+    items: &[Item],
+    unit: &[usize],
+    columns: usize,
+    ch: f64,
+) -> (Vec<(usize, usize)>, usize) {
+    let top = unit
+        .iter()
+        .map(|&i| items[i].top)
+        .fold(f64::INFINITY, f64::min);
+    let mut order = unit.to_vec();
+    order.sort_by(|&a, &b| {
+        items[a]
+            .top
+            .total_cmp(&items[b].top)
+            .then(items[a].x0.cmp(&items[b].x0))
+    });
+    let mut skyline = vec![0usize; columns];
+    let mut rows = HashMap::new();
+    let mut placed = Vec::new();
+    for i in order {
+        let item = &items[i];
+        let desired = ((item.top - top) / ch).round().max(0.0) as usize;
+        let y = match item.row {
+            Some(key) => *rows.entry(key).or_insert_with(|| {
+                unit.iter()
+                    .filter(|&&j| items[j].row == Some(key))
+                    .flat_map(|&j| skyline[items[j].x0..items[j].x1].iter().copied())
+                    .max()
+                    .unwrap_or(0)
+                    .max(desired)
+            }),
+            None => skyline[item.x0..item.x1]
+                .iter()
+                .copied()
+                .max()
+                .unwrap_or(0)
+                .max(desired),
+        };
+        for slot in &mut skyline[item.x0..item.x1] {
+            *slot = y + item.lines.len();
+        }
+        placed.push((i, y));
+    }
+    (placed, skyline.into_iter().max().unwrap_or(0))
 }

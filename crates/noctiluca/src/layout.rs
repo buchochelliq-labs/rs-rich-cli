@@ -1878,13 +1878,12 @@ fn project_part(
                         .map(|p| p.node)
                 });
                 item.anchor.get_or_insert(item.top);
-                if let Some((media, _, _)) = item.media {
-                    if page.media[media].kind == MediaKind::Image {
-                        if let Some(control) = source.relations.media_controls[media] {
-                            for span in item.lines.iter_mut().flat_map(|l| &mut l.spans) {
-                                span.control = Some(control);
-                            }
-                        }
+                if let Some((media, _, _)) = item.media
+                    && page.media[media].kind == MediaKind::Image
+                    && let Some(control) = source.relations.media_controls[media]
+                {
+                    for span in item.lines.iter_mut().flat_map(|l| &mut l.spans) {
+                        span.control = Some(control);
                     }
                 }
             }
@@ -2229,10 +2228,10 @@ fn project_part(
             }];
         }
     }
-    if let Some(source) = source {
-        if part == Part::Flow {
-            source::stack_figures(source, &mut items, columns, (cw, ch), marks);
-        }
+    if let Some(source) = source
+        && part == Part::Flow
+    {
+        source::stack_figures(source, &mut items, columns, (cw, ch), marks);
     }
     // Reading order: top, then left. A table's rows keep their order, even
     // where rounding puts a row and the one under it (Hacker News's subtext
