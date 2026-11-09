@@ -36,3 +36,22 @@ Current iTerm medians across the three per-run statistics are p95 **18.814 ms**,
 Load average recorded at run start ranged from 0.853 to 1.410 (1-minute), versus 0.001 to 0.162 for the earlier cbc sequence. No concurrent local build or native workload was running, but this host-load difference weakens causal comparison and may contribute to tail variance. The measurements are valid failures against the frozen gates; they are not enough to attribute the misses to one source function or prove a source regression.
 
 **Qualification decision:** the current PR source does not pass release performance acceptance and should not be treated as release-qualified. The next engineering step is targeted profiling of iTerm frame conversion/painting and scheduling under a quiet, comparable host, then a measured fix and a new source qualification using these same gates—not recalculated thresholds.
+
+## Follow-up trace-on/trace-off diagnostic
+
+After the qualification above, the same immutable f309073 harness binary was run in three adjacent trace-on/trace-off pairs with the same Iterm workload, normalized environment, output capture, and independent decoder. These six runs are exploratory diagnostics, not replacements for the declared qualification. Linux `perf` is unavailable in this environment, so no sampled call-stack profile was collected.
+
+| Pair | `RICH_MEDIA_TRACE` | p95 ms | p99 ms | input max ms | child CPU s | emitted / missing | Gate |
+|---|---|---:|---:|---:|---:|---:|---|
+| 1 | on | 11.925 | 12.769 | 3.501 | 0.727 | 59 / 1 | PASS |
+| 1 | off | 12.421 | 13.640 | 3.951 | 0.751 | 59 / 1 | PASS |
+| 2 | on | 13.690 | 31.230 | 2.741 | 0.765 | 60 / 0 | FAIL: p95, p99 |
+| 2 | off | 12.378 | 13.133 | 3.974 | 0.700 | 59 / 1 | PASS |
+| 3 | on | 11.493 | 11.920 | 3.876 | 0.696 | 60 / 0 | PASS |
+| 3 | off | 11.600 | 11.645 | 3.458 | 0.671 | 59 / 1 | PASS |
+
+Trace-on did not consistently worsen latency or CPU, though its second pair had a large p99 outlier. That run's slowest decoded frame was sequence 13 at 63.687 ms; the encoder trace also recorded a 22.813 ms encode while five pictures were live. This is a plausible correlation to investigate, not proof of causation. Five of the six diagnostic runs pass all four iTerm gates; one trace-on run fails p95 by 0.020 ms and p99 by 15.496 ms. The spread confirms that the original 0/3 failures cannot yet be attributed to a stable source-level bottleneck, and the diagnostic pass rate does not change the original qualification decision.
+
+Per-run hashes and full sampled values are in [trace-ab.json](evidence/noctiluca-performance-f309073/trace-ab.json); raw diagnostic logs and output captures remain under `/workspace/work/noctiluca-perf-current-f309073/`.
+
+The production code remains unchanged. Before making an encoder or scheduler change, collect a low-overhead profile that separates image fitting, PNG compression, registry/cache work, and frame scheduling; then use the unchanged gate and full semantic/output checks on the resulting source.
