@@ -21,7 +21,7 @@ keywords = ["terminal", "browser", "tui", "chrome", "rich"]
 categories = ["command-line-utilities"]
 include = [
     "src/**/*",
-    "tests/snapshots/source-native/*",
+    "tests/snapshots/source-native/**/*",
     "README.md",
     "LICENSE",
     "config.sample.toml",

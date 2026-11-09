@@ -138,7 +138,7 @@ packages:
     registry: crates.io
     manifest: crates/noctiluca/Cargo.toml
     version: "0.1.0"
-    paths: ["crates/noctiluca/src/**", "crates/noctiluca/README.md", "crates/noctiluca/LICENSE", "crates/noctiluca/config.sample.toml", "crates/noctiluca/Cargo.toml", "Cargo.lock"]
+    paths: ["crates/noctiluca/src/**", "crates/noctiluca/tests/snapshots/source-native/**", "crates/noctiluca/README.md", "crates/noctiluca/LICENSE", "crates/noctiluca/config.sample.toml", "crates/noctiluca/Cargo.toml", "Cargo.lock"]
 
   - name: cornacai
     registry: crates.io
