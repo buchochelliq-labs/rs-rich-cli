@@ -1,36 +1,6 @@
 [
   {
-    "node": 64,
-    "display": "none",
-    "position": "static"
-  },
-  {
-    "node": 65,
-    "display": "none",
-    "position": "static"
-  },
-  {
-    "node": 66,
-    "display": "none",
-    "position": "static"
-  },
-  {
-    "node": 67,
-    "display": "none",
-    "position": "static"
-  },
-  {
-    "node": 68,
-    "display": "none",
-    "position": "static"
-  },
-  {
-    "node": 2,
-    "display": "none",
-    "position": "static"
-  },
-  {
-    "node": 96,
+    "node": 91,
     "display": "contents",
     "position": "static"
   },
@@ -40,17 +10,17 @@
     "position": "static"
   },
   {
-    "node": 106,
-    "display": "contents",
-    "position": "static"
-  },
-  {
     "node": 111,
     "display": "contents",
     "position": "static"
   },
   {
-    "node": 116,
+    "node": 123,
+    "display": "contents",
+    "position": "static"
+  },
+  {
+    "node": 133,
     "display": "contents",
     "position": "static"
   }
