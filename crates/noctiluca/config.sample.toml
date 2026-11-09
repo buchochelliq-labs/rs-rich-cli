@@ -77,6 +77,8 @@ icon-buttons = true
 snap-grids = true
 # Genuine source figures/captions and ordinary surrounding flow, measured in cells.
 figure-flow = true
+# Complete action names; false keeps compact controls (Shift+F1 reads full names).
+wrap-action-labels = true
 collapse-nav = true
 collapse-gaps = true
 text-over-pictures = false

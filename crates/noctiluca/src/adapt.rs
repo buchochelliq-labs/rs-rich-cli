@@ -80,6 +80,8 @@ pub enum Rule {
     Shelves,
     /// Stack genuine source figures, captions and surrounding ordinary flow by measured terminal height.
     FigureFlow,
+    /// Wrap complete action names in the terminal and source popups.
+    WrapActionLabels,
 }
 
 /// What a rule is, for the config, the command line and the about page.
@@ -191,6 +193,12 @@ pub const RULES: &[RuleInfo] = &[
         rule: Rule::FigureFlow,
         name: "figure-flow",
         what: "stack source figures and captions with surrounding ordinary flow",
+        default: true,
+    },
+    RuleInfo {
+        rule: Rule::WrapActionLabels,
+        name: "wrap-action-labels",
+        what: "wrap complete action names; Shift+F1 lists names in compact mode",
         default: true,
     },
 ];
@@ -634,7 +642,7 @@ mod tests {
         assert!(adapt.on(Rule::DecorativeImages) && adapt.on(Rule::LiveTail));
         assert!(!adapt.on(Rule::TextOverPictures));
         assert!(Adapt::none().is_none());
-        assert_eq!(RULES.len(), 16);
+        assert_eq!(RULES.len(), 17);
         for info in RULES {
             assert_eq!(Rule::parse(info.name), Some(info.rule));
         }

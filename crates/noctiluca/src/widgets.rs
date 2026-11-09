@@ -245,7 +245,12 @@ pub fn web_widget(browser: Browser, nodes: Vec<NodeId>) -> Node {
                 &web,
                 stock_button(face, move |cx| {
                     act(browser, &web2, first, Intent::Click, cx)
-                }),
+                })
+                .wrap_label(
+                    browser
+                        .effective_adapt()
+                        .on(crate::adapt::Rule::WrapActionLabels),
+                ),
             )
             .disabled_when(disabled)
             .auto();
@@ -459,7 +464,12 @@ pub fn web_widget(browser: Browser, nodes: Vec<NodeId>) -> Node {
     })
     .auto();
     let node = row([tag, node.flex(1)]).name(&format!("web-{first}"));
-    if control.role.is_text() {
+    if control.role.is_text()
+        || matches!(
+            control.role,
+            Role::Button | Role::Tab | Role::MenuItem | Role::Link
+        )
+    {
         node.auto()
     } else {
         node.fixed(rows)

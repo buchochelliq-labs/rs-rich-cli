@@ -112,3 +112,16 @@ The guide is on the docs site:
 The library's reference is on [docs.rs](https://docs.rs/noctiluca). The
 design, its phases and what is still to come are in
 [`docs/design/browser.md`](https://github.com/buchochelliq-labs/rs-rich-cli/blob/main/docs/design/browser.md).
+
+Long action labels wrap by default in the adaptive projection and source popups.
+Set `[adapt] wrap-action-labels = false` or use
+`--adapt=-wrap-action-labels` for compact controls. `--no-adapt` also selects
+compact labels. Shift+F1 opens a local, scrollable list of full names, including
+disabled choices; Escape closes that list without dismissing the website popup.
+The binding is configurable as `[keys] page.labels = "..."`; F1 keeps Actions.
+
+Popups use shared intuiTUIve buttons with `Node::wrap_label(bool)`, measured
+scrolling and owner-controlled modal scopes. Other applications can use the same
+public components; shared buttons remain compact by default. Noctiluca's public
+`Rule` enum appends `WrapActionLabels` after `FigureFlow`; exhaustive matches
+should account for the added variant.

@@ -40,6 +40,8 @@ use crate::tab::{Command, Intent, Refusal, Tab, Update};
 use crate::video::{Encoder, Job, Pacing, VideoFrame};
 use crate::widgets::{WebControl, web_widget};
 
+mod labels;
+
 #[cfg(test)]
 type UpdateSink = Arc<dyn Fn(Update) + Send + Sync>;
 
@@ -84,6 +86,7 @@ pub struct Browser {
     pub page: Signal<Option<Arc<Page>>>,
     /// Complete immutable pair; the public legacy signal is its compatibility view.
     source: Signal<Option<crate::model::SourcePage>>,
+    label_details: Signal<Option<(u64, Option<NodeId>)>>,
     pub state: Signal<PageState>,
     pub view: Signal<View>,
     pub hints: Signal<Option<Hints>>,
@@ -783,6 +786,7 @@ pub fn run(b: Browser, id: &str, cx: &mut Ctx) {
         "site.bind" => bind_picker(b, cx),
         "site.keys" => site_keys_list(b, cx),
         "actions" => overlay(b, cx),
+        "page.labels" => labels::open(b),
         "quit" => cx.quit(),
         _ => {}
     }
@@ -2962,6 +2966,8 @@ fn source_foreground(b: Browser, nodes: Vec<NodeId>, bounds: (u16, u16, u16, u16
             layers(specs.into_iter().map(
                 move |(node, left, top, right, bottom, full_width, skip_x, skip)| {
                     let projection = memo(move || {
+                        let mut marks = b.hint_marks();
+                        marks.adapt.set(crate::adapt::Rule::WrapActionLabels, false);
                         b.page.with(|page| {
                             page.as_ref()
                                 .map(|page| {
@@ -2975,14 +2981,14 @@ fn source_foreground(b: Browser, nodes: Vec<NodeId>, bounds: (u16, u16, u16, u16
                                                 node,
                                                 full_width,
                                                 (CELL.0 as f64, CELL.1 as f64),
-                                                &b.hint_marks(),
+                                                &marks,
                                             ),
                                             None => layout::project_foreground(
                                                 page,
                                                 node,
                                                 full_width,
                                                 (CELL.0 as f64, CELL.1 as f64),
-                                                &b.hint_marks(),
+                                                &marks,
                                             ),
                                         }
                                     })
@@ -3081,320 +3087,7 @@ fn visible_source_dialog(b: Browser) -> bool {
 }
 
 fn source_dialogs(b: Browser) -> Node {
-    type Spec = (
-        NodeId,
-        u16,
-        u16,
-        u16,
-        u16,
-        bool,
-        bool,
-        String,
-        Option<String>,
-        Vec<NodeId>,
-        u64,
-    );
-    keyed(
-        move || {
-            let (columns, height) = b.viewport.get();
-            let rows = height.saturating_sub(CHROME_ROWS).max(1);
-            let source_y = source_position(b);
-            b.page.with(|page| {
-                page.as_ref()
-                    .map(|page| {
-                        page.overlays
-                            .iter()
-                            .filter_map(|dialog| {
-                                let layer = page.layers.get(dialog.layer)?;
-                                // Fit first, then keep as much of the source origin as
-                                // remains available in the actual terminal container.
-                                let width = ((layer.rect.width / f64::from(CELL.0)).ceil().max(1.0)
-                                    as u16)
-                                    .min(columns.max(1));
-                                let mut height =
-                                    ((layer.rect.height / f64::from(CELL.1)).ceil().max(1.0)
-                                        as u16)
-                                        .min(rows);
-                                let left = ((layer.rect.x / f64::from(CELL.0)).round().max(0.0)
-                                    as u16)
-                                    .min(columns.saturating_sub(width));
-                                let desired_top = if layer.place == crate::model::Place::Docked
-                                    && page.view_height > 0.0
-                                {
-                                    let from_bottom = ((page.view_height - layer.top).max(0.0)
-                                        / f64::from(CELL.1))
-                                    .round()
-                                        as u16;
-                                    rows.saturating_sub(from_bottom)
-                                } else {
-                                    (layer.top / f64::from(CELL.1)).round().max(0.0) as u16
-                                };
-                                let (top, skip) = if layer.fixed {
-                                    (desired_top.min(rows.saturating_sub(height)), 0)
-                                } else {
-                                    let (top, visible_height, skip) =
-                                        document_surface(layer, source_y, rows)?;
-                                    height = visible_height;
-                                    (top, skip)
-                                };
-                                Some((
-                                    dialog.node,
-                                    left,
-                                    top,
-                                    columns.saturating_sub(left + width),
-                                    rows.saturating_sub(top + height),
-                                    dialog.dialog,
-                                    dialog.modal,
-                                    dialog.name.clone(),
-                                    dialog.background.clone(),
-                                    dialog.foreground.clone(),
-                                    skip,
-                                ))
-                            })
-                            .collect::<Vec<Spec>>()
-                    })
-                    .unwrap_or_default()
-            })
-        },
-        move |specs| {
-            layers(specs.into_iter().map(
-                move |(
-                    node,
-                    left,
-                    top,
-                    right,
-                    bottom,
-                    is_dialog,
-                    modal,
-                    name,
-                    background,
-                    foreground,
-                    skip,
-                )| {
-                    let width = b
-                        .viewport
-                        .get_untracked()
-                        .0
-                        .saturating_sub(left + right)
-                        .max(1);
-                    let projection = memo(move || {
-                        b.page.with(|page| {
-                            page.as_ref()
-                                .and_then(|page| {
-                                    let index = page
-                                        .overlays
-                                        .iter()
-                                        .position(|dialog| dialog.node == node)?;
-                                    b.source.with(|source| {
-                                        match source
-                                            .as_ref()
-                                            .filter(|s| Arc::ptr_eq(s.page(), page))
-                                        {
-                                            Some(source) => layout::project_source_overlay(
-                                                source,
-                                                index,
-                                                width,
-                                                (CELL.0 as f64, CELL.1 as f64),
-                                                &b.hint_marks(),
-                                            ),
-                                            None => layout::project_overlay(
-                                                page,
-                                                index,
-                                                width,
-                                                (CELL.0 as f64, CELL.1 as f64),
-                                                &b.hint_marks(),
-                                            ),
-                                        }
-                                    })
-                                })
-                                .unwrap_or_default()
-                        })
-                    });
-                    let offset = signal(skip);
-                    let cells = Rc::new(pictures::Cells::with_presentation(b.presentation));
-                    let rows = scroll_virtual_with(
-                        move || projection.with(|p| p.lines.len()),
-                        |_| 1,
-                        move |i| {
-                            let cells = cells.clone();
-                            let zone_cells = cells.clone();
-                            let line = leaf(move |console, width, _| {
-                                projection.with(|p| {
-                                    if i >= p.lines.len() {
-                                        return vec![Vec::new()];
-                                    }
-                                    vec![draw_row(
-                                        b,
-                                        console,
-                                        &cells,
-                                        p,
-                                        i,
-                                        usize::from(width.max(1)),
-                                        &b.marks(),
-                                    )]
-                                })
-                            })
-                            .on_click_at(move |cx, column, _| {
-                                if let Some(index) = projection.with_untracked(|p| {
-                                    p.lines.get(i).and_then(|line| {
-                                        layout::control_at(line, usize::from(column))
-                                    })
-                                }) {
-                                    click_control(b, index, cx);
-                                }
-                                true
-                            });
-                            let targets = keyed(
-                                move || {
-                                    projection.with(|p| {
-                                        b.page.with(|page| {
-                                            let Some(line) = p.lines.get(i) else {
-                                                return Vec::new();
-                                            };
-                                            let Some(page) = page.as_ref() else {
-                                                return Vec::new();
-                                            };
-                                            let mut zones = Vec::new();
-                                            let mut x = 0usize;
-                                            while x < usize::from(width) {
-                                                let Some(index) = layout::control_at(line, x)
-                                                else {
-                                                    x += 1;
-                                                    continue;
-                                                };
-                                                let start = x;
-                                                while x < usize::from(width)
-                                                    && layout::control_at(line, x) == Some(index)
-                                                {
-                                                    x += 1;
-                                                }
-                                                if let Some(control) = page.controls.get(index) {
-                                                    zones.push((
-                                                        index,
-                                                        control.node,
-                                                        start as u16,
-                                                        x as u16,
-                                                        control.name.clone(),
-                                                        control.disabled,
-                                                        control.role.clone(),
-                                                    ));
-                                                }
-                                            }
-                                            zones
-                                        })
-                                    })
-                                },
-                                move |zones| {
-                                    let zone_cells = zone_cells.clone();
-                                    layers(zones.into_iter().map(
-                                        move |(
-                                            index,
-                                            target,
-                                            left,
-                                            right,
-                                            name,
-                                            disabled,
-                                            role,
-                                        )| {
-                                            use crate::model::Role as SourceRole;
-                                            use rich_intuituive::a11y::Role as AccessRole;
-                                            let role = match role {
-                                                SourceRole::TextBox
-                                                | SourceRole::SearchBox
-                                                | SourceRole::Password => AccessRole::TextBox,
-                                                SourceRole::CheckBox => AccessRole::CheckBox,
-                                                SourceRole::Switch => AccessRole::Switch,
-                                                SourceRole::Radio => AccessRole::RadioGroup,
-                                                SourceRole::ComboBox | SourceRole::ListBox => {
-                                                    AccessRole::ComboBox
-                                                }
-                                                SourceRole::Slider | SourceRole::SpinButton => {
-                                                    AccessRole::Slider
-                                                }
-                                                SourceRole::Tab => AccessRole::Tab,
-                                                SourceRole::MenuItem => AccessRole::MenuItem,
-                                                _ => AccessRole::Button,
-                                            };
-                                            let cells = zone_cells.clone();
-                                            leaf(move |console, _, _| {
-                                                projection.with(|p| {
-                                                    if i >= p.lines.len() {
-                                                        return vec![Vec::new()];
-                                                    }
-                                                    let line = draw_row(
-                                                        b,
-                                                        console,
-                                                        &cells,
-                                                        p,
-                                                        i,
-                                                        usize::from(width),
-                                                        &b.marks(),
-                                                    );
-                                                    vec![segment_columns(
-                                                        line,
-                                                        usize::from(left),
-                                                        usize::from(right.saturating_sub(left)),
-                                                    )]
-                                                })
-                                            })
-                                            .focusable()
-                                            .focus_style("reverse")
-                                            .name(&format!("popup-control-{target}"))
-                                            .label(name)
-                                            .role(role)
-                                            .disabled_when(move || disabled)
-                                            .on_key("enter", move |cx| click_control(b, index, cx))
-                                            .on_click(move |cx| click_control(b, index, cx))
-                                            .inset(
-                                                0,
-                                                width.saturating_sub(right),
-                                                0,
-                                                left,
-                                            )
-                                        },
-                                    ))
-                                    .children_cover_only()
-                                },
-                            )
-                            .children_cover_only();
-                            layers([line, targets]).fixed(1)
-                        },
-                        offset,
-                    );
-                    let mut children = Vec::new();
-                    if let Some(background) = background {
-                        let style = popup_fill(
-                            b.effective_adapt(),
-                            &background,
-                            crate::adapt::background(),
-                        );
-                        children.push(fill(" ", &style).on_click(|_| {}));
-                    }
-                    children.push(rows);
-                    let popup = layers(children)
-                        .label(&name)
-                        .inset(top, right, bottom, left);
-                    let popup = if is_dialog {
-                        popup.role(rich_intuituive::a11y::Role::Dialog)
-                    } else {
-                        popup
-                    };
-                    let popup = if modal {
-                        popup.controlled_modal()
-                    } else {
-                        popup
-                    };
-                    layers([
-                        popup,
-                        source_foreground(b, foreground, (left, top, right, bottom)),
-                    ])
-                    .children_cover_only()
-                },
-            ))
-            .children_cover_only()
-        },
-    )
-    .children_cover_only()
+    labels::source_dialogs(b)
 }
 
 fn projection_view(b: Browser) -> Node {
@@ -3823,6 +3516,7 @@ pub fn app_with_presentation(
             }
         });
         let b = Browser {
+            label_details: signal(None),
             presentation: media_presentation,
             page,
             source,
@@ -3936,6 +3630,9 @@ pub fn app_with_presentation(
             move |row, cx| follow_scroll(b, row, cx),
         );
 
+        watch(move || labels::details_owner_alive(b), move |alive, _| {
+            if !alive { b.label_details.set(None); }
+        });
         let address = crate::bars::header(b);
         let status = crate::bars::status(b);
         // Built again on each switch: a view kept while hidden could miss
@@ -3984,7 +3681,7 @@ pub fn app_with_presentation(
         }
         // Hints and site keys see keys before the page and its widgets
         // (a text box keeps what is typed into it).
-        column([root.flex(1)])
+        layers([column([root.flex(1)]), labels::details(b)])
             .previews_keys()
             .on_any_key(move |cx, key| {
                 if b.hints.with_untracked(Option::is_some) {
@@ -3994,6 +3691,10 @@ pub fn app_with_presentation(
                 // with Ctrl or Alt and the F keys.
                 if b.view.with_untracked(|v| *v == View::Pixels) && crate::pixel_view::passes(key) {
                     b.send(Command::Key(key));
+                    return true;
+                }
+                if key.code == KeyCode::Escape && b.label_details.with_untracked(Option::is_some) {
+                    b.label_details.set(None);
                     return true;
                 }
                 // Source-owned projection dialogs decide whether Escape closes

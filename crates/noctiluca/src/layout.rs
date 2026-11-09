@@ -798,6 +798,11 @@ fn wrap_chars(span: &Span, width: usize, first: &[Span], rest: &[Span]) -> Vec<L
 /// [icon buttons](Rule::IconButtons) off, an icon-only button shows as
 /// its picture would, a shaded box.
 pub fn face_in(control: &Control, adapt: Adapt, cells: usize) -> String {
+    if adapt.on(Rule::WrapActionLabels)
+        && matches!(control.role, Role::Button | Role::Tab | Role::MenuItem)
+    {
+        return format!("[ {} ]", control.name);
+    }
     if control.icon_only && control.role == Role::Button && !adapt.on(Rule::IconButtons) {
         return "░".repeat(cells.max(1));
     }
@@ -1792,9 +1797,12 @@ fn project_part(
                     });
                 }
                 let style = if control.disabled { "dim" } else { "reverse" };
-                // A control's face is one line: a narrow box gets its
-                // compact form (`[Subscribe]`), cut with `…` if still too
-                // wide, rather than its name wrapped over rows.
+                // Adaptive action names wrap; compact faces retain their density.
+                let wrap_action = adapt.on(Rule::WrapActionLabels)
+                    && matches!(
+                        control.role,
+                        Role::Button | Role::Tab | Role::MenuItem | Role::Link
+                    );
                 let (c0, c1) = snap(control.rect.x, control.rect.right());
                 let room = (c1 - c0).max(3);
                 let mut text = face_in(control, adapt, c1 - c0);
@@ -1807,7 +1815,9 @@ fn project_part(
                     control: Some(*index),
                     picture: None,
                 };
-                one_row.push(items.len());
+                if !wrap_action {
+                    one_row.push(items.len());
+                }
                 let mut item = text_item(
                     control.node,
                     control.rect,
@@ -1816,7 +1826,7 @@ fn project_part(
                     vec![span],
                     first,
                 );
-                item.one_line = true;
+                item.one_line = !wrap_action;
                 items.push(item);
             }
             BlockKind::Code => {
