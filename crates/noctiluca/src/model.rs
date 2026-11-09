@@ -3037,6 +3037,8 @@ impl Walker<'_> {
                     let text: String = runs.iter().map(|r| r.text.as_str()).collect();
                     let start = text.chars().take_while(|c| c.is_whitespace()).count();
                     table.caption = text.trim().to_string();
+                    // Like the caption text, its provenance belongs to the last caption.
+                    cells.retain(|(location, _)| !matches!(location, RunLocation::Caption { .. }));
                     if let Some(origins) = origins {
                         cells.push((
                             RunLocation::Caption { block },
