@@ -2007,8 +2007,9 @@ pub(crate) struct ScrollView {
     content: (u16, u16),
     /// The view's columns and rows, less the scrollbars.
     view: (u16, u16),
-    /// The focused node inside when it was last scrolled into view.
-    focus: Option<NodeId>,
+    /// The focused node and its content coordinates when last revealed.
+    focus: Option<(NodeId, Rect)>,
+    focus_view: (u16, u16),
     /// The bar down and the bar across, and where each was last drawn.
     pub(crate) down: crate::scrollbar::Bar,
     pub(crate) across_bar: crate::scrollbar::Bar,
@@ -2043,6 +2044,7 @@ impl ScrollView {
             content: (0, 0),
             view: (1, 1),
             focus: None,
+            focus_view: (0, 0),
             down: crate::scrollbar::Bar::new(Some(crate::scrollbar::Scrollbar::new())),
             across_bar: crate::scrollbar::Bar::new(Some(
                 crate::scrollbar::Scrollbar::new().side(crate::scrollbar::Side::Bottom),
@@ -2227,10 +2229,12 @@ impl Widget for ScrollView {
     }
 
     fn scroll(&mut self, cx: &ScrollCx) -> (Rect, (u16, u16)) {
-        // Keep a newly focused node inside in view, once it is laid out.
+        // Reveal a new focus, reflowed target or resized viewport. Content
+        // coordinates stay unchanged when the reader scrolls deliberately.
         let focused = cx.focused();
-        if focused.map(|(id, _)| id) != self.focus {
-            self.focus = focused.map(|(id, _)| id);
+        if focused != self.focus || self.view != self.focus_view {
+            self.focus = focused;
+            self.focus_view = self.view;
             if let Some((_, area)) = focused.filter(|(_, area)| !area.is_empty()) {
                 let (left, top) = (self.left(), self.top());
                 let next_top = into_view(top, self.view.1, area.y, area.bottom());

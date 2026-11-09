@@ -43,7 +43,7 @@
 
 use std::ops::RangeInclusive;
 
-use rich::Style;
+use rich::{Console, Segment, Style};
 use rich_interact::{Button as MouseButton, KeyCode, MouseKind};
 
 use crate::a11y::{AccessState, Role};
@@ -130,6 +130,7 @@ struct ButtonWidget {
     /// Its label, read each time it is measured, drawn or described.
     label: Label,
     variant: ButtonVariant,
+    wrap_label: bool,
     on_press: Press,
     /// Held down with the mouse: it looks pressed until it is let go.
     held: bool,
@@ -203,6 +204,7 @@ pub fn button_of(
     widget(ButtonWidget {
         label: Box::new(label),
         variant: ButtonVariant::Default,
+        wrap_label: false,
         on_press: Box::new(on_press),
         held: false,
     })
@@ -210,6 +212,19 @@ pub fn button_of(
 }
 
 impl Node {
+    /// For a [`button`] or [`button_of`]: wrap its complete label at the
+    /// available width and measure all its rows. Long words fold in terminal
+    /// cells. Defaults to `false` (a single compact row); ignored on other
+    /// nodes. Wrapped content takes precedence over decorative edge rows.
+    ///
+    /// Labels are console markup: escape literal brackets with
+    /// [`rich::markup::escape`]. A live label or a width change remeasures
+    /// the button without replacing its focus or action.
+    pub fn wrap_label(self, enabled: bool) -> Node {
+        self.widget_mut(|button: &mut ButtonWidget| button.wrap_label = enabled);
+        self
+    }
+
     /// For a [`button`]: its look, the theme's `button.primary` or
     /// `button.danger` rather than `button`. Ignored on other nodes.
     ///
@@ -239,6 +254,21 @@ impl Node {
 }
 
 impl ButtonWidget {
+    /// One text layout for both measurement and drawing. Keep side padding
+    /// when there is room, but let tiny controls use every available cell.
+    fn wrapped_lines(&self, console: &Console, width: u16) -> (u16, Vec<Vec<Segment>>) {
+        let padding = u16::from(width > 3);
+        let inner = width.saturating_sub(padding * 2).max(1);
+        let markup = (self.label)();
+        let mut text = rich::Text::from_markup(&markup).unwrap_or_else(|_| rich::Text::new(markup));
+        text.set_justify(rich::Justify::Center);
+        let mut options = console.options().update_width(inner as usize);
+        options.height = None;
+        options.no_wrap = Some(false);
+        options.overflow = Some(rich::Overflow::Fold);
+        (padding, console.render_lines(&text, &options, false))
+    }
+
     fn press(&mut self, cx: &mut EventCx) {
         (self.on_press)(cx.app());
     }
@@ -261,9 +291,15 @@ impl Widget for ButtonWidget {
         Some(plain(&untracked_label(&self.label)))
     }
 
-    fn measure(&mut self, _cx: &MeasureCx, axis: Axis, _width: u16, _height: u16) -> u16 {
+    fn measure(&mut self, cx: &MeasureCx, axis: Axis, width: u16, _height: u16) -> u16 {
         match axis {
             Axis::Horizontal => markup_width(&(self.label)()).saturating_add(2),
+            Axis::Vertical if self.wrap_label => {
+                self.wrapped_lines(cx.console(), width)
+                    .1
+                    .len()
+                    .clamp(1, u16::MAX as usize) as u16
+            }
             Axis::Vertical => 1,
         }
     }
@@ -289,7 +325,13 @@ impl Widget for ButtonWidget {
         let (width, height) = (canvas.width(), canvas.height());
         canvas.fill(0, 0, width, height, Some(&face));
         let text_mode = crate::a11y::text_mode();
-        if height >= 3 && !text_mode {
+        let wrapped = self
+            .wrap_label
+            .then(|| self.wrapped_lines(cx.console(), width));
+        let content_height = wrapped
+            .as_ref()
+            .map_or(1, |(_, lines)| lines.len().min(u16::MAX as usize) as u16);
+        if height >= content_height.saturating_add(2) && !text_mode {
             // The edges, in the colours the theme names: lit above and
             // shaded below, swapped while it is held.
             let edge = |part: &str| {
@@ -316,6 +358,22 @@ impl Widget for ButtonWidget {
             if let Some(bottom) = bottom {
                 canvas.print(0, height - 1, &"▁".repeat(width as usize), Some(&bottom));
             }
+        }
+        if let Some((padding, lines)) = wrapped {
+            let y = height.saturating_sub(content_height) / 2;
+            let inner = width.saturating_sub(padding * 2);
+            let lines: Vec<_> = lines
+                .iter()
+                .map(|line| Segment::apply_style(line, &face))
+                .collect();
+            canvas.lines_at(padding, y, inner, content_height.min(height), &lines);
+            if (self.held || text_mode) && padding > 0 {
+                for row in y..y.saturating_add(content_height).min(height) {
+                    canvas.print(0, row, "[", Some(&face));
+                    canvas.print(width - 1, row, "]", Some(&face));
+                }
+            }
+            return;
         }
         let markup = (self.label)();
         let label = markup_width(&markup).min(width);

@@ -7,7 +7,7 @@ use intuituive::interact::{Button, Event, Mouse, MouseKind};
 use intuituive::prelude::*;
 use intuituive::{
     CheckState, Driver, SelectOption, button_of, checkbox, checkbox_of, checkbox_tri, radio,
-    radio_keyed, select_field, select_field_keyed,
+    radio_keyed, scroll_both_with, select_field, select_field_keyed,
 };
 
 fn rows(driver: &Driver) -> Vec<String> {
@@ -123,6 +123,182 @@ fn a_wider_label_lays_the_row_out_again() {
     assert_eq!(rows(&driver)[0], " Go |");
     driver.press("l");
     assert_eq!(rows(&driver)[0], " Much longer |");
+}
+
+#[test]
+fn a_wrapped_label_remeasures_at_the_same_focus_on_change_and_resize() {
+    let app = App::new(|| {
+        let long = signal(false);
+        column([
+            button_of(
+                move || {
+                    if long.get() {
+                        "Review complete suffix".into()
+                    } else {
+                        "Go".into()
+                    }
+                },
+                |_| {},
+            )
+            .wrap_label(true)
+            .name("action"),
+            label("after").fixed(1),
+        ])
+        .on_key("l", move |_| long.set(true))
+    });
+    let mut driver = app.driver(24, 6);
+    driver.settle();
+    let id = driver.focused().unwrap();
+    assert_eq!(driver.accessibility()[0].rect.height, 1);
+    driver.press("l");
+    driver.resize(10, 6);
+    driver.settle();
+    assert_eq!(driver.focused(), Some(id));
+    assert_eq!(driver.accessibility()[0].rect.height, 3);
+    assert_eq!(
+        rows(&driver)[..4],
+        ["  Review", " complete", "  suffix", "after"]
+    );
+    driver.resize(24, 6);
+    driver.settle();
+    assert_eq!(driver.focused(), Some(id));
+    assert_eq!(driver.accessibility()[0].rect.height, 1);
+    assert_eq!(rows(&driver)[1], "after");
+}
+
+#[test]
+fn a_focused_wrapped_label_growing_in_a_scroll_reveals_its_last_row() {
+    let app = App::new(|| {
+        let long = signal(false);
+        let offset = signal(0u16);
+        column([
+            scroll_with(
+                column([
+                    label("before").fixed(3),
+                    button_of(
+                        move || {
+                            if long.get() {
+                                "alpha beta gamma".into()
+                            } else {
+                                "Go".into()
+                            }
+                        },
+                        |_| {},
+                    )
+                    .wrap_label(true)
+                    .name("action"),
+                    label("after").fixed(15),
+                ]),
+                offset,
+            )
+            .flex(1),
+            text!("{offset}").fixed(1),
+        ])
+        .on_key("l", move |_| long.set(true))
+        .on_key("o", move |_| offset.set(2))
+    });
+    let mut driver = app.driver(10, 6);
+    driver.press("tab");
+    driver.assert_focused("action");
+    let id = driver.focused();
+    assert_eq!(rows(&driver)[5], "0");
+    driver.press("l");
+    assert_eq!(driver.focused(), id);
+    assert_eq!(rows(&driver)[5], "1");
+    assert!(
+        rows(&driver).iter().any(|row| row.contains("gamma")),
+        "{:?}",
+        rows(&driver)
+    );
+    // Scrolling is deliberate: an unchanged focused rectangle must not pull
+    // the viewport back after wheel, keyboard or signal-driven movement.
+    driver.wheel(2, 2, 1);
+    driver.settle();
+    assert_eq!(rows(&driver)[5], "4");
+    driver.press("pagedown");
+    assert_eq!(rows(&driver)[5], "8");
+    driver.press("o");
+    assert_eq!(rows(&driver)[5], "2");
+    assert_eq!(driver.focused(), id);
+}
+
+#[test]
+fn shrinking_a_scroll_reveals_the_same_focused_wrapped_target() {
+    let mut driver = App::new(|| {
+        scroll(column([
+            label("before").fixed(3),
+            button_of(|| "alpha beta gamma".into(), |_| {})
+                .wrap_label(true)
+                .name("action"),
+            label("after").fixed(10),
+        ]))
+    })
+    .driver(10, 6);
+    driver.press("tab");
+    driver.assert_focused("action");
+    let id = driver.focused();
+    assert!(rows(&driver)[5].contains("gamma"));
+    driver.resize(10, 5);
+    driver.settle();
+    assert_eq!(driver.focused(), id);
+    assert!(rows(&driver)[4].contains("gamma"), "{:?}", rows(&driver));
+}
+
+#[test]
+fn resized_horizontal_and_oversized_focus_targets_do_not_scroll_in_a_loop() {
+    let mut horizontal = App::new(|| {
+        let x = signal(0u16);
+        column([
+            scroll_both_with(
+                row([
+                    label("before").fixed(8),
+                    intuituive::button("Go", |_| {}).fixed(4),
+                    label("after").fixed(10),
+                ]),
+                x,
+                signal(0),
+                true,
+                false,
+            )
+            .flex(1),
+            text!("{x}").fixed(1),
+        ])
+    })
+    .driver(10, 4);
+    horizontal.press("tab");
+    let id = horizontal.focused();
+    assert_eq!(rows(&horizontal)[3], "2");
+    horizontal.resize(8, 4);
+    horizontal.settle();
+    assert_eq!(horizontal.focused(), id);
+    assert_eq!(rows(&horizontal)[3], "4");
+    horizontal.press("right");
+    assert_eq!(rows(&horizontal)[3], "5");
+    horizontal.settle();
+    assert_eq!(rows(&horizontal)[3], "5");
+
+    let mut oversized = App::new(|| {
+        let y = signal(0u16);
+        column([
+            scroll_with(
+                column([
+                    label("before").fixed(3),
+                    intuituive::button("Go", |_| {}).wrap_label(true).fixed(10),
+                    label("after").fixed(15),
+                ]),
+                y,
+            )
+            .flex(1),
+            text!("{y}").fixed(1),
+        ])
+    })
+    .driver(10, 6);
+    oversized.press("tab");
+    assert_eq!(rows(&oversized)[5], "8");
+    oversized.settle();
+    assert_eq!(rows(&oversized)[5], "8");
+    oversized.press("pagedown");
+    assert_eq!(rows(&oversized)[5], "12");
 }
 
 #[test]

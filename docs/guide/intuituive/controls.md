@@ -32,7 +32,7 @@ use intuituive::{
 };
 ```
 
-Sized `.auto()`, a control takes one row in a column and its natural
+Sized `.auto()`, a compact control takes one row in a column and its natural
 width in a row; a column stretches it across unless it is given a size.
 `.disabled_when(..)` greys any of them out (the theme's
 `control.disabled`, else `dim`), takes it out of the Tab order and stops
@@ -55,6 +55,31 @@ or Space is pressed while it has the focus, or when it is clicked: a press
 let go over it. While the mouse holds it, it looks pressed: `[Save]`.
 Its label is console markup, with a cell of padding either side, centred
 in whatever width it is given.
+
+Buttons stay compact by default: one measured row, with an ellipsis if the
+label does not fit. Use `.wrap_label(true)` on `button` or `button_of` to
+show the full label across measured rows:
+
+```rust
+button("Review all changes before publishing", press).wrap_label(true)
+```
+
+Wrapping uses terminal cell widths, folds long words, and preserves console
+markup. Escape literal brackets with `rich::markup::escape`. Each row is
+centred, with side padding when there is room; at tiny widths the text uses
+the available cells. Wrapped content takes priority over decorative top
+and bottom edges. A fixed height can still clip the label, so use the
+button's automatic height in a measured column or grid. Live labels and
+resizing remeasure that height while keeping one focus target and action;
+Enter, Space and releasing a click on any row activate the same button.
+`.wrap_label(false)` selects compact rendering again. Other node kinds
+ignore this builder.
+
+For dense compact layouts, compose `.tooltip(full_label)` for pointer
+access with a keyboard action that opens a read-only `scroll(label(full_label))`
+in a `Ctx::modal`. Close the local modal with `Ctx::pop` to restore the
+previous focus. The accessible name always contains the complete label in
+either mode.
 
 Its face is a theme style: `button`, or with `.variant(..)`
 `button.primary` or `button.danger`. Over the face goes `.focus` while it

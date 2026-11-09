@@ -48,17 +48,6 @@ fn read(driver: &Driver) -> Vec<String> {
         .collect()
 }
 
-// Temporary RED adapter: the old button has no wrapping option. Removed when
-// the public builder lands, so the first failure exercises rendered behavior.
-trait PendingWrapLabel {
-    fn wrap_label(self, enabled: bool) -> Self;
-}
-impl PendingWrapLabel for Node {
-    fn wrap_label(self, _enabled: bool) -> Self {
-        self
-    }
-}
-
 #[test]
 fn wrapped_buttons_measure_full_labels_and_activate_from_every_row() {
     let app = App::new(|| {
@@ -113,13 +102,86 @@ fn wrapped_button_text_uses_markup_unicode_and_long_word_folding() {
     driver.settle();
     assert_eq!(
         rows(&driver)[..5],
-        [" [draft]", " 界界 e\u{301}", " abcdefgh", "   ijk", "after"]
+        [
+            " [draft]",
+            "  界界 e\u{301}",
+            " abcdefgh",
+            "   ijk",
+            "after"
+        ]
     );
     assert_eq!(
         read(&driver)[0],
         "[draft] 界界 e\u{301} abcdefghijk, button"
     );
     assert!(style_at(&driver, 1, 0).contains("bold"));
+}
+
+#[test]
+fn wrapped_buttons_handle_tiny_widths_and_can_return_to_compact() {
+    for (width, expected) in [(1, vec!["a", "b", "c", "d"]), (2, vec!["ab", "cd"])] {
+        let mut driver =
+            App::new(|| column([button("abcd", |_| {}).wrap_label(true)])).driver(width, 4);
+        driver.settle();
+        assert_eq!(&rows(&driver)[..expected.len()], expected);
+    }
+    let mut narrow_wide =
+        App::new(|| column([button("界界", |_| {}).wrap_label(true)])).driver(3, 2);
+    narrow_wide.settle();
+    assert_eq!(rows(&narrow_wide), ["界", "界"]);
+    for width in 0..=2 {
+        let mut driver =
+            App::new(|| button("界e\u{301}", |_| {}).wrap_label(true)).driver(width, 5);
+        driver.settle();
+        for y in 0..5 {
+            if width > 0 {
+                assert!(!driver.screen().cell(0, y).is_continuation());
+            }
+        }
+    }
+    let mut driver = App::new(|| {
+        column([
+            button("abcdefghijk", |_| {})
+                .wrap_label(true)
+                .wrap_label(false),
+            label("abcdefghijk").wrap_label(true).fixed(1),
+            button("", |_| {}).wrap_label(true),
+            label("after").fixed(1),
+        ])
+    })
+    .driver(6, 5);
+    driver.settle();
+    assert_eq!(rows(&driver)[..4], ["abcde…", "abcdef", "", "after"]);
+    assert_eq!(driver.accessibility()[0].rect.height, 1);
+}
+
+#[test]
+fn wrapped_content_wins_over_edges_and_keeps_variant_and_held_styles() {
+    let mut driver = App::new(|| {
+        column([button("Review complete suffix", |_| {})
+            .wrap_label(true)
+            .variant(ButtonVariant::Danger)
+            .theme_styles([
+                ("button.danger", "red on white"),
+                ("button.danger.light", "green"),
+                ("button.danger.shade", "blue"),
+            ])])
+    })
+    .driver(10, 3);
+    driver.settle();
+    assert_eq!(rows(&driver), ["  Review", " complete", "  suffix"]);
+    assert_eq!(style_at(&driver, 2, 2), "bold reverse red on white");
+    mouse(&mut driver, MouseKind::Down(Button::Left), 2, 2);
+    assert_eq!(rows(&driver), ["[ Review ]", "[complete]", "[ suffix ]"]);
+    assert_eq!(style_at(&driver, 2, 2), "bold reverse red on white");
+    let mut driver = App::new(|| {
+        button("Go", |_| {})
+            .wrap_label(true)
+            .theme_styles([("button.light", "green"), ("button.shade", "blue")])
+    })
+    .driver(6, 3);
+    driver.settle();
+    assert_eq!(rows(&driver), ["▔▔▔▔▔▔", "  Go", "▁▁▁▁▁▁"]);
 }
 
 /// A button that counts its presses, beside another, over the count.
