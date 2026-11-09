@@ -1864,6 +1864,125 @@ mod tests {
     use super::*;
     use crate::testing::FakeEngine;
 
+    fn recovery_worker<'a>(engine: FakeEngine, update: &'a dyn Fn(Update)) ->
+        (Worker<'a>, Receiver<Job>, Sender<((u64, StillKey), Picture)>)
+    {
+        let engine: Box<dyn Engine> = Box::new(engine);
+        let (decode, jobs) = mpsc::channel();
+        let (done, decoded) = mpsc::channel();
+        let (decode_inline, _inline_jobs) = mpsc::channel();
+        let (_inline_done, decoded_inline) = mpsc::channel();
+        let worker = Worker {
+            engine,
+            update,
+            source_update: None,
+            source: None,
+            revisions: Revisions::new(),
+            page: None,
+            state: PageState::default(),
+            dirty: None,
+            stills: HashMap::new(),
+            pictures: HashMap::new(),
+            decode,
+            decoded,
+            inline: HashMap::new(),
+            inline_asked: HashSet::new(),
+            inline_loader: None,
+            decode_inline,
+            decoded_inline,
+            metrics: None,
+            frames: Frames::default(),
+            on_screen: HashSet::new(),
+            intervals: HashMap::new(),
+            last_frame: None,
+            starved: false,
+            scale: 1.0,
+            scale_given: 1.0,
+            shown_time: HashMap::new(),
+            live: HashMap::new(),
+            appended: HashSet::new(),
+            settle: None,
+            stills_pending: false,
+            pixels: false,
+            pixels_cast: false,
+            screen_at: None,
+            latest: HashMap::new(),
+            drawn: HashMap::new(),
+            stale: HashSet::new(),
+            canvases: HashMap::new(),
+            asked: None,
+        };
+        (worker, jobs, done)
+    }
+
+    fn recovery_engine(count: usize) -> FakeEngine {
+        use crate::testing::PageBuilder;
+        let engine = FakeEngine::from_dir(std::path::Path::new("tests/fixtures")).unwrap();
+        let mut builder = PageBuilder::new("https://example.test/recovery", "recovery", 400.0, 800.0);
+        for n in 0..count {
+            builder.image(builder.body(), &format!("https://example.test/{n}.png"), "image",
+                Rect::new(0.0, n as f64 * 20.0, 16.0, 16.0));
+        }
+        {
+            let mut state = engine.state.lock().unwrap();
+            state.pages.insert("recovery".into(), builder.snapshot());
+            state.current = Some("recovery".into());
+        }
+        engine
+    }
+
+    fn recovery_png() -> Vec<u8> {
+        let mut bytes = std::io::Cursor::new(Vec::new());
+        image::RgbaImage::from_pixel(2, 2, image::Rgba([1, 2, 3, 255]))
+            .write_to(&mut bytes, image::ImageFormat::Png).unwrap();
+        bytes.into_inner()
+    }
+
+    fn recovery_animation() -> Vec<u8> {
+        let mut bytes = Vec::new();
+        {
+            let mut encoder = image::codecs::gif::GifEncoder::new(&mut bytes);
+            for color in [[255, 0, 0, 255], [0, 255, 0, 255]] {
+                encoder.encode_frame(image::Frame::from_parts(
+                    image::RgbaImage::from_pixel(2, 2, image::Rgba(color)), 0, 0,
+                    image::Delay::from_numer_denom_ms(100, 1))).unwrap();
+            }
+        }
+        bytes
+    }
+
+    #[test]
+    fn recovery_corrupt_accepted_png_has_decoder_completion() {
+        let bytes: Arc<[u8]> = recovery_png()[..41].into();
+        assert!(decodable(&bytes));
+        assert!(Picture::decode_animated(&bytes).is_err());
+        let (decode, decoded) = decoder();
+        decode.send((0_u64, bytes)).unwrap();
+        assert!(decoded.recv_timeout(Duration::from_secs(2)).is_ok(),
+            "actual decoder must complete rejected pixels too");
+    }
+
+    #[test]
+    fn recovery_transient_original_upgrades_same_key_animation() {
+        let engine = recovery_engine(1);
+        let state = engine.state.clone();
+        let update = |_: Update| {};
+        let (mut worker, jobs, done) = recovery_worker(engine, &update);
+        worker.read().unwrap();
+        worker.capture_stills();
+        let (id, bytes) = jobs.try_recv().unwrap();
+        done.send((id, Picture::decode_animated(&bytes).unwrap())).unwrap();
+        worker.take_decoded();
+        assert!(worker.page.as_ref().unwrap().media[0].picture.is_some());
+        state.lock().unwrap().resources.insert("https://example.test/0.png".into(), recovery_animation());
+        worker.read().unwrap();
+        worker.capture_stills();
+        let (id, bytes) = jobs.try_recv().expect("same-key original must be retried after temporary miss");
+        done.send((id, Picture::decode_animated(&bytes).unwrap())).unwrap();
+        worker.take_decoded();
+        assert_eq!(worker.page.as_ref().unwrap().media[0].picture.as_ref().unwrap().frames().unwrap().len(), 2);
+    }
+
     #[test]
     fn source_publication_pairs_all_five_paths_and_reuses_passive_relations() {
         use crate::engine::{Frame, LiveRead, PageSnapshot, Playback};
