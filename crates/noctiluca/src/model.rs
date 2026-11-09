@@ -4096,6 +4096,7 @@ fn build_parts(
 
 #[cfg(test)]
 mod tests {
+    include!("model/source_projection_tests.rs");
     use super::*;
     use serde_json::json;
 
