@@ -136,7 +136,8 @@ impl RunPiece {
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct SourceGrid {
     pub node: usize,
-    /// Source roots, including boxless roots. Descendants retain their own boxes.
+    /// Formatting roots through proven contents wrappers. Unknown boxless roots
+    /// remain conservative; semantic ancestry and descendant boxes stay intact.
     pub items: Vec<usize>,
 }
 #[derive(Clone, Debug, PartialEq)]
