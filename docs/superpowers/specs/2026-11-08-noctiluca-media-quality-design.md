@@ -146,7 +146,7 @@ Choose the smallest additive metrics/context API after tracing the current backe
 
 ## References
 
-- [Repository contract](../../../AGENTS.md)
+- [Repository contract](https://github.com/buchochelliq-labs/rs-rich-cli/blob/main/AGENTS.md)
 - [Browser design](../../design/browser.md)
 - [Second real-sites pass and its validation limits](../../design/noctiluca-real-sites-2.md)
 - [Existing rendering performance work](../../design/render-performance.md)
