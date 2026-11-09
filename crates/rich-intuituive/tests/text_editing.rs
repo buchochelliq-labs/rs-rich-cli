@@ -303,7 +303,7 @@ fn the_caret_shape_is_set_on_the_terminal_and_put_back() {
     assert!(moved.contains("\x1b[0 q"), "{moved:?}");
     let back = bytes(&mut driver, "backtab");
     assert!(back.contains("\x1b[6 q"), "{back:?}");
-    assert!(driver.finish().ends_with("\x1b[0 q"));
+    assert!(driver.finish().ends_with("\x1b[0 q\x1b[?7h"));
     // An app that never sets one never resets it.
     let app = App::new(|| input(signal(String::new())));
     let mut driver = app.driver(10, 1);

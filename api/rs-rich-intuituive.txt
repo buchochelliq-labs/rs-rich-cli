@@ -457,6 +457,9 @@ pub fn intuituive::app::Driver::take_exit<T: 'static>(&mut self) -> core::option
 pub fn intuituive::app::Driver::take_handoff(&mut self) -> core::option::Option<intuituive::app::Handoff>
 pub fn intuituive::app::Driver::take_printed(&mut self) -> alloc::vec::Vec<alloc::string::String>
 pub fn intuituive::app::Driver::timeout(&self, core::time::Duration) -> core::time::Duration
+pub fn intuituive::app::Driver::try_finish(self) -> std::io::error::Result<alloc::string::String>
+pub fn intuituive::app::Driver::try_render(&mut self) -> std::io::error::Result<core::option::Option<alloc::string::String>>
+pub fn intuituive::app::Driver::try_settle(&mut self) -> std::io::error::Result<()>
 pub fn intuituive::app::Driver::type_text(&mut self, &str)
 pub fn intuituive::app::Driver::update(&mut self, core::time::Duration)
 pub fn intuituive::app::Driver::wait_for_animations(&mut self)
@@ -3792,6 +3795,7 @@ pub fn intuituive::widget::Canvas<'_>::scroll_up(&mut self, u16)
 pub fn intuituive::widget::Canvas<'_>::set(&mut self, u16, u16, char, core::option::Option<&rich::style::Style>)
 pub fn intuituive::widget::Canvas<'_>::set_cell(&mut self, u16, u16, &str, core::option::Option<&rich::style::Style>)
 pub fn intuituive::widget::Canvas<'_>::width(&self) -> u16
+pub fn intuituive::widget::Canvas<'_>::write_premeasured(&mut self, &[rich_ext::surface::screen::PremeasuredCell<'_>]) -> core::result::Result<(), rich_ext::surface::screen::PremeasuredError>
 impl<'a> core::marker::Freeze for intuituive::widget::Canvas<'a>
 impl<'a> core::marker::Send for intuituive::widget::Canvas<'a>
 impl<'a> core::marker::Sync for intuituive::widget::Canvas<'a>
@@ -5095,6 +5099,9 @@ pub use intuituive::screen::Cell
 pub use intuituive::screen::PaintStats
 pub use intuituive::screen::PaintStrategy
 pub use intuituive::screen::Painter
+pub use intuituive::screen::PremeasuredCell
+pub use intuituive::screen::PremeasuredCellError
+pub use intuituive::screen::PremeasuredError
 pub use intuituive::screen::Rect
 pub use intuituive::screen::Screen
 pub mod intuituive::select
@@ -5875,6 +5882,7 @@ pub fn intuituive::widget::Canvas<'_>::scroll_up(&mut self, u16)
 pub fn intuituive::widget::Canvas<'_>::set(&mut self, u16, u16, char, core::option::Option<&rich::style::Style>)
 pub fn intuituive::widget::Canvas<'_>::set_cell(&mut self, u16, u16, &str, core::option::Option<&rich::style::Style>)
 pub fn intuituive::widget::Canvas<'_>::width(&self) -> u16
+pub fn intuituive::widget::Canvas<'_>::write_premeasured(&mut self, &[rich_ext::surface::screen::PremeasuredCell<'_>]) -> core::result::Result<(), rich_ext::surface::screen::PremeasuredError>
 impl<'a> core::marker::Freeze for intuituive::widget::Canvas<'a>
 impl<'a> core::marker::Send for intuituive::widget::Canvas<'a>
 impl<'a> core::marker::Sync for intuituive::widget::Canvas<'a>
@@ -8138,6 +8146,9 @@ pub fn intuituive::app::Driver::take_exit<T: 'static>(&mut self) -> core::option
 pub fn intuituive::app::Driver::take_handoff(&mut self) -> core::option::Option<intuituive::app::Handoff>
 pub fn intuituive::app::Driver::take_printed(&mut self) -> alloc::vec::Vec<alloc::string::String>
 pub fn intuituive::app::Driver::timeout(&self, core::time::Duration) -> core::time::Duration
+pub fn intuituive::app::Driver::try_finish(self) -> std::io::error::Result<alloc::string::String>
+pub fn intuituive::app::Driver::try_render(&mut self) -> std::io::error::Result<core::option::Option<alloc::string::String>>
+pub fn intuituive::app::Driver::try_settle(&mut self) -> std::io::error::Result<()>
 pub fn intuituive::app::Driver::type_text(&mut self, &str)
 pub fn intuituive::app::Driver::update(&mut self, core::time::Duration)
 pub fn intuituive::app::Driver::wait_for_animations(&mut self)

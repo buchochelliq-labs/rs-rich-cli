@@ -36,7 +36,7 @@ fn the_caller_feeds_events_and_writes_what_render_returns() {
     assert_eq!(driver.screen().plain()[0].trim_end(), "count 1");
     driver.event(press("q"));
     assert!(driver.is_done());
-    assert!(driver.finish().ends_with("\x1b[?25h"));
+    assert!(driver.finish().ends_with("\x1b[?25h\x1b[?7h"));
 }
 
 #[test]

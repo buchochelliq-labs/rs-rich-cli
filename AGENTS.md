@@ -196,7 +196,11 @@ into a screen) is the faithful reference. rs-rich-ext's fast path
 (`surface::Draw`, `TextRun`, `Screen::write_runs`) writes cells straight
 into a `Screen`, and is what rs-rich-ext's widgets and intuiTUIve draw
 with by default. Both must give the same cells: a fast path comes with a
-test that compares it with rich's path.
+test that compares it with rich's path. The separate
+`Screen::write_premeasured` / `Canvas::write_premeasured` import accepts an
+external grid's opaque text and declared spans without measurement; it is
+not a Draw implementation and does not weaken the two native paths' parity
+contract. Its terminal painter supports owned fullscreen mode only.
 
 **intuiTUIve's core components are generic.** `crates/rich-intuituive`'s
 always-compiled code holds only components other components can reuse: no

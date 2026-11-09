@@ -67,7 +67,7 @@ use crate::layout::{
 };
 use crate::node::{Axis, Node};
 use crate::reactive::{NodeId, Signal};
-use crate::screen::{Rect, Screen};
+use crate::screen::{PremeasuredCell, PremeasuredError, Rect, Screen};
 
 /// Whether a widget or handler used an event. One it did not use bubbles
 /// to the node's ancestors.
@@ -981,6 +981,21 @@ impl Canvas<'_> {
         self.rect.height
     }
 
+    /// Import exactly `width() * height()` caller-measured cells over this
+    /// canvas. Text and styles are copied without remeasurement. Invalid
+    /// input leaves both the screen and damage unchanged. Painting these
+    /// cells requires fullscreen mode; use `Driver::try_render` for errors.
+    pub fn write_premeasured(
+        &mut self,
+        cells: &[PremeasuredCell<'_>],
+    ) -> Result<(), PremeasuredError> {
+        let damage = self.screen.write_premeasured(self.rect, cells)?;
+        if !damage.is_empty() {
+            self.written.push(damage);
+        }
+        Ok(())
+    }
+
     /// Draw `drawable` over the whole canvas through rs-rich-ext's fast
     /// path ([`Draw`](rich_ext::surface::Draw)): the cells rendering it
     /// and writing the lines with [`lines`](Self::lines) would give,
@@ -1319,11 +1334,11 @@ impl Canvas<'_> {
 pub struct CellView<'a> {
     symbol: &'a str,
     style: Option<&'a Style>,
-    width: u8,
+    width: u16,
 }
 
 impl CellView<'_> {
-    /// Its grapheme: empty for the second column of a wide one.
+    /// Its exact text: empty for any continuation column.
     pub fn symbol(&self) -> &str {
         self.symbol
     }
@@ -1333,13 +1348,12 @@ impl CellView<'_> {
         self.style
     }
 
-    /// The columns its grapheme takes: 1, 2 for a wide one, and 0 for the
-    /// second column of a wide one.
+    /// The supplied occupied columns, or zero for any continuation.
     pub fn width(&self) -> u16 {
-        u16::from(self.width)
+        self.width
     }
 
-    /// Whether it is the second column of a wide grapheme.
+    /// Whether it is a continuation column of a wide atom.
     pub fn is_continuation(&self) -> bool {
         self.width == 0
     }
@@ -1387,5 +1401,53 @@ impl MouseExt for Mouse {
             MouseKind::ScrollDown => 1,
             _ => 0,
         }
+    }
+}
+
+#[cfg(test)]
+mod premeasured_canvas_tests {
+    use super::*;
+
+    #[test]
+    fn premeasured_canvas_keeps_invalid_damage_and_records_expanded_success() {
+        let mut screen = Screen::new(3, 1);
+        let cells = [
+            PremeasuredCell {
+                text: "opaque",
+                width: 3,
+                style: None,
+            },
+            PremeasuredCell {
+                text: "",
+                width: 0,
+                style: None,
+            },
+            PremeasuredCell {
+                text: "",
+                width: 0,
+                style: None,
+            },
+        ];
+        screen.write_premeasured(screen.area(), &cells).unwrap();
+        let before = *screen.cell(0, 0);
+        let mut written = Vec::new();
+        let mut canvas = Canvas {
+            screen: &mut screen,
+            rect: Rect::new(2, 0, 1, 1),
+            written: &mut written,
+        };
+        assert!(canvas.write_premeasured(&[]).is_err());
+        assert!(canvas.written.is_empty());
+        assert_eq!(*canvas.screen.cell(0, 0), before);
+        canvas
+            .write_premeasured(&[PremeasuredCell {
+                text: "X",
+                width: 1,
+                style: None,
+            }])
+            .unwrap();
+        assert_eq!(*canvas.written, [Rect::new(0, 0, 3, 1)]);
+        assert_eq!(canvas.screen.cell(0, 0).text(), " ");
+        assert_eq!(canvas.screen.cell(1, 0).width, 1);
     }
 }

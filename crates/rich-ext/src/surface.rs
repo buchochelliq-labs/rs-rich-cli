@@ -36,6 +36,15 @@
 //! A [`resize`](Surface::resize) keeps what was drawn and writes everything
 //! once. Graphics (micro assets drawn with Kitty, iTerm2 or Sixel) come
 //! through a [`PlacementSource`], as they do for [`frame`](crate::frame)s.
+//!
+//! [`Screen::write_premeasured`] is a separate import of an externally
+//! measured grid, preserving opaque text and supplied occupied columns.
+//! It does not change [`Draw`]'s native parity contract. Imported painting
+//! supports owned fullscreen terminals only (DECAWM/CUP, autowrap enabled
+//! between paints); inline input returns an error. Surface retries wrap
+//! restoration after writer failures and restores it on finish/drop.
+//! A bare [`Painter`] only constructs bytes: its caller owns writing,
+//! flushing and terminal restoration after errors and panics.
 
 mod screen;
 
@@ -47,7 +56,10 @@ use rich::{Console, ConsoleOptions, Renderable, Segment};
 use crate::frame::{Change, Frame, Placement, PlacementSource, plan_graphics};
 
 pub(crate) use screen::char_width;
-pub use screen::{Cell, PaintStats, PaintStrategy, Painter, Rect, Screen, TextRun};
+pub use screen::{
+    Cell, PaintStats, PaintStrategy, Painter, PremeasuredCell, PremeasuredCellError,
+    PremeasuredError, Rect, Screen, TextRun,
+};
 
 /// Drawing straight into a [`Screen`]'s cells: rs-rich-ext's fast path.
 ///
@@ -394,13 +406,13 @@ impl<W: Write> Surface<W> {
         };
         f(&mut drawing);
         let Drawing { damage, cursor, .. } = drawing;
-        let out = self.frame(damage, cursor);
-        self.writer.write_all(out.as_bytes())?;
-        self.writer.flush()
+        self.painter.check_screen(&self.screen)?;
+        let out = self.frame(damage, cursor)?;
+        self.write_owned(&out)
     }
 
     /// The bytes for one frame.
-    fn frame(&mut self, damage: Vec<Rect>, cursor: Option<(u16, u16)>) -> String {
+    fn frame(&mut self, damage: Vec<Rect>, cursor: Option<(u16, u16)>) -> io::Result<String> {
         let mut out = String::new();
         if !self.started {
             if self.viewport == Viewport::Fullscreen {
@@ -425,7 +437,7 @@ impl<W: Write> Surface<W> {
             .map(|p| Rect::new(p.column as u16, p.row as u16, p.cols as u16, p.rows as u16))
             .collect();
         self.painter.set_fixed(&fixed);
-        let painted = self.painter.paint(&self.screen, &damage);
+        let painted = self.painter.try_paint(&self.screen, &damage)?;
         let written = self.painter.written().to_vec();
         if self.cursor_shown && !painted.is_empty() {
             // Hidden while the frame is written, so it does not flicker
@@ -458,7 +470,7 @@ impl<W: Write> Surface<W> {
         if self.synchronized && !out.is_empty() {
             out = format!("{BEGIN_SYNCHRONIZED_UPDATE}{out}{END_SYNCHRONIZED_UPDATE}");
         }
-        out
+        Ok(out)
     }
 
     /// After the cells: the graphics that moved, went away or had their
@@ -514,6 +526,29 @@ impl<W: Write> Surface<W> {
         out
     }
 
+    /// Writing can fail after DECAWM was disabled. Retry cleanup on the
+    /// same writer, preserving the original error or panic. A second panic
+    /// during best-effort cleanup must not replace the original one.
+    fn write_owned(&mut self, out: &str) -> io::Result<()> {
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            self.writer.write_all(out.as_bytes())?;
+            self.writer.flush()
+        }));
+        if !matches!(&result, Ok(Ok(()))) {
+            self.full = true;
+            if self.viewport == Viewport::Fullscreen {
+                let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                    let _ = self.writer.write_all(b"\x1b[?2026l\x1b[?7h");
+                    let _ = self.writer.flush();
+                }));
+            }
+        }
+        match result {
+            Ok(result) => result,
+            Err(panic) => std::panic::resume_unwind(panic),
+        }
+    }
+
     /// Give the terminal back: the alternate screen is left (full screen),
     /// or the cursor goes below the last frame (inline); styles are reset
     /// and the cursor shown. Called by `Drop` if not before.
@@ -533,10 +568,9 @@ impl<W: Write> Surface<W> {
         out.push_str(&self.painter.finish());
         out.push_str("\x1b[0m\x1b[?25h");
         if self.viewport == Viewport::Fullscreen {
-            out.push_str("\x1b[?1049l");
+            out.push_str("\x1b[?7h\x1b[?1049l");
         }
-        self.writer.write_all(out.as_bytes())?;
-        self.writer.flush()?;
+        self.write_owned(&out)?;
         // Only now: a failed write leaves `finish` (and `Drop`) to try again.
         self.finished = true;
         Ok(())
@@ -545,7 +579,8 @@ impl<W: Write> Surface<W> {
 
 impl<W: Write> Drop for Surface<W> {
     fn drop(&mut self) {
-        let _ = self.finish();
+        // Cleanup must not cause a second panic while a writer unwinds.
+        let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| self.finish()));
     }
 }
 
@@ -855,7 +890,10 @@ mod tests {
         assert!(out.contains("\x1b[2J") && out.contains("hello"), "{out:?}");
         surface.finish().unwrap();
         let out = output(&mut surface);
-        assert!(out.ends_with("\x1b[0m\x1b[?25h\x1b[?1049l"), "{out:?}");
+        assert!(
+            out.ends_with("\x1b[0m\x1b[?25h\x1b[?7h\x1b[?1049l"),
+            "{out:?}"
+        );
     }
 
     #[test]
@@ -1032,5 +1070,114 @@ mod tests {
         }
         let out = String::from_utf8(sink).unwrap();
         assert!(out.ends_with("\x1b[?1049l"), "{out:?}");
+    }
+}
+
+#[cfg(test)]
+mod premeasured_lifecycle_tests {
+    use super::*;
+    use std::cell::RefCell;
+    use std::rc::Rc;
+
+    struct FaultWriter {
+        bytes: Rc<RefCell<Vec<u8>>>,
+        fault: u8,
+    }
+    impl Write for FaultWriter {
+        fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
+            let fault = if self.fault == 3 {
+                0
+            } else {
+                std::mem::take(&mut self.fault)
+            };
+            if fault != 0 {
+                self.bytes.borrow_mut().extend_from_slice(b"\x1b[?7l");
+                if fault == 2 {
+                    panic!("writer panic");
+                }
+                return Err(io::Error::other("original write failure"));
+            }
+            self.bytes.borrow_mut().extend_from_slice(bytes);
+            Ok(bytes.len())
+        }
+        fn flush(&mut self) -> io::Result<()> {
+            if self.fault == 3 {
+                self.fault = 0;
+                return Err(io::Error::other("original flush failure"));
+            }
+            Ok(())
+        }
+    }
+
+    fn draw_import(drawing: &mut Drawing<'_>) {
+        let area = drawing.area();
+        drawing
+            .screen
+            .write_premeasured(
+                area,
+                &[PremeasuredCell {
+                    text: "字",
+                    width: 1,
+                    style: None,
+                }],
+            )
+            .unwrap();
+        drawing.damage.push(area);
+    }
+
+    #[test]
+    fn premeasured_surface_retries_wrap_after_partial_write_flush_or_panic() {
+        for fault in [1, 2, 3] {
+            let bytes = Rc::new(RefCell::new(Vec::new()));
+            let mut surface = Surface::new(
+                FaultWriter {
+                    bytes: bytes.clone(),
+                    fault,
+                },
+                1,
+                1,
+            );
+            let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                surface.draw(draw_import)
+            }));
+            match (fault, result) {
+                (2, Err(_)) => {}
+                (1, Ok(Err(error))) => assert_eq!(error.to_string(), "original write failure"),
+                (3, Ok(Err(error))) => assert_eq!(error.to_string(), "original flush failure"),
+                _ => panic!("wrong failure result"),
+            }
+            assert!(bytes.borrow().ends_with(b"\x1b[?7h"));
+            surface.finish().unwrap();
+            let out = String::from_utf8(bytes.borrow().clone()).unwrap();
+            assert!(out.rfind("\x1b[?7h").unwrap() < out.rfind("\x1b[?1049l").unwrap());
+        }
+    }
+
+    #[test]
+    fn premeasured_surface_inline_rejection_writes_nothing() {
+        let mut surface = Surface::new(Vec::new(), 1, 1).viewport(Viewport::Inline(1));
+        let error = surface.draw(draw_import).unwrap_err();
+        assert_eq!(error.kind(), io::ErrorKind::InvalidInput);
+        assert!(surface.writer().is_empty());
+        assert!(!surface.started);
+    }
+
+    #[test]
+    fn premeasured_surface_drop_restores_wrap_before_leaving() {
+        let bytes = Rc::new(RefCell::new(Vec::new()));
+        {
+            let mut surface = Surface::new(
+                FaultWriter {
+                    bytes: bytes.clone(),
+                    fault: 0,
+                },
+                1,
+                1,
+            );
+            surface.draw(draw_import).unwrap();
+            bytes.borrow_mut().clear();
+        }
+        let out = String::from_utf8(bytes.borrow().clone()).unwrap();
+        assert!(out.find("\x1b[?7h").unwrap() < out.find("\x1b[?1049l").unwrap());
     }
 }

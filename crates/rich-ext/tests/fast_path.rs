@@ -33,7 +33,7 @@ fn backdrop(width: u16, height: u16, rect: Rect) -> Screen {
 }
 
 /// Every cell of `a` and `b`, with its style resolved.
-fn cells(screen: &Screen) -> Vec<(String, u8, Option<Style>)> {
+fn cells(screen: &Screen) -> Vec<(String, u16, Option<Style>)> {
     let area = screen.area();
     let mut out = Vec::new();
     for y in 0..area.height {
