@@ -50,7 +50,7 @@
   };
   const start = performance.now();
   function frame(now) {
-    const mbps = Math.min((now - start) / 1000 * 36, 287.4);
+    const mbps = Math.min((now - start) / 1000 * 24, 287.4);
     dial(document.getElementById('painted'), mbps);
     dial(document.getElementById('labelled'), mbps);
     const up = mbps / 3;

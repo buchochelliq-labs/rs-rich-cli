@@ -3233,7 +3233,10 @@ mod tests {
                 let pixels = &frames[0].pixels;
                 assert_eq!((pixels.width, pixels.height), (20, 20), "{name}");
                 let expected = if capture { [30, 90, 220] } else { [7; 3] };
-                assert!(pixels.rgb.chunks_exact(3).all(|p| p == expected), "{name}");
+                assert!(
+                    pixels.rgb.as_chunks::<3>().0.iter().all(|p| *p == expected),
+                    "{name}"
+                );
             }
             // A fresh cast before the next slot cannot duplicate either path.
             worker.intervals.insert(node, Duration::from_secs(60));

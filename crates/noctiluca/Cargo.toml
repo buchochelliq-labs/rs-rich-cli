@@ -19,7 +19,14 @@ readme = "README.md"
 documentation = "https://docs.rs/noctiluca"
 keywords = ["terminal", "browser", "tui", "chrome", "rich"]
 categories = ["command-line-utilities"]
-include = ["src/**/*", "README.md", "LICENSE", "config.sample.toml", "Cargo.toml"]
+include = [
+    "src/**/*",
+    "tests/snapshots/source-native/*",
+    "README.md",
+    "LICENSE",
+    "config.sample.toml",
+    "Cargo.toml",
+]
 
 [lints]
 workspace = true

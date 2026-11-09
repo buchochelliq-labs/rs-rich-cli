@@ -3,10 +3,13 @@ pub use intuituive::ImageAnchor
 pub use intuituive::ImageFit
 pub use intuituive::ImageMode
 pub use intuituive::ImageView
+pub use intuituive::KittyFeatures
 pub use intuituive::Overflow
 pub use intuituive::PaintStats
 pub use intuituive::PaintStrategy
 pub use intuituive::Picture
+pub use intuituive::PictureEncoding
+pub use intuituive::PixelFormats
 pub use intuituive::Pixels
 pub use intuituive::dates
 pub use intuituive::interact
@@ -424,6 +427,7 @@ pub fn intuituive::app::Driver::drag_on(&mut self, &str, (i32, i32))
 pub fn intuituive::app::Driver::event(&mut self, rich_interact::event::Event)
 pub fn intuituive::app::Driver::find_text(&self, &str) -> core::option::Option<(u16, u16)>
 pub fn intuituive::app::Driver::finish(self) -> alloc::string::String
+pub fn intuituive::app::Driver::finish_output(self) -> intuituive::app::FinishOutput
 pub fn intuituive::app::Driver::focused(&self) -> core::option::Option<intuituive::reactive::NodeId>
 pub fn intuituive::app::Driver::focused_name(&self) -> core::option::Option<alloc::string::String>
 pub fn intuituive::app::Driver::handed_back(&mut self, intuituive::app::Handoff, std::io::error::Result<core::option::Option<i32>>)
@@ -435,6 +439,7 @@ pub fn intuituive::app::Driver::is_accessible(&self) -> bool
 pub fn intuituive::app::Driver::is_done(&self) -> bool
 pub fn intuituive::app::Driver::is_linear(&self) -> bool
 pub fn intuituive::app::Driver::needs_render(&self) -> bool
+pub fn intuituive::app::Driver::output_written(&self)
 pub fn intuituive::app::Driver::press(&mut self, &str)
 pub fn intuituive::app::Driver::rect_of(&self, &str) -> core::option::Option<rich_ext::surface::screen::Rect>
 pub fn intuituive::app::Driver::render(&mut self) -> core::option::Option<alloc::string::String>
@@ -443,6 +448,7 @@ pub fn intuituive::app::Driver::run_named(&mut self, &str) -> bool
 pub fn intuituive::app::Driver::screen(&self) -> &rich_ext::surface::screen::Screen
 pub fn intuituive::app::Driver::scroll_on(&mut self, &str, i32)
 pub fn intuituive::app::Driver::send(&mut self, rich_interact::event::Event)
+pub fn intuituive::app::Driver::set_cell_pixels(&mut self, core::option::Option<(u16, u16)>)
 pub fn intuituive::app::Driver::set_clipboard(&mut self, bool)
 pub fn intuituive::app::Driver::set_origin(&mut self, u16)
 pub fn intuituive::app::Driver::set_releases(&mut self, rich_interact::event::Releases)
@@ -478,6 +484,18 @@ impl core::marker::Unpin for intuituive::app::Driver
 impl core::marker::UnsafeUnpin for intuituive::app::Driver
 impl !core::panic::unwind_safe::RefUnwindSafe for intuituive::app::Driver
 impl !core::panic::unwind_safe::UnwindSafe for intuituive::app::Driver
+pub struct intuituive::app::FinishOutput
+impl intuituive::app::FinishOutput
+pub fn intuituive::app::FinishOutput::as_str(&self) -> &str
+pub fn intuituive::app::FinishOutput::output_written(&mut self)
+pub fn intuituive::app::FinishOutput::write_to(&mut self, &mut impl std::io::Write) -> std::io::error::Result<()>
+impl core::marker::Freeze for intuituive::app::FinishOutput
+impl core::marker::Send for intuituive::app::FinishOutput
+impl core::marker::Sync for intuituive::app::FinishOutput
+impl core::marker::Unpin for intuituive::app::FinishOutput
+impl core::marker::UnsafeUnpin for intuituive::app::FinishOutput
+impl !core::panic::unwind_safe::RefUnwindSafe for intuituive::app::FinishOutput
+impl !core::panic::unwind_safe::UnwindSafe for intuituive::app::FinishOutput
 pub struct intuituive::app::FrameStats
 pub intuituive::app::FrameStats::bytes: usize
 pub intuituive::app::FrameStats::draw: core::time::Duration
@@ -2666,6 +2684,7 @@ impl core::marker::Unpin for intuituive::layout::Track
 impl core::marker::UnsafeUnpin for intuituive::layout::Track
 impl core::panic::unwind_safe::RefUnwindSafe for intuituive::layout::Track
 impl core::panic::unwind_safe::UnwindSafe for intuituive::layout::Track
+pub fn intuituive::layout::adaptive_columns(u16, u16, u16, usize) -> usize
 pub fn intuituive::layout::split(rich_ext::surface::screen::Rect, intuituive::node::Axis, &[intuituive::layout::Track], intuituive::layout::StackLayout) -> alloc::vec::Vec<rich_ext::surface::screen::Rect>
 pub fn intuituive::layout::split_with_spacers(rich_ext::surface::screen::Rect, intuituive::node::Axis, &[intuituive::layout::Track], intuituive::layout::StackLayout) -> (alloc::vec::Vec<rich_ext::surface::screen::Rect>, alloc::vec::Vec<rich_ext::surface::screen::Rect>)
 pub fn intuituive::layout::squarify(rich_ext::surface::screen::Rect, &[f64], (u16, u16), f64) -> intuituive::layout::Squarified
@@ -2979,6 +2998,7 @@ impl intuituive::node::Node
 pub fn intuituive::node::Node::access_hidden(self, bool) -> intuituive::node::Node
 pub fn intuituive::node::Node::access_role(&self) -> intuituive::a11y::Role
 pub fn intuituive::node::Node::access_state(&self) -> intuituive::a11y::AccessState
+pub fn intuituive::node::Node::adaptive_columns(self, u16, usize) -> intuituive::node::Node
 pub fn intuituive::node::Node::add_title(self, intuituive::border::Edge, intuituive::layout::Align, impl core::convert::Into<alloc::string::String>) -> intuituive::node::Node
 pub fn intuituive::node::Node::add_title_text(self, intuituive::border::Edge, intuituive::layout::Align, &str) -> intuituive::node::Node
 pub fn intuituive::node::Node::add_title_with(self, intuituive::border::Edge, intuituive::layout::Align, impl core::ops::function::Fn() -> alloc::string::String + 'static) -> intuituive::node::Node
@@ -3000,9 +3020,11 @@ pub fn intuituive::node::Node::border_with(self, impl core::ops::function::Fn() 
 pub fn intuituive::node::Node::borders(self, intuituive::border::Sides) -> intuituive::node::Node
 pub fn intuituive::node::Node::busy_when(self, impl core::ops::function::Fn() -> bool + 'static) -> intuituive::node::Node
 pub fn intuituive::node::Node::checked_when(self, impl core::ops::function::Fn() -> bool + 'static) -> intuituive::node::Node
+pub fn intuituive::node::Node::children_cover_only(self) -> intuituive::node::Node
 pub fn intuituive::node::Node::class(self, &str) -> intuituive::node::Node
 pub fn intuituive::node::Node::class_when(self, &str, impl core::ops::function::Fn() -> bool + 'static) -> intuituive::node::Node
 pub fn intuituive::node::Node::collapse_borders(self) -> intuituive::node::Node
+pub fn intuituive::node::Node::controlled_modal(self) -> intuituive::node::Node
 pub fn intuituive::node::Node::disabled_when(self, impl core::ops::function::Fn() -> bool + 'static) -> intuituive::node::Node
 pub fn intuituive::node::Node::draggable<T: 'static>(self, T) -> intuituive::node::Node
 pub fn intuituive::node::Node::error_message(self, impl core::ops::function::Fn() -> core::option::Option<alloc::string::String> + 'static) -> intuituive::node::Node
@@ -3243,6 +3265,7 @@ impl intuituive::node::Node
 pub fn intuituive::node::Node::tree_keys(self, intuituive::widgets::TreeKeys) -> intuituive::node::Node
 impl intuituive::node::Node
 pub fn intuituive::node::Node::variant(self, intuituive::ButtonVariant) -> intuituive::node::Node
+pub fn intuituive::node::Node::wrap_label(self, bool) -> intuituive::node::Node
 impl intuituive::node::Node
 pub fn intuituive::node::Node::vim(self) -> intuituive::node::Node
 pub fn intuituive::node::Node::vim_inserting(self) -> intuituive::node::Node
@@ -4338,6 +4361,7 @@ impl intuituive::node::Node
 pub fn intuituive::node::Node::access_hidden(self, bool) -> intuituive::node::Node
 pub fn intuituive::node::Node::access_role(&self) -> intuituive::a11y::Role
 pub fn intuituive::node::Node::access_state(&self) -> intuituive::a11y::AccessState
+pub fn intuituive::node::Node::adaptive_columns(self, u16, usize) -> intuituive::node::Node
 pub fn intuituive::node::Node::add_title(self, intuituive::border::Edge, intuituive::layout::Align, impl core::convert::Into<alloc::string::String>) -> intuituive::node::Node
 pub fn intuituive::node::Node::add_title_text(self, intuituive::border::Edge, intuituive::layout::Align, &str) -> intuituive::node::Node
 pub fn intuituive::node::Node::add_title_with(self, intuituive::border::Edge, intuituive::layout::Align, impl core::ops::function::Fn() -> alloc::string::String + 'static) -> intuituive::node::Node
@@ -4359,9 +4383,11 @@ pub fn intuituive::node::Node::border_with(self, impl core::ops::function::Fn() 
 pub fn intuituive::node::Node::borders(self, intuituive::border::Sides) -> intuituive::node::Node
 pub fn intuituive::node::Node::busy_when(self, impl core::ops::function::Fn() -> bool + 'static) -> intuituive::node::Node
 pub fn intuituive::node::Node::checked_when(self, impl core::ops::function::Fn() -> bool + 'static) -> intuituive::node::Node
+pub fn intuituive::node::Node::children_cover_only(self) -> intuituive::node::Node
 pub fn intuituive::node::Node::class(self, &str) -> intuituive::node::Node
 pub fn intuituive::node::Node::class_when(self, &str, impl core::ops::function::Fn() -> bool + 'static) -> intuituive::node::Node
 pub fn intuituive::node::Node::collapse_borders(self) -> intuituive::node::Node
+pub fn intuituive::node::Node::controlled_modal(self) -> intuituive::node::Node
 pub fn intuituive::node::Node::disabled_when(self, impl core::ops::function::Fn() -> bool + 'static) -> intuituive::node::Node
 pub fn intuituive::node::Node::draggable<T: 'static>(self, T) -> intuituive::node::Node
 pub fn intuituive::node::Node::error_message(self, impl core::ops::function::Fn() -> core::option::Option<alloc::string::String> + 'static) -> intuituive::node::Node
@@ -4602,6 +4628,7 @@ impl intuituive::node::Node
 pub fn intuituive::node::Node::tree_keys(self, intuituive::widgets::TreeKeys) -> intuituive::node::Node
 impl intuituive::node::Node
 pub fn intuituive::node::Node::variant(self, intuituive::ButtonVariant) -> intuituive::node::Node
+pub fn intuituive::node::Node::wrap_label(self, bool) -> intuituive::node::Node
 impl intuituive::node::Node
 pub fn intuituive::node::Node::vim(self) -> intuituive::node::Node
 pub fn intuituive::node::Node::vim_inserting(self) -> intuituive::node::Node
@@ -5088,6 +5115,7 @@ impl<T> core::marker::Unpin for intuituive::reactive::Signal<T>
 impl<T> core::marker::UnsafeUnpin for intuituive::reactive::Signal<T>
 impl<T> core::panic::unwind_safe::RefUnwindSafe for intuituive::reactive::Signal<T>
 impl<T> core::panic::unwind_safe::UnwindSafe for intuituive::reactive::Signal<T>
+pub fn intuituive::reactive::cell_pixels() -> intuituive::reactive::Memo<core::option::Option<(u16, u16)>>
 pub fn intuituive::reactive::memo<T: core::cmp::PartialEq + 'static>(impl core::ops::function::Fn() -> T + 'static) -> intuituive::reactive::Memo<T>
 pub fn intuituive::reactive::on_write<T: core::clone::Clone + 'static>(intuituive::reactive::Signal<T>, impl core::ops::function::FnMut(T, &mut intuituive::app::Ctx) + 'static)
 pub fn intuituive::reactive::on_write_ref<T: 'static>(intuituive::reactive::Signal<T>, impl core::ops::function::FnMut(&T, &mut intuituive::app::Ctx) + 'static)
@@ -8114,6 +8142,7 @@ pub fn intuituive::app::Driver::drag_on(&mut self, &str, (i32, i32))
 pub fn intuituive::app::Driver::event(&mut self, rich_interact::event::Event)
 pub fn intuituive::app::Driver::find_text(&self, &str) -> core::option::Option<(u16, u16)>
 pub fn intuituive::app::Driver::finish(self) -> alloc::string::String
+pub fn intuituive::app::Driver::finish_output(self) -> intuituive::app::FinishOutput
 pub fn intuituive::app::Driver::focused(&self) -> core::option::Option<intuituive::reactive::NodeId>
 pub fn intuituive::app::Driver::focused_name(&self) -> core::option::Option<alloc::string::String>
 pub fn intuituive::app::Driver::handed_back(&mut self, intuituive::app::Handoff, std::io::error::Result<core::option::Option<i32>>)
@@ -8125,6 +8154,7 @@ pub fn intuituive::app::Driver::is_accessible(&self) -> bool
 pub fn intuituive::app::Driver::is_done(&self) -> bool
 pub fn intuituive::app::Driver::is_linear(&self) -> bool
 pub fn intuituive::app::Driver::needs_render(&self) -> bool
+pub fn intuituive::app::Driver::output_written(&self)
 pub fn intuituive::app::Driver::press(&mut self, &str)
 pub fn intuituive::app::Driver::rect_of(&self, &str) -> core::option::Option<rich_ext::surface::screen::Rect>
 pub fn intuituive::app::Driver::render(&mut self) -> core::option::Option<alloc::string::String>
@@ -8133,6 +8163,7 @@ pub fn intuituive::app::Driver::run_named(&mut self, &str) -> bool
 pub fn intuituive::app::Driver::screen(&self) -> &rich_ext::surface::screen::Screen
 pub fn intuituive::app::Driver::scroll_on(&mut self, &str, i32)
 pub fn intuituive::app::Driver::send(&mut self, rich_interact::event::Event)
+pub fn intuituive::app::Driver::set_cell_pixels(&mut self, core::option::Option<(u16, u16)>)
 pub fn intuituive::app::Driver::set_clipboard(&mut self, bool)
 pub fn intuituive::app::Driver::set_origin(&mut self, u16)
 pub fn intuituive::app::Driver::set_releases(&mut self, rich_interact::event::Releases)
@@ -8225,6 +8256,18 @@ impl core::marker::Unpin for intuituive::FeedTeller
 impl core::marker::UnsafeUnpin for intuituive::FeedTeller
 impl core::panic::unwind_safe::RefUnwindSafe for intuituive::FeedTeller
 impl core::panic::unwind_safe::UnwindSafe for intuituive::FeedTeller
+pub struct intuituive::FinishOutput
+impl intuituive::app::FinishOutput
+pub fn intuituive::app::FinishOutput::as_str(&self) -> &str
+pub fn intuituive::app::FinishOutput::output_written(&mut self)
+pub fn intuituive::app::FinishOutput::write_to(&mut self, &mut impl std::io::Write) -> std::io::error::Result<()>
+impl core::marker::Freeze for intuituive::app::FinishOutput
+impl core::marker::Send for intuituive::app::FinishOutput
+impl core::marker::Sync for intuituive::app::FinishOutput
+impl core::marker::Unpin for intuituive::app::FinishOutput
+impl core::marker::UnsafeUnpin for intuituive::app::FinishOutput
+impl !core::panic::unwind_safe::RefUnwindSafe for intuituive::app::FinishOutput
+impl !core::panic::unwind_safe::UnwindSafe for intuituive::app::FinishOutput
 pub struct intuituive::FrameStats
 pub intuituive::FrameStats::bytes: usize
 pub intuituive::FrameStats::draw: core::time::Duration
@@ -8448,6 +8491,35 @@ impl core::marker::Unpin for intuituive::app::Holds
 impl core::marker::UnsafeUnpin for intuituive::app::Holds
 impl core::panic::unwind_safe::RefUnwindSafe for intuituive::app::Holds
 impl core::panic::unwind_safe::UnwindSafe for intuituive::app::Holds
+pub struct intuituive::ImagePresentation
+impl intuituive::ImagePresentation
+pub fn intuituive::ImagePresentation::detect() -> Self
+pub fn intuituive::ImagePresentation::encoding(self, rich_art::graphics::CellPixels) -> rich_art::picture::PictureEncoding
+pub fn intuituive::ImagePresentation::formats(self) -> rich_art::picture::PixelFormats
+pub fn intuituive::ImagePresentation::from_environment(&dyn rich_ext::capabilities::Environment) -> Self
+pub fn intuituive::ImagePresentation::graphics(self) -> alloc::sync::Arc<dyn rich_ext::frame::graphics::PlacementSource>
+pub fn intuituive::ImagePresentation::kitty_features(self) -> rich_ext::capabilities::KittyFeatures
+pub fn intuituive::ImagePresentation::new(rich_art::picture::Pixels, rich_ext::capabilities::KittyFeatures, rich_art::picture::PixelFormats) -> Self
+pub fn intuituive::ImagePresentation::picture(self, &rich_art::picture::Picture) -> rich_art::picture::Picture
+pub fn intuituive::ImagePresentation::pixels(self) -> rich_art::picture::Pixels
+pub fn intuituive::ImagePresentation::with_native_kitty_animation(self, bool) -> Self
+pub fn intuituive::ImagePresentation::with_pixels(self, rich_art::picture::Pixels) -> Self
+impl core::clone::Clone for intuituive::ImagePresentation
+pub fn intuituive::ImagePresentation::clone(&self) -> intuituive::ImagePresentation
+impl core::cmp::Eq for intuituive::ImagePresentation
+impl core::cmp::PartialEq for intuituive::ImagePresentation
+pub fn intuituive::ImagePresentation::eq(&self, &intuituive::ImagePresentation) -> bool
+impl core::fmt::Debug for intuituive::ImagePresentation
+pub fn intuituive::ImagePresentation::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Copy for intuituive::ImagePresentation
+impl core::marker::StructuralPartialEq for intuituive::ImagePresentation
+impl core::marker::Freeze for intuituive::ImagePresentation
+impl core::marker::Send for intuituive::ImagePresentation
+impl core::marker::Sync for intuituive::ImagePresentation
+impl core::marker::Unpin for intuituive::ImagePresentation
+impl core::marker::UnsafeUnpin for intuituive::ImagePresentation
+impl core::panic::unwind_safe::RefUnwindSafe for intuituive::ImagePresentation
+impl core::panic::unwind_safe::UnwindSafe for intuituive::ImagePresentation
 pub struct intuituive::InputHistory
 impl intuituive::complete::InputHistory
 pub fn intuituive::complete::InputHistory::entries(&self) -> alloc::vec::Vec<alloc::string::String>
@@ -8776,6 +8848,7 @@ impl intuituive::node::Node
 pub fn intuituive::node::Node::access_hidden(self, bool) -> intuituive::node::Node
 pub fn intuituive::node::Node::access_role(&self) -> intuituive::a11y::Role
 pub fn intuituive::node::Node::access_state(&self) -> intuituive::a11y::AccessState
+pub fn intuituive::node::Node::adaptive_columns(self, u16, usize) -> intuituive::node::Node
 pub fn intuituive::node::Node::add_title(self, intuituive::border::Edge, intuituive::layout::Align, impl core::convert::Into<alloc::string::String>) -> intuituive::node::Node
 pub fn intuituive::node::Node::add_title_text(self, intuituive::border::Edge, intuituive::layout::Align, &str) -> intuituive::node::Node
 pub fn intuituive::node::Node::add_title_with(self, intuituive::border::Edge, intuituive::layout::Align, impl core::ops::function::Fn() -> alloc::string::String + 'static) -> intuituive::node::Node
@@ -8797,9 +8870,11 @@ pub fn intuituive::node::Node::border_with(self, impl core::ops::function::Fn() 
 pub fn intuituive::node::Node::borders(self, intuituive::border::Sides) -> intuituive::node::Node
 pub fn intuituive::node::Node::busy_when(self, impl core::ops::function::Fn() -> bool + 'static) -> intuituive::node::Node
 pub fn intuituive::node::Node::checked_when(self, impl core::ops::function::Fn() -> bool + 'static) -> intuituive::node::Node
+pub fn intuituive::node::Node::children_cover_only(self) -> intuituive::node::Node
 pub fn intuituive::node::Node::class(self, &str) -> intuituive::node::Node
 pub fn intuituive::node::Node::class_when(self, &str, impl core::ops::function::Fn() -> bool + 'static) -> intuituive::node::Node
 pub fn intuituive::node::Node::collapse_borders(self) -> intuituive::node::Node
+pub fn intuituive::node::Node::controlled_modal(self) -> intuituive::node::Node
 pub fn intuituive::node::Node::disabled_when(self, impl core::ops::function::Fn() -> bool + 'static) -> intuituive::node::Node
 pub fn intuituive::node::Node::draggable<T: 'static>(self, T) -> intuituive::node::Node
 pub fn intuituive::node::Node::error_message(self, impl core::ops::function::Fn() -> core::option::Option<alloc::string::String> + 'static) -> intuituive::node::Node
@@ -9040,6 +9115,7 @@ impl intuituive::node::Node
 pub fn intuituive::node::Node::tree_keys(self, intuituive::widgets::TreeKeys) -> intuituive::node::Node
 impl intuituive::node::Node
 pub fn intuituive::node::Node::variant(self, intuituive::ButtonVariant) -> intuituive::node::Node
+pub fn intuituive::node::Node::wrap_label(self, bool) -> intuituive::node::Node
 impl intuituive::node::Node
 pub fn intuituive::node::Node::vim(self) -> intuituive::node::Node
 pub fn intuituive::node::Node::vim_inserting(self) -> intuituive::node::Node
@@ -9906,6 +9982,7 @@ pub fn intuituive::big_text(impl core::ops::function::Fn() -> alloc::string::Str
 pub fn intuituive::button(impl core::convert::Into<alloc::string::String>, impl core::ops::function::FnMut(&mut intuituive::app::Ctx) + 'static) -> intuituive::node::Node
 pub fn intuituive::button_of(impl core::ops::function::Fn() -> alloc::string::String + 'static, impl core::ops::function::FnMut(&mut intuituive::app::Ctx) + 'static) -> intuituive::node::Node
 pub fn intuituive::carousel(impl core::ops::function::Fn() -> usize + 'static, intuituive::reactive::Signal<usize>, impl core::ops::function::Fn(usize) -> intuituive::node::Node + 'static) -> intuituive::node::Node
+pub fn intuituive::cell_pixels() -> intuituive::reactive::Memo<core::option::Option<(u16, u16)>>
 pub fn intuituive::checkbox(impl core::convert::Into<alloc::string::String>, intuituive::reactive::Signal<bool>) -> intuituive::node::Node
 pub fn intuituive::checkbox_of(impl core::ops::function::Fn() -> alloc::string::String + 'static, intuituive::reactive::Signal<intuituive::CheckState>) -> intuituive::node::Node
 pub fn intuituive::checkbox_tri(impl core::convert::Into<alloc::string::String>, intuituive::reactive::Signal<intuituive::CheckState>) -> intuituive::node::Node

@@ -27,6 +27,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, mpsc};
 
 use crate::app::Ctx;
+use crate::clock::Instant;
 
 /// A node's identity in the tree, as the runtime sees it.
 pub type NodeId = u64;
@@ -660,7 +661,7 @@ impl Runtime {
         // Snapshot this turn's work: replacements arriving during a costly
         // job belong to the next turn. Also bound large initial batches.
         let count = self.pending_jobs.load(Ordering::Acquire).min(64);
-        let started = std::time::Instant::now();
+        let started = Instant::now();
         for _ in 0..count {
             let Ok(job) = self.inbox.try_recv() else {
                 break;

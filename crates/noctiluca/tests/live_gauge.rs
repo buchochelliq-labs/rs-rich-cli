@@ -149,7 +149,7 @@ fn canvas_dials_get_pictures_and_frames_while_they_draw() {
         intervals: Vec::new(),
         scale: 1.0,
     });
-    // While the script draws (about eight seconds): frames, each one new.
+    // While the script draws (about twelve seconds): frames, each one new.
     live.pump(Duration::from_secs(3));
     for node in &nodes {
         let frames = live.frames.get(node).map_or(0, Vec::len);
@@ -161,7 +161,7 @@ fn canvas_dials_get_pictures_and_frames_while_they_draw() {
         assert!(all.windows(2).all(|w| w[0] != w[1]), "a frame repeated");
     }
     // Once it has stopped, so do the frames.
-    live.pump(Duration::from_secs(11).saturating_sub(opened.elapsed()));
+    live.pump(Duration::from_secs(14).saturating_sub(opened.elapsed()));
     let sent: usize = live.frames.values().map(Vec::len).sum();
     live.pump(Duration::from_secs(3));
     let after: usize = live.frames.values().map(Vec::len).sum();
