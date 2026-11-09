@@ -1268,6 +1268,8 @@ struct Item {
     /// Text to wrap to the box's width, with a first-line prefix; or
     /// lines kept as they are (code, media).
     wrap: Option<(Vec<Span>, Vec<Span>)>,
+    /// Original code, retained until source allocation gives its final width.
+    code: Option<String>,
     lines: Vec<Line>,
     /// The node it shows.
     node: crate::engine::NodeId,
@@ -1379,6 +1381,7 @@ fn project_part(
             x0,
             x1,
             wrap: Some((spans, first)),
+            code: None,
             lines: Vec::new(),
             node,
             log: None,
@@ -1486,6 +1489,7 @@ fn project_part(
             x0,
             x1,
             wrap: None,
+            code: None,
             lines: vec![line],
             node: region.node,
             log: None,
@@ -1515,6 +1519,7 @@ fn project_part(
                 x0,
                 x1,
                 wrap: None,
+                code: None,
                 lines: vec![crate::shelf::strip(
                     &shelf.clipped(columns as f64 * cw),
                     x1 - x0,
@@ -1643,6 +1648,7 @@ fn project_part(
                     x0,
                     x1,
                     wrap: None,
+                    code: None,
                     // Reserve height now; source reflow determines the usable width.
                     lines: vec![Line::default(); rows],
                     node: log.node,
@@ -1696,6 +1702,7 @@ fn project_part(
                             .min(columns)
                             .max(i0 + 1),
                         wrap: None,
+                        code: None,
                         lines,
                         node: indicator.node,
                         log: None,
@@ -1759,6 +1766,7 @@ fn project_part(
                     x0: m0,
                     x1,
                     wrap: None,
+                    code: None,
                     lines,
                     node: media.node,
                     log: None,
@@ -1829,6 +1837,7 @@ fn project_part(
                     x0,
                     x1,
                     wrap: None,
+                    code: source.map(|_| code),
                     lines,
                     node: block.node,
                     log: None,
@@ -2223,6 +2232,12 @@ fn project_part(
         placed[n].2 = start;
     }
     for item in items.iter_mut() {
+        if let Some(code) = &item.code {
+            item.lines = code
+                .split('\n')
+                .flat_map(|row| wrap_chars(&Span::new(row, "cyan"), item.x1 - item.x0, &[], &[]))
+                .collect();
+        }
         if let Some(node) = item.log {
             let log = page
                 .logs

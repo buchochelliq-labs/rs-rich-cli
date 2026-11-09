@@ -681,6 +681,10 @@ pub(super) fn stack_figures(
         if group.is_empty() {
             continue;
         }
+        let old_bottom = group
+            .iter()
+            .map(|&i| items[i].bottom)
+            .fold(f64::NEG_INFINITY, f64::max);
         group.sort_by_key(|&i| items[i].source);
         let top = group
             .iter()
@@ -744,6 +748,27 @@ pub(super) fn stack_figures(
             for &(i, row) in unit {
                 items[i].top = top + (slot.y as usize + row) as f64 * cell.1;
                 items[i].bottom = items[i].top + items[i].lines.len() as f64 * cell.1;
+            }
+        }
+        let extra = (top + total as f64 * cell.1 - old_bottom).max(0.0);
+        // Preserve the enclosing flow's source order when this container grows.
+        // A sibling's old source row cannot sort between newly wrapped members.
+        let parent = rel
+            .grids
+            .iter()
+            .rev()
+            .flat_map(|g| &g.items)
+            .find(|&&unit| rel.contains(unit, root))
+            .copied();
+        for item in items.iter_mut() {
+            if item.source.is_some_and(|node| {
+                node > root
+                    && !rel.contains(root, node)
+                    && flow_context(rel, node)
+                    && parent.is_none_or(|parent| rel.contains(parent, node))
+            }) {
+                item.top += extra;
+                item.bottom += extra;
             }
         }
     }
