@@ -57,7 +57,7 @@
 
 **Interfaces:** Consume Tasks 1–2 without altering their behavior.
 
-- [ ] Run the complete Noctiluca package suite, scoped Clippy, fmt and `git diff --check`.
-- [ ] Build the current CLI if disk permits; rerun the eight-site Kitty capture set and inspect before/after images for layout movement and cleanup.
-- [ ] Record the unchanged iTerm-compatible performance gate as open if it cannot be run safely; do not claim release qualification.
-- [ ] Perform a fresh whole-branch review, resolve material findings, then push the feature branch and open a PR for user review. Do not merge.
+- [x] Run the complete Noctiluca package suite, scoped Clippy, fmt and `git diff --check` (433 passed, 3 ignored; see the local SDD ledger).
+- [x] Build the current CLI and rerun the eight-site Kitty capture set; visually inspect all 40 images and verify process/socket cleanup. The site findings and capture limits are recorded in `docs/design/noctiluca-media-quality-status.md`.
+- [x] Record release performance acceptance as open. The prior iTerm-compatible runs failed at least one original gate, and this current source was not requalified; qualitative site screenshots do not measure smoothness or latency.
+- [x] Request an independent review of the follow-up code range; no material findings. Push the feature branch and open a PR for user review. Do not merge.
