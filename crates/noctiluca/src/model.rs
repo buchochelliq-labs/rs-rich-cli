@@ -5074,6 +5074,77 @@ mod tests {
     }
 
     #[test]
+    fn source_replaced_table_caption_keeps_only_surviving_origins() {
+        for (discarded, retained) in [
+            ("  discarded é  ", " 世界 "),
+            (" 界 ", " café Unicode "),
+            ("old", " "),
+        ] {
+            let mut f = Fake::new();
+            let table = f.el(0, "TABLE", &[], "table");
+            let first = f.el(table, "CAPTION", &[], "table-caption");
+            let discarded_node = f.node(first, 3, "#text", Some(discarded), &[], Some("inline"));
+            let row = f.el(table, "TR", &[], "table-row");
+            let cell = f.el(row, "TD", &[], "table-cell");
+            let cell_node = f.node(cell, 3, "#text", Some("Cell survives"), &[], Some("inline"));
+            let last = f.el(table, "CAPTION", &[], "table-caption");
+            let retained_node = f.node(last, 3, "#text", Some(retained), &[], Some("inline"));
+            let snapshot = PageSnapshot {
+                dom: f.snapshot(),
+                ax: Value::Null,
+            };
+            let source = build_source(&snapshot, &mut Revisions::new());
+            let legacy = build(&snapshot, &mut Revisions::new());
+            assert_eq!(source.page().as_ref(), &legacy);
+            let BlockKind::Table(table) = &source.page().blocks[0].kind else {
+                panic!("table expected")
+            };
+            assert_eq!(
+                table.caption,
+                retained.trim(),
+                "legacy keeps the last caption"
+            );
+            assert!(
+                source
+                    .relations
+                    .runs
+                    .iter()
+                    .all(|piece| piece.node != discarded_node as usize),
+                "discarded caption has no final provenance"
+            );
+            let mut coverage = vec![0; table.caption.len()];
+            for piece in source
+                .relations
+                .runs
+                .iter()
+                .filter(|piece| matches!(piece.location, RunLocation::Caption { block: 0 }))
+            {
+                assert_eq!(piece.node, retained_node as usize);
+                assert!(
+                    table.caption.get(piece.bytes.clone()).is_some(),
+                    "caption addresses remain valid UTF-8 ranges"
+                );
+                for byte in &mut coverage[piece.bytes.clone()] {
+                    *byte += 1;
+                }
+            }
+            assert_eq!(
+                coverage,
+                vec![1; table.caption.len()],
+                "every final caption byte has exactly one source"
+            );
+            let cell_text: String = source
+                .relations
+                .runs
+                .iter()
+                .filter(|piece| piece.node == cell_node as usize)
+                .map(|piece| piece.text(source.page()))
+                .collect();
+            assert_eq!(cell_text, "Cell survives");
+        }
+    }
+
+    #[test]
     fn source_tables_folded_inside_logs_leave_no_dangling_cell_addresses() {
         let mut f = Fake::new();
         let log = f.el(0, "DIV", &[("role", "log")], "block");
