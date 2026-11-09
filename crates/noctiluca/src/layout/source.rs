@@ -1,11 +1,12 @@
 //! Source interpretation only; rectangular allocation uses the shared layout solver.
 use super::*;
 use crate::engine::Rect;
-use crate::model::source::{RunLocation, SourcePosition, SourceRelations};
+use crate::model::source::{RunLocation, RunPiece, SourcePosition, SourceRelations};
 use rich_intuituive::Size;
 use rich_intuituive::layout::{StackLayout, Track, adaptive_columns, split};
 use rich_intuituive::node::Axis;
 use rich_intuituive::screen::Rect as Cells;
+use std::collections::HashSet;
 
 pub(super) struct TextGroup {
     pub runs: Vec<Run>,
@@ -21,46 +22,137 @@ fn block_of(location: &RunLocation) -> usize {
     }
 }
 
-fn alias(source: &SourcePage, node: usize, block: usize) -> Option<(usize, Rect)> {
-    let rel = &source.relations;
-    let &(_, shown) = rel
-        .twins
-        .iter()
-        .find(|(spoken, _)| rel.contains(*spoken, node))?;
-    // The known counterpart must still have a retained visible piece in the same layer.
-    let layer = source.page().blocks[block].stack.layer;
-    rel.runs.iter().find(|piece| {
-        let b = &source.page().blocks[block_of(&piece.location)];
-        rel.contains(shown, piece.node) && !b.stack.covered && b.stack.layer == layer
-    })?;
-    Some((shown, rel.nodes[shown].rect?))
+// Borrowed, disposable indexes for one projection. The retained source graph and
+// Page stay immutable; no text, pixels or replacement ownership graph is copied.
+pub(super) struct Context<'a> {
+    page: &'a Page,
+    pub(super) relations: &'a SourceRelations,
+    owners: Vec<Option<usize>>,
+    pieces: Vec<Vec<&'a RunPiece>>,
+    boundaries: Vec<Option<usize>>,
+    node_by_id: HashMap<NodeId, usize>,
+    alias_for: Vec<Option<usize>>,
+    aliases: Vec<Option<Alias>>,
+    owned_kinds: Vec<u8>,
 }
-
-pub(super) fn has_alias(source: &SourcePage, block: usize, marks: &Marks) -> bool {
+struct Alias {
+    shown: usize,
+    rect: Rect,
+    layers: HashSet<Option<usize>>,
+}
+impl<'a> Context<'a> {
+    pub(super) fn new(source: &'a SourcePage, adapt: Adapt) -> Self {
+        let rel = &source.relations;
+        let page = source.page().as_ref();
+        let mut owners = vec![None; page.blocks.len()];
+        let mut pieces = vec![Vec::new(); page.blocks.len()];
+        let mut owned_kinds = vec![0u8; rel.nodes.len()];
+        for piece in &rel.blocks {
+            owners[piece.block] = Some(piece.node);
+            owned_kinds[piece.node] |= match page.blocks[piece.block].kind {
+                BlockKind::Media(m) if page.media[m].kind == MediaKind::Video => 1,
+                BlockKind::Log(_) => 2,
+                _ => 0,
+            };
+        }
+        for piece in &rel.runs {
+            pieces[block_of(&piece.location)].push(piece);
+        }
+        let boundary_roots: HashSet<_> = rel
+            .grids
+            .iter()
+            .filter(|_| adapt.on(Rule::SnapGrids))
+            .flat_map(|g| g.items.iter().copied())
+            .chain(
+                rel.figures
+                    .iter()
+                    .filter(|_| adapt.on(Rule::FigureFlow))
+                    .map(|f| f.node),
+            )
+            .collect();
+        let mut aliases = Vec::new();
+        let mut alias_roots = HashMap::new();
+        if adapt.on(Rule::ScreenReaderTwins) {
+            for &(spoken, shown) in &rel.twins {
+                alias_roots.insert(spoken, aliases.len());
+                aliases.push(rel.nodes[shown].rect.map(|rect| {
+                    Alias {
+                        shown,
+                        rect,
+                        // Known counterpart pieces must survive in this exact layer.
+                        layers: rel
+                            .runs
+                            .iter()
+                            .filter(|p| rel.contains(shown, p.node))
+                            .map(|p| &page.blocks[block_of(&p.location)])
+                            .filter(|b| !b.stack.covered)
+                            .map(|b| b.stack.layer)
+                            .collect(),
+                    }
+                }));
+            }
+        }
+        let mut boundaries = vec![None; rel.nodes.len()];
+        let mut alias_for = vec![None; rel.nodes.len()];
+        for (i, node) in rel.nodes.iter().enumerate() {
+            boundaries[i] = if boundary_roots.contains(&i) {
+                Some(i)
+            } else {
+                node.parent.and_then(|p| boundaries[p])
+            };
+            alias_for[i] = node
+                .parent
+                .and_then(|p| alias_for[p])
+                .or_else(|| alias_roots.get(&i).copied());
+        }
+        for (i, node) in rel.nodes.iter().enumerate().rev() {
+            if let Some(parent) = node.parent {
+                owned_kinds[parent] |= owned_kinds[i];
+            }
+        }
+        Self {
+            page,
+            relations: rel,
+            owners,
+            pieces,
+            boundaries,
+            node_by_id: rel
+                .nodes
+                .iter()
+                .enumerate()
+                .map(|(i, n)| (n.node, i))
+                .collect(),
+            alias_for,
+            aliases,
+            owned_kinds,
+        }
+    }
+    fn page(&self) -> &Page {
+        self.page
+    }
+    pub(super) fn owner(&self, block: usize) -> Option<usize> {
+        self.owners[block]
+    }
+    fn node_rect(&self, node: NodeId) -> Option<Rect> {
+        self.relations.nodes[*self.node_by_id.get(&node)?].rect
+    }
+}
+fn alias(source: &Context<'_>, node: usize, block: usize) -> Option<(usize, Rect)> {
+    let alias = source.aliases[source.alias_for[node]?].as_ref()?;
+    alias
+        .layers
+        .contains(&source.page.blocks[block].stack.layer)
+        .then_some((alias.shown, alias.rect))
+}
+pub(super) fn has_alias(source: &Context<'_>, block: usize, marks: &Marks) -> bool {
     marks.adapt.on(Rule::ScreenReaderTwins)
-        && source.relations.runs.iter().any(|piece| {
-            matches!(piece.location, RunLocation::Block { block: b, .. } if b == block)
-                && alias(source, piece.node, block).is_some()
+        && source.pieces[block].iter().any(|p| {
+            matches!(p.location, RunLocation::Block { .. })
+                && alias(source, p.node, block).is_some()
         })
 }
 
-fn boundary(rel: &SourceRelations, node: usize, adapt: Adapt) -> Option<usize> {
-    rel.grids
-        .iter()
-        .filter(|_| adapt.on(Rule::SnapGrids))
-        .flat_map(|g| &g.items)
-        .copied()
-        .chain(
-            rel.figures
-                .iter()
-                .filter(|_| adapt.on(Rule::FigureFlow))
-                .map(|f| f.node),
-        )
-        .filter(|&root| rel.contains(root, node))
-        .max()
-}
-
-pub(super) fn text_groups(source: &SourcePage, block: usize, marks: &Marks) -> Vec<TextGroup> {
+pub(super) fn text_groups(source: &Context<'_>, block: usize, marks: &Marks) -> Vec<TextGroup> {
     groups_at(
         source,
         block,
@@ -71,7 +163,7 @@ pub(super) fn text_groups(source: &SourcePage, block: usize, marks: &Marks) -> V
 }
 
 pub(super) fn cell_groups(
-    source: &SourcePage,
+    source: &Context<'_>,
     block: usize,
     row: usize,
     cell: usize,
@@ -87,27 +179,40 @@ pub(super) fn cell_groups(
 }
 
 fn groups_at(
-    source: &SourcePage,
+    source: &Context<'_>,
     block: usize,
     runs: &[Run],
     marks: &Marks,
     location: impl Fn(usize) -> RunLocation,
 ) -> Vec<TextGroup> {
     let rel = &source.relations;
-    let owner = rel.blocks.iter().find(|p| p.block == block).map(|p| p.node);
-    let pieces: Vec<_> = rel
-        .runs
+    let owner = source.owner(block);
+    let first = location(0);
+    let pieces: Vec<_> = source.pieces[block]
         .iter()
-        .filter(|p| (0..runs.len()).any(|run| p.location == location(run)))
+        .copied()
+        .filter(|p| match (&p.location, &first) {
+            (RunLocation::Block { .. }, RunLocation::Block { .. }) => true,
+            (
+                RunLocation::Cell {
+                    row: a, cell: b, ..
+                },
+                RunLocation::Cell {
+                    row: c, cell: d, ..
+                },
+            ) => a == c && b == d,
+            (RunLocation::Caption { .. }, RunLocation::Caption { .. }) => true,
+            _ => false,
+        })
         .collect();
     let mixed_alias = marks.adapt.on(Rule::ScreenReaderTwins)
         && pieces
             .iter()
             .any(|p| alias(source, p.node, block).is_some());
-    let own_boundary = owner.and_then(|n| boundary(rel, n, marks.adapt));
+    let own_boundary = owner.and_then(|n| source.boundaries[n]);
     let mixed_owner = pieces
         .iter()
-        .any(|p| boundary(rel, p.node, marks.adapt) != own_boundary);
+        .any(|p| source.boundaries[p.node] != own_boundary);
     if !mixed_alias && !mixed_owner {
         return vec![TextGroup {
             runs: runs.to_vec(),
@@ -152,10 +257,9 @@ fn groups_at(
             );
             let mut fragment = run.clone();
             fragment.text = run.text[piece.bytes.clone()].to_string();
-            let key = boundary(rel, at, marks.adapt).unwrap_or(at);
+            let key = source.boundaries[at].unwrap_or(at);
             if let Some(last) = groups.last_mut().filter(|g| {
-                g.rect == rect
-                    && g.owner.map(|n| boundary(rel, n, marks.adapt).unwrap_or(n)) == Some(key)
+                g.rect == rect && g.owner.map(|n| source.boundaries[n].unwrap_or(n)) == Some(key)
             }) {
                 last.runs.push(fragment);
             } else {
@@ -282,7 +386,7 @@ fn members(rel: &SourceRelations, root: usize, items: &[Item]) -> Vec<usize> {
 }
 
 pub(super) fn allocate(
-    source: &SourcePage,
+    source: &Context<'_>,
     items: &mut [Item],
     columns: usize,
     cell: (f64, f64),
@@ -317,18 +421,8 @@ pub(super) fn allocate(
             let Some(first) = boxes.first() else { continue };
             // The established source-declared video/log pair keeps its wider minimum.
             // Membership is actual ancestry, including a log's atomic retained slot.
-            let owns = |root, video| {
-                rel.blocks.iter().any(|piece| {
-                    rel.contains(root, piece.node)
-                        && match source.page().blocks[piece.block].kind {
-                            BlockKind::Media(m) => {
-                                video && source.page().media[m].kind == MediaKind::Video
-                            }
-                            BlockKind::Log(_) => !video,
-                            _ => false,
-                        }
-                })
-            };
+            let owns =
+                |root: usize, video| source.owned_kinds[root] & if video { 1 } else { 2 } != 0;
             let paired = grid.items.len() == 2
                 && ((owns(grid.items[0], true) && owns(grid.items[1], false))
                     || (owns(grid.items[1], true) && owns(grid.items[0], false)));
@@ -460,12 +554,7 @@ pub(super) fn allocate(
                 if let Some((table, _)) = item.row {
                     // A cell fragment may alias a different run root; its column
                     // allocation still belongs to the exact source table row.
-                    let original = rel
-                        .nodes
-                        .iter()
-                        .find(|n| n.node == table)
-                        .and_then(|n| n.rect)
-                        .unwrap_or(rect);
+                    let original = source.node_rect(table).unwrap_or(rect);
                     let scale = |x: usize| {
                         x0 + (((x as f64 * cw - original.x).max(0.0) / original.width.max(1.0))
                             * (x1 - x0) as f64)
@@ -485,7 +574,7 @@ pub(super) fn allocate(
 }
 
 pub(super) fn stack_figures(
-    source: &SourcePage,
+    source: &Context<'_>,
     items: &mut [Item],
     columns: usize,
     cell: (f64, f64),

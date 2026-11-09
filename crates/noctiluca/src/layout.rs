@@ -1260,6 +1260,8 @@ fn project_part(
     part: Part,
     slots: &mut Vec<LogSlot>,
 ) -> Projection {
+    let context = source.map(|source| source::Context::new(source, marks.adapt));
+    let source = context.as_ref();
     let columns = columns.max(10) as usize;
     let (cw, ch) = (cell.0.max(1.0), cell.1.max(1.0));
     let origin_x = match part {
@@ -1869,14 +1871,7 @@ fn project_part(
         }
         for item in &mut items[first_item..] {
             if let Some(source) = source {
-                item.source = item.source.or_else(|| {
-                    source
-                        .relations
-                        .blocks
-                        .iter()
-                        .find(|p| p.block == block_index)
-                        .map(|p| p.node)
-                });
+                item.source = item.source.or_else(|| source.owner(block_index));
                 item.anchor.get_or_insert(item.top);
                 if let Some((media, _, _)) = item.media
                     && page.media[media].kind == MediaKind::Image
