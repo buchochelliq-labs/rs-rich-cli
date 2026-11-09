@@ -20,7 +20,7 @@ Kinds               ╭─ Actions ───────────────
                     │   Next match (Find something first.)                   n │                   ┃
 Sizes               │   Previous match (Find something first.)               N │                   ┃
 Name      │ Size    │   Scroll down                                        j/↓ │                   ┃
-──────────┼─────    │  41/41 · ↑↓ move · enter run · esc close                 │                   ┃
+──────────┼─────    │  42/42 · ↑↓ move · enter run · esc close                 │                   ┃
 Noctiluca │ 1 mm    ╰──────────────────────────────────────────────────────────╯                   ┃
 Copepod   │ 2 mm                                                                                   ┃
                                                                                                    │

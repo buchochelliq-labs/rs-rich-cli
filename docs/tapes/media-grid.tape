@@ -24,7 +24,8 @@ Sleep 1s
 Screenshot watch
 Type "p"
 Wait /PLAYING/
-Sleep 3s
+# Capture the first playing frame. Waiting several seconds made this text
+# screenshot depend on the decoded video's playback clock on each runner.
 Screenshot playing
 Type "G"
 Wait /^(?![\s\S]*░)[\s\S]*Harbour time-lapse/ 60s

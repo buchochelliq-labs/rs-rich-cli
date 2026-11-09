@@ -7,8 +7,8 @@
    Size
     ( ) Small       (•) Large
 
-       Mirror ‹First mirror ▾›        Volume ◀ 50 ▶   [Send] [Unavailable]
-
+       Mirror ‹First mirror ▾›        Volume ◀ 50 ▶   [Unavailable]
+                                               [Send]
  [Schedule remote update]
                ╭─ The "Mirror" select ──────────────────────────────────────────────╮
                │Mirror First mirror                                                ▾│

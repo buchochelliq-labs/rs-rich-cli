@@ -1,9 +1,9 @@
 {
   "tape": "docs/tapes/noctiluca-forms.tape",
   "tape_fnv1a64": "c272bfc4fc862508",
-  "recorder": "rs-rich-record 0.0.12",
+  "recorder": "rs-rich-record 0.1.0",
   "rich": null,
-  "commit": "133ea8ef1a7afc3bfa787185e9a409fc061cbf87",
+  "commit": "2e793e026077a31c0e7b0801242b30e06ef8181a",
   "screenshots": [
     "form",
     "form-hints",
