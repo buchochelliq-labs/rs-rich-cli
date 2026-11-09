@@ -761,7 +761,9 @@ fn bound_public_widget_updates_pixels_and_retires_resources_each_frame() {
             tile.image
                 .pixels()
                 .unwrap()
-                .chunks_exact(4)
+                .as_chunks::<4>()
+                .0
+                .iter()
                 .all(|p| p[..3] == rgb)
         }));
     }
