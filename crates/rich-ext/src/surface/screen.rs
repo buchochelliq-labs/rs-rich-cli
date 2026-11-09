@@ -198,8 +198,8 @@ impl Rect {
     }
 }
 
-/// One cell: a grapheme and its style. A wide grapheme's second column is a
-/// continuation cell (empty text, width 0).
+/// One cell: a native grapheme or an imported opaque atom and its style.
+/// Every later column of a wide atom is a continuation (empty text, width 0).
 ///
 /// A cell is small and `Copy`, with no heap string: a grapheme of up to
 /// four bytes (every single character, and short clusters such as `e` and
@@ -224,12 +224,14 @@ pub struct Cell {
     bytes: [u8; 4],
     /// How many of `bytes` are the text, or [`LONG`] for an index.
     len: u8,
-    pub width: u8,
+    flags: u8,
+    pub width: u16,
     pub style: StyleId,
 }
 
 /// [`Cell::len`] for a grapheme kept in the shared table.
 const LONG: u8 = u8::MAX;
+const PREMEASURED: u8 = 1;
 
 /// The graphemes longer than four bytes, each once, for every screen: what
 /// a cell's index names. Leaked, so a cell's text is borrowed for as long
@@ -253,6 +255,10 @@ impl Cell {
     /// A cell showing `text` (one grapheme), `width` columns wide (0 for a
     /// continuation), in `style`.
     pub fn new(text: &str, width: u8, style: StyleId) -> Cell {
+        Self::stored(text, u16::from(width), style, 0)
+    }
+
+    fn stored(text: &str, width: u16, style: StyleId, flags: u8) -> Cell {
         let mut bytes = [0u8; 4];
         let len = if text.len() <= 4 {
             bytes[..text.len()].copy_from_slice(text.as_bytes());
@@ -281,6 +287,7 @@ impl Cell {
         Cell {
             bytes,
             len,
+            flags,
             width,
             style,
         }
@@ -294,7 +301,8 @@ impl Cell {
         Cell {
             bytes,
             len,
-            width,
+            flags: 0,
+            width: u16::from(width),
             style,
         }
     }
@@ -337,11 +345,19 @@ impl Cell {
         std::str::from_utf8(&self.bytes[..self.len as usize]).unwrap_or(" ")
     }
 
+    fn premeasured(&self) -> bool {
+        self.flags & PREMEASURED != 0
+    }
+
+    fn certain_ascii(&self) -> bool {
+        self.width == 1 && self.len == 1 && (b' '..=b'~').contains(&self.bytes[0])
+    }
+
     pub fn is_continuation(&self) -> bool {
         self.width == 0
     }
 
-    /// Whether the cell's text is empty (a wide character's second half).
+    /// Whether the cell has empty continuation text.
     #[inline]
     pub(crate) fn is_empty_text(&self) -> bool {
         self.len == 0
@@ -354,13 +370,158 @@ impl Cell {
 
     /// The same grapheme, `width` wide, in `style`.
     #[inline]
-    fn restyled(self, width: u8, style: StyleId) -> Cell {
+    fn restyled(self, width: u16, style: StyleId) -> Cell {
         Cell {
             width,
             style,
             ..self
         }
     }
+}
+
+/// One caller-measured terminal atom, or one of its continuation columns.
+/// Text and styles are borrowed only during [`Screen::write_premeasured`].
+/// A leader has nonempty text and a positive width; each following column
+/// in its span has empty text, width zero, and the same optional style.
+#[derive(Clone, Copy, Debug)]
+pub struct PremeasuredCell<'a> {
+    pub text: &'a str,
+    pub width: u16,
+    pub style: Option<&'a Style>,
+}
+
+/// A malformed premeasured grid. No input text is echoed in errors.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum PremeasuredError {
+    Shape {
+        expected: usize,
+        actual: usize,
+    },
+    Cell {
+        index: usize,
+        reason: PremeasuredCellError,
+    },
+}
+
+/// Why a premeasured cell was rejected.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum PremeasuredCellError {
+    EmptyLeader,
+    NonemptyContinuation,
+    OrphanContinuation,
+    SpanCrossesRow,
+    MissingContinuation,
+    ContinuationStyle,
+    TextControl,
+    LinkControl,
+}
+
+impl std::fmt::Display for PremeasuredCellError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            Self::EmptyLeader => "empty leader",
+            Self::NonemptyContinuation => "nonempty continuation",
+            Self::OrphanContinuation => "orphan continuation",
+            Self::SpanCrossesRow => "span crosses its row",
+            Self::MissingContinuation => "missing continuation",
+            Self::ContinuationStyle => "continuation style differs from its leader",
+            Self::TextControl => "terminal control in text",
+            Self::LinkControl => "terminal control in hyperlink",
+        })
+    }
+}
+
+impl std::fmt::Display for PremeasuredError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Shape { expected, actual } => {
+                write!(f, "expected {expected} cells, got {actual}")
+            }
+            Self::Cell { index, reason } => write!(f, "cell {index}: {reason}"),
+        }
+    }
+}
+
+impl std::error::Error for PremeasuredError {}
+
+fn validate_premeasured(rect: Rect, cells: &[PremeasuredCell<'_>]) -> Result<(), PremeasuredError> {
+    let Some(expected) = usize::from(rect.width).checked_mul(usize::from(rect.height)) else {
+        return Err(PremeasuredError::Shape {
+            expected: usize::MAX,
+            actual: cells.len(),
+        });
+    };
+    if cells.len() != expected {
+        return Err(PremeasuredError::Shape {
+            expected,
+            actual: cells.len(),
+        });
+    }
+    let bad = |index, reason| PremeasuredError::Cell { index, reason };
+    use PremeasuredCellError::*;
+    for (row, line) in cells.chunks(usize::from(rect.width).max(1)).enumerate() {
+        let mut x = 0;
+        while x < line.len() {
+            let cell = line[x];
+            let index = row * usize::from(rect.width) + x;
+            if cell.width == 0 {
+                return Err(bad(
+                    index,
+                    if cell.text.is_empty() {
+                        OrphanContinuation
+                    } else {
+                        NonemptyContinuation
+                    },
+                ));
+            }
+            if cell.text.is_empty() {
+                return Err(bad(index, EmptyLeader));
+            }
+            let end = x + usize::from(cell.width);
+            if end > line.len() {
+                return Err(bad(index, SpanCrossesRow));
+            }
+            if cell
+                .text
+                .chars()
+                .any(|c| super::control_picture(c).is_some())
+            {
+                return Err(bad(index, TextControl));
+            }
+            if cell
+                .style
+                .and_then(Style::link)
+                .is_some_and(|link| link.chars().any(|c| super::control_picture(c).is_some()))
+            {
+                return Err(bad(index, LinkControl));
+            }
+            for (offset, continuation) in line[x + 1..end].iter().enumerate() {
+                let index = index + offset + 1;
+                if continuation.width != 0 {
+                    return Err(bad(index, MissingContinuation));
+                }
+                if !continuation.text.is_empty() {
+                    return Err(bad(index, NonemptyContinuation));
+                }
+                if continuation.style != cell.style {
+                    return Err(bad(index, ContinuationStyle));
+                }
+            }
+            x = end;
+        }
+    }
+    Ok(())
+}
+
+/// The complete stored atom containing a column. Arithmetic is wider than
+/// coordinates so a span at the u16 boundary cannot wrap.
+fn atom_bounds(row: &[Cell], x: u16) -> (u16, u16) {
+    let mut lead = usize::from(x);
+    while lead > 0 && row[lead].is_continuation() {
+        lead -= 1;
+    }
+    let end = (lead + usize::from(row[lead].width.max(1))).min(row.len());
+    (lead as u16, end as u16)
 }
 
 /// A run of text in one style, for rs-rich-ext's fast path
@@ -596,38 +757,83 @@ impl Screen {
 
     #[inline]
     fn put_cell(&mut self, x: u16, y: u16, ch: char, style: StyleId) {
-        let ch = narrow(ch);
-        let at = y as usize * self.width as usize + x as usize;
-        let width = self.cells[at].width;
-        if width == 0 && x > 0 {
-            // The second column of a wide grapheme: its first is erased too.
-            let lead = &mut self.cells[at - 1];
-            *lead = Cell::char(' ', 1, lead.style);
-        } else if width >= 2 && x + 1 < self.width {
-            let next = &mut self.cells[at + 1];
-            *next = Cell::char(' ', 1, next.style);
-        }
-        self.cells[at] = Cell::char(ch, 1, style);
+        let (start, end) = atom_bounds(self.row(y), x);
+        self.erase_span(y, start, end);
+        *self.cell_mut(x, y) = Cell::char(narrow(ch), 1, style);
     }
 
-    /// A wide grapheme that `rect` cuts in half, on either side, becomes a
-    /// space: the terminal erases a wide grapheme when either column is
-    /// written, so the half outside `rect` must not stay in the model.
-    fn split_edges(&mut self, rect: Rect) {
+    fn erase_span(&mut self, y: u16, start: u16, end: u16) {
+        for x in start..end {
+            let cell = self.cell_mut(x, y);
+            *cell = Cell::char(' ', 1, cell.style);
+        }
+    }
+
+    /// Erase whole old atoms split by either destination boundary. Return
+    /// conservative damage, including columns outside the destination.
+    fn split_edges(&mut self, rect: Rect) -> Rect {
         let rect = rect.intersection(self.area());
         if rect.is_empty() {
-            return;
+            return rect;
         }
+        let mut damage = rect;
         for y in rect.y..rect.bottom() {
-            if rect.x > 0 && self.cell(rect.x, y).is_continuation() {
-                let style = self.cell(rect.x - 1, y).style;
-                self.cell_mut(rect.x - 1, y).set(" ", 1, style);
-            }
-            if rect.right() < self.width && self.cell(rect.right(), y).is_continuation() {
-                let style = self.cell(rect.right(), y).style;
-                self.cell_mut(rect.right(), y).set(" ", 1, style);
+            for boundary in [rect.x, rect.right()] {
+                if boundary < self.width && self.cell(boundary, y).is_continuation() {
+                    let (start, end) = atom_bounds(self.row(y), boundary);
+                    self.erase_span(y, start, end);
+                    damage = damage.union(Rect::new(start, y, end - start, 1));
+                }
             }
         }
+        damage
+    }
+
+    /// Import opaque atoms with caller-supplied widths, without measuring,
+    /// segmenting or normalizing text. This is separate from [`super::Draw`]'s
+    /// native rich-equivalence contract. The complete original grid is
+    /// validated before any interning or mutation, including clipped cells.
+    /// Partly clipped atoms become ordinary styled spaces. The returned
+    /// damage includes old atoms erased beyond either destination edge.
+    ///
+    /// Exact geometry is available through [`cell`](Self::cell) and
+    /// [`get`](Self::get); lines, plain text and SVG exports are lossy for
+    /// imported profiles. Painting requires an owned fullscreen terminal
+    /// implementing DECAWM and CUP; inline painters reject these cells.
+    pub fn write_premeasured(
+        &mut self,
+        rect: Rect,
+        cells: &[PremeasuredCell<'_>],
+    ) -> Result<Rect, PremeasuredError> {
+        validate_premeasured(rect, cells)?;
+        let visible = rect.intersection(self.area());
+        if visible.is_empty() {
+            return Ok(visible);
+        }
+        let damage = self.split_edges(visible);
+        let stride = usize::from(rect.width);
+        for y in visible.y..visible.bottom() {
+            let row = usize::from(y - rect.y) * stride;
+            let mut column = 0;
+            while column < usize::from(visible.width) {
+                let leader = cells[row + column];
+                let width = usize::from(leader.width);
+                let id = self.styles.intern(leader.style);
+                let end = (column + width).min(usize::from(visible.width));
+                let clipped = end - column != width;
+                for cx in column..end {
+                    let target = self.cell_mut((usize::from(rect.x) + cx) as u16, y);
+                    *target = if clipped {
+                        Cell::char(' ', 1, id)
+                    } else {
+                        let source = cells[row + cx];
+                        Cell::stored(source.text, source.width, id, PREMEASURED)
+                    };
+                }
+                column = end;
+            }
+        }
+        Ok(damage)
     }
 
     /// Clear `rect` to blank cells.
@@ -1044,7 +1250,8 @@ impl Screen {
                         Some(at) => {
                             let cell = *self.cell(at, y);
                             let joined = format!("{}{piece}", cell.text());
-                            *self.cell_mut(at, y) = Cell::new(&joined, cell.width, cell.style);
+                            *self.cell_mut(at, y) =
+                                Cell::stored(&joined, cell.width, cell.style, 0);
                         }
                         None => lead.push_str(piece),
                     }
@@ -1159,14 +1366,21 @@ impl Screen {
             if ty >= self.height {
                 break;
             }
+            let mut bounds = (0, 0);
             for column in 0..from.width {
                 let tx = x.saturating_add(column);
                 if tx >= self.width {
                     break;
                 }
                 let cell = *source.cell(from.x + column, from.y + row);
-                let cut = cell.is_continuation() && column == 0
-                    || cell.width >= 2 && (column + 1 >= from.width || tx + 1 >= self.width);
+                let sx = from.x + column;
+                if column == 0 || sx >= bounds.1 {
+                    bounds = atom_bounds(source.row(from.y + row), sx);
+                }
+                let (lead, end) = bounds;
+                let visible_end = usize::from(from.x)
+                    + usize::from(from.width).min(usize::from(self.width.saturating_sub(x)));
+                let cut = lead < from.x || usize::from(end) > visible_end;
                 let styles = &mut self.styles;
                 let id = match ids.get_mut(cell.style.index()) {
                     Some(slot) => {
@@ -1208,7 +1422,8 @@ impl Screen {
     /// Each row as rendered segments, a run of cells in one style per
     /// segment: what any rich renderer takes, so a frame can be drawn
     /// somewhere else (into a ratatui buffer with `rs-rich-ratatui`'s
-    /// `lines_to_buffer`, for one).
+    /// `lines_to_buffer`, for one). This loses imported occupied-column
+    /// geometry; use [`cell`](Self::cell) or [`get`](Self::get) for exact readback.
     pub fn lines(&self) -> Vec<Vec<Segment>> {
         (0..self.height)
             .map(|y| {
@@ -1254,6 +1469,8 @@ impl Screen {
     /// assert!(svg.starts_with("<svg"));
     /// assert!(svg.contains("font-weight: bold"));
     /// ```
+    /// Imported geometry is lossy here: the segment lines are remeasured
+    /// by the native Frame exporter.
     pub fn to_svg(&self, options: &crate::frame::SvgOptions<'_>) -> String {
         let mut segments = Vec::new();
         for (y, line) in self.lines().into_iter().enumerate() {
@@ -1268,6 +1485,8 @@ impl Screen {
     }
 
     /// Each row as plain text (continuation cells skipped).
+    /// Plain text loses imported occupied-column information; use cell
+    /// readback when the supplied geometry matters.
     pub fn plain(&self) -> Vec<String> {
         (0..self.height)
             .map(|y| {
@@ -1314,6 +1533,7 @@ fn narrow(ch: char) -> char {
 
 /// What a [`Painter`] last sent: the cells, by the style ids of the screen
 /// it painted (whose table it does not copy).
+#[derive(Clone)]
 struct Sent {
     width: u16,
     height: u16,
@@ -1542,6 +1762,7 @@ impl PaintStats {
 /// It keeps a copy of the cells it sent, not of the style table: cells
 /// compare by style id, so a screen's ids must not change under it, except
 /// through [`compact`](Self::compact) or [`remap_styles`](Self::remap_styles).
+#[derive(Clone)]
 pub struct Painter {
     previous: Option<Sent>,
     system: Option<ColorSystem>,
@@ -2021,15 +2242,63 @@ impl Painter {
     /// What to write so the terminal shows `screen`, given that only the
     /// `damage` rectangles can have changed since the last paint (ignored
     /// on the first paint, or after a resize or [`invalidate`](Self::invalidate)).
+    ///
+    /// # Panics
+    /// Panics for premeasured cells in inline mode; use [`try_paint`](Self::try_paint)
+    /// to handle unsupported input. Bare painters return bytes only: the
+    /// caller owns I/O and must restore enabled autowrap after errors or panics.
     pub fn paint(&mut self, screen: &Screen, damage: &[Rect]) -> String {
-        let mut out = String::new();
-        self.paint_into(screen, damage, &mut out);
-        out
+        self.try_paint(screen, damage)
+            .expect("premeasured painting requires fullscreen mode")
     }
 
-    /// [`paint`](Self::paint), appending to `out`: one buffer for a whole
-    /// frame.
+    /// Fallible [`paint`](Self::paint). Inline premeasured input returns
+    /// `InvalidInput` before changing painter state or constructing output.
+    pub fn try_paint(&mut self, screen: &Screen, damage: &[Rect]) -> std::io::Result<String> {
+        let mut out = String::new();
+        self.try_paint_into(screen, damage, &mut out)?;
+        Ok(out)
+    }
+
+    /// [`paint`](Self::paint), appending to one frame buffer.
+    ///
+    /// # Panics
+    /// Panics for premeasured inline input; use [`try_paint_into`](Self::try_paint_into).
     pub fn paint_into(&mut self, screen: &Screen, damage: &[Rect], out: &mut String) {
+        self.try_paint_into(screen, damage, out)
+            .expect("premeasured painting requires fullscreen mode");
+    }
+
+    /// Check whether this painter supports `screen`, without changing any
+    /// state or output. Output owners can preflight before reserving inline
+    /// space, writing cursor controls, or entering terminal modes.
+    pub fn check_screen(&self, screen: &Screen) -> std::io::Result<()> {
+        self.preflight(screen).map(|_| ())
+    }
+
+    fn preflight(&self, screen: &Screen) -> std::io::Result<bool> {
+        let imported = screen.cells.iter().any(Cell::premeasured);
+        if self.inline && imported {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                "premeasured painting requires an owned fullscreen terminal; inline mode is unsupported",
+            ));
+        }
+        Ok(imported)
+    }
+
+    /// Fallible [`paint_into`](Self::paint_into). On unsupported inline
+    /// input, `out`, the painter, and its Sent snapshot are unchanged.
+    /// Nonempty imported fullscreen frames disable autowrap and restore it
+    /// afterward, assuming enabled autowrap between frames. Terminal/font
+    /// shaping may still differ from the supplied geometry.
+    pub fn try_paint_into(
+        &mut self,
+        screen: &Screen,
+        damage: &[Rect],
+        out: &mut String,
+    ) -> std::io::Result<()> {
+        let imported = self.preflight(screen)?;
         self.written.clear();
         self.stats = PaintStats::default();
         let base = out.len();
@@ -2060,6 +2329,32 @@ impl Painter {
                 .filter(|r| !r.is_empty())
                 .collect()
         };
+        // Native cells keep their existing one-column halo. The wider
+        // closure is needed only while either grid contains imported atoms.
+        let close_spans = imported
+            || self
+                .previous
+                .as_ref()
+                .is_some_and(|previous| previous.cells.iter().any(Cell::premeasured));
+        if close_spans {
+            rects = self.normalize_damage(screen, &rects);
+        }
+        // A true no-op must not toggle terminal modes, even with Full.
+        if imported
+            && !first
+            && !self.force
+            && rects.iter().all(|r| {
+                let previous = self.previous.as_ref().expect("not the first paint");
+                let row = usize::from(r.y) * usize::from(screen.width);
+                let span = row + usize::from(r.x)..row + usize::from(r.right());
+                previous.cells[span.clone()] == screen.cells[span]
+            })
+        {
+            self.stats.strategy = self.strategy;
+            self.stats.compared = rects.iter().map(|r| usize::from(r.width)).sum();
+            self.stats.elided = self.stats.compared;
+            return Ok(());
+        }
         let mut pen = Pen {
             at: self.cursor,
             ..Pen::default()
@@ -2094,9 +2389,18 @@ impl Painter {
             rects = vec![screen.area()];
             self.force = true;
         }
+        if strategy == PaintStrategy::Rows {
+            rects = rects
+                .iter()
+                .map(|r| Rect::new(0, r.y, screen.width, r.height))
+                .collect();
+        }
+        if close_spans {
+            rects = self.normalize_damage(screen, &rects);
+        }
         for (y, spans) in row_spans(&rects, screen.height) {
             if strategy == PaintStrategy::Rows {
-                self.paint_row(screen, y, &mut pen, out);
+                self.paint_row(screen, y, close_spans, &mut pen, out);
                 continue;
             }
             for (start, end) in spans {
@@ -2127,6 +2431,10 @@ impl Painter {
             out.push_str("\x1b[0m");
         }
         self.stats.style_bytes += out.len() - before;
+        if imported && out.len() > base {
+            out.insert_str(base, "\x1b[?7l");
+            out.push_str("\x1b[?7h");
+        }
         let stats = &mut self.stats;
         stats.strategy = strategy;
         stats.elided = stats.compared.saturating_sub(stats.written);
@@ -2155,6 +2463,41 @@ impl Painter {
                 }
             }
         }
+        Ok(())
+    }
+
+    /// Close each span under both current and previously sent topology.
+    /// Alternating grids can expose another partial atom, so reach a fixed
+    /// point before comparing, emitting, and copying exactly these spans.
+    fn normalize_damage(&self, screen: &Screen, rects: &[Rect]) -> Vec<Rect> {
+        let mut closed = Vec::new();
+        for (y, spans) in row_spans(rects, screen.height) {
+            for (mut start, mut end) in spans {
+                loop {
+                    let before = (start, end);
+                    for row in std::iter::once(screen.row(y))
+                        .chain(self.previous.as_ref().map(|p| p.row(y)))
+                    {
+                        if start < end {
+                            start = start.min(atom_bounds(row, start).0);
+                            end = end.max(atom_bounds(row, end - 1).1);
+                        }
+                    }
+                    if before == (start, end) {
+                        break;
+                    }
+                }
+                closed.push(Rect::new(start, y, end - start, 1));
+            }
+        }
+        row_spans(&closed, screen.height)
+            .into_iter()
+            .flat_map(|(y, spans)| {
+                spans
+                    .into_iter()
+                    .map(move |(start, end)| Rect::new(start, y, end - start, 1))
+            })
+            .collect()
     }
 
     /// [`PaintStrategy::Best`]'s pick for this frame.
@@ -2178,7 +2521,14 @@ impl Painter {
 
     /// [`PaintStrategy::Rows`] on row `y`: when it differs from what was
     /// sent, every cell from its first change to its last.
-    fn paint_row(&mut self, screen: &Screen, y: u16, pen: &mut Pen, out: &mut String) {
+    fn paint_row(
+        &mut self,
+        screen: &Screen,
+        y: u16,
+        close_spans: bool,
+        pen: &mut Pen,
+        out: &mut String,
+    ) {
         let Some(previous) = &self.previous else {
             return;
         };
@@ -2189,12 +2539,22 @@ impl Painter {
             return;
         };
         let last = (0..width).rfind(|&x| sent[x] != now[x]).unwrap_or(first);
-        // A wide grapheme's second column is written with its first.
-        let end = (last + 1 + usize::from(now.get(last).is_some_and(|c| c.width >= 2))).min(width);
+        let (first, end) = if close_spans {
+            let bounds = self.normalize_damage(
+                screen,
+                &[Rect::new(first as u16, y, (last + 1 - first) as u16, 1)],
+            );
+            (bounds[0].x, bounds[0].right())
+        } else {
+            // Keep the native painter's established end-column rule.
+            let end =
+                (last + 1 + usize::from(now.get(last).is_some_and(|c| c.width >= 2))).min(width);
+            (first as u16, end as u16)
+        };
         let forced = self.force;
         self.force = true;
         let compared = self.stats.compared;
-        self.paint_span(screen, y, first as u16, end as u16, pen, out);
+        self.paint_span(screen, y, first, end, pen, out);
         // Counted once, above.
         self.stats.compared = compared;
         self.force = forced;
@@ -2360,10 +2720,22 @@ impl Painter {
     /// [`paint`](Self::paint), writing every cell of `rects` whether it
     /// changed or not: for cells something else drew over (a graphic that
     /// went away).
+    ///
+    /// # Panics
+    /// Panics for premeasured inline input; use [`try_repaint`](Self::try_repaint).
     pub fn repaint(&mut self, screen: &Screen, rects: &[Rect]) -> String {
+        self.try_repaint(screen, rects)
+            .expect("premeasured painting requires fullscreen mode")
+    }
+
+    /// Fallible [`repaint`](Self::repaint), with the same atomic inline
+    /// rejection as [`try_paint`](Self::try_paint).
+    pub fn try_repaint(&mut self, screen: &Screen, rects: &[Rect]) -> std::io::Result<String> {
+        self.preflight(screen)?;
+        let forced = self.force;
         self.force = true;
-        let out = self.paint(screen, rects);
-        self.force = false;
+        let out = self.try_paint(screen, rects);
+        self.force = forced;
         out
     }
 
@@ -2377,10 +2749,9 @@ impl Painter {
         out: &mut String,
     ) {
         let mut x = start;
-        // A span that starts on a wide grapheme's second column starts at
-        // its first.
-        if x > 0 && screen.cell(x, y).is_continuation() {
-            x -= 1;
+        // A span beginning on any continuation starts at its leader.
+        if x < end {
+            x = atom_bounds(screen.row(y), x).0;
         }
         while x < end {
             // Past the cells the same as what was sent, a run at a time.
@@ -2400,10 +2771,7 @@ impl Painter {
                     break;
                 }
             }
-            let mut x0 = x;
-            if screen.cell(x0, y).is_continuation() && x0 > 0 {
-                x0 -= 1;
-            }
+            let mut x0 = atom_bounds(screen.row(y), x).0;
             // A run of blanks on the terminal's own background: erased
             // (EL to the end of the row, ECH within it) when that is
             // shorter than writing it.
@@ -2463,7 +2831,12 @@ impl Painter {
                     cell.len == LONG || text.contains(['\u{200d}', '\u{fe0f}'])
                 }
             };
-            let next = x0 + cell.width.max(1) as u16;
+            let several = if cell.premeasured() {
+                !cell.certain_ascii()
+            } else {
+                several
+            };
+            let next = x0 + cell.width.max(1);
             let columns = usize::from(next - x0);
             self.stats.compared += usize::from(next - x);
             self.stats.written += columns;
@@ -2501,7 +2874,11 @@ impl Painter {
             let mut style = pen.style;
             for gx in fx..x {
                 let cell = screen.cell(gx, fy);
-                if cell.width != 1 || cell.len == LONG || cell.len == 0 {
+                if cell.width != 1
+                    || cell.len == LONG
+                    || cell.len == 0
+                    || cell.premeasured() && !cell.certain_ascii()
+                {
                     cost = usize::MAX;
                     break;
                 }
@@ -2761,7 +3138,7 @@ fn push_u8(out: &mut String, n: u8) {
 /// parameters to another's, by the two ids, in one buffer. Emptied with
 /// the parameters' cache, and when it holds more than [`SgrChanges::MAX`]
 /// bytes.
-#[derive(Default)]
+#[derive(Clone, Default)]
 struct SgrChanges {
     text: String,
     at: HashMap<(u32, u32), (u32, u32), FxBuild>,
@@ -2806,7 +3183,7 @@ struct RgbAt {
 /// not once a cell. Each is kept whole (`ESC [ 38;2;r;g;b ; 48;2;r;g;b m`),
 /// so a change of both colours is one copy, and either colour's
 /// parameters are a slice of it.
-#[derive(Default)]
+#[derive(Clone, Default)]
 struct RgbCodes {
     text: String,
     at: Vec<Option<RgbAt>>,
@@ -3450,3 +3827,6 @@ mod tests {
         assert_eq!(target.style_count(), source.style_count());
     }
 }
+
+#[cfg(test)]
+mod premeasured_tests;

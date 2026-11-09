@@ -3905,11 +3905,23 @@ impl App {
         // there is no frame to hold. Nothing for output that is empty.
         fn put(backend: &mut impl Backend, linear: bool, out: &str) -> io::Result<()> {
             if out.is_empty() {
-                Ok(())
-            } else if linear {
-                backend.write(out)
-            } else {
-                backend.write_frame(out)
+                return Ok(());
+            }
+            let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                if linear {
+                    backend.write(out)
+                } else {
+                    backend.write_frame(out)
+                }
+            }));
+            if !matches!(&result, Ok(Ok(()))) && !linear && backend.alternate_screen() {
+                let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                    let _ = backend.write("\x1b[?2026l\x1b[?7h");
+                }));
+            }
+            match result {
+                Ok(result) => result,
+                Err(panic) => std::panic::resume_unwind(panic),
             }
         }
         // Text a handler copied, or the mouse selected, onto the clipboard:
@@ -4022,7 +4034,7 @@ impl App {
                 };
                 if hold.is_some() {
                     driver.app.stats.update(|stats| stats.skipped += 1);
-                } else if let Some(out) = driver.render() {
+                } else if let Some(out) = driver.try_render()? {
                     last_frame = Some(now);
                     let started = crate::clock::Instant::now();
                     put(backend, linear, &out)?;
@@ -4077,10 +4089,23 @@ impl App {
             driver.take_printed()
         };
         let rows = driver.printed_rows(&printed);
-        let mut output = driver.finish_output();
-        if put(backend, linear, output.as_str()).is_ok() {
-            output.output_written();
+        // A preflight failure before the first frame owns no output yet.
+        let cleanup = if driver.started {
+            driver.try_finish_output().and_then(|mut output| {
+                let written = put(backend, linear, output.as_str());
+                if written.is_ok() {
+                    output.output_written();
+                }
+                written
+            })
+        } else {
+            drop(driver);
+            Ok(())
+        };
+        if !inline && !linear && cleanup.is_err() {
+            let _ = backend.write("\x1b[?2026l\x1b[?7h\x1b[0m\x1b[?25h");
         }
+        let result = result.and(cleanup);
         let mut printed = Vec::new();
         if write_printed {
             let text: String = rows.iter().map(|row| format!("{row}\x1b[0m\r\n")).collect();
@@ -7689,7 +7714,56 @@ impl Driver {
     /// in an app that [waits for its tasks](App::wait_for_tasks), the
     /// tasks they start finish, and what they change is drawn too: the
     /// frame returned is settled, and the next event finds it so.
+    ///
+    /// # Panics
+    /// Panics for unsupported premeasured inline input; use [`try_render`](Self::try_render).
+    /// A bare Driver returns bytes only: its caller owns terminal I/O and
+    /// must restore enabled autowrap after output errors or writer panics.
     pub fn render(&mut self) -> Option<String> {
+        self.try_render()
+            .expect("premeasured painting requires fullscreen mode")
+    }
+
+    /// Fallible [`render`](Self::render). Unsupported inline input is
+    /// rejected before changing Painter state or constructing terminal bytes.
+    pub fn try_render(&mut self) -> io::Result<Option<String>> {
+        // Inline rendering can settle over several rounds. A later round
+        // can reject an import after earlier bytes were built but never
+        // sent: restore the entire painter, not an unsent intermediate frame.
+        // Fullscreen rendering has no unsupported cell mode or copy cost.
+        let checkpoint = self.app.inline.is_some().then(|| {
+            (
+                self.painter.clone(),
+                self.started,
+                self.shifted,
+                self.app.caret_shown,
+                self.app.caret_shape,
+                self.app.motion,
+            )
+        });
+        let result = self.render_checked();
+        if result.is_ok() && checkpoint.is_some() {
+            // Only committed inline frames may renumber style IDs: the
+            // rollback painter still refers to the pre-frame table.
+            self.painter.compact(&mut self.screen);
+        }
+        if result.is_err()
+            && let Some((painter, started, shifted, caret_shown, caret_shape, motion)) = checkpoint
+        {
+            self.painter = painter;
+            self.started = started;
+            self.shifted = shifted;
+            self.app.caret_shown = caret_shown;
+            self.app.caret_shape = caret_shape;
+            self.app.motion = motion;
+            // The screen contains the latest valid imported data; a retry
+            // must redraw it even though its dirty work was already consumed.
+            self.first = true;
+        }
+        result
+    }
+
+    fn render_checked(&mut self) -> io::Result<Option<String>> {
         // The frame's counters start again; the rounds below add to them.
         if !self.done && self.needs_render() {
             self.app.bytes_before = self.app.stats.get().bytes;
@@ -7701,7 +7775,7 @@ impl Driver {
                 stats.painted = PaintStats::default();
             });
         }
-        let mut out = self.render_once();
+        let mut out = self.render_once()?;
         // A few rounds: a watch's result may lay out anew, and set off
         // another.
         for _ in 0..LAYOUT_ROUNDS {
@@ -7709,7 +7783,7 @@ impl Driver {
                 break;
             }
             self.update(self.app.now);
-            if let Some(more) = self.render_once() {
+            if let Some(more) = self.render_once()? {
                 out.get_or_insert_with(String::new).push_str(&more);
             }
         }
@@ -7722,20 +7796,24 @@ impl Driver {
                 stats.painted.other_bytes += out.len().saturating_sub(stats.painted.bytes());
             });
         }
-        out
+        Ok(out)
     }
 
     /// [`render`](Self::render), once: what changed drawn, and the
     /// lifecycle events told.
-    fn render_once(&mut self) -> Option<String> {
+    fn render_once(&mut self) -> io::Result<Option<String>> {
         if self.done {
-            return None;
+            return Ok(None);
         }
         self.app.refresh_hints();
         self.app.refresh_heading();
         #[cfg(feature = "tracing")]
         self.app.send_console_trace();
-        let out = self.needs_render().then(|| {
+        let out = if self.needs_render() {
+            self.app.stats.update(|stats| stats.frames += 1);
+            let full = self.first || (self.app.inline.is_some() && !self.app.printed.is_empty());
+            let damage = self.prepare_paint(full);
+            self.painter.check_screen(&self.screen)?;
             let mut out = String::new();
             if !self.started {
                 self.started = true;
@@ -7744,32 +7822,33 @@ impl Driver {
                     out.push_str("\x1b[?25l");
                 }
             }
-            self.app.stats.update(|stats| stats.frames += 1);
             // Inline, lines printed above go into the scrollback before the
             // region draws again below them.
             if self.app.inline.is_some() && !self.app.printed.is_empty() {
                 out.push_str(&self.print_inline());
             }
-            out.push_str(&self.paint(self.first));
+            out.push_str(&self.paint_prepared(damage)?);
             self.first = false;
             // A frame can leave nodes to draw again (a scroll that moved to
             // keep the focus in view, pointer readers inside it): once more,
             // so what is sent is settled.
             if self.app.runtime.has_dirty() {
-                out.push_str(&self.paint(false));
+                out.push_str(&self.paint(false)?);
             }
             self.app.calm_restless();
             // Keyed children exist once drawn: focus is chosen after a
             // frame, and chosen again if the focused node has gone.
             self.app.keep_focus();
-            out
-        });
+            Some(out)
+        } else {
+            None
+        };
         // Focus, hover and resize events, once what they are about is laid
         // out: a widget told it has the focus knows where it is.
         if self.app.tell_lifecycle() {
             self.done = true;
         }
-        out
+        Ok(out)
     }
 
     /// How long the loop may wait for an event before calling
@@ -8041,19 +8120,29 @@ impl Driver {
     /// driver.settle();
     /// assert_eq!(driver.screen().plain()[0].trim_end(), "ready");
     /// ```
+    ///
+    /// # Panics
+    /// Panics for unsupported premeasured inline input; use [`try_settle`](Self::try_settle).
     pub fn settle(&mut self) {
+        self.try_settle()
+            .expect("premeasured painting requires fullscreen mode");
+    }
+
+    /// Fallible [`settle`](Self::settle), returning inline import errors.
+    pub fn try_settle(&mut self) -> io::Result<()> {
         // A frame can leave work for the next (a watch set off by a
         // lifecycle event); a few rounds settle any sane app.
         for _ in 0..8 {
             if self.done {
-                return;
+                return Ok(());
             }
             self.update(self.app.now);
-            let drew = self.render().is_some();
+            let drew = self.try_render()?.is_some();
             if !drew && !self.needs_render() && self.app.lifecycle.is_empty() {
-                return;
+                return Ok(());
             }
         }
+        Ok(())
     }
 
     /// Move the app's clock on by `by`, a step at a time, and draw after
@@ -8992,31 +9081,51 @@ impl Driver {
     /// Finish while retaining graphics reservations until the final output is
     /// successfully written. Prefer this for manual loops using bound pictures.
     pub fn finish_output(self) -> FinishOutput {
+        self.try_finish_output()
+            .expect("premeasured painting requires fullscreen mode")
+    }
+
+    /// Fallible [`finish_output`](Self::finish_output), retaining graphics
+    /// reservations until the returned output is confirmed written.
+    pub fn try_finish_output(self) -> io::Result<FinishOutput> {
         let graphics = self.app.graphics.clone();
-        FinishOutput {
-            output: self.finish(),
+        let output = self.try_finish()?;
+        Ok(FinishOutput {
+            output,
             written: 0,
             graphics,
-        }
+        })
     }
 
     /// Stop: the bytes that show the last change and leave the terminal
     /// as it was (styles reset, the cursor shown; inline, below the
     /// region, where the shell's prompt follows the app's last frame).
-    pub fn finish(mut self) -> String {
+    ///
+    /// # Panics
+    /// Panics for unsupported premeasured inline input; use [`try_finish`](Self::try_finish).
+    pub fn finish(self) -> String {
+        self.try_finish()
+            .expect("premeasured painting requires fullscreen mode")
+    }
+
+    /// Fallible [`finish`](Self::finish). Fullscreen cleanup includes
+    /// enabled autowrap; custom loops must actually write and flush it.
+    pub fn try_finish(mut self) -> io::Result<String> {
         let mut out = String::new();
         if self.app.linear {
             // Nothing was drawn, so there is nothing to put back.
             self.app.runtime.close();
-            return out;
+            return Ok(out);
         }
         // Inline, the last frame stays in the scrollback: show what the
         // last handler changed (and printed) before leaving.
         if self.app.inline.is_some() && !self.app.printed.is_empty() {
+            let damage = self.prepare_paint(true);
+            self.painter.check_screen(&self.screen)?;
             out.push_str(&self.print_inline());
-            out.push_str(&self.paint(true));
+            out.push_str(&self.paint_prepared(damage)?);
         } else if self.app.inline.is_some() && (self.app.restack || self.app.runtime.has_dirty()) {
-            out.push_str(&self.paint(false));
+            out.push_str(&self.paint(false)?);
         }
         if let Some(source) = &self.app.graphics {
             // Inline, the last frame stays, with its graphics.
@@ -9031,12 +9140,15 @@ impl Driver {
         if self.app.caret_shape.take().is_some() {
             out.push_str(rich_interact::caret::RESET);
         }
+        if self.app.inline.is_none() {
+            out.push_str("\x1b[?7h");
+        }
         self.app.runtime.close();
-        out
+        Ok(out)
     }
 
     /// Draw what changed: the bytes to send.
-    fn paint(&mut self, mut full: bool) -> String {
+    fn prepare_paint(&mut self, mut full: bool) -> Vec<Rect> {
         let app = &mut self.app;
         app.poke = false;
         let screen = &mut self.screen;
@@ -9051,15 +9163,27 @@ impl Driver {
             }
         }
         let started = crate::clock::Instant::now();
-        let mut damage = app.frame(&self.console, screen, full);
+        let damage = app.frame(&self.console, screen, full);
         let drew = started.elapsed();
         app.stats.update(|stats| {
             stats.draw += drew;
             stats.total_draw += drew;
         });
+        damage
+    }
+
+    fn paint(&mut self, full: bool) -> io::Result<String> {
+        let damage = self.prepare_paint(full);
+        self.paint_prepared(damage)
+    }
+
+    fn paint_prepared(&mut self, mut damage: Vec<Rect>) -> io::Result<String> {
+        self.painter.check_screen(&self.screen)?;
+        let app = &mut self.app;
+        let screen = &mut self.screen;
         if app.linear {
             let out = self.lines();
-            return out;
+            return Ok(out);
         }
         let started = crate::clock::Instant::now();
         if let Some((start, end)) = app.selection {
@@ -9084,7 +9208,7 @@ impl Driver {
         }
         self.damage_log.push_back((frame, damage.clone()));
         let mut out = String::new();
-        self.painter.paint_into(screen, &damage, &mut out);
+        self.painter.try_paint_into(screen, &damage, &mut out)?;
         screen.forget_scrolls();
         let counts = self.painter.stats();
         // Accessible: the cursor is hidden while the frame is written, so a
@@ -9112,7 +9236,9 @@ impl Driver {
         out.push_str(&app.caret(&mut self.painter));
         // Styles no cell uses any more go, once they pile up: a picture
         // whose colours change every frame keeps a frame's worth.
-        self.painter.compact(&mut self.screen);
+        if self.app.inline.is_none() {
+            self.painter.compact(&mut self.screen);
+        }
         let took = started.elapsed();
         let app = &mut self.app;
         app.stats.update(|stats| {
@@ -9120,7 +9246,7 @@ impl Driver {
             stats.total_paint += took;
             stats.painted.add(&counts);
         });
-        out
+        Ok(out)
     }
 
     /// Linear mode: the lines of the nodes whose line changed since they

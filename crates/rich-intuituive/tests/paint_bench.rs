@@ -534,7 +534,7 @@ fn every_strategy_reproduces_every_scene() {
 }
 
 /// Every cell of `screen`: its text, width and style.
-fn cells_of(screen: &Screen) -> Vec<(String, u8, Option<rich::Style>)> {
+fn cells_of(screen: &Screen) -> Vec<(String, u16, Option<rich::Style>)> {
     let area = screen.area();
     let mut out = Vec::new();
     for y in 0..area.height {

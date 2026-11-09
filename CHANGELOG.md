@@ -50,6 +50,37 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   input and process-CPU limits across the final three-run sample. Kitty and ANSI
   meet their frozen frame/input limits; all observations and remaining native
   limitations are recorded in the [media-quality handoff](docs/design/noctiluca-media-quality-status.md).
+### Premeasured fullscreen cells (rs-rich-ext / rs-rich-intuituive 0.1.0)
+
+- Import borrowed `PremeasuredCell` grids through `Screen::write_premeasured`
+  or full-canvas `Canvas::write_premeasured`. The complete input is validated
+  atomically, then opaque text, styles and supplied widths are preserved,
+  including spans above 255 columns. Clipping and later native writes erase
+  whole intersected atoms; damage accounts for both old and new spans.
+- **Breaking:** `rich_ext::surface::Cell::width` (also re-exported by
+  `intuituive::screen`) is now `u16`, formerly `u8`. Update width variables
+  and conversions to `u16`; use `u8::try_from(cell.width)` only when a
+  downstream interface explicitly requires a bounded width. The existing
+  `Cell::new(text, width: u8, style)` signature and 12-byte layout remain.
+  Use `write_premeasured` to import wider atoms.
+- Imported painting requires an owned fullscreen terminal with DECAWM/CUP
+  and enabled autowrap between paints. Frames balance autowrap mode changes
+  and explicitly position after uncertain atoms. Native painting keeps its
+  existing width rules. Physical terminal/font shaping is not guaranteed.
+- `Painter` is now cloneable for state checkpoints. Inline Driver frames
+  roll back unsent painter state if a later settling round rejects input.
+  Add `Painter::check_screen`, `try_paint`, `try_paint_into`, `try_repaint`,
+  and `Driver::try_render`, `try_settle`, `try_finish`. Inline imported
+  screens return `InvalidInput` before Painter/output mutation. Existing
+  infallible entry points preserve their signatures and panic on that
+  unsupported input; callers admitting imports should use the fallible APIs.
+- Surface, App and Session output owners restore autowrap during cleanup
+  and retry restoration after write failures; frame write/flush is serialized
+  with Session suspend/leave. Bare Painter/Driver users own actual I/O and
+  cleanup, including error/panic restoration. A permanently failed output or
+  SIGKILL cannot be recovered by software.
+- `Screen::cell`/`get` and `Canvas::cell` expose exact imported geometry;
+  plain text, segment lines and the existing SVG export lose that geometry.
 
 ### Releases: rab v2.0.1
 

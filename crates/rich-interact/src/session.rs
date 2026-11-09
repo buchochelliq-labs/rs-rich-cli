@@ -456,6 +456,9 @@ fn undo(active: u8, library: BackendKind) -> String {
         out.push_str("\x1b[?2004l");
     }
     out.push_str("\x1b[?25h");
+    if active & ALTERNATE != 0 {
+        out.push_str("\x1b[?7h");
+    }
     if active & ALTERNATE != 0 && !library.owns_alternate_screen() {
         out.push_str(&library.alternate_sequence(false));
     }
@@ -573,8 +576,14 @@ static RESUMED: AtomicBool = AtomicBool::new(false);
 /// SIGTSTP runs on the signal thread while the event loop runs on, so
 /// without it a session that ended during the stop (a key queued, a timer
 /// due) would have its modes turned back on after it restored them.
-/// `enter` holds it while it marks the modes on and writes them.
+/// `enter` holds it while it marks the modes on and writes them. Whole
+/// frame writes and flushes hold it too, including autowrap recovery.
 static SUSPENDING: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+fn frame_output<T>(write_and_flush: impl FnOnce() -> T) -> T {
+    let _suspending = SUSPENDING.lock().unwrap_or_else(|e| e.into_inner());
+    write_and_flush()
+}
 
 #[cfg(unix)]
 fn suspend() {
@@ -1820,7 +1829,15 @@ impl Backend for Session {
     }
 
     fn write(&mut self, text: &str) -> io::Result<()> {
-        self.options.output.write(text)
+        // A whole frame, including flush and error recovery, must finish
+        // before suspend can restore modes and re-enable wrap.
+        frame_output(|| {
+            let result = self.options.output.write(text);
+            if result.is_err() && self.options.alternate_screen {
+                let _ = self.options.output.write("\x1b[?2026l\x1b[?7h");
+            }
+            result
+        })
     }
 
     /// The session's [`Waker`]: on Unix the terminal and it are waited on
@@ -1917,8 +1934,7 @@ mod tests {
     #[test]
     fn every_backend_leaves_the_same_modes() {
         let all = RAW | ALTERNATE | MOUSE | PASTE | KITTY;
-        let expected =
-            "\x1b[<1u\x1b[?1006l\x1b[?1015l\x1b[?1003l\x1b[?1002l\x1b[?1000l\x1b[?2004l\x1b[?25h";
+        let expected = "\x1b[<1u\x1b[?1006l\x1b[?1015l\x1b[?1003l\x1b[?1002l\x1b[?1000l\x1b[?2004l\x1b[?25h\x1b[?7h";
         for kind in BackendKind::ALL {
             let out = undo(all, *kind);
             assert!(out.starts_with(expected), "{kind}: {out:?}");
@@ -2129,5 +2145,43 @@ mod tests {
             // Off, nothing about it.
             assert!(!undo(RAW | MOUSE, *kind).contains("2026"));
         }
+    }
+}
+
+#[cfg(test)]
+mod premeasured_session_tests {
+    use super::*;
+
+    #[test]
+    fn premeasured_undo_restores_wrap_before_alternate_exit() {
+        for kind in BackendKind::ALL {
+            let out = undo(ALTERNATE | SYNC, *kind);
+            let wrap = out.find("\x1b[?7h").unwrap();
+            if let Some(exit) = out.find("\x1b[?1049l") {
+                assert!(wrap < exit);
+            }
+        }
+        assert!(!undo(RAW, BackendKind::default()).contains("?7"));
+    }
+
+    #[test]
+    fn premeasured_frame_output_excludes_suspend_through_flush_and_recovery() {
+        // The signal thread's suspend/restore sequence takes SUSPENDING.
+        // Hold a frame across a simulated partial write, flush and recovery,
+        // and ensure that competing restoration cannot enter until all end.
+        let (entered_tx, entered_rx) = std::sync::mpsc::channel();
+        let (finish_tx, finish_rx) = std::sync::mpsc::channel();
+        let frame = std::thread::spawn(move || {
+            frame_output(|| {
+                entered_tx.send(()).unwrap();
+                finish_rx.recv().unwrap();
+                assert!(SUSPENDING.try_lock().is_err());
+            })
+        });
+        entered_rx.recv().unwrap();
+        assert!(SUSPENDING.try_lock().is_err());
+        finish_tx.send(()).unwrap();
+        frame.join().unwrap();
+        assert!(SUSPENDING.try_lock().is_ok());
     }
 }
