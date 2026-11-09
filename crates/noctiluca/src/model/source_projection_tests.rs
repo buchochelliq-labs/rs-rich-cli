@@ -736,3 +736,76 @@ fn source_native_captured_boxless_spanning_grid_keeps_complete_words_and_links()
     );
     assert!(p.lines.iter().all(|l| l.width() <= 40));
 }
+
+
+#[test]
+fn source_review_code_rewraps_at_final_lane_width_without_losing_characters() {
+    for x in [0.0, 320.0] {
+        let mut f = Fake::new();
+        clip_bounds(&mut f, 0, [0.0, 0.0, 640.0, 900.0]);
+        clip_style(&mut f, 0, 14, "");
+        let grid = f.el(0, "DIV", &[], "grid");
+        clip_bounds(&mut f, grid, [0.0, 0.0, 640.0, 144.0]);
+        let code = "  ABCDEFGHIJKLMNOPQRSTUVWXYZ0123\n    second_line\n\nlast_line";
+        for lane_x in [0.0, 320.0] {
+            let card = f.el(grid, "DIV", &[], "block");
+            clip_bounds(&mut f, card, [lane_x, 0.0, 320.0, 144.0]);
+            if lane_x == x {
+                let pre = f.el(card, "PRE", &[], "block");
+                clip_bounds(&mut f, pre, [lane_x, 0.0, 320.0, 72.0]);
+                let text = f.text(pre, code);
+                clip_bounds(&mut f, text, [lane_x, 0.0, 320.0, 72.0]);
+                flow_text(&mut f, card, "CODE-FOLLOWER", [lane_x, 72.0, 320.0, 18.0]);
+            } else {
+                flow_text(&mut f, card, "OTHER-LANE", [lane_x, 0.0, 320.0, 18.0]);
+            }
+        }
+        for width in [40, 80, 120] {
+            let (_, p) = projected_source(&f, width, &crate::layout::Marks::default());
+            let code_rows: Vec<_> = p.lines.iter().enumerate().filter_map(|(i,l)| {
+                let text: String = l.spans.iter().filter(|s| s.style == "cyan").map(|s|s.text.as_str()).collect();
+                (!text.is_empty()).then_some((i,text))
+            }).collect();
+            let actual: String = code_rows.iter().map(|(_,s)|s.as_str()).collect();
+            assert_eq!(actual, code.replace('\n', ""), "x={x}, width={width}: {:?}", p.lines);
+            assert!(code_rows.iter().any(|(_,s)|s.starts_with("    second_line")), "original indentation/line boundary");
+            assert!(code_rows.iter().any(|(_,s)|s=="last_line"), "original last line boundary");
+            let follower=p.lines.iter().position(|l|l.plain().contains("CODE-FOLLOWER")).unwrap();
+            assert!(follower>code_rows.last().unwrap().0, "follower must use rewrapped height");
+            assert!(code_rows.len() <= 6, "right-side source clipping must not prewrap at one cell");
+        }
+    }
+}
+
+#[test]
+fn source_review_expanding_figure_keeps_all_internal_units_before_outside_sibling() {
+    let mut f=Fake::new();
+    clip_bounds(&mut f,0,[0.0,0.0,640.0,900.0]);
+    clip_style(&mut f,0,14,"");
+    let article=f.el(0,"ARTICLE",&[],"block");
+    clip_bounds(&mut f,article,[0.0,0.0,640.0,72.0]);
+    let figure=f.el(article,"FIGURE",&[],"block");
+    clip_bounds(&mut f,figure,[0.0,0.0,640.0,36.0]);
+    let caption=f.el(figure,"FIGCAPTION",&[],"block");
+    clip_bounds(&mut f,caption,[0.0,0.0,640.0,36.0]);
+    let link=f.el(caption,"A",&[("href","/original-caption")],"inline");
+    clip_bounds(&mut f,link,[0.0,0.0,640.0,36.0]);
+    let text=f.text(link,"A long caption with enough words to occupy four full terminal rows when narrowed and keep its original source link intact.");
+    clip_bounds(&mut f,text,[0.0,0.0,640.0,36.0]);
+    flow_text(&mut f,article,"INSIDE-FIRST",[0.0,36.0,640.0,18.0]);
+    flow_text(&mut f,article,"INSIDE-LAST",[0.0,54.0,640.0,18.0]);
+    flow_text(&mut f,0,"OUTSIDE-FOLLOWING",[0.0,72.0,640.0,18.0]);
+    let marks=crate::layout::Marks::default();
+    let mut anchor=None;
+    for width in [40,80,120,40] {
+        let (source,p)=projected_source(&f,width,&marks);
+        let row=|word:&str|p.lines.iter().position(|l|l.plain().contains(word)).unwrap();
+        assert!(row("INSIDE-FIRST")<row("INSIDE-LAST"));
+        assert!(row("INSIDE-LAST")<row("OUTSIDE-FOLLOWING"), "width={width}: {:?}",p.lines);
+        assert!(p.lines.iter().flat_map(|l|&l.spans).any(|s|s.control==Some(0)));
+        assert_eq!(source.page().controls[0].node,100+link);
+        let key=p.keys[row("INSIDE-LAST")];
+        if let Some(old)=anchor {assert_eq!(key,old,"source anchor must survive resizing");}
+        anchor=Some(key);
+    }
+}
