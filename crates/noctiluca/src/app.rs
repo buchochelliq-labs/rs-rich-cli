@@ -2965,13 +2965,27 @@ fn source_foreground(b: Browser, nodes: Vec<NodeId>, bounds: (u16, u16, u16, u16
                         b.page.with(|page| {
                             page.as_ref()
                                 .map(|page| {
-                                    layout::project_foreground(
-                                        page,
-                                        node,
-                                        full_width,
-                                        (CELL.0 as f64, CELL.1 as f64),
-                                        &b.hint_marks(),
-                                    )
+                                    b.source.with(|source| {
+                                        match source
+                                            .as_ref()
+                                            .filter(|s| Arc::ptr_eq(s.page(), page))
+                                        {
+                                            Some(source) => layout::project_source_foreground(
+                                                source,
+                                                node,
+                                                full_width,
+                                                (CELL.0 as f64, CELL.1 as f64),
+                                                &b.hint_marks(),
+                                            ),
+                                            None => layout::project_foreground(
+                                                page,
+                                                node,
+                                                full_width,
+                                                (CELL.0 as f64, CELL.1 as f64),
+                                                &b.hint_marks(),
+                                            ),
+                                        }
+                                    })
                                 })
                                 .unwrap_or_default()
                         })
@@ -3171,13 +3185,27 @@ fn source_dialogs(b: Browser) -> Node {
                                         .overlays
                                         .iter()
                                         .position(|dialog| dialog.node == node)?;
-                                    layout::project_overlay(
-                                        page,
-                                        index,
-                                        width,
-                                        (CELL.0 as f64, CELL.1 as f64),
-                                        &b.hint_marks(),
-                                    )
+                                    b.source.with(|source| {
+                                        match source
+                                            .as_ref()
+                                            .filter(|s| Arc::ptr_eq(s.page(), page))
+                                        {
+                                            Some(source) => layout::project_source_overlay(
+                                                source,
+                                                index,
+                                                width,
+                                                (CELL.0 as f64, CELL.1 as f64),
+                                                &b.hint_marks(),
+                                            ),
+                                            None => layout::project_overlay(
+                                                page,
+                                                index,
+                                                width,
+                                                (CELL.0 as f64, CELL.1 as f64),
+                                                &b.hint_marks(),
+                                            ),
+                                        }
+                                    })
                                 })
                                 .unwrap_or_default()
                         })

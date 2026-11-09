@@ -178,6 +178,17 @@ fn ordinary_path(rel: &SourceRelations, root: usize, mut node: usize) -> bool {
         node = parent;
     }
 }
+fn flow_context(rel: &SourceRelations, mut node: usize) -> bool {
+    loop {
+        let n = &rel.nodes[node];
+        // The document layout object has bounds but no element style facts.
+        let Some(parent) = n.parent else { return true };
+        if n.rect.is_some() && n.position != SourcePosition::Flow {
+            return false;
+        }
+        node = parent;
+    }
+}
 fn containers(rel: &SourceRelations) -> Vec<usize> {
     let mut roots = Vec::new();
     for figure in &rel.figures {
@@ -185,7 +196,7 @@ fn containers(rel: &SourceRelations) -> Vec<usize> {
         while let Some(node) = parent {
             let n = &rel.nodes[node];
             if n.ordinary {
-                if ordinary_path(rel, node, figure.node) {
+                if ordinary_path(rel, node, figure.node) && flow_context(rel, node) {
                     roots.push(node);
                 }
                 break;
@@ -233,7 +244,9 @@ pub(super) fn allocate(
             let Some(rect) = rel.nodes[grid.node].rect else {
                 continue;
             };
-            if rel.nodes[grid.node].position != SourcePosition::Flow {
+            if rel.nodes[grid.node].position != SourcePosition::Flow
+                || !flow_context(rel, grid.node)
+            {
                 continue;
             }
             let Some(boxes) = grid
@@ -349,9 +362,21 @@ pub(super) fn allocate(
             let x1 = ((rect.right() / cw).round().max(0.0) as usize).clamp(x0 + 1, columns);
             for i in members(rel, root, items) {
                 let item = &mut items[i];
-                item.x0 = x0;
-                item.x1 = x1;
-                item.allocation = Some((x0, x1));
+                if item.row.is_some() {
+                    let original = item.source.and_then(|n| rel.nodes[n].rect).unwrap_or(rect);
+                    let scale = |x: usize| {
+                        x0 + (((x as f64 * cw - original.x).max(0.0) / original.width.max(1.0))
+                            * (x1 - x0) as f64)
+                            .round() as usize
+                    };
+                    item.x0 = scale(item.source_x.0).clamp(x0, x1 - 1);
+                    item.x1 = scale(item.source_x.1).clamp(item.x0 + 1, x1);
+                    item.allocation = Some((item.x0, item.x1));
+                } else {
+                    item.x0 = x0;
+                    item.x1 = x1;
+                    item.allocation = Some((x0, x1));
+                }
             }
         }
     }
@@ -378,9 +403,29 @@ pub(super) fn stack_figures(
             .iter()
             .map(|&i| items[i].top)
             .fold(f64::INFINITY, f64::min);
-        let heights: Vec<_> = group
+        // Cells of one source table row occupy one measured vertical track.
+        let mut units: Vec<Vec<usize>> = Vec::new();
+        for i in group {
+            if let Some(row) = items[i].row {
+                if let Some(unit) = units
+                    .iter_mut()
+                    .find(|unit| items[unit[0]].row == Some(row))
+                {
+                    unit.push(i);
+                    continue;
+                }
+            }
+            units.push(vec![i]);
+        }
+        let heights: Vec<_> = units
             .iter()
-            .map(|&i| items[i].lines.len().min(u16::MAX as usize) as u16)
+            .map(|unit| {
+                unit.iter()
+                    .map(|&i| items[i].lines.len())
+                    .max()
+                    .unwrap_or(0)
+                    .min(u16::MAX as usize) as u16
+            })
             .collect();
         let total: usize = heights.iter().map(|&h| h as usize).sum();
         // Unrepresentably large groups keep their source placement.
@@ -397,9 +442,11 @@ pub(super) fn stack_figures(
             &tracks,
             StackLayout::default(),
         );
-        for (&i, slot) in group.iter().zip(slots) {
-            items[i].top = top + slot.y as f64 * cell.1;
-            items[i].bottom = items[i].top + slot.height as f64 * cell.1;
+        for (unit, slot) in units.iter().zip(slots) {
+            for &i in unit {
+                items[i].top = top + slot.y as f64 * cell.1;
+                items[i].bottom = items[i].top + slot.height as f64 * cell.1;
+            }
         }
     }
 }

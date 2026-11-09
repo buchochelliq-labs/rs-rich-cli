@@ -33,6 +33,7 @@ site, and each can be switched off.
 | `captions` | An `Image: …` line under a picture with alt text and no caption | on |
 | `icon-buttons` | Shows every button, icon-only ones too, as `[ label ]` from its name; an icon-only one with a known icon's name as its glyph, `[⋯]`, `[✕]`, `[🔍]` | on |
 | `snap-grids` | Snaps a grid's columns to the cells, with fewer columns when they would be too narrow | on |
+| `figure-flow` | Keeps genuine source figures and captions together, stacking them and surrounding ordinary prose by measured terminal height. Uses source relationships; faithful mode and popup underlays keep source placement | on |
 | `collapse-nav` | On a narrow terminal (under 100 columns), a navigation or sidebar becomes one row of its links | on |
 | `collapse-gaps` | Rows blank across the whole page (an empty ad slot, a hidden menu, a spacer) collapse to one blank row | on |
 | `text-over-pictures` | Draws a picture of text (a heading or button image, a banner) as its text | off: it changes meaning |
@@ -58,3 +59,10 @@ site, and each can be switched off.
   collapse-nav = false
   text-over-pictures = true
   ```
+
+Source-aware grids use actual DOM item ownership, including nested allocation.
+Boxless roots, unequal spans and uncertain or positioned containers retain their
+source arrangement when equal-column snapping would misrepresent them. Figure
+flow is rectangular composition; it does not implement CSS floats or per-line
+text exclusions. Image links retain their actual source action through decode;
+caption and foreground links keep their own targets.

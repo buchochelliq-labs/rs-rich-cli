@@ -1087,6 +1087,43 @@ pub(crate) fn project_foreground(
     )
 }
 
+pub(crate) fn project_source_overlay(
+    source: &SourcePage,
+    index: usize,
+    columns: u16,
+    cell: (f64, f64),
+    marks: &Marks,
+) -> Option<Projection> {
+    source.page().overlays.get(index)?;
+    Some(project_part(
+        source.page(),
+        Some(source),
+        columns,
+        cell,
+        marks,
+        Part::Overlay(index),
+        &mut Vec::new(),
+    ))
+}
+
+pub(crate) fn project_source_foreground(
+    source: &SourcePage,
+    node: NodeId,
+    columns: u16,
+    cell: (f64, f64),
+    marks: &Marks,
+) -> Projection {
+    project_part(
+        source.page(),
+        Some(source),
+        columns,
+        cell,
+        marks,
+        Part::Foreground(node),
+        &mut Vec::new(),
+    )
+}
+
 #[derive(Clone, Debug)]
 pub(crate) struct LogSlot {
     pub node: NodeId,

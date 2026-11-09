@@ -17,6 +17,8 @@ fn flow_text(f: &mut Fake, parent: i64, text: &str, bounds: [f64; 4]) -> i64 {
 fn source_projection_nested_grids_follow_roots_despite_reversed_boxes_and_overhang() {
     let mut f = Fake::new();
     clip_bounds(&mut f, 0, [0.0, 0.0, 960.0, 900.0]);
+    // DOMSnapshot's document layout object has no element styles.
+    clip_style(&mut f, 0, 14, "");
     let outer = f.el(0, "DIV", &[], "grid");
     clip_bounds(&mut f, outer, [0.0, 0.0, 960.0, 144.0]);
     for (side, x) in [("first", 480.0), ("second", 0.0)] {
@@ -140,4 +142,117 @@ fn source_projection_linked_image_placeholder_uses_ancestor_action_not_overlap()
     let mut presentation = crate::presentation::Presentation::default();
     let presented = presentation.update_source(&source, crate::config::View::Projection, 40, &crate::layout::Marks::default());
     assert_eq!(presented.as_ref(), &p, "app must consume the exact paired projection");
+    let mut decoded = source.page().as_ref().clone();
+    decoded.media[0].still = Some(Arc::from([1u8, 2, 3]));
+    decoded.media[0].picture = rich_intuituive::Picture::from_rgba(1, 1, vec![10, 20, 30, 255]);
+    let decoded = source.clone().republish(Arc::new(decoded));
+    let updated = presentation.update_source(&decoded, crate::config::View::Projection, 40, &crate::layout::Marks::default());
+    assert!(std::rc::Rc::ptr_eq(&presented, &updated), "decode must reuse layout/hits");
+    assert_eq!(crate::layout::control_at(&updated.lines[region.row + 2], region.column + 8), Some(actual));
+    assert!(decoded.page().check(&control.binding(source.page())).is_ok());
+}
+
+#[test]
+fn source_projection_unsupported_grids_keep_source_geometry() {
+    for unsupported in ["boxless", "unequal", "positioned", "unknown", "positioned-parent"] {
+        let mut f = Fake::new();
+        clip_bounds(&mut f, 0, [0.0, 0.0, 640.0, 900.0]);
+        let parent = f.el(0, "DIV", &[], "block");
+        clip_bounds(&mut f, parent, [0.0, 0.0, 640.0, 500.0]);
+        if unsupported == "positioned-parent" { clip_style(&mut f, parent, 14, "absolute"); }
+        let grid = f.el(parent, "DIV", &[], "grid");
+        clip_bounds(&mut f, grid, [0.0, 0.0, 640.0, 500.0]);
+        if unsupported == "positioned" { clip_style(&mut f, grid, 14, "absolute"); }
+        if unsupported == "unknown" { clip_style(&mut f, grid, 14, ""); }
+        for (name, x, height) in [("Primary", 320.0, 90.0), ("Aside", 0.0, if unsupported == "unequal" { 400.0 } else { 90.0 })] {
+            let item = if unsupported == "boxless" { f.node(grid, 1, "DIV", None, &[], None) } else { let i = f.el(grid, "DIV", &[], "block"); clip_bounds(&mut f, i, [x, 0.0, 320.0, height]); i };
+            flow_text(&mut f, item, name, [x, 0.0, 120.0, 18.0]);
+        }
+        let mut marks = crate::layout::Marks::default();
+        marks.adapt.set(crate::adapt::Rule::CollapseNav, false);
+        let (source, result) = projected_source(&f, 80, &marks);
+        marks.adapt.set(crate::adapt::Rule::SnapGrids, false);
+        assert_eq!(result, crate::layout::project_source(&source, 80, (8.0, 18.0), &marks), "unsupported {unsupported} must bypass equal cards");
+    }
+}
+
+#[test]
+fn source_projection_figure_rule_faithful_popup_and_positioned_precedence() {
+    let mut f = Fake::new();
+    clip_bounds(&mut f, 0, [0.0, 0.0, 640.0, 1800.0]);
+    let article = f.el(0, "ARTICLE", &[], "block");
+    clip_bounds(&mut f, article, [0.0, 0.0, 640.0, 1800.0]);
+    flow_text(&mut f, article, "Before", [0.0, 0.0, 640.0, 18.0]);
+    let figure = f.el(article, "FIGURE", &[], "block");
+    clip_bounds(&mut f, figure, [0.0, 600.0, 640.0, 300.0]);
+    flow_text(&mut f, figure, "Figure", [0.0, 600.0, 640.0, 18.0]);
+    flow_text(&mut f, article, "After", [0.0, 1200.0, 640.0, 18.0]);
+    let mut marks = crate::layout::Marks::default();
+    marks.adapt.set(crate::adapt::Rule::CollapseGaps, false);
+    let (source, adapted) = projected_source(&f, 80, &marks);
+    assert_eq!(adapted.lines.len(), 3);
+    marks.adapt.set(crate::adapt::Rule::FigureFlow, false);
+    let legacy = crate::layout::project(source.page(), 80, (8.0, 18.0), &marks);
+    assert_eq!(crate::layout::project_source(&source, 80, (8.0, 18.0), &marks), legacy);
+    marks.adapt = crate::adapt::Adapt::none();
+    assert_eq!(crate::layout::project_source(&source, 80, (8.0, 18.0), &marks), crate::layout::project(source.page(), 80, (8.0, 18.0), &marks));
+    // A positioned ancestor forbids reflow even though FIGURE itself is static.
+    clip_style(&mut f, article, 14, "absolute");
+    let (_, positioned) = projected_source(&f, 80, &crate::layout::Marks { adapt: crate::adapt::Adapt::default().with(crate::adapt::Rule::CollapseGaps, false), ..Default::default() });
+    assert!(positioned.lines.len() > 30);
+    clip_style(&mut f, article, 14, "static");
+    let dialog = f.el(0, "DIV", &[("role", "dialog")], "block");
+    clip_bounds(&mut f, dialog, [320.0, 36.0, 240.0, 180.0]);
+    clip_style(&mut f, dialog, 14, "fixed");
+    clip_style(&mut f, dialog, 3, "rgb(255,255,255)");
+    flow_text(&mut f, dialog, "Popup", [320.0, 36.0, 240.0, 18.0]);
+    let (source, _) = projected_source(&f, 80, &crate::layout::Marks::default());
+    assert!(!source.page().overlays.is_empty());
+    let mut presentation = crate::presentation::Presentation::default();
+    let shown = presentation.update_source(&source, crate::config::View::Projection, 80, &crate::layout::Marks::default());
+    assert!(shown.lines.len() > 30, "source popup must disable FigureFlow in its underlay");
+}
+
+#[test]
+fn source_projection_dialog_image_keeps_actual_action_and_source_coordinates() {
+    let mut f = Fake::new();
+    clip_bounds(&mut f, 0, [0.0, 0.0, 640.0, 800.0]);
+    let dialog = f.el(0, "DIV", &[("role", "dialog")], "block");
+    clip_bounds(&mut f, dialog, [80.0, 180.0, 320.0, 180.0]);
+    clip_style(&mut f, dialog, 14, "fixed");
+    clip_style(&mut f, dialog, 3, "rgb(255,255,255)");
+    let link = f.node(dialog, 1, "A", None, &[("href", "/inside")], None);
+    let image = f.el(link, "IMG", &[("src", "/image.png"), ("alt", "")], "block");
+    clip_bounds(&mut f, image, [80.0, 180.0, 240.0, 90.0]);
+    let (source, _) = projected_source(&f, 80, &crate::layout::Marks::default());
+    assert_eq!(source.page().overlays.len(), 1);
+    let marks = crate::layout::Marks::default();
+    let popup = crate::layout::project_source_overlay(&source, 0, 40, (8.0, 18.0), &marks).unwrap();
+    assert_eq!(popup.regions[0].row, 0);
+    assert_eq!(popup.regions[0].column, 0);
+    assert_eq!(crate::layout::control_at(&popup.lines[2], 8), Some(0));
+}
+
+#[test]
+fn source_projection_figure_keeps_table_rows_as_measured_units() {
+    let mut f = Fake::new();
+    clip_bounds(&mut f, 0, [0.0, 0.0, 640.0, 1200.0]);
+    let article = f.el(0, "ARTICLE", &[], "block");
+    clip_bounds(&mut f, article, [0.0, 0.0, 640.0, 1200.0]);
+    let figure = f.el(article, "FIGURE", &[], "block");
+    clip_bounds(&mut f, figure, [0.0, 180.0, 640.0, 800.0]);
+    let table = f.el(figure, "TABLE", &[], "table");
+    clip_bounds(&mut f, table, [0.0, 180.0, 640.0, 800.0]);
+    let row = f.el(table, "TR", &[], "table-row");
+    clip_bounds(&mut f, row, [0.0, 180.0, 640.0, 18.0]);
+    for (word, x) in [("Left", 0.0), ("Right", 320.0)] {
+        let cell = f.el(row, "TD", &[], "table-cell");
+        clip_bounds(&mut f, cell, [x, 180.0, 320.0, 18.0]);
+        let text = f.text(cell, word);
+        clip_bounds(&mut f, text, [x, 180.0, 120.0, 18.0]);
+    }
+    flow_text(&mut f, article, "After", [0.0, 1100.0, 640.0, 18.0]);
+    let (_, p) = projected_source(&f, 40, &crate::layout::Marks::default());
+    assert!(p.lines.iter().any(|l| l.plain().contains("Left") && l.plain().contains("Right")), "table row split: {:?}", p.lines);
+    assert!(p.lines.len() < 5);
 }

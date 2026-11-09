@@ -75,6 +75,8 @@ cap-pictures = true
 captions = true
 icon-buttons = true
 snap-grids = true
+# Genuine source figures/captions and ordinary surrounding flow, measured in cells.
+figure-flow = true
 collapse-nav = true
 collapse-gaps = true
 text-over-pictures = false

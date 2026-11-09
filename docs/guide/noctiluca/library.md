@@ -203,3 +203,19 @@ for the binary only: built with it, `noctiluca` replays the snapshots in
 the folder `NOCTILUCA_FAKE_ENGINE` names instead of starting Chrome. The
 end-to-end test and the docs recordings run the binary so. A build
 without the feature ignores the variable.
+
+## Optional source relationships
+
+`model::build_source(snapshot, revisions)` returns an opaque `SourcePage` that
+owns the exact immutable `Arc<Page>` exposed by `page()`. Pass that pair to
+`layout::project_source(&source, columns, cell_size, &marks)` for source-owned
+nested grids, figure/caption flow, known canonical twin placement and linked
+image targets. `Tab::spawn_with_source` delivers the companion with the same
+page allocation; media and fixed-log updates preserve its relationships.
+
+The existing `build`, `project`, `project_overlay`, `Tab::spawn`, complete public
+model literals and reader behavior remain available. A manually constructed
+`Page` needs no companion or migration. `Rule::FigureFlow` is an appended public
+enum variant (`figure-flow`, default on); exhaustive matches over `Rule` must
+handle it. It only changes ordinary source-aware flow and is disabled by
+faithful mode and source-preserving popup underlays.
