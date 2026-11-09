@@ -6,6 +6,8 @@ User decision: **“Make it configurable.”** This extends the [approved media-
 
 Add `Node::wrap_label(self, enabled: bool) -> Node` for stock buttons, ignored on other node types. Existing constructors/defaults remain compact. The private button implementation uses one width-aware text layout for wrapped measurement and drawing, with the existing markup/Unicode text machinery, long-word folding, and safe tiny-width behavior. Complete accessible names, variants/themes, disabled guards, focus, keyboard activation and pointer capture/release remain intact. Wrapped content takes precedence over decorative edge rows. Live labels and width changes must invalidate measured height.
 
+A demonstrated shared scroll gap is part of this contract: a focused control that grows or is clipped by a shrinking viewport must be revealed again. Track content geometry and viewport changes, while preserving deliberate wheel, page-key and programmatic scrolling when that geometry stays unchanged. This belongs in the generic scroll component, without a browser focus workaround or new public scroll API.
+
 The bool builder is the reusable programmatic configuration. Do not also add a duplicate no-argument builder, new required options field or global App preference. Compact full-name access uses existing tooltip/modal/scroll primitives; no new disclosure widget is missing.
 
 ## Noctiluca policy

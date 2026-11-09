@@ -31,14 +31,14 @@
 
 ### Task 1: Configurable shared button-label wrapping
 
-**Files:** Modify/test `crates/rich-intuituive/src/controls.rs`; extend existing control interaction tests and framework-only external consumer; document `docs/guide/intuituive/controls.md`.
+**Files:** Modify/test `crates/rich-intuituive/src/controls.rs` and the demonstrated focused-geometry reveal fix in `builtin.rs`; extend existing control interaction tests and framework-only external consumer; document `docs/guide/intuituive/controls.md`.
 
 **Interfaces:** Add public `Node::wrap_label(self, enabled: bool) -> Node`; private ButtonWidget state defaults false. Constructors/signatures/public literals unchanged. Other node kinds are unaffected.
 
-- [ ] Add intended RED for a narrow opted-in button: complete long suffix across measured rows, larger vertical measure and clickable lower rows. Keep a default compact control as parity reference. Cover literal `[draft]`, CJK, combining text, long word, tiny widths, live label/resize, Enter/Space, mouse release inside/outside and disabled guard.
-- [ ] Implement the bool builder and one shared wrapped measurement/draw layout using existing text/Unicode machinery. Preserve legacy compact path and decoration/state/theme semantics. No new rendering engine or duplicate layout in measure/draw.
-- [ ] Verify focused control tests, modified library suite, fmt/scoped strict lint and an isolated default-features-disabled public consumer using both bool values. Record intended RED/GREEN and any proven baseline failures. Document the API and compact disclosure composition.
-- [ ] Commit/self-review/report exact BASE/HEAD and evidence. Root independent task review before Noct adoption.
+- [x] Add intended RED for a narrow opted-in button: complete long suffix across measured rows, larger vertical measure and clickable lower rows. Keep a default compact control as parity reference. Cover literal `[draft]`, CJK, combining text, long word, tiny widths, live label/resize, Enter/Space, mouse release inside/outside and disabled guard.
+- [x] Implement the bool builder and one shared wrapped measurement/draw layout using existing text/Unicode machinery. Preserve legacy compact path and decoration/state/theme semantics. No new rendering engine or duplicate layout in measure/draw.
+- [x] Verify focused control tests, modified library suite, fmt/scoped strict lint and an isolated default-features-disabled public consumer using both bool values. Record intended RED/GREEN and any proven baseline failures. Document the API and compact disclosure composition.
+- [x] Commit/self-review/report exact BASE/HEAD and evidence. Root independent task review before Noct adoption.
 
 ### Task 2: Noct configuration and true popup adoption
 
@@ -51,3 +51,6 @@
 - [ ] Add compact tooltips and `page.labels` read-only scrollable details with disabled names, configurable binding, F1 unchanged, no password values and no source action/Escape on local dismissal. Preserve source owner dismissal and navigation cleanup.
 - [ ] Verify ordinary and beyond4000-row content navigation, hints, disabled/readonly/source revision guards, owner dismissal and existing product/video/popups. Run Noct suite/fmt/scoped lint; explicitly document public Rule-variant extension and adaptive default/config behavior.
 - [ ] Coordinate native capture: both modes on neutral fixture at40columns and a reachable ordinary popup; no external consent/action activation. Preserve source/config/hash/screenshots, self-review and commit/report. Root task review and later broad continuation review/application gates remain required.
+
+
+Shared Task1 independently reviewed PASS atbc0b261:1474unit/integration,408doctests and2isolated consumer tests passed. The shared ordinary-scroll fix re-reveals a focused target when its content geometry/viewport changes; unchanged-geometry manual scrolling stays put. Noct adoption remains Task2 and is not implemented by the core result.
