@@ -856,3 +856,110 @@ fn source_linked_image_cells_dispatch_the_retained_ancestor_action() {
             .any(|a| matches!(a, noctiluca::engine::PageAction::Click(node) if *node == target))
     });
 }
+
+#[test]
+fn captured_native_figure_pixels_cover_broad_screen_cells_and_keep_action() {
+    use noctiluca::{
+        app::{Options, app_with_presentation},
+        bookmarks::Bookmarks,
+        config::{Config, Images, View},
+        testing::FakeEngine,
+    };
+    let mut snapshot = noctiluca::engine::PageSnapshot {
+        dom: serde_json::from_str(include_str!("snapshots/source-native/dom.json")).unwrap(),
+        ax: serde_json::from_str(include_str!("snapshots/source-native/ax.json")).unwrap(),
+    };
+    snapshot.dom["sourceFormatting"] =
+        serde_json::from_str(include_str!("snapshots/source-native/formatting.json")).unwrap();
+    let page = build(&snapshot, &mut Revisions::new());
+    let target = page
+        .controls
+        .iter()
+        .find(|c| {
+            c.href
+                .as_deref()
+                .is_some_and(|h| h.ends_with("#target-image"))
+        })
+        .unwrap()
+        .node;
+    let engine = FakeEngine::from_dir(
+        &std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/snapshots"),
+    )
+    .unwrap();
+    let state = engine.state.clone();
+    {
+        let mut state = state.lock().unwrap();
+        state.pages.insert("neutral".into(), snapshot);
+        for media in &page.media {
+            state.resources.insert(
+                media.src.clone(),
+                include_bytes!("snapshots/source-native/glow.png").to_vec(),
+            );
+        }
+    }
+    let mut d = app_with_presentation(
+        Box::new(engine),
+        Options {
+            config: Config::default(),
+            bookmarks: Bookmarks::default(),
+            url: Some("http://127.0.0.1:43649/neutral.html".into()),
+            view: Some(View::Projection),
+            images: Some(Images::Kitty),
+            tunnel: None,
+            control: None,
+        },
+        rich_intuituive::ImagePresentation::new(
+            rich_intuituive::Pixels::Kitty,
+            rich_intuituive::KittyFeatures {
+                unicode_placeholders: true,
+                native_animation: true,
+            },
+            rich_intuituive::PixelFormats::cells().with(rich_intuituive::Pixels::Kitty),
+        ),
+    )
+    .driver(40, 40);
+    wait(&mut d, |d| {
+        d.screen()
+            .lines()
+            .into_iter()
+            .flatten()
+            .filter_map(|s| s.style.as_ref().and_then(rich_art::picture::PictureTag::of))
+            .any(|tag| tag.cols == 20)
+    });
+    let mut seen = std::collections::HashMap::<u32, (usize, usize, usize)>::new();
+    let mut click = None;
+    for (y, line) in d.screen().lines().iter().enumerate() {
+        let mut x = 0;
+        for segment in line {
+            let width = rich::cells::cell_len(&segment.text);
+            if let Some(tag) = segment
+                .style
+                .as_ref()
+                .and_then(rich_art::picture::PictureTag::of)
+            {
+                let image =
+                    rich_intuituive::Picture::find(tag.id, tag.version).expect("decoded picture");
+                assert_eq!((image.image().width(), image.image().height()), (40, 20));
+                let count = seen.entry(tag.id).or_insert((tag.cols, tag.rows, 0));
+                count.2 += width;
+                if tag.cols == 20 && tag.row == 0 {
+                    click = Some(((x + width - 1) as u16, y as u16));
+                }
+            }
+            x += width;
+        }
+    }
+    let mut coverage: Vec<_> = seen.into_values().collect();
+    coverage.sort_unstable();
+    assert_eq!(coverage, vec![(12, 3, 36), (20, 4, 80)]);
+    let (x, y) = click.expect("image cell beyond the old one-column strip");
+    d.click(x, y);
+    wait(&mut d, |_| {
+        state
+            .lock()
+            .unwrap()
+            .actions
+            .iter()
+            .any(|a| matches!(a,noctiluca::engine::PageAction::Click(node) if *node==target))
+    });
+}
