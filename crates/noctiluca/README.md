@@ -55,6 +55,23 @@ as a normal user, never as root.
   keywords, the search engine, keys, and per-site settings and keys. See
   [`config.sample.toml`](config.sample.toml).
 
+## Image fallback and recovery
+
+Images decode asynchronously through the shared Picture decoder. If original
+bytes are unavailable, unsupported or fail decoding, Noctiluca captures the
+current model's guarded Chrome pixels as a PNG fallback. A temporary network
+cache miss is retried after 500 ms, 2 s, 8 s, then 30 s per attempt (capped).
+The last successfully decoded picture stays visible while the same source,
+size and revision is replaced; a changed key or document starts fresh.
+
+Retries respect image readiness and pending document changes. Admission is
+limited to eight sources per batch and eight outstanding still decodes, with
+one pending attempt per live key. Screenshot failures also back off; unsupported
+originals, data URLs and drawings without originals do not poll for original
+bytes. A successful original is retained without repeated reads. Retrying a
+cache miss does not force lazy loading or make a new browser network request.
+A fallback is a still: animation returns only if the original becomes available.
+
 ## Cargo features
 
 - `fake-engine` (off; **test-only**): the binary replays saved page

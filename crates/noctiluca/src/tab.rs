@@ -455,7 +455,7 @@ struct Worker<'a> {
     /// Stills to decode, to the decoder thread.
     decode: Sender<Job>,
     /// Pictures decoded, from the decoder thread.
-    decoded: Receiver<(StillAttempt, Option<Picture>)>,
+    decoded: Receiver<StillCompletion>,
     /// Bounded to live keys; transport IDs remain until stale jobs complete.
     recovery: HashMap<StillKey, StillRecovery>,
     outstanding: HashSet<u64>,
@@ -501,12 +501,6 @@ struct Worker<'a> {
     pixels_cast: bool,
     /// When the pixel view's last frame was looked for.
     screen_at: Option<Instant>,
-    /// The newest still captured of each node, and the newest decoded:
-    /// a drawing that changed shows them until its new one comes.
-    latest: HashMap<NodeId, StillKey>,
-    drawn: HashMap<NodeId, StillKey>,
-    /// Drawings whose still is of an older revision: captured again.
-    stale: HashSet<NodeId>,
     /// The canvases watched as live regions, by node.
     canvases: HashMap<NodeId, Watch>,
     /// The address last opened, until a page other than Chrome's error
@@ -639,27 +633,19 @@ impl Worker<'_> {
             self.recovery.clear();
             self.inline.clear();
             self.inline_asked.clear();
-            self.latest.clear();
-            self.drawn.clear();
             self.canvases.clear();
         }
         let live: HashSet<_> = page.media.iter().map(key_of).collect();
         self.recovery.retain(|key, _| live.contains(key));
         self.stills.retain(|key, _| live.contains(key));
         self.pictures.retain(|key, _| live.contains(key));
-        self.latest.retain(|_, key| live.contains(key));
-        self.drawn.retain(|_, key| live.contains(key));
         self.follow_logs(&mut page);
         self.dress_inline(&mut page);
-        self.stale.clear();
         for media in &mut page.media {
             let key = key_of(media);
-            let (still, picture, stale) = self.shown(&key);
+            let (still, picture) = self.shown(&key);
             media.still = still;
             media.picture = picture;
-            if stale {
-                self.stale.insert(media.node);
-            }
         }
         self.probe(&mut page);
         // A new document is read again until its layout holds still: the
@@ -783,11 +769,10 @@ impl Worker<'_> {
     }
 
     /// Retain good pixels only for the exact current source, size and revision.
-    fn shown(&self, key: &StillKey) -> (Option<Arc<[u8]>>, Option<Picture>, bool) {
+    fn shown(&self, key: &StillKey) -> (Option<Arc<[u8]>>, Option<Picture>) {
         (
             self.stills.get(key).cloned(),
             self.pictures.get(key).cloned(),
-            false,
         )
     }
 
@@ -1026,6 +1011,9 @@ impl Worker<'_> {
                     None if state.original_due.is_some() && self.pictures.contains_key(&key) => {
                         None
                     }
+                    // Resource and screenshot failures have independent clocks.
+                    // An earlier original retry cannot defeat fallback backoff.
+                    None if state.screenshot_due.is_some_and(|due| due > now) => None,
                     None => self.screenshot_bytes(media.rect, &mut state, now),
                 }
             } else {
@@ -1044,7 +1032,6 @@ impl Worker<'_> {
                     if !self.pictures.contains_key(&key) {
                         self.stills.insert(key.clone(), bytes);
                     }
-                    self.latest.insert(key.0, key.clone());
                 } else {
                     state.screenshot_due = Some(now + retry_delay(&mut state.screenshot_failures));
                 }
@@ -1110,7 +1097,6 @@ impl Worker<'_> {
                 if origin == StillOrigin::Original {
                     state.original_due = None;
                 }
-                self.drawn.insert(key.0, key.clone());
                 self.pictures.insert(key, picture);
                 any = true;
             } else if origin == StillOrigin::Original {
@@ -1164,7 +1150,7 @@ impl Worker<'_> {
         };
         let mut next = (*page).clone();
         for media in &mut next.media {
-            let (still, picture, _) = self.shown(&key_of(media));
+            let (still, picture) = self.shown(&key_of(media));
             media.still = still;
             media.picture = picture;
         }
@@ -1673,6 +1659,7 @@ type ToDecode<K> = Sender<(K, Arc<[u8]>)>;
 /// A still for the decoder thread.
 type StillAttempt = (u64, StillKey, u64, StillOrigin);
 type Job = (StillAttempt, Arc<[u8]>);
+type StillCompletion = (StillAttempt, Option<Picture>);
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum StillOrigin {
@@ -1740,7 +1727,7 @@ pub(crate) fn data_bytes(data: &str) -> Option<Vec<u8>> {
 }
 
 /// Unlike the legacy inline channel, every still job releases admission.
-fn still_decoder() -> (Sender<Job>, Receiver<(StillAttempt, Option<Picture>)>) {
+fn still_decoder() -> (Sender<Job>, Receiver<StillCompletion>) {
     let (send, jobs) = mpsc::channel::<Job>();
     let (done, decoded) = mpsc::channel();
     thread::spawn(move || {
@@ -1836,9 +1823,6 @@ fn run_with_source(
         pixels: false,
         pixels_cast: false,
         screen_at: None,
-        latest: HashMap::new(),
-        drawn: HashMap::new(),
-        stale: HashSet::new(),
         canvases: HashMap::new(),
         asked: None,
     };
@@ -1954,11 +1938,7 @@ mod tests {
     fn recovery_worker<'a>(
         engine: FakeEngine,
         update: &'a dyn Fn(Update),
-    ) -> (
-        Worker<'a>,
-        Receiver<Job>,
-        Sender<(StillAttempt, Option<Picture>)>,
-    ) {
+    ) -> (Worker<'a>, Receiver<Job>, Sender<StillCompletion>) {
         let engine: Box<dyn Engine> = Box::new(engine);
         let (decode, jobs) = mpsc::channel();
         let (done, decoded) = mpsc::channel();
@@ -2001,9 +1981,6 @@ mod tests {
             pixels: false,
             pixels_cast: false,
             screen_at: None,
-            latest: HashMap::new(),
-            drawn: HashMap::new(),
-            stale: HashSet::new(),
             canvases: HashMap::new(),
             asked: None,
         };
@@ -2057,53 +2034,142 @@ mod tests {
         bytes
     }
 
+    fn complete_recovery(jobs: &Receiver<Job>, done: &Sender<StillCompletion>) -> StillAttempt {
+        let (id, bytes) = jobs.try_recv().unwrap();
+        done.send((id.clone(), Picture::decode_animated(&bytes).ok()))
+            .unwrap();
+        id
+    }
+
+    fn assert_image_only(before: &Page, after: &Page) {
+        assert_eq!(layout_key(before), layout_key(after));
+        let clear = |page: &Page| {
+            let mut page = page.clone();
+            for media in &mut page.media {
+                media.still = None;
+                media.picture = None;
+            }
+            page
+        };
+        assert_eq!(
+            clear(before),
+            clear(after),
+            "pixels must not alter geometry, actions or document"
+        );
+    }
+
     #[test]
     fn recovery_corrupt_accepted_png_has_decoder_completion() {
         let bytes: Arc<[u8]> = recovery_png()[..41].into();
         assert!(decodable(&bytes));
         assert!(Picture::decode_animated(&bytes).is_err());
-        let (decode, decoded) = still_decoder();
-        let id = (1, (1, "source".into(), 2, 2, 0), 1, StillOrigin::Original);
-        decode.send((id.clone(), bytes)).unwrap();
-        let (completed, picture) = decoded.recv_timeout(Duration::from_secs(2)).unwrap();
-        assert_eq!(completed, id);
+        let engine = recovery_engine(1);
+        let state = engine.state.clone();
+        state
+            .lock()
+            .unwrap()
+            .resources
+            .insert("https://example.test/0.png".into(), bytes.to_vec());
+        let update = |_: Update| {};
+        let (mut worker, _jobs, done) = recovery_worker(engine, &update);
+        let (decode, actual) = still_decoder();
+        worker.decode = decode;
+        let before = worker.read().unwrap();
+        let now = Instant::now();
+        worker.capture_stills_at(now);
+        let completion = actual.recv_timeout(Duration::from_secs(2)).unwrap();
+        assert_eq!(completion.0.3, StillOrigin::Original);
         assert!(
-            picture.is_none(),
+            completion.1.is_none(),
             "actual decoder must complete rejected pixels too"
         );
+        done.send(completion).unwrap();
+        worker.take_decoded_at(now);
+        assert!(worker.outstanding.is_empty());
+        assert!(state.lock().unwrap().captures.is_empty());
+        worker.capture_stills_at(now);
+        let completion = actual.recv_timeout(Duration::from_secs(2)).unwrap();
+        assert_eq!(completion.0.3, StillOrigin::Screenshot);
+        assert!(completion.1.is_some());
+        done.send(completion).unwrap();
+        worker.take_decoded_at(now);
+        assert!(worker.page.as_ref().unwrap().media[0].picture.is_some());
+        assert_image_only(&before, worker.page.as_ref().unwrap());
+        worker.capture_stills_at(now + Duration::from_secs(1000));
+        let state = state.lock().unwrap();
+        assert_eq!(
+            state.resource_reads.len(),
+            1,
+            "corrupt originals do not poll"
+        );
+        assert_eq!(state.captures.len(), 1);
     }
 
     #[test]
     fn recovery_transient_original_upgrades_same_key_animation() {
         let engine = recovery_engine(1);
         let state = engine.state.clone();
+        state.lock().unwrap().resource_steps.insert(
+            "https://example.test/0.png".into(),
+            [None, None, None, None, None, Some(recovery_animation())].into(),
+        );
         let update = |_: Update| {};
+        let pairs = std::cell::RefCell::new(Vec::new());
+        let paired = |update: Update, source: Option<SourcePage>| {
+            if let Update::Page(page) = update {
+                let source = source.unwrap();
+                assert!(Arc::ptr_eq(&page, source.page()));
+                pairs.borrow_mut().push(source);
+            }
+        };
         let (mut worker, jobs, done) = recovery_worker(engine, &update);
-        worker.read().unwrap();
-        let now = Instant::now();
+        worker.source_update = Some(&paired);
+        let before = worker.read().unwrap();
+        let mut now = Instant::now();
         worker.capture_stills_at(now);
-        let (id, bytes) = jobs.try_recv().unwrap();
-        done.send((id, Some(Picture::decode_animated(&bytes).unwrap())))
-            .unwrap();
+        complete_recovery(&jobs, &done);
         worker.take_decoded_at(now);
-        assert!(worker.page.as_ref().unwrap().media[0].picture.is_some());
-        state
-            .lock()
-            .unwrap()
-            .resources
-            .insert("https://example.test/0.png".into(), recovery_animation());
-        worker.read().unwrap();
-        worker.capture_stills_at(now + Duration::from_millis(499));
-        assert!(jobs.try_recv().is_err());
-        worker.capture_stills_at(now + Duration::from_millis(500));
-        let (id, bytes) = jobs
-            .try_recv()
-            .expect("same-key original must be retried after temporary miss");
-        done.send((id, Some(Picture::decode_animated(&bytes).unwrap())))
-            .unwrap();
-        worker.take_decoded();
+        let good = worker.page.clone().unwrap();
+        assert!(good.media[0].picture.is_some());
+        for (n, millis) in [500, 2000, 8000, 30000, 30000].into_iter().enumerate() {
+            let due = now + Duration::from_millis(millis);
+            assert_eq!(
+                worker.recovery.values().next().unwrap().original_due,
+                Some(due)
+            );
+            // Repeated snapshot reads and scroll-triggered batches never reset due.
+            worker.read().unwrap();
+            worker.capture_stills_at(due - Duration::from_nanos(1));
+            assert_eq!(state.lock().unwrap().resource_reads.len(), n + 1);
+            assert!(jobs.try_recv().is_err());
+            assert!(!worker.still_retry_due(due - Duration::from_nanos(1)));
+            assert!(worker.still_retry_due(due));
+            worker.capture_stills_at(due);
+            assert_eq!(state.lock().unwrap().resource_reads.len(), n + 2);
+            assert_eq!(
+                worker.page.as_ref().unwrap().media[0].picture,
+                good.media[0].picture
+            );
+            assert_eq!(
+                worker.page.as_ref().unwrap().media[0].still,
+                good.media[0].still
+            );
+            now = due;
+        }
         assert_eq!(
-            worker.page.as_ref().unwrap().media[0]
+            state.lock().unwrap().captures.len(),
+            1,
+            "good fallback stays visible"
+        );
+        // A due original that is decoding owns the key; a later tick cannot duplicate it.
+        worker.capture_stills_at(now + Duration::from_secs(1000));
+        assert_eq!(state.lock().unwrap().resource_reads.len(), 6);
+        let id = complete_recovery(&jobs, &done);
+        assert_eq!(id.3, StillOrigin::Original);
+        worker.take_decoded_at(now);
+        let after = worker.page.as_ref().unwrap();
+        assert_eq!(
+            after.media[0]
                 .picture
                 .as_ref()
                 .unwrap()
@@ -2112,6 +2178,390 @@ mod tests {
                 .len(),
             2
         );
+        assert_eq!(
+            after.media[0].still.as_deref(),
+            Some(recovery_animation().as_slice())
+        );
+        assert_image_only(&before, after);
+        for pair in pairs.borrow().iter() {
+            assert!(Arc::ptr_eq(&pairs.borrow()[0].relations, &pair.relations));
+        }
+        worker.capture_stills_at(now + Duration::from_secs(2000));
+        assert!(jobs.try_recv().is_err());
+        assert!(!worker.still_retry_due(now + Duration::from_secs(2000)));
+        assert_eq!(
+            state.lock().unwrap().resource_reads.len(),
+            6,
+            "successful original is final"
+        );
+    }
+
+    #[test]
+    fn recovery_failed_screenshot_capture_and_decode_back_off_without_original_polling() {
+        let engine = recovery_engine(1);
+        let state = engine.state.clone();
+        {
+            let mut state = state.lock().unwrap();
+            state
+                .resources
+                .insert("https://example.test/0.png".into(), b"<svg/>".to_vec());
+            state.capture_steps = [
+                None,
+                Some(recovery_png()[..41].to_vec()),
+                None,
+                Some(recovery_png()),
+            ]
+            .into();
+        }
+        let update = |_: Update| {};
+        let (mut worker, jobs, done) = recovery_worker(engine, &update);
+        worker.read().unwrap();
+        let mut now = Instant::now();
+        worker.capture_stills_at(now);
+        assert!(jobs.try_recv().is_err());
+        for (n, millis) in [500, 2000, 8000].into_iter().enumerate() {
+            let due = now + Duration::from_millis(millis);
+            assert_eq!(
+                worker.recovery.values().next().unwrap().screenshot_due,
+                Some(due)
+            );
+            worker.read().unwrap();
+            worker.capture_stills_at(due - Duration::from_nanos(1));
+            assert_eq!(state.lock().unwrap().captures.len(), n + 1);
+            worker.capture_stills_at(due);
+            assert_eq!(state.lock().unwrap().captures.len(), n + 2);
+            if n != 1 {
+                complete_recovery(&jobs, &done);
+                worker.take_decoded_at(due);
+            }
+            now = due;
+        }
+        assert!(worker.page.as_ref().unwrap().media[0].picture.is_some());
+        worker.capture_stills_at(now + Duration::from_secs(1000));
+        assert_eq!(state.lock().unwrap().resource_reads.len(), 1);
+        assert_eq!(state.lock().unwrap().captures.len(), 4);
+    }
+
+    #[test]
+    fn recovery_batch_failure_and_not_ready_sources_do_not_starve_later_media() {
+        let engine = recovery_engine(20);
+        let state = engine.state.clone();
+        {
+            let mut state = state.lock().unwrap();
+            state.capture_steps = (0..8).map(|_| None).collect();
+            state
+                .resources
+                .insert("https://example.test/16.png".into(), recovery_animation());
+        }
+        let update = |_: Update| {};
+        let (mut worker, jobs, done) = recovery_worker(engine, &update);
+        worker.read().unwrap();
+        let now = Instant::now();
+        let first = worker.page.as_ref().unwrap().media[0].node;
+        state.lock().unwrap().not_loaded.insert(first);
+        worker.capture_stills_at(now);
+        assert_eq!(state.lock().unwrap().resource_reads.len(), 8);
+        assert!(
+            !state
+                .lock()
+                .unwrap()
+                .resource_reads
+                .iter()
+                .any(|src| src.ends_with("/0.png"))
+        );
+        assert!(jobs.try_recv().is_err());
+        assert!(worker.stills_pending);
+        worker.capture_stills_at(now);
+        assert_eq!(worker.outstanding.len(), 8);
+        assert_eq!(state.lock().unwrap().resource_reads.len(), 16);
+        worker.capture_stills_at(now);
+        assert_eq!(
+            state.lock().unwrap().resource_reads.len(),
+            16,
+            "full transport admits no work"
+        );
+        for _ in 0..8 {
+            complete_recovery(&jobs, &done);
+        }
+        worker.take_decoded_at(now);
+        worker.capture_stills_at(now);
+        assert_eq!(state.lock().unwrap().resource_reads.len(), 19);
+        for _ in 0..3 {
+            complete_recovery(&jobs, &done);
+        }
+        worker.take_decoded_at(now);
+        let last = worker.page.as_ref().unwrap().media.last().unwrap();
+        assert!(last.picture.is_some(), "later ready source was reached");
+        assert_eq!(worker.recovery.len(), 19);
+        state.lock().unwrap().not_loaded.remove(&first);
+        worker.capture_stills_at(now);
+        complete_recovery(&jobs, &done);
+        worker.take_decoded_at(now);
+        assert_eq!(state.lock().unwrap().resource_reads.len(), 20);
+        worker.capture_stills_at(now);
+        assert!(jobs.try_recv().is_err());
+        assert!(!worker.stills_pending, "nothing is immediately runnable");
+        assert!(worker.outstanding.is_empty());
+    }
+
+    #[test]
+    fn recovery_original_retry_honors_later_failed_screenshot_due() {
+        let engine = recovery_engine(1);
+        let state = engine.state.clone();
+        state
+            .lock()
+            .unwrap()
+            .capture_steps
+            .push_back(Some(recovery_png()[..41].to_vec()));
+        let update = |_: Update| {};
+        let (mut worker, jobs, done) = recovery_worker(engine, &update);
+        worker.read().unwrap();
+        let now = Instant::now();
+        worker.capture_stills_at(now);
+        complete_recovery(&jobs, &done);
+        worker.take_decoded_at(now + Duration::from_millis(100));
+        worker.capture_stills_at(now + Duration::from_millis(500));
+        assert_eq!(state.lock().unwrap().resource_reads.len(), 2);
+        assert_eq!(
+            state.lock().unwrap().captures.len(),
+            1,
+            "original retry cannot pull a failed fallback forward"
+        );
+        assert!(jobs.try_recv().is_err());
+        worker.capture_stills_at(now + Duration::from_millis(599));
+        assert_eq!(state.lock().unwrap().captures.len(), 1);
+        worker.capture_stills_at(now + Duration::from_millis(600));
+        assert_eq!(state.lock().unwrap().captures.len(), 2);
+        assert_eq!(complete_recovery(&jobs, &done).3, StillOrigin::Screenshot);
+        worker.take_decoded_at(now + Duration::from_millis(600));
+    }
+
+    #[test]
+    fn recovery_unsupported_data_and_drawing_sources_keep_stable_fallbacks() {
+        use crate::testing::PageBuilder;
+        let engine = recovery_engine(0);
+        let state = engine.state.clone();
+        let mut builder = PageBuilder::new("https://example.test/recovery", "test", 400.0, 800.0);
+        builder.image(
+            builder.body(),
+            "data:image/svg+xml;base64,PHN2Zy8+",
+            "data",
+            Rect::new(0.0, 0.0, 16.0, 16.0),
+        );
+        builder.image(
+            builder.body(),
+            "https://example.test/unsupported",
+            "unsupported",
+            Rect::new(0.0, 20.0, 16.0, 16.0),
+        );
+        builder.element(
+            builder.body(),
+            "SVG",
+            &[],
+            &[],
+            Some(Rect::new(0.0, 40.0, 16.0, 16.0)),
+        );
+        {
+            let mut state = state.lock().unwrap();
+            state.pages.insert("recovery".into(), builder.snapshot());
+            state.resources.insert(
+                "https://example.test/unsupported".into(),
+                b"<svg/>".to_vec(),
+            );
+        }
+        let update = |_: Update| {};
+        let (mut worker, jobs, done) = recovery_worker(engine, &update);
+        worker.read().unwrap();
+        let now = Instant::now();
+        worker.capture_stills_at(now);
+        for _ in 0..3 {
+            assert_eq!(complete_recovery(&jobs, &done).3, StillOrigin::Screenshot);
+        }
+        worker.take_decoded_at(now);
+        for millis in [0, 500, 2500, 10500, 40500, 70500] {
+            worker.read().unwrap();
+            worker.capture_stills_at(now + Duration::from_millis(millis));
+            assert!(jobs.try_recv().is_err());
+        }
+        assert!(
+            worker
+                .page
+                .as_ref()
+                .unwrap()
+                .media
+                .iter()
+                .all(|m| m.picture.is_some())
+        );
+        assert_eq!(state.lock().unwrap().resource_reads.len(), 1);
+        assert_eq!(state.lock().unwrap().captures.len(), 3);
+    }
+
+    #[test]
+    fn recovery_failed_replacement_keeps_same_key_good_pixels() {
+        let engine = recovery_engine(1);
+        let state = engine.state.clone();
+        state.lock().unwrap().resource_steps.insert(
+            "https://example.test/0.png".into(),
+            [None, Some(recovery_png()[..41].to_vec())].into(),
+        );
+        let update = |_: Update| {};
+        let (mut worker, jobs, done) = recovery_worker(engine, &update);
+        worker.read().unwrap();
+        let now = Instant::now();
+        worker.capture_stills_at(now);
+        complete_recovery(&jobs, &done);
+        worker.take_decoded_at(now);
+        let good = worker.page.clone().unwrap();
+        let due = now + Duration::from_millis(500);
+        worker.capture_stills_at(due);
+        complete_recovery(&jobs, &done); // actual decode rejects corrupt replacement
+        worker.take_decoded_at(due);
+        assert_eq!(worker.page.as_ref(), Some(&good));
+        state.lock().unwrap().capture_steps.push_back(None);
+        worker.capture_stills_at(due); // guarded fallback itself fails
+        assert_eq!(worker.page.as_ref(), Some(&good));
+        worker.read().unwrap();
+        assert_eq!(worker.page.as_ref(), Some(&good));
+        worker.capture_stills_at(due + Duration::from_millis(499));
+        assert!(jobs.try_recv().is_err());
+        worker.capture_stills_at(due + Duration::from_millis(500));
+        complete_recovery(&jobs, &done);
+        worker.take_decoded_at(due + Duration::from_millis(500));
+        assert_image_only(&good, worker.page.as_ref().unwrap());
+        assert_eq!(state.lock().unwrap().resource_reads.len(), 2);
+    }
+
+    #[test]
+    fn recovery_late_same_key_completions_never_clear_a_new_attempt() {
+        for newest_first in [false, true] {
+            let engine = recovery_engine(1);
+            let update = |_: Update| {};
+            let (mut worker, jobs, done) = recovery_worker(engine, &update);
+            worker.read().unwrap();
+            let now = Instant::now();
+            worker.capture_stills_at(now);
+            let (old, bytes) = jobs.try_recv().unwrap();
+            done.send((old.clone(), None)).unwrap();
+            worker.take_decoded_at(now);
+            worker.capture_stills_at(now + Duration::from_millis(500));
+            let (new, _) = jobs.try_recv().unwrap();
+            let picture = Picture::decode_animated(&bytes).unwrap();
+            if newest_first {
+                done.send((new.clone(), Some(picture.clone()))).unwrap();
+            }
+            done.send((
+                old,
+                Some(Picture::from_rgba(1, 1, vec![255, 0, 0, 255]).unwrap()),
+            ))
+            .unwrap();
+            worker.take_decoded_at(now);
+            if !newest_first {
+                assert_eq!(
+                    worker.outstanding.len(),
+                    1,
+                    "old completion releases no newer slot"
+                );
+                assert_eq!(
+                    worker
+                        .recovery
+                        .values()
+                        .next()
+                        .unwrap()
+                        .pending
+                        .as_ref()
+                        .unwrap()
+                        .0,
+                    new.2
+                );
+                assert!(worker.page.as_ref().unwrap().media[0].picture.is_none());
+                done.send((new, Some(picture.clone()))).unwrap();
+                worker.take_decoded_at(now);
+            }
+            assert_eq!(
+                worker.page.as_ref().unwrap().media[0].picture.as_ref(),
+                Some(&picture)
+            );
+            assert!(worker.outstanding.is_empty());
+        }
+    }
+
+    #[test]
+    fn recovery_churn_prunes_live_state_but_late_jobs_release_transport_once() {
+        use crate::testing::PageBuilder;
+        let engine = recovery_engine(1);
+        let state = engine.state.clone();
+        let update = |_: Update| {};
+        let (mut worker, jobs, done) = recovery_worker(engine, &update);
+        let now = Instant::now();
+        let mut pending = Vec::new();
+        let mut previous = None;
+        for n in 0..12 {
+            // Same node with a changed source/size; navigation reuses node IDs too.
+            let url = if n < 6 {
+                "https://example.test/recovery"
+            } else {
+                "https://example.test/navigation"
+            };
+            let mut builder = PageBuilder::new(url, "recovery", 400.0, 800.0);
+            builder.image(
+                builder.body(),
+                &format!("https://example.test/{n}.png"),
+                "image",
+                Rect::new(0.0, 0.0, 16.0 + n as f64, 16.0),
+            );
+            state
+                .lock()
+                .unwrap()
+                .pages
+                .insert("recovery".into(), builder.snapshot());
+            let page = worker.read().unwrap();
+            assert!(page.media[0].picture.is_none());
+            assert!(page.media[0].still.is_none());
+            let key = key_of(&page.media[0]);
+            if let Some(old) = previous {
+                assert_ne!(old, key);
+            }
+            previous = Some(key);
+            worker.capture_stills_at(now);
+            pending.extend(jobs.try_iter());
+            assert!(worker.recovery.len() <= 1);
+            assert!(worker.stills.len() <= 1);
+            assert!(worker.pictures.is_empty());
+            assert!(worker.outstanding.len() <= 8);
+        }
+        assert_eq!(pending.len(), 8, "churn cannot queue unbounded old jobs");
+        let (old, bytes) = pending.pop().unwrap();
+        done.send((old.clone(), Picture::decode_animated(&bytes).ok()))
+            .unwrap();
+        worker.take_decoded_at(now);
+        assert_eq!(worker.outstanding.len(), 7);
+        worker.capture_stills_at(now);
+        let (new, bytes) = jobs.try_recv().unwrap();
+        assert_eq!(worker.outstanding.len(), 8);
+        // A duplicate completion cannot make room a second time.
+        done.send((old, None)).unwrap();
+        worker.take_decoded_at(now);
+        assert_eq!(worker.outstanding.len(), 8);
+        done.send((new, Picture::decode_animated(&bytes).ok()))
+            .unwrap();
+        worker.take_decoded_at(now);
+        assert!(worker.page.as_ref().unwrap().media[0].picture.is_some());
+        for (id, bytes) in pending {
+            done.send((id, Picture::decode_animated(&bytes).ok()))
+                .unwrap();
+        }
+        worker.take_decoded_at(now);
+        assert!(worker.outstanding.is_empty());
+        let builder = PageBuilder::new("https://example.test/navigation", "empty", 400.0, 800.0);
+        state
+            .lock()
+            .unwrap()
+            .pages
+            .insert("recovery".into(), builder.snapshot());
+        worker.read().unwrap();
+        assert!(worker.recovery.is_empty());
+        assert!(worker.stills.is_empty());
+        assert!(worker.pictures.is_empty());
     }
 
     #[test]
@@ -2267,9 +2717,6 @@ mod tests {
             pixels: false,
             pixels_cast: false,
             screen_at: None,
-            latest: HashMap::new(),
-            drawn: HashMap::new(),
-            stale: HashSet::new(),
             canvases: HashMap::new(),
             asked: None,
         };
@@ -2519,9 +2966,6 @@ mod tests {
                 pixels: false,
                 pixels_cast: false,
                 screen_at: None,
-                latest: HashMap::new(),
-                drawn: HashMap::new(),
-                stale: HashSet::new(),
                 canvases: HashMap::new(),
                 asked: None,
             };
@@ -2854,9 +3298,6 @@ mod tests {
             pixels: false,
             pixels_cast: false,
             screen_at: None,
-            latest: HashMap::new(),
-            drawn: HashMap::new(),
-            stale: HashSet::new(),
             canvases: HashMap::new(),
             asked: None,
         };
@@ -2949,9 +3390,6 @@ mod tests {
                 pixels: false,
                 pixels_cast: false,
                 screen_at: None,
-                latest: HashMap::new(),
-                drawn: HashMap::new(),
-                stale: HashSet::new(),
                 canvases: HashMap::new(),
                 asked: None,
             };
@@ -3082,9 +3520,6 @@ mod tests {
             pixels: false,
             pixels_cast: false,
             screen_at: None,
-            latest: HashMap::new(),
-            drawn: HashMap::new(),
-            stale: HashSet::new(),
             canvases: HashMap::new(),
             asked: None,
         };
@@ -3329,9 +3764,6 @@ mod tests {
             pixels: false,
             pixels_cast: false,
             screen_at: None,
-            latest: HashMap::new(),
-            drawn: HashMap::new(),
-            stale: HashSet::new(),
             canvases: HashMap::new(),
             asked: None,
         };

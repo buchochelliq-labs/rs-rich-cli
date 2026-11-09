@@ -2,7 +2,7 @@
 //! recorded, and a hook to change the page when an action runs. No
 //! browser.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use std::io;
 use std::sync::{Arc, Mutex};
 
@@ -47,6 +47,10 @@ pub struct FakeState {
     pub codecs: HashMap<String, String>,
     /// Resources the page loaded, by address: an image's original bytes.
     pub resources: HashMap<String, Vec<u8>>,
+    /// Direct resource reads, for deterministic still-source lifecycle tests.
+    pub resource_reads: Vec<String>,
+    /// Per-source scripted bytes or read failures, consumed before resources.
+    pub resource_steps: HashMap<String, VecDeque<Option<Vec<u8>>>>,
     /// Where resources not in [`resources`](Self::resources) are read
     /// from: a fixture directory, by the address's path after its last
     /// `/fixtures/` (else its last segment). Saved snapshots name their
@@ -70,6 +74,8 @@ pub struct FakeState {
     pub paint: Option<[u8; 3]>,
     /// The regions captured of Chrome's pixels, in order.
     pub captures: Vec<Rect>,
+    /// Scripted capture bytes or failures, consumed before the default paint.
+    pub capture_steps: VecDeque<Option<Vec<u8>>>,
 }
 
 impl FakeState {
@@ -816,6 +822,11 @@ impl Engine for FakeEngine {
         let paint = {
             let mut state = self.lock();
             state.captures.push(region);
+            if let Some(bytes) = state.capture_steps.pop_front() {
+                return bytes
+                    .map(|bytes| Frame { format, bytes })
+                    .ok_or_else(|| io::Error::other("scripted capture failure"));
+            }
             state.paint.unwrap_or([30, 90, 220])
         };
         let (w, h) = (region.width.max(1.0) as u32, region.height.max(1.0) as u32);
@@ -902,9 +913,17 @@ impl Engine for FakeEngine {
     }
 
     fn resource(&mut self, _tab: TabId, url: &str) -> io::Result<Vec<u8>> {
-        self.lock()
-            .resource(url)
-            .ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "no such resource"))
+        let mut state = self.lock();
+        state.resource_reads.push(url.to_string());
+        let bytes = match state
+            .resource_steps
+            .get_mut(url)
+            .and_then(VecDeque::pop_front)
+        {
+            Some(bytes) => bytes,
+            None => state.resource(url),
+        };
+        bytes.ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "no such resource"))
     }
 
     fn optional_resources(&mut self) -> Option<crate::engine::ResourceReader> {
