@@ -606,14 +606,24 @@ fn source_projection_faithful_keeps_mixed_boxless_figure_runs_in_their_original_
 
 fn native_source() -> SourcePage {
     let mut snapshot = PageSnapshot {
-        dom: serde_json::from_str(include_str!("../../tests/snapshots/source-native/dom.json")).unwrap(),
-        ax: serde_json::from_str(include_str!("../../tests/snapshots/source-native/ax.json")).unwrap(),
+        dom: serde_json::from_str(include_str!("../../tests/snapshots/source-native/dom.json"))
+            .unwrap(),
+        ax: serde_json::from_str(include_str!("../../tests/snapshots/source-native/ax.json"))
+            .unwrap(),
     };
-    snapshot.dom["sourceFormatting"] = serde_json::from_str(include_str!("../../tests/snapshots/source-native/formatting.json")).unwrap();
+    snapshot.dom["sourceFormatting"] = serde_json::from_str(include_str!(
+        "../../tests/snapshots/source-native/formatting.json"
+    ))
+    .unwrap();
     let mut source = build_source(&snapshot, &mut Revisions::new());
     let page = Arc::make_mut(&mut source.page);
     for media in &mut page.media {
-        media.picture = Some(rich_intuituive::Picture::new(image::load_from_memory(include_bytes!("../../tests/snapshots/source-native/glow.png")).unwrap()));
+        media.picture = Some(rich_intuituive::Picture::new(
+            image::load_from_memory(include_bytes!(
+                "../../tests/snapshots/source-native/glow.png"
+            ))
+            .unwrap(),
+        ));
     }
     source
 }
@@ -623,7 +633,21 @@ fn native_projection(source: &SourcePage) -> crate::layout::Projection {
     marks.adapt.set(crate::adapt::Rule::CollapseNav, false);
     let projection = crate::layout::project_source(source, 40, (8., 18.), &marks);
     if let Ok(path) = std::env::var("NOCT_SOURCE_EVIDENCE") {
-        std::fs::write(path, format!("SOURCE {source:#?}\nREGIONS {:#?}\nLINES\n{}", projection.regions, projection.lines.iter().enumerate().map(|(i,l)|format!("{i}: {}",l.plain())).collect::<Vec<_>>().join("\n"))).unwrap();
+        std::fs::write(
+            path,
+            format!(
+                "SOURCE {source:#?}\nREGIONS {:#?}\nLINES\n{}",
+                projection.regions,
+                projection
+                    .lines
+                    .iter()
+                    .enumerate()
+                    .map(|(i, l)| format!("{i}: {}", l.plain()))
+                    .collect::<Vec<_>>()
+                    .join("\n")
+            ),
+        )
+        .unwrap();
     }
     projection
 }
@@ -633,17 +657,34 @@ fn source_native_captured_figure_images_keep_broad_reservations_and_hits() {
     let source = native_source();
     let p = native_projection(&source);
     let mut undecoded = source.clone();
-    for media in &mut Arc::make_mut(&mut undecoded.page).media {media.picture=None;}
-    assert_eq!(p,native_projection(&undecoded),"decode must preserve reservations, control hits and anchors");
+    for media in &mut Arc::make_mut(&mut undecoded.page).media {
+        media.picture = None;
+    }
+    assert_eq!(
+        p,
+        native_projection(&undecoded),
+        "decode must preserve reservations, control hits and anchors"
+    );
     assert_eq!(p.regions.len(), 2);
     for r in &p.regions {
         let media = &source.page().media[r.media];
         let expected = (media.rect.width / 8.).round() as usize;
-        assert_eq!(r.cols, expected, "decoded image must retain its source aspect/reservation: {r:?}");
+        assert_eq!(
+            r.cols, expected,
+            "decoded image must retain its source aspect/reservation: {r:?}"
+        );
         let control = source.relations.media_controls[r.media].unwrap();
         for row in r.row..r.row + r.rows {
-            let covered: usize = p.lines[row].spans.iter().filter(|s|s.control==Some(control)).map(|s|rich::cells::cell_len(&s.text)).sum();
-            assert_eq!(covered, r.cols, "image control must cover reserved cells at {row}");
+            let covered: usize = p.lines[row]
+                .spans
+                .iter()
+                .filter(|s| s.control == Some(control))
+                .map(|s| rich::cells::cell_len(&s.text))
+                .sum();
+            assert_eq!(
+                covered, r.cols,
+                "image control must cover reserved cells at {row}"
+            );
         }
     }
 }
@@ -652,17 +693,46 @@ fn source_native_captured_figure_images_keep_broad_reservations_and_hits() {
 fn source_native_captured_boxless_spanning_grid_keeps_complete_words_and_links() {
     let source = native_source();
     let p = native_projection(&source);
-    let words = p.lines.iter().map(|l|l.plain()).collect::<String>();
-    let compact: String = words.chars().filter(|c|!c.is_whitespace()).collect();
-    for word in ["ASIDE-01", "TAIL-01", "MAIN-01", "INNER-B-01", "INNER-A-01", "MAIN-TEXT-02", "SourceRelationshipWordWithoutNaturalBreaks0123456789", "AFTER-01"] {
+    let words = p.lines.iter().map(|l| l.plain()).collect::<String>();
+    let compact: String = words.chars().filter(|c| !c.is_whitespace()).collect();
+    for word in [
+        "ASIDE-01",
+        "TAIL-01",
+        "MAIN-01",
+        "INNER-B-01",
+        "INNER-A-01",
+        "MAIN-TEXT-02",
+        "SourceRelationshipWordWithoutNaturalBreaks0123456789",
+        "AFTER-01",
+    ] {
         assert_eq!(compact.matches(word).count(), 1, "{word}: {words}");
     }
     for (control, c) in source.page().controls.iter().enumerate() {
-        if c.href.as_deref().is_some_and(|h|["#target-aside","#target-tail","#target-a","#target-b"].iter().any(|end|h.ends_with(end))) {
-            let rendered: String = p.lines.iter().flat_map(|l|&l.spans).filter(|s|s.control==Some(control)).flat_map(|s|s.text.chars()).filter(|c|!c.is_whitespace()).collect();
-            assert_eq!(rendered,c.name.chars().filter(|c|!c.is_whitespace()).collect::<String>());
+        if c.href.as_deref().is_some_and(|h| {
+            ["#target-aside", "#target-tail", "#target-a", "#target-b"]
+                .iter()
+                .any(|end| h.ends_with(end))
+        }) {
+            let rendered: String = p
+                .lines
+                .iter()
+                .flat_map(|l| &l.spans)
+                .filter(|s| s.control == Some(control))
+                .flat_map(|s| s.text.chars())
+                .filter(|c| !c.is_whitespace())
+                .collect();
+            assert_eq!(
+                rendered,
+                c.name
+                    .chars()
+                    .filter(|c| !c.is_whitespace())
+                    .collect::<String>()
+            );
         }
     }
-    assert!(words.find("MAIN-TEXT-02").unwrap() < words.find("AFTER-01").unwrap(), "outside neighbor must follow the whole grid: {words}");
-    assert!(p.lines.iter().all(|l|l.width() <= 40));
+    assert!(
+        words.find("MAIN-TEXT-02").unwrap() < words.find("AFTER-01").unwrap(),
+        "outside neighbor must follow the whole grid: {words}"
+    );
+    assert!(p.lines.iter().all(|l| l.width() <= 40));
 }

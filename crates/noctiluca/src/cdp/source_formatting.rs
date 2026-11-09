@@ -53,17 +53,19 @@ fn candidates(dom: &Value) -> Vec<(i64, i64)> {
         let Some(parent) = parent.as_u64().map(|p| p as usize) else {
             continue;
         };
-        if open.contains(&parent) && !boxes.contains(&i) && n["nodeType"][i].as_u64() == Some(1) {
-            if let (Some(node), Some(parent)) = (
+        if open.contains(&parent)
+            && !boxes.contains(&i)
+            && n["nodeType"][i].as_u64() == Some(1)
+            && let (Some(node), Some(parent)) = (
                 n["backendNodeId"][i].as_i64(),
                 n["backendNodeId"][parent].as_i64(),
-            ) {
-                result.push((node, parent));
-                if result.len() > 128 {
-                    return Vec::new();
-                }
-                open.insert(i);
+            )
+        {
+            result.push((node, parent));
+            if result.len() > 128 {
+                return Vec::new();
             }
+            open.insert(i);
         }
     }
     result

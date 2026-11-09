@@ -61,8 +61,10 @@ site, and each can be switched off.
   ```
 
 Source-aware grids use actual DOM item ownership, including nested allocation.
-Boxless roots, unequal spans and uncertain or positioned containers retain their
-source arrangement when equal-column snapping would misrepresent them. Figure
-flow is rectangular composition; it does not implement CSS floats or per-line
+Explicit `display: contents` wrappers preserve semantic ancestry while their
+formatting children participate in the grid. Unequal spans retain their source
+columns when they fit; at narrow widths, complete source items stack as measured
+units. Missing formatting facts and uncertain or positioned containers keep their
+source arrangement. Figure flow is rectangular composition; it does not implement CSS floats or per-line
 text exclusions. Image links retain their actual source action through decode;
 caption and foreground links keep their own targets.
