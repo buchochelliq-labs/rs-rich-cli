@@ -1959,12 +1959,20 @@ fn run_with_source(
         // Events can arrive during the synchronous model read too. Backends
         // also guard the final frame take atomically against their model scope.
         worker.poll_events(&mut read_now, &mut live_due);
-        // Never capture old-model media while a known invalidation or refused
-        // snapshot waits. The backend also checks ownership during each capture.
+        // A canvas can keep changing without a useful quiet period (for
+        // example, a speed-test dial also updates its HTML readout every
+        // animation frame). Keep polling canvases against the last published
+        // layout while it is dirty; capture_model checks document and
+        // viewport ownership atomically. Do not do this after a navigation
+        // read was refused or is still due.
+        if !read_now && worker.page.is_some() && !worker.pixels {
+            worker.poll_canvases();
+        }
+        // Never capture old-model video or still media while a known
+        // invalidation or refused snapshot waits.
         if !read_now && worker.dirty.is_none() && worker.page.is_some() {
             if !worker.pixels {
                 worker.video();
-                worker.poll_canvases();
             }
             if worker.stills_pending || worker.still_retry_due(Instant::now()) {
                 worker.capture_stills();
