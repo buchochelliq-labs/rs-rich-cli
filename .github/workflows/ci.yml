@@ -682,7 +682,7 @@ jobs:
         run: |
           version="$(python scripts/read_upstream_version.py)"
           echo "Pinned rich version: $version"
-          python -m pip install "rich==$version"
+          python -m pip install "rich==$version" -c scripts/upstream-oracle-constraints.txt
 
       - name: Regenerate golden fixtures from real rich
         env:

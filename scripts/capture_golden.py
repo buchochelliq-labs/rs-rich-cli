@@ -6,7 +6,7 @@ This is the source of truth for the byte-parity tests in
 `sync-upstream` skill), install the matching `rich` version and re-run this to
 refresh the expected output:
 
-    pip install "rich==<version-from-UPSTREAM.toml>"
+    pip install "rich==<version-from-UPSTREAM.toml>" -c scripts/upstream-oracle-constraints.txt
     python scripts/capture_golden.py
 
 Only add cases here whose behavior the Rust core is expected to reproduce
@@ -2209,7 +2209,7 @@ def verify_upstream_version() -> str:
     except importlib.metadata.PackageNotFoundError as exc:
         raise SystemExit(
             "Python package 'rich' is not installed; install the pinned version "
-            f"with: python -m pip install rich=={expected}"
+            f"with: python -m pip install rich=={expected} -c scripts/upstream-oracle-constraints.txt"
         ) from exc
     if installed != expected:
         raise SystemExit(

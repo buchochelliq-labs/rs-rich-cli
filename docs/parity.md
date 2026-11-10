@@ -46,7 +46,7 @@ End to end, the current CLI renders **0 mismatches across 138 document cases**
 Fixtures are captured from the real Python library and asserted in CI:
 
 ```bash
-pip install "rich==15.0.0"
+pip install "rich==15.0.0" -c scripts/upstream-oracle-constraints.txt
 python scripts/capture_golden.py       # writes crates/rich/tests/golden/*.tsv
 cargo test -p rs-rich --test golden    # asserts byte equality
 ```

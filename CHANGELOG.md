@@ -9,6 +9,16 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### The parity oracle's own dependencies are pinned
+
+- **`scripts/upstream-oracle-constraints.txt`** pins upstream rich's
+  dependencies (markdown-it-py 4.2.0, mdurl 0.1.2, Pygments 2.21.0) for the
+  golden and differential parity jobs, the docs and the skills. rich itself
+  stays pinned by `UPSTREAM.toml`. markdown-it-py 4.3.0, released on
+  2026-11-10, changed how a failed link label caches backticks (the quirk
+  DIVERGENCES.md §54 records), which turned the harness's own tests red on
+  every branch. The goldens regenerate byte for byte under the pins.
+
 ### The nightly differential run is green again (rs-rich, 0.0.26)
 
 - **Markdown parity fixes** (rs-rich), each found by the nightly run since
