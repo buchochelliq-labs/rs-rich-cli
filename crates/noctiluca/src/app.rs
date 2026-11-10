@@ -5118,12 +5118,22 @@ mod update_measurements {
             })));
         }
         let until = Instant::now() + Duration::from_secs(2);
-        while b.reads.get_untracked() < initial + 20 {
+        // Waiting pages coalesce to the newest: the last chat line arrives,
+        // in at most one application a page.
+        let newest = |b: Browser| {
+            b.page.with_untracked(|p| {
+                p.as_ref()
+                    .and_then(|p| p.logs[0].entries.last().map(|e| e.key))
+                    == Some(1020)
+            })
+        };
+        while !newest(b) {
             d.update(Duration::ZERO);
             d.render();
-            assert!(Instant::now() < until, "semantic pages were lost");
+            assert!(Instant::now() < until, "the newest page was lost");
             std::thread::yield_now();
         }
+        assert!(b.reads.get_untracked() - initial <= 20);
         assert_eq!(d.focused(), focus);
         assert!(d.screen().plain().join("\n").contains("unsent draft"));
         let web = b

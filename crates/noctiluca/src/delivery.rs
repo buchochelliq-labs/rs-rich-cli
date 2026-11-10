@@ -1,5 +1,12 @@
-//! Lossless semantic updates and replaceable frames share one ordered
+//! Lossless semantic updates and replaceable ones share one ordered
 //! mailbox. Only one lightweight proxy marker is outstanding.
+//!
+//! Replaceable: a region's frame, the pixel view's frame, the page (each
+//! reading is the whole page, with its source pair), the tab's state and
+//! its scroll metrics; a newer one takes the older one's place at the back
+//! of the queue, so a UI thread that falls behind (a slow terminal) finds
+//! one of each, not a pile of whole pages. Command results, downloads,
+//! stills and the about page's answers are never dropped.
 use crate::model::SourcePage;
 use crate::tab::Update;
 
@@ -75,10 +82,23 @@ impl Trace {
         ));
     }
 }
-fn key_of(update: &Update) -> Option<Option<i64>> {
+/// What a replaceable update replaces: the waiting one of the same key.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Key {
+    Frame(i64),
+    Screen,
+    Page,
+    State,
+    Metrics,
+}
+
+fn key_of(update: &Update) -> Option<Key> {
     match update {
-        Update::Frame(f) => Some(Some(f.node)),
-        Update::Screen(_) => Some(None),
+        Update::Frame(f) => Some(Key::Frame(f.node)),
+        Update::Screen(_) => Some(Key::Screen),
+        Update::Page(_) => Some(Key::Page),
+        Update::State(_) => Some(Key::State),
+        Update::Metrics(_) => Some(Key::Metrics),
         _ => None,
     }
 }
@@ -108,11 +128,11 @@ mod tests {
         let source = crate::model::build_source(&snapshot, &mut crate::model::Revisions::new());
         let mut q = Mailbox::default();
         q.push_source(Update::Page(source.page().clone()), Some(source.clone()));
+        let (_, first) = q.pop_envelope().unwrap();
         q.push(Update::Page(Arc::new(crate::model::Page {
             document: 50,
             ..Default::default()
         })));
-        let (_, first) = q.pop_envelope().unwrap();
         let Update::Page(page) = first.update else {
             panic!("page expected")
         };
@@ -121,6 +141,44 @@ mod tests {
         let (document, legacy) = q.pop_envelope().unwrap();
         assert_eq!(document, 50);
         assert!(legacy.source.is_none());
+    }
+
+    #[test]
+    fn waiting_pages_coalesce_to_the_newest_with_its_source_and_results_stay() {
+        let snapshot =
+            crate::testing::PageBuilder::new("https://example.test/", "pair", 400.0, 400.0)
+                .snapshot();
+        let mut q = Mailbox::default();
+        let mut newest = None;
+        for n in 0..50u64 {
+            let source = crate::model::build_source(&snapshot, &mut crate::model::Revisions::new());
+            q.push_source(Update::Page(source.page().clone()), Some(source.clone()));
+            q.push(Update::Done(n, Ok(())));
+            q.push(Update::Metrics(crate::engine::Metrics::default()));
+            newest = Some(source);
+        }
+        // Fifty results, one page (the last, with its own source) and one
+        // metrics: the queue stays bounded by what must not be lost.
+        assert_eq!(q.queue.len(), 52);
+        let mut done = Vec::new();
+        let mut pages = 0;
+        while let Some((_, envelope)) = q.pop_envelope() {
+            match envelope.update {
+                Update::Done(n, _) => done.push(n),
+                Update::Page(page) => {
+                    pages += 1;
+                    let source = envelope.source.unwrap();
+                    assert!(Arc::ptr_eq(&page, source.page()));
+                    assert!(Arc::ptr_eq(&page, newest.as_ref().unwrap().page()));
+                    // After every result queued before it.
+                    assert_eq!(done.len(), 49);
+                }
+                Update::Metrics(_) => {}
+                _ => panic!("unexpected update"),
+            }
+        }
+        assert_eq!(pages, 1);
+        assert_eq!(done, (0..50).collect::<Vec<_>>());
     }
 
     #[test]
@@ -182,14 +240,9 @@ mod tests {
         }
         assert_eq!(
             seen,
-            [
-                "page/11/1",
-                "done/1",
-                "page/11/2",
-                "page/22/3",
-                "frame/3",
-                "done/2"
-            ]
+            // The waiting pages coalesce to the newest, after the result
+            // queued before it; its frame follows it.
+            ["done/1", "page/22/3", "frame/3", "done/2"]
         );
     }
 }
