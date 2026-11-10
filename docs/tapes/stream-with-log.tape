@@ -14,9 +14,10 @@ Set Size 110x32
 Set TypingDelay 40ms
 Mask /\d:\d\d \/ \d:\d\d/ "<time>"
 Mask /\d:\d\d \/ live/ "<time>-live"
-# Decoder-dependent frame pixels vary as the video advances; normalize them
-# only in text grids while retaining the image in the PNG and SVG captures.
-Mask /▀/ " "
+# Decoder-dependent frame pixels vary as the video advances; normalize the
+# stream's wide runs of them only (the badges and emotes, a few cells each,
+# stay checked) in text grids, keeping the image in the PNG and SVG captures.
+Mask /▀[▀ ]{12,}▀/ "<stream>"
 Hide
 Type "export NOCTILUCA_FAKE_ENGINE=$REPO/crates/noctiluca/tests/snapshots XDG_CONFIG_HOME=$PWD/config; clear"
 Enter
@@ -45,6 +46,8 @@ Escape
 Sleep 300ms
 Type "a"
 Wait /faithful/
+# The faithful view draws the stream again from its next frame.
+Wait /▀{30}/
 Sleep 800ms
 Screenshot faithful
 Type "q"

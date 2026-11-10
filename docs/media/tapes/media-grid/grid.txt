@@ -15,9 +15,9 @@
                                                                                                    ┃
  The bloom from the air                                                                            ┃
                                                                                                    ┃
-       Sea Light  12K subscribers [Subscribe] [Like     [Share]                                    ┃
-                                              this                                                 ┃
-                                              video]                                               ┃
+       Sea Light  12K subscribers [Subscribe]  [Like this video]  [Share]                          ┃
+                                                                                                   ┃
+                                                                                                   ┃
  Up next                                                                                           ┃
                                                                                                    ┃
                                                                                                    ┃
@@ -36,5 +36,5 @@
     Marta I saw this from the pier last night, unreal.                                             ┃
     Jo What camera was this shot on?                                                               ┃
     Sam The bit at 0:04 is my favourite.                                                           ┃
- projection | media PAUSED <time> muted | sound off (--audio) | row 5/40
+ projection | media PAUSED <time> muted | row 5/40
  f1 actions | f hints | o open | r reader | p play/pause | [/] seek | alt+m mute | q quit

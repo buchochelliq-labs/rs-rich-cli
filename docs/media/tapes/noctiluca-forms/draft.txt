@@ -3,13 +3,13 @@
 Sign up
 Name                             Ada Lovelace                     ● edited · Enter applies
 Secret
-[ ][Send newsews
+[ ] Send news
 
 Size
-( )[Small Small
-(•) Large Large
+( ) Small
+(•) Large
 Mirror First mirror                                                                                ▾
-Volume ━━━━━━━━━━━━●───────────50─50
+Volume ━━━━━━━━━━━━●───────────50
  Send
  Unavailable
  Schedule remote update
