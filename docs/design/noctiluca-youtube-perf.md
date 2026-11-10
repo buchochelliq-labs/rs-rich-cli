@@ -151,12 +151,26 @@ repository, so these are not the same measurement as the report's.
 | main, ANSI 1 / 2 / 3 | 3.77 / 3.89 / 4.49 | 4.79 / 4.01 / 4.87 | 2.24 / 2.05 / 2.18 | 0.22 / 0.24 / 0.25 | pass 3/3 |
 | this branch, ANSI 1 / 2 / 3 | 4.08 / 4.26 / 4.00 | 4.21 / 4.51 / 4.35 | 1.67 / 2.76 / 1.86 | 0.25 / 0.27 / 0.23 | pass 3/3 |
 
-The Kitty run does not reach its window on main or here: the workload's
-own check finds no inline picture on the test Driver's Kitty screen. The
-trace puts the iTerm2 encode off the app's thread at 3.7 ms median (6 to 8
-ms at worst) a frame; writing opaque PNGs as RGB did not lower it, and no
-encoder change was made. The host was not quiet (load average 2.7 to 3.3),
-so this neither confirms nor clears the report's 0/3.
+A second session on a quieter but slower host (load average under 1,
+nothing else running) gave this branch: **iTerm2 0/3** (p95 12.8 to 16.1
+ms, p99 14.0 to 17.6, input max 2.7 to 3.3, CPU 0.79 to 0.85 s: p95, p99
+and CPU over the gate), **Kitty 3/3** (p95 4.2 to 4.5, p99 4.3 to 4.8,
+input max 2.4 to 3.5, CPU 0.28 s) and **ANSI 3/3** (p95 4.2 to 4.5, p99
+4.3 to 5.3, input max 2.4 to 3.2). The Kitty run needed its inline-picture
+check repaired: since #877/#878 Kitty's inline pictures are the image
+presentation's own resources, not cells tagged with the picture's id, so
+the check failed on main before the window.
+
+Where an iTerm2 frame's time goes, measured inside rs-rich-art on the
+encoder's thread: fitting the 480x270 frame to the region's 328x224 pixels
+(Lanczos3, then the crop `Cover` asks for) is **4.5 ms of 4.6**; the PNG
+encode is 0.1 ms on this workload's flat frames. A micro-benchmark of the
+choices: as now 4.96 ms, resampling as RGB 4.75 (no gain once the
+conversion is paid), cropping before resampling 4.10, a bilinear filter
+3.80. None of them takes the gate's 1 to 3 ms off p95 and 0.05 to 0.15 s
+off CPU on this host, and the bilinear one changes the picture; **#883 is
+not fixed here**. What would: a SIMD resampler (none is in the lockfile or
+reachable offline) or resampling in bands on several threads.
 
 ## Layout
 

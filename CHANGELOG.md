@@ -62,8 +62,10 @@ Measured with a release build in a PTY at 120x40 against main as it was
   not sent again on scroll (26 kB a row on YouTube's results). Sixel and
   iTerm2 still redraw moved pictures (about 0.5 MB a row): #884.
 - **noctiluca:** `NOCTILUCA_MEASURE_PROTOCOL=iterm` runs the ignored
-  frame/chat qualification workload in iTerm2 (#883); measured on a busy
-  host, it passes the iTerm2 and ANSI gates 3/3 on main and here.
+  frame/chat qualification workload in iTerm2, and its Kitty run works
+  again (#883). On a quiet host Kitty and ANSI pass 3/3 and iTerm2 still
+  fails 0/3: its frames' fitting (Lanczos3, 4.5 ms of each 4.6 ms encode)
+  is the cost, not PNG compression. #883 stays open.
 
 ### Noctiluca and shared media presentation
 
