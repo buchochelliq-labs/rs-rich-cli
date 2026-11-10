@@ -101,6 +101,10 @@ pub fn ping_read_gap(cost: Duration, playing: bool) -> Duration {
 
 /// How often the tab looks at its engine when nothing happens.
 const TICK: Duration = Duration::from_millis(25);
+/// How long an action waits for a reading the engine refuses for a moment
+/// (the viewport's metrics being applied), and how often it tries again.
+const ACTION_READ_WAIT: Duration = Duration::from_secs(1);
+const ACTION_READ_RETRY: Duration = Duration::from_millis(25);
 /// At most this many stills are captured per reading.
 const STILLS_PER_READ: usize = 8;
 /// How often a playing video's or audio's time is read again.
@@ -647,6 +651,24 @@ impl Worker<'_> {
 
     /// Read the page and publish it; `None` if the engine refused (a
     /// navigation swapping the page's process, say).
+    /// A reading for an action the user or a script asked for: the engine
+    /// can refuse one for a moment (the viewport's metrics not applied yet,
+    /// or the document or viewport changing during the read), so it is
+    /// tried again for up to [`ACTION_READ_WAIT`] before the action is
+    /// refused as not ready.
+    fn read_for_action(&mut self) -> Option<Arc<Page>> {
+        let until = Instant::now() + ACTION_READ_WAIT;
+        loop {
+            if let Some(page) = self.read() {
+                return Some(page);
+            }
+            if Instant::now() >= until {
+                return None;
+            }
+            std::thread::sleep(ACTION_READ_RETRY);
+        }
+    }
+
     fn read(&mut self) -> Option<Arc<Page>> {
         if crate::trace::on() {
             crate::trace::media(r#"{"stage":"model_snapshot_attempt"}"#);
@@ -1717,7 +1739,7 @@ impl Worker<'_> {
             }
             Command::ScrollBox { document, node, by } => {
                 let page = self
-                    .read()
+                    .read_for_action()
                     .ok_or_else(|| Refusal::Stale("The page is not ready.".into()))?;
                 if page.document != document {
                     return Err(Refusal::Stale(
@@ -1765,7 +1787,7 @@ impl Worker<'_> {
 
             Command::Media { document, node, op } => {
                 let page = self
-                    .read()
+                    .read_for_action()
                     .ok_or_else(|| Refusal::Stale("The page is not ready.".into()))?;
                 if page.document != document {
                     return Err(Refusal::Stale(
@@ -1792,7 +1814,7 @@ impl Worker<'_> {
                 y,
             } => {
                 let page = self
-                    .read()
+                    .read_for_action()
                     .ok_or_else(|| Refusal::Stale("The page is not ready.".into()))?;
                 if page.document != document {
                     return Err(Refusal::Stale(
@@ -1808,7 +1830,7 @@ impl Worker<'_> {
             }
             Command::Act { binding, intent } => {
                 let page = self
-                    .read()
+                    .read_for_action()
                     .ok_or_else(|| Refusal::Stale("The page is not ready.".into()))?;
                 let control = page.check(&binding).map_err(Refusal::Stale)?;
                 guard(control, &intent)?;
@@ -1818,7 +1840,7 @@ impl Worker<'_> {
             }
             Command::Activate { role, name, nth } => {
                 let page = self
-                    .read()
+                    .read_for_action()
                     .ok_or_else(|| Refusal::Stale("The page is not ready.".into()))?;
                 let found = page.find(&role, &name);
                 let control = found.get(nth).ok_or_else(|| {

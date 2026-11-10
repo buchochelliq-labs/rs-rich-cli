@@ -46,6 +46,10 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ### Noctiluca: video at 24 frames a second on a page that keeps changing; sound on by default
 
+- **A hint or a click no longer fails with "The page is not ready."**
+  while Chrome applies new viewport metrics: Chrome refuses a page's
+  snapshot for that moment, and an action asked for in it was refused at
+  once. An action now waits up to a second for a reading.
 Measured with a release build in a PTY at 120x40 against main as it was
 (`b8ce24e2`): [Noctiluca's video and readings, measured](docs/design/noctiluca-youtube-perf.md).
 
