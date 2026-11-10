@@ -76,6 +76,29 @@ pub const SETTLE_MAX: Duration = Duration::from_secs(3);
 /// How long a new document is watched at least: a quiet step sooner does
 /// not settle it, since a script's first move can come after one.
 pub const SETTLE_MIN: Duration = Duration::from_secs(1);
+/// A reading the page pinged for waits this many times the last
+/// reading's cost after it ended, so pinged readings take at most a
+/// quarter of the tab's time however large the page is (a large page's
+/// snapshot costs hundreds of milliseconds). A reading for an action of
+/// ours, a navigation or a load never waits.
+pub const READ_DUTY: u32 = 3;
+/// While the screencast runs for a video, a reading the page pinged for
+/// waits at least this long after the last: a player's clock and progress
+/// bar change the page several times a second.
+pub const READ_WHILE_PLAYING: Duration = Duration::from_secs(1);
+
+/// How long after a reading that cost `cost` a reading the page pinged
+/// for may run: [`DEBOUNCE`], [`READ_DUTY`] times the cost, and
+/// [`READ_WHILE_PLAYING`] while a video plays, whichever is longest.
+pub fn ping_read_gap(cost: Duration, playing: bool) -> Duration {
+    let gap = DEBOUNCE.max(cost * READ_DUTY);
+    if playing {
+        gap.max(READ_WHILE_PLAYING)
+    } else {
+        gap
+    }
+}
+
 /// How often the tab looks at its engine when nothing happens.
 const TICK: Duration = Duration::from_millis(25);
 /// At most this many stills are captured per reading.
@@ -450,6 +473,12 @@ struct Worker<'a> {
     state: PageState,
     /// When the first change ping since the last reading came.
     dirty: Option<Instant>,
+    /// When the last reading ended and what it cost: a pinged reading
+    /// waits [`ping_read_gap`] after it.
+    last_read: Option<(Instant, Duration)>,
+    /// The last reading was refused (a navigation swapping the page's
+    /// process): no frame is cut with the old model until one succeeds.
+    refused: bool,
     stills: HashMap<StillKey, Arc<[u8]>>,
     /// The pictures decoded from the stills.
     pictures: HashMap<StillKey, Picture>,
@@ -1551,6 +1580,28 @@ impl Worker<'_> {
         let _ = self.engine.set_screencast_area(TabId(0), area);
     }
 
+    /// Whether a reading the page pinged for may run now (see
+    /// [`ping_read_gap`]).
+    fn ping_due(&self, now: Instant) -> bool {
+        let Some(since) = self.dirty else {
+            return false;
+        };
+        let held = self
+            .last_read
+            .is_some_and(|(end, cost)| now < end + ping_read_gap(cost, self.frames.on));
+        now.duration_since(since) >= DEBOUNCE && !held
+    }
+
+    /// Whether video frames may be cut and captured now: with a model of
+    /// this document (none asked for or refused). A change the page pinged
+    /// waits its turn ([`ping_read_gap`]) without stopping the frames: a
+    /// player's own clock pings several times a second, and the frames
+    /// would stop with it. The engine still checks each frame's document
+    /// and viewport.
+    fn video_may_run(&self, read_now: bool) -> bool {
+        !read_now && !self.refused && self.page.is_some() && !self.pixels
+    }
+
     /// How long the tab may wait for a command before it looks at its
     /// engine again: until the next video frame is due (so frames are
     /// taken on their slots, not on the tick after), a moment while a due
@@ -1960,6 +2011,8 @@ fn run_with_source(
         page: None,
         state: PageState::default(),
         dirty: None,
+        last_read: None,
+        refused: false,
         stills: HashMap::new(),
         pictures: HashMap::new(),
         decode,
@@ -2042,9 +2095,7 @@ fn run_with_source(
             probed = Instant::now();
             worker.follow_playback();
         }
-        let due = worker
-            .dirty
-            .is_some_and(|since| since.elapsed() >= DEBOUNCE)
+        let due = worker.ping_due(Instant::now())
             || worker
                 .settle
                 .is_some_and(|(next, _, _)| Instant::now() >= next);
@@ -2060,7 +2111,11 @@ fn run_with_source(
                 crate::trace::event("read_why", serde_json::json!({ "why": why }));
             }
             // A refused reading stays due, and is tried at the next tick.
-            if worker.read().is_some() {
+            let began = Instant::now();
+            let read = worker.read();
+            worker.last_read = Some((Instant::now(), began.elapsed()));
+            worker.refused = read.is_none();
+            if read.is_some() {
                 read_now = false;
                 live_due = false;
             } else {
@@ -2085,13 +2140,16 @@ fn run_with_source(
         }
         // Never capture old-model video or still media while a known
         // invalidation or refused snapshot waits.
-        if !read_now && worker.dirty.is_none() && worker.page.is_some() {
-            if !worker.pixels {
-                worker.video();
-            }
-            if worker.stills_pending || worker.still_retry_due(Instant::now()) {
-                worker.capture_stills();
-            }
+        if worker.video_may_run(read_now) {
+            worker.video();
+        }
+        // Stills wait for a model that no known change outdates.
+        if !read_now
+            && worker.dirty.is_none()
+            && worker.page.is_some()
+            && (worker.stills_pending || worker.still_retry_due(Instant::now()))
+        {
+            worker.capture_stills();
         }
         // A sole fresh frame belongs to the model published for its document.
         // Keep it in the engine while an initial/navigation snapshot is refused.
@@ -2140,6 +2198,8 @@ mod tests {
             page: None,
             state: PageState::default(),
             dirty: None,
+            last_read: None,
+            refused: false,
             stills: HashMap::new(),
             pictures: HashMap::new(),
             decode,
@@ -3064,6 +3124,8 @@ mod tests {
             page: None,
             state: PageState::default(),
             dirty: None,
+            last_read: None,
+            refused: false,
             stills: HashMap::new(),
             pictures: HashMap::new(),
             decode,
@@ -3309,6 +3371,8 @@ mod tests {
                 page: Some(Arc::new(page)),
                 state: PageState::default(),
                 dirty: None,
+                last_read: None,
+                refused: false,
                 stills: HashMap::new(),
                 pictures: HashMap::new(),
                 decode,
@@ -3718,6 +3782,8 @@ mod tests {
             page: None,
             state: PageState::default(),
             dirty: None,
+            last_read: None,
+            refused: false,
             stills: HashMap::new(),
             pictures: HashMap::new(),
             decode,
@@ -3814,6 +3880,8 @@ mod tests {
                 page: None,
                 state: PageState::default(),
                 dirty: None,
+                last_read: None,
+                refused: false,
                 stills: HashMap::new(),
                 pictures: HashMap::new(),
                 decode,
@@ -3949,6 +4017,8 @@ mod tests {
             page: None,
             state: PageState::default(),
             dirty: None,
+            last_read: None,
+            refused: false,
             stills: HashMap::new(),
             pictures: HashMap::new(),
             decode,
@@ -4197,6 +4267,8 @@ mod tests {
             page: None,
             state: PageState::default(),
             dirty: None,
+            last_read: None,
+            refused: false,
             stills: HashMap::new(),
             pictures: HashMap::new(),
             decode,
@@ -4288,6 +4360,138 @@ mod tests {
         );
         assert!(pages.last().unwrap().inline_pictures.contains_key(last));
         assert_eq!(pages.last().unwrap().logs[0].entries.len(), 200);
+    }
+
+    /// An engine whose page pings a change at every look and whose
+    /// snapshot takes `cost`, counting the snapshots and their time.
+    struct Busy {
+        inner: FakeEngine,
+        cost: Duration,
+        spent: Arc<std::sync::Mutex<(u32, Duration)>>,
+    }
+
+    impl Engine for Busy {
+        fn resize(&mut self, columns: u16, rows: u16) -> std::io::Result<()> {
+            self.inner.resize(columns, rows)
+        }
+        fn open(&mut self, tab: TabId, url: &str) -> std::io::Result<()> {
+            self.inner.open(tab, url)
+        }
+        fn history(&mut self, tab: TabId, step: HistoryStep) -> std::io::Result<()> {
+            self.inner.history(tab, step)
+        }
+        fn state(&self, tab: TabId) -> PageState {
+            self.inner.state(tab)
+        }
+        fn snapshot(&mut self, tab: TabId) -> std::io::Result<crate::engine::PageSnapshot> {
+            thread::sleep(self.cost);
+            let mut spent = self.spent.lock().unwrap();
+            spent.0 += 1;
+            spent.1 += self.cost;
+            self.inner.snapshot(tab)
+        }
+        fn capture(
+            &mut self,
+            tab: TabId,
+            region: Rect,
+            format: Format,
+        ) -> std::io::Result<crate::engine::Frame> {
+            self.inner.capture(tab, region, format)
+        }
+        fn act(&mut self, tab: TabId, action: &PageAction) -> std::io::Result<()> {
+            self.inner.act(tab, action)
+        }
+        fn events(&mut self) -> Vec<EngineEvent> {
+            let mut events = self.inner.events();
+            events.push(EngineEvent::Changed);
+            events
+        }
+    }
+
+    #[test]
+    fn a_page_that_keeps_changing_is_read_at_most_a_quarter_of_the_time() {
+        let snapshots = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/snapshots");
+        let spent = Arc::new(std::sync::Mutex::new((0, Duration::ZERO)));
+        let engine = Busy {
+            inner: FakeEngine::from_dir(&snapshots).unwrap(),
+            cost: Duration::from_millis(120),
+            spent: spent.clone(),
+        };
+        let tab = Tab::spawn(Box::new(engine), |_| {});
+        tab.send(Command::Open("https://fixture.example/second.html".into()));
+        // Past the new document's settling, then a span of pings alone.
+        thread::sleep(SETTLE_MAX + Duration::from_millis(200));
+        let before = *spent.lock().unwrap();
+        let span = Duration::from_secs(3);
+        thread::sleep(span);
+        let after = *spent.lock().unwrap();
+        drop(tab);
+        let reads = after.0 - before.0;
+        let share = (after.1 - before.1).as_secs_f64() / span.as_secs_f64();
+        // Read again and again (a ping is never dropped), but each reading
+        // waits three times its cost: about a quarter of the time. Without
+        // the wait it reads after each debounce, over half the time.
+        assert!(reads >= 2, "{reads} readings");
+        assert!(
+            share < 0.4,
+            "reading took {:.0}% of the time",
+            share * 100.0
+        );
+    }
+
+    #[test]
+    fn pinged_readings_wait_for_their_cost_and_for_playing_video() {
+        assert_eq!(ping_read_gap(Duration::from_millis(5), false), DEBOUNCE);
+        assert_eq!(
+            ping_read_gap(Duration::from_millis(300), false),
+            Duration::from_millis(900)
+        );
+        assert_eq!(
+            ping_read_gap(Duration::from_millis(50), true),
+            READ_WHILE_PLAYING
+        );
+        assert_eq!(
+            ping_read_gap(Duration::from_millis(500), true),
+            Duration::from_millis(1500)
+        );
+        let dir = std::env::temp_dir().join(format!("tab-ping-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let update = |_| {};
+        let (mut worker, _jobs, _done) =
+            recovery_worker(FakeEngine::from_dir(&dir).unwrap(), &update);
+        let now = Instant::now();
+        worker.dirty = Some(now - DEBOUNCE);
+        assert!(worker.ping_due(now));
+        // Just read at a cost of 200 ms: the ping waits 600 ms, a second
+        // while the video's screencast runs.
+        worker.last_read = Some((now, Duration::from_millis(200)));
+        assert!(!worker.ping_due(now + Duration::from_millis(500)));
+        assert!(worker.ping_due(now + Duration::from_millis(600)));
+        worker.frames.on = true;
+        assert!(!worker.ping_due(now + Duration::from_millis(900)));
+        assert!(worker.ping_due(now + READ_WHILE_PLAYING));
+    }
+
+    #[test]
+    fn video_frames_go_on_while_a_pinged_reading_waits() {
+        let dir = std::env::temp_dir().join(format!("tab-ping-video-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let update = |_| {};
+        let (mut worker, _jobs, _done) =
+            recovery_worker(FakeEngine::from_dir(&dir).unwrap(), &update);
+        assert!(!worker.video_may_run(false), "no model yet");
+        worker.page = Some(Arc::new(Page::default()));
+        assert!(worker.video_may_run(false));
+        // The page pinged a change (a player's clock): frames go on.
+        worker.dirty = Some(Instant::now());
+        assert!(worker.video_may_run(false));
+        // A reading asked for (navigation, an action) or refused: none.
+        assert!(!worker.video_may_run(true));
+        worker.refused = true;
+        assert!(!worker.video_may_run(false));
+        worker.refused = false;
+        worker.pixels = true;
+        assert!(!worker.video_may_run(false));
     }
 
     #[test]
