@@ -376,6 +376,8 @@ PARITY_DOCS_CASES: list[tuple[str, dict]] = [
             ("`\na|b\n-|-\n|", {}),
             (">`e` []() ~~e~~", {"justify": "full"}),
             ("- a  b c d e f g h i j k l m", {"justify": "full"}),
+            ("##  \nx", {}),
+            ("---\n# #", {}),
         ])
     ],
     ("scope_wide_keys", {"kind": "scope", "width": 24, "scope": [["界界", "界"], ["🙂", [1, 2, 3, 4, 5, 6, 7, 8]]]}),

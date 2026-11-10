@@ -1896,6 +1896,26 @@ fn parse(source: &str, md: &MarkdownOptions, styles: &MarkdownStyles) -> Vec<Blo
                     // to apply here; treating a quoted heading as body text
                     // flattened h1 to plain magenta and left-aligned it.
                     text.set_justify(justify);
+                    // An empty ATX heading's `inline` token has no children,
+                    // so upstream's `_flatten_tokens` yields the token itself
+                    // and its close sets `new_line` before the heading
+                    // renders: a top-level `##` opening the document prints a
+                    // blank line first. An empty `Html` block stands in for
+                    // that token's turn in the block spacing.
+                    let bare_atx = heading_open.is_some()
+                        && source[range.clone()]
+                            .trim()
+                            .trim_matches('#')
+                            .trim()
+                            .is_empty();
+                    // After any other block the usual gap already stands
+                    // for it.
+                    if bare_atx
+                        && stack.is_empty()
+                        && matches!(blocks.last(), None | Some(Block::Rule))
+                    {
+                        blocks.push(Block::Html);
+                    }
                     sink(&mut blocks, &mut stack).push(Block::Text(text, heading_open));
                 }
                 block_style = None;
