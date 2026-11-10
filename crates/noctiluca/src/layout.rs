@@ -1828,9 +1828,11 @@ fn project_part(
                     control: Some(*index),
                     picture: None,
                 };
-                if !wrap_action {
-                    one_row.push(items.len());
-                }
+                // Wrapping or not, a control keeps its place in its row:
+                // one whose face needs more cells pushes those after it
+                // right (source order), and a run past the edge shortens
+                // its faces with `…`.
+                one_row.push(items.len());
                 let mut item = text_item(
                     control.node,
                     control.rect,

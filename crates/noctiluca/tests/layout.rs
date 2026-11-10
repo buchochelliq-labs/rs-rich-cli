@@ -2006,3 +2006,34 @@ fn a_skip_link_parked_above_a_top_bar_is_not_drawn() {
         assert!(all.contains(kept), "{kept} missing from\n{all}");
     }
 }
+
+#[test]
+fn wrapping_action_labels_keep_their_row_and_source_order() {
+    // WrapActionLabels (on by default) once left its buttons out of their
+    // row: form.html's `[Send]` went to the next row, after
+    // `[Unavailable]`, and media-grid's "Like this video" wrapped over
+    // three rows in its narrow box.
+    let rows = |name: &str| -> Vec<String> {
+        noctiluca::layout::project(&page(name), 100, (8.0, 18.0), &Marks::default())
+            .lines
+            .iter()
+            .map(Line::plain)
+            .collect()
+    };
+    let form = rows("form");
+    let row = form
+        .iter()
+        .find(|r| r.contains("[Unavailable]"))
+        .expect("the disabled button");
+    let send = row
+        .find("[Send]")
+        .unwrap_or_else(|| panic!("[Send] left its row:\n{}", form.join("\n")));
+    assert!(send < row.find("[Unavailable]").unwrap(), "{row}");
+    let grid = rows("media-grid");
+    assert!(
+        grid.iter()
+            .any(|r| r.contains("[Like this video]") && r.contains("[Share]")),
+        "{}",
+        grid.join("\n")
+    );
+}
