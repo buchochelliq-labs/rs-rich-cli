@@ -4897,6 +4897,7 @@ mod update_measurements {
         let images = match std::env::var("NOCTILUCA_MEASURE_PROTOCOL").as_deref() {
             Ok("kitty") => Images::Kitty,
             Ok("sixel") => Images::Sixel,
+            Ok("iterm" | "iterm2") => Images::Iterm2,
             _ => Images::Ansi,
         };
         let options = Options {
