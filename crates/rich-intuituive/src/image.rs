@@ -1185,13 +1185,25 @@ mod tests {
     #[test]
     fn encoded_cache_byte_budget_evicts_before_entry_budget() {
         let source = tracked_source();
-        let picture = Picture::from_rgba(4, 4, vec![255; 64]).unwrap();
+        // Noise, opaque: raw Kitty frames are zlib-compressed, and a flat
+        // picture would shrink far under the sizes this test needs.
+        let mut seed = 0x2545_f491_u32;
+        let noise: Vec<u8> = (0..640 * 1280)
+            .flat_map(|_| {
+                seed ^= seed << 13;
+                seed ^= seed >> 17;
+                seed ^= seed << 5;
+                let [r, g, b, _] = seed.to_le_bytes();
+                [r, g, b, 255]
+            })
+            .collect();
+        let picture = Picture::from_rgba(640, 1280, noise).unwrap();
         for cols in 64..74 {
             let tag = PictureTag {
                 id: picture.id(),
                 version: picture.version(),
                 cols,
-                rows: 64,
+                rows: 72,
                 row: 0,
                 pixels: Pixels::Kitty,
                 fit: Some(ImageFit::Stretch),
@@ -1201,13 +1213,17 @@ mod tests {
                 .graphic(
                     &tag,
                     0..cols,
-                    0..64,
+                    0..72,
                     rich_art::graphics::CellPixels::DEFAULT,
                     None,
                     None,
                 )
                 .unwrap();
-            assert!(graphic.escape.len() > 2 * 1024 * 1024);
+            assert!(
+                graphic.escape.len() > 2 * 1024 * 1024,
+                "{}",
+                graphic.escape.len()
+            );
             let made = source.made.lock().unwrap();
             assert!(
                 made.values()

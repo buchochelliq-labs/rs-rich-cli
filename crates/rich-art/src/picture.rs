@@ -1115,16 +1115,22 @@ impl Picture {
                 let fitted = fitted(&self.shown.image);
                 if self.shown.raw {
                     let (width, height) = fitted.dimensions();
-                    // A video's frames are opaque: three bytes a pixel.
+                    // A video's frames are opaque: three bytes a pixel,
+                    // zlib-compressed at its fastest (`o=z`): a camera's
+                    // picture about halves, a flat one shrinks tenfold, for
+                    // a few milliseconds on the thread that encodes it,
+                    // against hundreds of kilobytes of base64 a frame the
+                    // terminal would otherwise read.
                     if fitted.pixels().all(|p| p[3] == 255) {
                         let rgb = DynamicImage::ImageRgba8(fitted).into_rgb8();
-                        return Some(crate::kitty::transmit_rgb(
-                            id,
-                            rgb.as_raw(),
-                            width,
-                            height,
-                            cols,
-                            rows,
+                        return Some(crate::kitty::transmit_raw(
+                            &crate::kitty::RawImage::new(
+                                crate::kitty::RawFormat::Rgb,
+                                rgb.as_raw(),
+                                width,
+                                height,
+                            ),
+                            &crate::kitty::Transmit::new(id, cols, rows).compress(true),
                         ));
                     }
                     return Some(crate::kitty::transmit_rgba(
@@ -3022,7 +3028,12 @@ mod tests {
         // A raw frame goes to Kitty as raw pixels, not PNG: RGB when it is
         // opaque, RGBA when it is not.
         let raw = Picture::from_rgba(2, 2, vec![255; 16]).unwrap();
-        assert!(raw.encode(Pixels::Kitty, 4, 2).unwrap().contains("f=24"));
+        let sent = raw.encode(Pixels::Kitty, 4, 2).unwrap();
+        assert!(sent.contains("f=24") && sent.contains(",o=z,"), "{sent}");
+        // Compressed: a flat 64x64 frame takes under a tenth of its raw size.
+        let flat = Picture::from_rgba(64, 64, vec![255; 64 * 64 * 4]).unwrap();
+        let sent = flat.encode(Pixels::Kitty, 8, 4).unwrap();
+        assert!(sent.len() < 64 * 64 * 3 / 10, "{} bytes", sent.len());
         let clear = Picture::from_rgba(2, 2, [255, 0, 0, 128].repeat(4)).unwrap();
         assert!(clear.encode(Pixels::Kitty, 4, 2).unwrap().contains("f=32"));
         assert!(Picture::from_rgba(2, 2, vec![0; 3]).is_none());
