@@ -1019,6 +1019,141 @@ pub fn project(page: &Page, columns: u16, cell: (f64, f64), marks: &Marks) -> Pr
     main
 }
 
+/// A row's run of controls whose faces, grown to what they need, would
+/// run past the right edge or into another box on their rows: `boxes` are
+/// each one's columns in Chrome and the cells its face needs, left to
+/// right, and `obstacles` the columns the other boxes take. Each goes at
+/// its own place, or as far right of the one before it as a cell between
+/// them asks; grows to its face, left first when the next obstacle is near
+/// (a bar's menu button beside its logo), into free cells only; and
+/// shortens, to [`MIN_FACE`] at least, where the cells before the next
+/// obstacle are too few. What is left of the crowding keeps its place.
+/// `None` when the run cannot fit so (still past the edge).
+fn fit_run(
+    boxes: &[(usize, usize, usize)],
+    columns: usize,
+    obstacles: &[(usize, usize)],
+) -> Option<Vec<(usize, usize)>> {
+    let mut placed: Vec<(usize, usize)> = Vec::with_capacity(boxes.len());
+    let inside = |at: usize| {
+        obstacles
+            .iter()
+            .find(|&&(o0, o1)| o0 <= at && at < o1)
+            .map(|&(_, o1)| o1 + 1)
+    };
+    for &(x0, x1, need) in boxes {
+        // Crowded, a face takes its own cells, not its wider box's.
+        let width = if need > 0 { need } else { x1.saturating_sub(x0).max(1) };
+        // Not left of the box before (a cell after it) nor of an obstacle
+        // left of its own box.
+        let floor = placed
+            .last()
+            .map_or(0, |&(_, end)| end + 1)
+            .max(
+                obstacles
+                    .iter()
+                    .filter(|&&(_, o1)| o1 <= x0)
+                    .map(|&(_, o1)| o1 + 1)
+                    .max()
+                    .unwrap_or(0),
+            );
+        let mut floor = floor;
+        while let Some(past) = inside(floor) {
+            floor = past;
+        }
+        let start = x0.max(floor);
+        let start = inside(start).unwrap_or(start);
+        // The cells free from `start` on: up to the next obstacle.
+        let limit = |from: usize| {
+            obstacles
+                .iter()
+                .filter(|&&(_, o1)| o1 > from)
+                .map(|&(o0, _)| o0.saturating_sub(1).max(from))
+                .min()
+                .unwrap_or(columns)
+                .min(columns)
+        };
+        let mut start = start;
+        let mut end = limit(start);
+        // Short of cells: the boxes before move left into free cells
+        // first, as far as this one needs.
+        if start + width > end && placed.last().is_some_and(|&(_, e)| e + 1 >= start) {
+            let deficit = start + width - end;
+            if let Some(d) = (1..=deficit).rev().find(|&d| shift_left(&mut placed, d, obstacles, true)) {
+                shift_left(&mut placed, d, obstacles, false);
+                start -= d;
+                end = limit(start);
+            }
+        }
+        let (start, end) = if start + width <= end {
+            (start, start + width)
+        } else {
+            // Left into free cells first, then shorter.
+            let left = end.saturating_sub(width).max(floor).min(start);
+            let end = limit(left);
+            (left, (left + width).min(end).max(left + MIN_FACE.min(width)))
+        };
+        if end > columns || obstacles.iter().any(|&(o0, o1)| start < o1 && o0 < end) {
+            return None;
+        }
+        placed.push((start, end));
+    }
+    Some(placed)
+}
+
+/// Move the end of a run of `placed` boxes left by `by` cells, each box
+/// only as far as the one after it needs (a cell between them), none into
+/// an obstacle or past the left edge; with `dry`, only whether it can.
+fn shift_left(
+    placed: &mut [(usize, usize)],
+    by: usize,
+    obstacles: &[(usize, usize)],
+    dry: bool,
+) -> bool {
+    let mut moved = placed.to_vec();
+    // The cell the next box (the one being placed) will start at, less
+    // the gap.
+    let mut bound = match moved.last() {
+        Some(&(_, end)) => end.saturating_sub(by),
+        None => return false,
+    };
+    for k in (0..moved.len()).rev() {
+        let (s0, s1) = moved[k];
+        if s1 <= bound {
+            break;
+        }
+        let shift = s1 - bound;
+        let Some(start) = s0.checked_sub(shift) else {
+            return false;
+        };
+        if obstacles.iter().any(|&(o0, o1)| start < o1 && o0 < bound) {
+            return false;
+        }
+        moved[k] = (start, bound);
+        bound = start.saturating_sub(1);
+        if start == 0 && k > 0 && moved[k - 1].1 > 0 {
+            return false;
+        }
+    }
+    if !dry {
+        placed.copy_from_slice(&moved);
+    }
+    true
+}
+
+/// A top or bottom bar this tall in rows at most has its one-line items
+/// on the row their middles share.
+const MAX_BAR_ROWS: usize = 4;
+
+/// The pinned or docked layer `block` is in: a top or bottom bar.
+fn bar_of<'a>(page: &'a Page, block: &Block) -> Option<&'a crate::model::Layer> {
+    block
+        .stack
+        .layer
+        .and_then(|l| page.layers.get(l))
+        .filter(|l| matches!(l.place, Place::Pinned | Place::Docked))
+}
+
 /// Cells a run of controls at the right edge keeps for each control when
 /// it has to shorten them: `[`, a letter, `…` and `]`.
 const MIN_FACE: usize = 4;
@@ -1297,6 +1432,12 @@ fn project_part(
         // screen readers only (Wikipedia's reference back-links sit
         // 100,000 pixels up), never shown.
         if block.rect.bottom() < 0.0 || block.rect.right() < 0.0 {
+            continue;
+        }
+        // In a top or bottom bar, wholly above Chrome's viewport, wherever
+        // Chrome is scrolled: a skip link parked at `top: -1000px` until
+        // it is focused (focused, the page moves it into view).
+        if bar_of(page, block).is_some_and(|l| block.rect.bottom() - l.rect.y + l.top < 0.0) {
             continue;
         }
         // Scrolled out of a shelf's box sideways: Chrome shows it only
@@ -1608,6 +1749,24 @@ fn project_part(
             item.top += dy;
             item.bottom += dy;
         }
+        // A bar's one-line items (a logo's text, a search box, buttons)
+        // are centred in its height, each box as tall as it is: they go
+        // on the row their middles share, not each on the row its own top
+        // rounds to, so the bar keeps to one row as Chrome draws it.
+        if part != Part::Flow
+            && bar_of(page, block).is_some_and(|l| l.rect.height <= MAX_BAR_ROWS as f64 * ch)
+        {
+            for item in &mut items[first_item..] {
+                let one_line = item.one_line
+                    || item.wrap.is_some() && item.bottom - item.top <= 1.5 * ch;
+                if one_line && item.media.is_none() {
+                    let row = ((item.top + item.bottom) / 2.0 / ch).floor().max(0.0);
+                    let height = item.bottom - item.top;
+                    item.top = row * ch;
+                    item.bottom = item.top + height.min(ch);
+                }
+            }
+        }
         // A short text (one line, at most a third of the picture's width)
         // over a picture is drawn in its cells, not under it.
         if let Some(m) = over
@@ -1706,7 +1865,38 @@ fn project_part(
         // names) moves left into cells nothing beside it claims, its gaps
         // a cell at most; still too wide, its faces shorten with `…`
         // rather than being cut by the screen.
-        if at.last().is_some_and(|&(_, x1)| x1 > columns) {
+        // Other boxes on the row's rows: a run never runs into them.
+        let obstacles: Vec<(usize, usize)> = {
+            let (top, bottom) = (items[row[0]].top, items[row[0]].bottom);
+            items
+                .iter()
+                .enumerate()
+                .filter(|(m, it)| {
+                    !row.contains(m) && it.top < bottom - 0.5 && top < it.bottom - 0.5
+                })
+                .map(|(_, it)| (it.x0, it.x1))
+                // One over a control's own box in Chrome too (an overlay)
+                // is the skyline's to settle, not the run's.
+                .filter(|&(o0, o1)| {
+                    !row
+                        .iter()
+                        .any(|&n| o0 < items[n].x1 && items[n].x0 < o1)
+                })
+                .collect()
+        };
+        let boxes: Vec<(usize, usize, usize)> = row
+            .iter()
+            .map(|&n| (items[n].x0, items[n].x1, need_of(&items[n])))
+            .collect();
+        let crowded = at.iter().any(|&(a, b)| {
+            b > columns || obstacles.iter().any(|&(o0, o1)| a < o1 && o0 < b)
+        });
+        if crowded && let Some(fit) = fit_run(&boxes, columns, &obstacles) {
+            for (&n, &(x0, x1)) in row.iter().zip(&fit) {
+                items[n].x0 = x0;
+                items[n].x1 = x1;
+            }
+        } else if at.last().is_some_and(|&(_, x1)| x1 > columns) {
             let (top, bottom, first) = (items[row[0]].top, items[row[0]].bottom, at[0].0);
             let floor = items
                 .iter()

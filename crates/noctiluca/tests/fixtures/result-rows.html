@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Result rows</title>
+<style>
+  /* A results page as video sites lay one out: a narrow guide of icons
+     with small labels, rows of a thumbnail beside a title, a line of
+     metadata items joined by a separator, a channel's avatar and name,
+     and a menu button at the row's right edge; a narrow column of related
+     items whose view counts are short boxes. */
+  body { margin: 0; font: 14px/20px sans-serif; }
+  #guide { position: fixed; top: 0; left: 0; width: 72px; padding-top: 8px; }
+  #guide a { display: flex; flex-direction: column; align-items: center;
+             padding: 16px 0 14px; color: #000; text-decoration: none; }
+  #guide svg { width: 24px; height: 24px; }
+  #guide span { font-size: 10px; line-height: 14px; margin-top: 6px; }
+  #results { margin-left: 96px; width: 600px; }
+  .row { display: flex; position: relative; margin: 16px 0; }
+  .thumb { width: 240px; height: 135px; background: #246; flex: none; }
+  .meta { margin-left: 16px; width: 300px; }
+  .title { display: block; font-size: 18px; line-height: 26px; color: #000;
+           text-decoration: none; padding-right: 24px; }
+  .menu { position: absolute; top: 0; right: -24px; width: 40px; height: 40px;
+          border: 0; background: none; }
+  .line { display: flex; flex-wrap: wrap; font-size: 12px; line-height: 18px; color: #606060; }
+  .line span { display: block; }
+  .line span + span::before { content: "\2022"; margin: 0 4px; }
+  .channel { display: flex; align-items: center; margin: 12px 0; font-size: 12px; }
+  .channel img { width: 24px; height: 24px; border-radius: 50%; margin-right: 8px; }
+  #related { position: absolute; top: 16px; left: 760px; width: 168px; }
+  #related .item { margin-bottom: 12px; }
+  #related .name { display: block; font-size: 14px; line-height: 20px; }
+</style>
+</head>
+<body>
+<nav id="guide">
+  <a href="#home"><svg viewBox="0 0 24 24"><path d="M4 10l8-6 8 6v10H4z"/></svg><span>Home</span></a>
+  <a href="#subs"><svg viewBox="0 0 24 24"><path d="M4 4h16v16H4z"/></svg><span>Subscriptions</span></a>
+  <a href="#you"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/></svg><span>You</span></a>
+</nav>
+<div id="results">
+  <div class="row">
+    <div class="thumb"></div>
+    <div class="meta">
+      <a class="title" href="#one">The glowing coast at night</a>
+      <button class="menu" aria-label="Action menu"><svg viewBox="0 0 24 24" width="24" height="24"><path d="M12 4a2 2 0 110 4 2 2 0 010-4zm0 6a2 2 0 110 4 2 2 0 010-4zm0 6a2 2 0 110 4 2 2 0 010-4z"/></svg></button>
+      <div class="line"><span>23M</span><span>11y ago</span></div>
+      <div class="channel"><img src="glow.png" alt=""><a href="#studio">Glow Studio</a></div>
+    </div>
+  </div>
+  <div class="row">
+    <div class="thumb"></div>
+    <div class="meta">
+      <a class="title" href="#two">Waves under the pier</a>
+      <button class="menu" aria-label="Action menu"><svg viewBox="0 0 24 24" width="24" height="24"><path d="M12 4a2 2 0 110 4 2 2 0 010-4zm0 6a2 2 0 110 4 2 2 0 010-4zm0 6a2 2 0 110 4 2 2 0 010-4z"/></svg></button>
+      <div class="line"><span>9M</span><span>18y ago</span></div>
+      <div class="channel"><img src="glow.png" alt=""><a href="#studio">Glow Studio</a></div>
+    </div>
+  </div>
+</div>
+<div id="related">
+  <div class="item"><a class="name" href="#r1">Tide pools</a><div class="line"><span>28K</span><span>2d ago</span></div></div>
+  <div class="item"><a class="name" href="#r2">Night swim</a><div class="line"><span>310K</span><span>5y ago</span></div></div>
+</div>
+</body>
+</html>
