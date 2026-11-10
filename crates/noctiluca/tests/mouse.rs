@@ -127,7 +127,16 @@ fn the_wheel_scrolls_the_page() {
         options(View::Projection, "article.html"),
     )
     .driver(80, 10);
-    wait(&mut driver, "the page", |d| screen(d).contains("row 1/"));
+    // The page itself, not the one-row projection drawn before it loads
+    // (`row 1/1`), whose wheel would have nothing to scroll.
+    wait(&mut driver, "the page", |d| {
+        screen(d)
+            .split("row 1/")
+            .nth(1)
+            .and_then(|rest| rest.split_whitespace().next())
+            .and_then(|total| total.parse::<usize>().ok())
+            .is_some_and(|total| total > 1)
+    });
     // Three rows a notch.
     driver.wheel(10, 4, 2);
     wait_for(&mut driver, "row 7/");
