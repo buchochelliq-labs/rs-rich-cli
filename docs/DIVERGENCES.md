@@ -17,7 +17,7 @@ open ones are **permanent**, each for the reason in its entry:
 | Resolved in 0.0.22 | §5's residual, §7, §12, §24, §28, §29, §33 (one list-marker edge stays, see the entry) |
 | Resolved earlier | §1 (table), §8, §10, §11, §13, §14 (stack), §27 |
 | Permanent: the language or platform | §1 (`UNICODE_VERSION`), §3, §3a, §6, §14 (per console), §14a, §15, §19 (reflection), §20, §25, §30, §38, §41, §42, §43, §44, §45, §47, §52 (`--inspect`) |
-| Permanent: another engine | §9 and §18 (syntect, not Pygments), §21 (pulldown-cmark's emphasis) |
+| Permanent: another engine | §9 and §18 (syntect, not Pygments), §21 (pulldown-cmark's emphasis), §54 (markdown-it's backtick cache) |
 | Permanent: an API or CLI choice | §2, §16 (`f64` counts, byte reads), §17 (a `Live` owns its console; proxy writers, not the process's stdout; nested displays drawn from their last rendering), §31, §32, §34, §40, §46, §48, §49, §50 (`rich URL`'s downgrade refusal and sanitizing, 0.0.24), §51 (`--theme`), §53 (no arguments) |
 | Permanent: ours, opt-in or additive | §22, §23, §26, §35, §36, §37, §39 |
 
@@ -1010,6 +1010,24 @@ open ones are **permanent**, each for the reason in its entry:
   were ported; a tour of what it renders tells a new user more than a
   usage line, and nothing scripted depends on the usage line's text.
 - **Verdict (0.0.24): permanent** (a CLI choice).
+
+### 54. A code span after a failed link label (markdown-it's backtick cache)
+
+- **Upstream (markdown-it-py, under rich 15.0.0):** `[` `e`` prints
+  literally. The `link` rule at `[` scans for a label end with `skipToken`,
+  which runs the `backticks` rule over `` `e` `` and finds no closer for
+  the last backtick; that sets `state.backticksScanned`. The label fails,
+  and when the backtick at 1 is tokenized for real, the cache says no
+  closer exists and it stays text. With the cache reset it is a code span.
+- **Here:** a code span (`` ` ` `` holding a space, then `e``), as
+  CommonMark reads it and pulldown-cmark parses it.
+- **Why:** reproducing it means replaying markdown-it's inline scan, with
+  its per-block cache, in place of pulldown-cmark's.
+- **Pinned:** the differential harness parses each differing Markdown case
+  twice with markdown-it, once with the cache reset before every backtick
+  run, and sets the case aside under this entry only when the two parses
+  differ (`known_divergence` in `scripts/diff_rich.py`).
+- **Verdict (0.0.26): permanent** (another engine, as §21).
 
 ## Feature-flagged divergences
 

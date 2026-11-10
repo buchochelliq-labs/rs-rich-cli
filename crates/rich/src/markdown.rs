@@ -1262,7 +1262,10 @@ fn split_paragraph_tables(source: &str) -> Option<String> {
             Event::End(TagEnd::BlockQuote(_) | TagEnd::List(_) | TagEnd::FootnoteDefinition) => {
                 depth = depth.saturating_sub(1)
             }
-            Event::Start(Tag::Paragraph) if depth == 0 => {
+            // A setext heading's lines are paragraph lines until its
+            // underline, and markdown-it's table interrupts those too
+            // (`~\na|b\n-|-\n-`: the last row reads as an underline here).
+            Event::Start(Tag::Paragraph | Tag::Heading { .. }) if depth == 0 => {
                 let lines: Vec<(usize, &str)> = source[range.clone()]
                     .split_inclusive('\n')
                     .scan(range.start, |at, line| {
@@ -1394,6 +1397,9 @@ fn parse(source: &str, md: &MarkdownOptions, styles: &MarkdownStyles) -> Vec<Blo
     let source = piped.as_deref().unwrap_or(source);
     let split = split_paragraph_tables(source);
     let source = split.as_deref().unwrap_or(source);
+    // Again for the tables the split has just let start.
+    let repiped = pipe_markdown_it_table_rows(source);
+    let source = repiped.as_deref().unwrap_or(source);
     let escaped = escape_refused_definitions(source);
     let source = escaped.as_deref().unwrap_or(source);
     let hyperlinks = !md.no_hyperlinks;
@@ -1870,7 +1876,12 @@ fn parse(source: &str, md: &MarkdownOptions, styles: &MarkdownStyles) -> Vec<Blo
                         .iter()
                         .rposition(|f| matches!(f, Frame::Item { .. } | Frame::Quote { .. }))
                         .is_some_and(|i| matches!(stack[i], Frame::Quote { .. }));
-                    if in_quote {
+                    // Under `justify="full"` the base style would reach only
+                    // the gaps `Lines.justify` makes, which upstream leaves
+                    // bare (the quote colour still arrives with the row's
+                    // style): a styled base gives each gap a span of its own,
+                    // so a double space printed as two runs.
+                    if in_quote && justify != Justify::Full {
                         // Quote paragraph: the quote style (over the document
                         // style) as its base, so its padding carries it too.
                         if let Some(root) = container_root(md, styles, &stack) {
@@ -2150,29 +2161,6 @@ fn render_text(
     for line in &mut lines {
         if line.is_empty() && width > 0 {
             line.push(Segment::new("", None));
-        }
-    }
-    // `Lines.justify("full")` spans a gap only when its style is truthy. A
-    // markdown element's `Text` has no base style upstream (its runs carry
-    // spans; the quote colour arrives through `render_lines(style=…)`), so a
-    // gap beside an empty word (two spaces in the source) is bare text, and
-    // the gaps either side of that word render as one run. Here a quoted
-    // paragraph's base style stands in for that colour and each gap is its
-    // own segment, which printed `▌ )    ` `    png)` as two SGR runs.
-    if justify == Justify::Full {
-        let gap =
-            |s: &Segment| !s.control && !s.text.is_empty() && s.text.bytes().all(|b| b == b' ');
-        for line in &mut lines {
-            let mut merged: Vec<Segment> = Vec::with_capacity(line.len());
-            for segment in line.drain(..) {
-                match merged.last_mut() {
-                    Some(last) if gap(last) && gap(&segment) && last.style == segment.style => {
-                        last.text.push_str(&segment.text);
-                    }
-                    _ => merged.push(segment),
-                }
-            }
-            *line = merged;
         }
     }
     lines

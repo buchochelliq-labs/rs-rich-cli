@@ -81,3 +81,17 @@
 {"kind": "columns", "name": "doc_columns_4", "source": "", "width": 13, "color_system": "256", "safe_box": true, "ascii_only": false, "items": ["yx界 ", "xxéxx-yb🙂🙂y_y", "- _🙂c🙂界béa", "_ _zb- _界é a-", "éycz"], "equal": false, "expand": false, "column_first": false, "right_to_left": false}
 {"kind": "json", "name": "doc_json_4", "source": "{\"_ é\": 1e+300, \"éé\": 1.5, \"z-\": []}", "width": 39, "color_system": "standard", "safe_box": false, "ascii_only": false, "options": {"indent": null, "sort_keys": true, "ensure_ascii": true}}
 {"kind": "tree", "name": "doc_tree_4", "source": "", "width": 20, "color_system": "256", "safe_box": true, "ascii_only": false, "tree": {"label": "ay- y_ab🙂", "children": [{"label": "ax__🙂", "children": [], "expanded": true}], "expanded": true}, "hide_root": false}
+{"kind": "markdown", "name": "nightly_empty_link_item_full_justify", "source": "2) []()", "width": 31, "color_system": "truecolor", "hyperlinks": true, "justify": "full"}
+{"kind": "markdown", "name": "nightly_empty_paragraph_item_full", "color_system": "truecolor", "safe_box": true, "ascii_only": false, "source": "* []()", "width": 27, "hyperlinks": true, "justify": "full"}
+{"kind": "markdown", "name": "nightly_image_item_full", "color_system": "256", "safe_box": false, "ascii_only": false, "source": "* ![]()", "width": 20, "hyperlinks": false, "justify": "full"}
+{"kind": "markdown", "name": "nightly_empty_paragraph_quote_full", "color_system": "256", "safe_box": false, "ascii_only": false, "source": ">[]()", "width": 23, "hyperlinks": true, "justify": "full"}
+{"kind": "markdown", "name": "nightly_nested_item_image_break", "color_system": "truecolor", "safe_box": false, "ascii_only": false, "source": "- a\n  - ![]()", "width": 26, "hyperlinks": false}
+{"kind": "markdown", "name": "nightly_html_block_item", "color_system": "truecolor", "safe_box": false, "ascii_only": false, "source": "* <x>", "width": 12, "hyperlinks": true}
+{"kind": "markdown", "name": "nightly_heading_image_fallback_title", "color_system": "truecolor", "safe_box": false, "ascii_only": false, "source": "# ![](a)", "width": 35, "hyperlinks": false}
+{"kind": "markdown", "name": "nightly_quote_full_double_space", "color_system": "truecolor", "safe_box": false, "ascii_only": false, "source": ">)  png) bold**", "width": 17, "hyperlinks": true, "justify": "full"}
+{"kind": "markdown", "name": "nightly_quote_full_ragged_spaces", "color_system": "truecolor", "safe_box": false, "ascii_only": false, "source": ">`e` []() ~~e~~", "width": 30, "hyperlinks": true, "justify": "full"}
+{"kind": "markdown", "name": "nightly_table_pipeless_delimiter", "color_system": "standard", "safe_box": false, "ascii_only": false, "source": "|d\n--", "width": 24, "hyperlinks": true}
+{"kind": "markdown", "name": "nightly_table_lone_pipe_row", "color_system": "truecolor", "safe_box": false, "ascii_only": false, "source": "-||\n-|-\n|", "width": 39, "hyperlinks": true}
+{"kind": "markdown", "name": "nightly_table_interrupts_setext", "color_system": "standard", "safe_box": false, "ascii_only": false, "source": "~\na|b\n-|-\n-", "width": 15, "hyperlinks": false}
+{"kind": "markdown", "name": "nightly_table_split_lone_pipe_row", "color_system": "truecolor", "safe_box": false, "ascii_only": false, "source": "`\na|b\n-|-\n|", "width": 24, "hyperlinks": true}
+{"kind": "pretty", "name": "nightly_pretty_colliding_set", "source": "", "width": 19, "color_system": "256", "safe_box": false, "ascii_only": false, "value": {"$": "set", "items": [1, 9, 6]}, "options": {"indent_guides": true}}

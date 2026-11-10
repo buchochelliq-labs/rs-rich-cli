@@ -103,6 +103,27 @@ class DiffRichTests(unittest.TestCase):
         for case in known:
             self.assertIsInstance(case.get("issue"), int, case["name"])
 
+    def test_set_specs_keep_their_order_through_python_value(self):
+        # `set([1, 9, 6, 7])` iterates 1, 7, 9, 6; the port prints the spec's
+        # order, so a spec must be an order its set gives back.
+        for values in ([1, 9, 6, 7], [0, 8], [9, 1, 3], [1, 6, 7, 9], [], [5]):
+            items = diff_rich.stable_set_items(values)
+            self.assertEqual(list(set(items)), items)
+            self.assertTrue(set(items) <= set(values))
+        self.assertEqual(diff_rich.stable_set_items([1, 6, 7, 9]), [1, 6, 7])
+
+    def test_known_divergences_are_exactly_the_documented_ones(self):
+        def divergence(source):
+            return diff_rich.known_divergence({"kind": "markdown", "source": source})
+
+        self.assertIn("§18", divergence("~~~"))
+        self.assertIn("§18", divergence("    indented code"))
+        self.assertIn("§33", divergence("- |b\n-|-"))
+        self.assertIn("§54", divergence("[` `e`"))
+        for source in ("a|b\n-|-", "-||\n-|-\n|", "` `e`", "[`a` b", "~~gone~~ a", "- a\n  - b"):
+            self.assertIsNone(divergence(source), source)
+        self.assertIsNone(diff_rich.known_divergence({"kind": "text", "source": "~~~"}))
+
 
 if __name__ == "__main__":
     unittest.main()
