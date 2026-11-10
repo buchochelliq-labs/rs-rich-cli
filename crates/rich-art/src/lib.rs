@@ -59,6 +59,9 @@ pub mod sixel;
 #[cfg(feature = "image")]
 pub mod graphics;
 
+#[cfg(feature = "image")]
+mod resample;
+
 #[cfg(feature = "kitty")]
 pub mod kitty;
 

@@ -36,6 +36,7 @@ use crate::ascii::AsciiArt;
 use crate::block::BlockArt;
 use crate::braille::BrailleArt;
 use crate::quadrant::QuadrantArt;
+use crate::resample::{self, Filter};
 use crate::{ColorDistance, Dither, ImageColorMode};
 
 /// Which backend renders the image.
@@ -767,7 +768,14 @@ impl ImageArt {
         };
         let result = match fit {
             ImageFit::Native => unreachable!("native sizing resolves to a fit or a canvas"),
-            ImageFit::Stretch => source.resize_exact(width, height, FilterType::Triangle),
+            ImageFit::Stretch => resample::resize_crop(
+                &source,
+                Filter::Triangle,
+                (width, height),
+                (0, 0),
+                (width, height),
+            )
+            .unwrap_or_else(|| source.resize_exact(width, height, FilterType::Triangle)),
             ImageFit::Contain if keep_alpha => {
                 let fitted = source
                     .resize(width, height, FilterType::Triangle)
@@ -830,9 +838,13 @@ impl ImageArt {
                     }
                     _ => (rh - height) / 2,
                 };
-                source
-                    .resize_exact(rw, rh, FilterType::Triangle)
-                    .crop_imm(x, y, width, height)
+                // Resampling only the pixels the crop keeps.
+                resample::resize_crop(&source, Filter::Triangle, (rw, rh), (x, y), (width, height))
+                    .unwrap_or_else(|| {
+                        source
+                            .resize_exact(rw, rh, FilterType::Triangle)
+                            .crop_imm(x, y, width, height)
+                    })
             }
         };
         Ok(Arc::new(self.checkered(result, mode)))
