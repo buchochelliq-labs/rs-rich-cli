@@ -307,6 +307,16 @@ struct Shared {
     meta: FrameMeta,
     /// On demand: the newest frame, waiting to be taken.
     raw: Option<RawFrame>,
+    /// Area and scale changes the app asked for, and the last whose
+    /// restart Chrome answered: until it has answered them all, a frame
+    /// may have been painted at the old area or scale, even one that comes
+    /// before the engine's thread has seen the change.
+    restarts_asked: u64,
+    restarts_answered: u64,
+    /// The image size of the area's frames, while one is cast: a frame
+    /// Chrome sent while it was still painting the new area holds the
+    /// area's size in CSS pixels but only part of its pixels.
+    expect: Option<(u32, u32)>,
     state: PageState,
     notify: Option<Notify>,
     /// The browser process, so the engine can end it from any thread.
@@ -618,7 +628,8 @@ impl ChromeEngine {
     /// engine decodes a fraction of the bytes.
     /// [`ScreencastFrame::crop`] maps through the frame's own size, so a
     /// region is cut the same at any scale. Taking effect restarts the
-    /// screencast; frames come again from the next Chrome paints.
+    /// screencast: a frame waiting to be taken is dropped, and so is every
+    /// frame Chrome painted at the old scale, before it restarted.
     pub fn set_screencast_scale(&mut self, scale: f64) -> io::Result<()> {
         let scale = if scale.is_finite() {
             scale.clamp(0.01, 1.0)
@@ -631,6 +642,15 @@ impl ChromeEngine {
         self.scale = scale;
         if self.commands.is_none() {
             return Ok(());
+        }
+        let ack = {
+            let mut shared = lock(&self.shared);
+            shared.frame = None;
+            shared.restarts_asked += 1;
+            shared.raw.take().and_then(|(_, _, ack)| ack)
+        };
+        if let Some(ack) = ack {
+            self.send(Request::Ack(ack))?;
         }
         self.send(Request::ScreencastScale(scale))
     }
@@ -660,6 +680,7 @@ impl ChromeEngine {
         let ack = {
             let mut shared = lock(&self.shared);
             shared.frame = None;
+            shared.restarts_asked += 1;
             shared.raw.take().and_then(|(_, _, ack)| ack)
         };
         if let Some(ack) = ack {
@@ -705,7 +726,7 @@ impl ChromeEngine {
     }
 
     fn take_scoped(&mut self, scope: Option<&ScreencastScope>) -> Option<ScreencastFrame> {
-        let (raw, decoded, revision) = {
+        let (raw, decoded, revision, expect) = {
             let mut shared = lock(&self.shared);
             if scope.is_some_and(|scope| !self.scope_matches(&shared, scope)) {
                 return None;
@@ -715,13 +736,16 @@ impl ChromeEngine {
                 shared.raw.take(),
                 shared.frame.take().map(|p| (p, meta)),
                 shared.revision,
+                shared.expect,
             )
         };
         let frame = if let Some((data, meta, ack)) = raw {
             if let Some(ack) = ack {
                 let _ = self.send(Request::Ack(ack));
             }
-            decode_frame(&data).map(|pixels| ScreencastFrame { pixels, meta })
+            decode_frame(&data)
+                .filter(|pixels| whole(pixels, expect))
+                .map(|pixels| ScreencastFrame { pixels, meta })
         } else {
             decoded.map(|(pixels, meta)| ScreencastFrame { pixels, meta })
         };
@@ -1349,6 +1373,16 @@ pub(crate) fn base64_decode(text: &str) -> Option<Vec<u8>> {
 }
 
 /// A screencast frame (base64 JPEG or PNG) as RGB pixels.
+/// Whether `pixels` are a whole frame of the size `expect` (`None`: any):
+/// Chrome fits a frame in the size it was asked for, keeping its shape,
+/// so both sides are within a rounding of it.
+fn whole(pixels: &Pixels, expect: Option<(u32, u32)>) -> bool {
+    expect.is_none_or(|(width, height)| {
+        let near = |got: u32, want: u32| got.abs_diff(want) <= 2.max(want / 50);
+        near(pixels.width, width) && near(pixels.height, height)
+    })
+}
+
 fn decode_frame(data: &str) -> Option<Pixels> {
     let bytes = base64_decode(data)?;
     let image = image::load_from_memory(&bytes).ok()?.to_rgb8();
@@ -1701,7 +1735,11 @@ impl Session {
                 self.screencast()
             }
             Request::ScreencastScale(scale) => {
+                // Like an area: frames Chrome painted at the old scale have
+                // the same size in CSS pixels, and would be cut small.
                 self.scale = scale;
+                self.restarts += 1;
+                self.restarting = Some(self.restarts);
                 self.screencast()
             }
             Request::ScreencastArea(area) => {
@@ -1804,6 +1842,8 @@ impl Session {
                     if self.restarting == Some(restart) {
                         self.restarting = None;
                     }
+                    let mut state = lock(shared);
+                    state.restarts_answered = state.restarts_answered.max(restart);
                 }
                 Pending::Other => {}
             }
@@ -1849,7 +1889,11 @@ impl Session {
                     meta.device_width == f64::from(w) && meta.device_height == f64::from(h)
                 });
                 let meta = placed(meta, self.area);
-                if !matching_viewport || self.restarting.is_some() {
+                let unanswered = {
+                    let state = lock(shared);
+                    state.restarts_asked > state.restarts_answered
+                };
+                if !matching_viewport || self.restarting.is_some() || unanswered {
                     if let Some(ack) = ack {
                         self.page("Page.screencastFrameAck", json!({"sessionId": ack}))?;
                     }
@@ -1860,7 +1904,12 @@ impl Session {
                     // ([`keep_frame`]). Without an id there is nothing to
                     // wait for.
                     if let (Some(data), Some(ack)) = (params["data"].as_str(), ack) {
-                        let now = keep_frame(&mut lock(shared).raw, data.to_string(), meta, ack);
+                        let expect = self.area.map(|a| scaled((a.width, a.height), self.scale));
+                        let now = {
+                            let mut state = lock(shared);
+                            state.expect = expect;
+                            keep_frame(&mut state.raw, data.to_string(), meta, ack)
+                        };
                         if let Some(ack) = now {
                             self.page("Page.screencastFrameAck", json!({"sessionId": ack}))?;
                         }
@@ -1871,7 +1920,12 @@ impl Session {
                 if let Some(ack) = ack {
                     self.page("Page.screencastFrameAck", json!({"sessionId": ack}))?;
                 }
-                if let Some(pixels) = params["data"].as_str().and_then(decode_frame) {
+                let expect = self.area.map(|a| scaled((a.width, a.height), self.scale));
+                if let Some(pixels) = params["data"]
+                    .as_str()
+                    .and_then(decode_frame)
+                    .filter(|pixels| whole(pixels, expect))
+                {
                     let mut state = lock(shared);
                     state.frame = Some(pixels);
                     state.meta = meta;
@@ -2278,8 +2332,21 @@ mod tests {
         rgb: [u8; 3],
         meta: Value,
     ) {
+        send_test_frame_sized(session, shared, id, rgb, meta, (1, 1));
+    }
+
+    /// A frame whose image is `width` x `height` pixels, as Chrome sends an
+    /// area's (its image the area's size at a scale of one).
+    fn send_test_frame_sized(
+        session: &mut Session,
+        shared: &Mutex<Shared>,
+        id: i64,
+        rgb: [u8; 3],
+        meta: Value,
+        (width, height): (u32, u32),
+    ) {
         let mut png = Vec::new();
-        image::RgbImage::from_pixel(1, 1, image::Rgb(rgb))
+        image::RgbImage::from_pixel(width, height, image::Rgb(rgb))
             .write_to(&mut io::Cursor::new(&mut png), image::ImageFormat::Png)
             .unwrap();
         session
@@ -2385,6 +2452,156 @@ mod tests {
 
     #[cfg(unix)]
     #[test]
+    fn frames_painted_before_a_scale_change_are_dropped() {
+        let (mut engine, mut session, _output, requests) = pending_session();
+        let viewport = json!({"deviceWidth": 800, "deviceHeight": 480, "pageScaleFactor": 1});
+        session.apply(Request::ScreencastScale(0.5)).unwrap();
+        let start = session.next;
+        session
+            .message(
+                &json!({"id": start, "result": {}}).to_string(),
+                &engine.shared,
+            )
+            .unwrap();
+        send_test_frame_with_meta(
+            &mut session,
+            &engine.shared,
+            1,
+            [255, 0, 0],
+            viewport.clone(),
+        );
+        assert!(engine.take_screencast().is_some());
+        // The scale goes to 1: a frame Chrome painted at half scale has the
+        // viewport's size in CSS pixels too, and is dropped until Chrome
+        // answers the restart.
+        session.apply(Request::ScreencastScale(1.0)).unwrap();
+        let restart = session.next;
+        send_test_frame_with_meta(
+            &mut session,
+            &engine.shared,
+            2,
+            [0, 255, 0],
+            viewport.clone(),
+        );
+        assert!(
+            engine.take_screencast().is_none(),
+            "a half-scale frame came through"
+        );
+        session
+            .message(
+                &json!({"id": restart, "result": {}}).to_string(),
+                &engine.shared,
+            )
+            .unwrap();
+        send_test_frame_with_meta(
+            &mut session,
+            &engine.shared,
+            3,
+            [0, 0, 255],
+            viewport.clone(),
+        );
+        assert_eq!(engine.take_screencast().unwrap().pixels.rgb, [0, 0, 255]);
+        // The app asking for another scale drops the frame waiting to be taken.
+        send_test_frame_with_meta(&mut session, &engine.shared, 4, [1, 2, 3], viewport);
+        engine.scale = 1.0;
+        engine.set_screencast_scale(0.25).unwrap();
+        assert!(engine.take_screencast().is_none());
+        let asked: Vec<_> = requests.try_iter().collect();
+        assert_eq!(asked, [Request::ScreencastScale(0.25)]);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_frame_between_the_ask_and_the_engines_thread_seeing_it_is_dropped() {
+        // The app asks for an area; before the engine's thread has taken
+        // the request, Chrome sends a frame painted at the old viewport and
+        // scale. It matches the old viewport, but it is from before the
+        // change, so it is dropped until Chrome answers the restart.
+        let (mut engine, mut session, _output, requests) = pending_session();
+        let viewport = json!({"deviceWidth": 800, "deviceHeight": 480, "pageScaleFactor": 1});
+        let area = ScreencastArea {
+            x: 8,
+            y: 113,
+            width: 320,
+            height: 181,
+        };
+        engine.set_screencast_area(Some(area)).unwrap();
+        send_test_frame_with_meta(&mut session, &engine.shared, 1, [255, 0, 0], viewport);
+        assert!(
+            engine.take_screencast().is_none(),
+            "an old-viewport frame came through"
+        );
+        let asked: Vec<_> = requests.try_iter().collect();
+        assert_eq!(asked, [Request::ScreencastArea(Some(area))]);
+        session.apply(Request::ScreencastArea(Some(area))).unwrap();
+        let restart = session.next;
+        session
+            .message(
+                &json!({"id": restart, "result": {}}).to_string(),
+                &engine.shared,
+            )
+            .unwrap();
+        let sized = json!({"deviceWidth": 320, "deviceHeight": 181, "pageScaleFactor": 1});
+        send_test_frame_sized(
+            &mut session,
+            &engine.shared,
+            2,
+            [0, 0, 255],
+            sized,
+            (320, 181),
+        );
+        let taken = engine.take_screencast().unwrap();
+        assert_eq!((taken.meta.scroll_x, taken.meta.scroll_y), (8.0, 113.0));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_partly_painted_area_frame_is_dropped() {
+        // Just after the area changes, Chrome can send a frame that says
+        // the area's size but holds only part of its pixels (201 of 320
+        // wide): cut as the area, the region would come out narrow.
+        let (mut engine, mut session, _output, _requests) = pending_session();
+        let area = ScreencastArea {
+            x: 8,
+            y: 113,
+            width: 320,
+            height: 181,
+        };
+        session.apply(Request::ScreencastArea(Some(area))).unwrap();
+        let start = session.next;
+        session
+            .message(
+                &json!({"id": start, "result": {}}).to_string(),
+                &engine.shared,
+            )
+            .unwrap();
+        let sized = json!({"deviceWidth": 320, "deviceHeight": 181, "pageScaleFactor": 1});
+        send_test_frame_sized(
+            &mut session,
+            &engine.shared,
+            1,
+            [255, 0, 0],
+            sized.clone(),
+            (201, 181),
+        );
+        assert!(
+            engine.take_screencast().is_none(),
+            "a partly painted frame came through"
+        );
+        send_test_frame_sized(
+            &mut session,
+            &engine.shared,
+            2,
+            [0, 0, 255],
+            sized,
+            (320, 181),
+        );
+        let taken = engine.take_screencast().unwrap();
+        assert_eq!((taken.pixels.width, taken.pixels.height), (320, 181));
+    }
+
+    #[cfg(unix)]
+    #[test]
     fn frames_painted_before_an_area_change_are_dropped_whatever_their_size() {
         use std::io::Read;
         let (mut engine, mut session, mut output, requests) = pending_session();
@@ -2406,7 +2623,14 @@ mod tests {
                 &engine.shared,
             )
             .unwrap();
-        send_test_frame_with_meta(&mut session, &engine.shared, 1, [255, 0, 0], sized.clone());
+        send_test_frame_sized(
+            &mut session,
+            &engine.shared,
+            1,
+            [255, 0, 0],
+            sized.clone(),
+            (30, 20),
+        );
         let taken = engine.take_screencast().unwrap();
         assert_eq!((taken.meta.scroll_x, taken.meta.scroll_y), (10.0, 40.0));
         // The area moves to x 50, the same size. Frames that come before
@@ -2416,7 +2640,14 @@ mod tests {
             .apply(Request::ScreencastArea(Some(area(50))))
             .unwrap();
         let restart = session.next;
-        send_test_frame_with_meta(&mut session, &engine.shared, 2, [0, 255, 0], sized.clone());
+        send_test_frame_sized(
+            &mut session,
+            &engine.shared,
+            2,
+            [0, 255, 0],
+            sized.clone(),
+            (30, 20),
+        );
         assert!(
             engine.take_screencast().is_none(),
             "a stale frame came through"
@@ -2427,9 +2658,16 @@ mod tests {
                 &engine.shared,
             )
             .unwrap();
-        send_test_frame_with_meta(&mut session, &engine.shared, 3, [0, 0, 255], sized);
+        send_test_frame_sized(
+            &mut session,
+            &engine.shared,
+            3,
+            [0, 0, 255],
+            sized,
+            (30, 20),
+        );
         let taken = engine.take_screencast().unwrap();
-        assert_eq!(taken.pixels.rgb, [0, 0, 255]);
+        assert_eq!(&taken.pixels.rgb[..3], [0, 0, 255]);
         assert_eq!((taken.meta.scroll_x, taken.meta.scroll_y), (50.0, 40.0));
         // A frame of another size than the area's is not the area's.
         let viewport = json!({"deviceWidth": 800, "deviceHeight": 480, "pageScaleFactor": 1});
