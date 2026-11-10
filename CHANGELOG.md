@@ -11,7 +11,7 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## 0.0.26 cohort — to be published
 
-To be published from `main` by one `release.yml` run on rab v2.1.1 (tag
+To be published from `main` by one `release.yml` run on rab v2.1.2 (tag
 `release-0.0.26`): core 0.0.16 / macros 0.0.10 / plugin API 0.0.10 /
 art 0.0.19 / diagram 0.0.9 / mermaid 0.0.12 / lumis 0.0.10 / ext 0.0.23 /
 micro 0.0.12 / record 0.0.14 / interact 0.0.14 / ratatui 0.0.11 /
@@ -232,9 +232,12 @@ Measured with a release build in a PTY at 120x40 against main as it was
   committed evidence), and the handoff says it was merged as #878 and lists its
   follow-ups (#879 to #884).
 
-### Releases: rab v2.1.1
+### Releases: rab v2.1.2
 
-- **rab v2.1.1** replaces v2.0.1 (`release.py install` from its tag).
+- **rab v2.1.2** replaces v2.0.1 (`release.py install` from its tag).
+  - **`check` on Windows:** cargo's package list, which prints backslashes
+    there, is read with either separator; before, every crate's embeds
+    were refused (v2.1.2).
   - **The release record:** a crate no longer lists the files of a
     same-named package (0.0.25's record gave crates.io `rs-rich` PyPI
     `rs-rich`'s wheels; v2.1.1).
