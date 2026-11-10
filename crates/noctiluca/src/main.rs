@@ -269,7 +269,8 @@ fn engine(args: &Args, config: &Config, switches: &[String]) -> std::io::Result<
     let (columns, rows) = terminal_size();
     let backend = ChromeBackend::start(ChromeOptions {
         binary,
-        audio: args.audio || config.audio,
+        // Resolved in `browse` (noctiluca::args::sound_on).
+        audio: config.audio,
         profile,
         quarantine: None,
         no_js: args.no_js,
@@ -320,7 +321,7 @@ fn browse(args: Args) -> std::io::Result<()> {
     if let Some(fps) = args.fps {
         config.fps = fps;
     }
-    config.audio |= args.audio;
+    config.audio = noctiluca::args::sound_on(&args, config.audio, rich_art::picture::over_ssh());
     config.transparent |= args.transparent;
     config.adapt = noctiluca::args::adapt_of(&args, config.adapt)
         .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidInput, e))?;
@@ -359,7 +360,13 @@ fn browse(args: Args) -> std::io::Result<()> {
         return Ok(());
     }
     if args.view.unwrap_or(config.view) == View::Raster {
-        return raster(&args, url.unwrap_or_else(|| "about:blank".into()), switches);
+        let audio = config.audio;
+        return raster(
+            &args,
+            audio,
+            url.unwrap_or_else(|| "about:blank".into()),
+            switches,
+        );
     }
     let engine = engine(&args, &config, &switches)?;
     let control = listen(&args, &config)?;
@@ -383,10 +390,9 @@ fn browse(args: Args) -> std::io::Result<()> {
 
 /// The raster view, for debugging: the page as Chrome paints it, in half
 /// blocks, through rs-rich-embed's web view.
-fn raster(args: &Args, url: String, switches: Vec<String>) -> std::io::Result<()> {
+fn raster(args: &Args, audio: bool, url: String, switches: Vec<String>) -> std::io::Result<()> {
     use rich_intuituive::prelude::*;
     let binary = args.chrome.clone().or_else(noctiluca::cdp::find_chrome);
-    let audio = args.audio;
     App::new(move || {
         let mut engine = rich_embed::ChromeEngine::new()
             .audio(audio)

@@ -9,7 +9,7 @@ different jobs.
 | Where the network goes from | the remote | the remote, through the tunnel |
 | What crosses SSH | the terminal's output: text, and pictures in the budget | page traffic, as the remote fetches it |
 | Its `localhost` | the remote's | the remote's |
-| Sound | plays on the remote | plays here (with `--audio`) |
+| Sound | off (it would play on the remote); `--audio` turns it on there | plays here, on by default |
 | The browser profile | on the remote | on this machine |
 
 - **Run Noctiluca on the remote** (`ssh devbox`, then `noctiluca URL`)

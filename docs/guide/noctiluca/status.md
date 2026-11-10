@@ -116,7 +116,7 @@ Expected limits on real sites:
 | First forms | Fields with a draft and a guarded commit, password fields never read, check boxes, radios, switches, selects, sliders, buttons |
 | Keys | Two presets, rebinding by action id, per-site keys bound from inside the app, the live F1 overlay |
 | Still images | As pictures in **reader mode only** (Kitty, Sixel, iTerm2, or half blocks); the projection shows a placeholder with the alt text |
-| Sound | With `--audio`, played where Chrome runs; play, pause, mute and volume for each video and audio |
+| Sound | On by default on your own machine, off over SSH unless `--audio`; played where Chrome runs; play, pause, mute and volume for each video and audio |
 | Scripts and CI | `--dump text`, `ax` or `json`, `--no-js` |
 | Safety | Chrome's sandbox always on, page text cleaned, downloads refused, a temporary profile, removed on the way out, unless you keep one |
 

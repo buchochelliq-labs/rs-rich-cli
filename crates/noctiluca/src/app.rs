@@ -1247,7 +1247,7 @@ fn player(b: Browser, node: NodeId) -> Node {
         let sound = if b.config.with(|c| c.audio) {
             ""
         } else {
-            "  [dim]sound is off: start with --audio[/]"
+            "  [dim]sound is off: --audio turns it on[/]"
         };
         match playback() {
             None => format!("[dim]not ready[/]{sound}"),

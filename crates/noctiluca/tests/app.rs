@@ -343,7 +343,7 @@ fn media_controls_follow_the_element_and_run_from_keys_and_f1() {
     wait_for(&mut driver, "Play");
     // Sound is off unless asked for, and the widget says so.
     assert!(
-        screen(&driver).contains("sound is off: start with --audio"),
+        screen(&driver).contains("sound is off: --audio turns it on"),
         "{}",
         screen(&driver)
     );
