@@ -18,8 +18,10 @@ Mask /\d:\d\d \/ live/ "<time>-live"
 # pacer steps a region down to half-block cells for a while, which does.
 # So each half-block cell is blanked one for one in the text grids (every
 # column stays where it is, and the layout around the pictures is still
-# checked); the PNG and SVG captures keep the pictures.
+# checked); the PNG and SVG captures keep the pictures. A row left with
+# only those blanks at its end is trimmed, as a row with no text is.
 Mask /▀/ " "
+Mask /(?m) +$/ ""
 Hide
 Type "export NOCTILUCA_FAKE_ENGINE=$REPO/crates/noctiluca/tests/snapshots XDG_CONFIG_HOME=$PWD/config; clear"
 Enter
