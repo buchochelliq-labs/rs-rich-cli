@@ -31,15 +31,21 @@ reason = "The re-exported surface Cell width widens; migrate width variables/con
 [[manual_break]]
 crate = "noctiluca"
 version = "0.0.5"
-item = "noctiluca::args::Args::mute"
-from = "no field"
-to = "pub mute: bool"
-reason = "`--mute`/`--no-audio` now that sound is on by default when not over SSH; a struct literal of Args adds `mute: false` (or uses ..Args::default())."
-
-[[manual_break]]
-crate = "noctiluca"
-version = "0.0.5"
 item = "noctiluca::testing::FakeState::screencast_area, noctiluca::testing::FakeState::screencast_areas"
 from = "no fields"
 to = "pub screencast_area: Option<Rect>, pub screencast_areas: Vec<Option<Rect>>"
 reason = "The fake engine records the screencast area the tab asks for (Engine::set_screencast_area); a struct literal of FakeState adds them (or uses ..FakeState::default())."
+
+[[break]]
+crate = "noctiluca"
+version = "0.0.5"
+lint = "constructible_struct_adds_field"
+items = ["field Page.overlays", "field Args.mute"]
+why = "#878's source overlays (dialogs and popups measured from the page) and sound on by default (the 0.0.26 plan, decision 3): `--mute`/`--no-audio`. A struct literal adds them or uses ..Default::default()"
+
+[[break]]
+crate = "noctiluca"
+version = "0.0.5"
+lint = "enum_variant_added"
+items = ["variant Rule:FigureFlow", "variant Rule:WrapActionLabels"]
+why = "#878's adaptive layouts: source figures and captions stacked by measured height, and complete action names wrapped in the terminal and source popups"
