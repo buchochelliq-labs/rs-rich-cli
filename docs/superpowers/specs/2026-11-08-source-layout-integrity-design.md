@@ -2,7 +2,7 @@
 
 Continuation of the [approved media-quality design](2026-11-08-noctiluca-media-quality-design.md). Matched sandboxed source captures and the external public model/projection consumer establish four generic defects: boxless links drop visible descendants; fully clipped static descendants reach the terminal edge; boxless wrappers erase declared grid items; and grid membership splits text whose glyph bounds overhang its enclosing frame before nested transforms mix coordinate spaces.
 
-The concrete source/model evidence, capture configuration and neutral assertions are preserved in `/workspace/work/noctiluca-continuation-layout-worker-brief.md` and `/workspace/work/noctiluca-continuation-source-capture/`. Source visits are BBC, Giphy, MDN and Wikipedia at960x630CSS. Backend IDs are diagnostic correlations only, never implementation selectors. Source PNGs and native terminal runs are separate observations.
+The concrete source/model evidence, capture configuration and neutral assertions were recorded in a worker brief and source captures that were not kept in the repository. Source visits are BBC, Giphy, MDN and Wikipedia at960x630CSS. Backend IDs are diagnostic correlations only, never implementation selectors. Source PNGs and native terminal runs are separate observations.
 
 ## Contract
 

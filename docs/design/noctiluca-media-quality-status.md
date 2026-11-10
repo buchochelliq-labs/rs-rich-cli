@@ -1,6 +1,6 @@
 # Noctiluca media quality: handoff
 
-Updated: 2026-11-09. Branch: `codex/noctiluca-media-quality`. The aggregate final review was measured at `cbc7d930b81acdde5800755b69eece2b218eeccb`; follow-up source-grid and video/chat semantic fixes are now at `f3090737be9d569fd29b0260ba18148b65caa57b`. **Release acceptance remains blocked:** a fresh Rust 1.90 qualification on `f309073` failed the unchanged iTerm-compatible gate in all three runs; Kitty and ANSI passed three of three. The latest source is not release-qualified. The eight-site visual pass below is qualitative and does not measure performance.
+Updated: 2026-11-10. Merged as #878 (merge `da011270`, 2026-11-09) from branch `codex/noctiluca-media-quality`. The aggregate final review was measured at `cbc7d930b81acdde5800755b69eece2b218eeccb`; follow-up source-grid and video/chat semantic fixes are now at `f3090737be9d569fd29b0260ba18148b65caa57b`. **Release acceptance remains blocked:** a fresh Rust 1.90 qualification on `f309073` failed the unchanged iTerm-compatible gate in all three runs; Kitty and ANSI passed three of three. The latest source is not release-qualified. The eight-site visual pass below is qualitative and does not measure performance.
 
 ## Behavior and compatibility
 
@@ -22,14 +22,14 @@ Actual sandboxed Chromium regressions separately passed current-document/applied
 
 Both final artifacts are Rust 1.90 release builds, mode `0555` (read/execute, write protected):
 
-- CLI: `/workspace/work/final-wave-immutable-binaries/noctiluca-cbc7d93-release-rust190`, SHA-256 `8ec19f52ad9d627007331bdc4a73b347ea4e518ffeed6c2312e8621e1ca97ed9`.
-- Harness: `/workspace/work/final-wave-immutable-binaries/cbc7d93-harness-99f214ce-tests`, SHA-256 `3cc28dafe30ae1525c86b30cb840306517cc911d1e2987974cd3c689819aa396`.
+- CLI: `noctiluca-cbc7d93-release-rust190`, SHA-256 `8ec19f52ad9d627007331bdc4a73b347ea4e518ffeed6c2312e8621e1ca97ed9`.
+- Harness: `cbc7d93-harness-99f214ce-tests`, SHA-256 `3cc28dafe30ae1525c86b30cb840306517cc911d1e2987974cd3c689819aa396`.
 
-All earlier immutable binaries, build logs, raw 33 observations, oracles and screenshots remain preserved. No faithful `crates/rich` source changed, no new release thresholds were set, and nothing was pushed, merged or published.
+The binaries were not kept in the repository; the hashes identify them. Neither were the earlier binaries, build logs, raw 33 observations, oracles and screenshots. No faithful `crates/rich` source changed, no new release thresholds were set, and nothing was published (the merge came later, as #878).
 
 ## Native observations
 
-These are bounded qualitative observations on the explicitly named source, not FPS, physical-display latency or all-corpus conformance. Full local evidence is `/workspace/work/final-wave-native-review.md`.
+These are bounded qualitative observations on the explicitly named source, not FPS, physical-display latency or all-corpus conformance. The full native review notes were not kept in the repository.
 
 | Source / terminal | Observed | Limits |
 |---|---|---|
@@ -41,7 +41,7 @@ These are bounded qualitative observations on the explicitly named source, not F
 
 ### Eight-site follow-up — `f309073`
 
-A fresh anonymous Kitty 0.41.1 run captured all five states at 120×40 for BBC News, Wikipedia, YouTube, Amazon, Twitch, Giphy, Speedtest, and MDN. F1/Escape restored the page on all sites and runner cleanup passed. The screenshots confirm that the new generic grid regressions are useful but do not establish that every real page is polished: BBC's opening columns remain awkward, Wikipedia retains a large placeholder, Twitch still shows overlapping controls and `PAUSED 0:00`, Giphy retains blank tiles and right-edge clipping, Speedtest's privacy dialog dominates, and MDN's navigation/code remain crowded. YouTube still fails with `ERR_TUNNEL_CONNECTION_FAILED`; Amazon shows an unsupported-client page. No consent, login, chat, playback, purchase, or speed-test interaction occurred. This qualitative review does not measure scrolling judder or frame rate; see the [overview](evidence/noctiluca-real-sites-f309073/review-overview.jpg), [BBC](evidence/noctiluca-real-sites-f309073/bbc-review.jpg), [Wikipedia](evidence/noctiluca-real-sites-f309073/wikipedia-review.jpg), [YouTube](evidence/noctiluca-real-sites-f309073/youtube-review.jpg), [Amazon](evidence/noctiluca-real-sites-f309073/amazon-review.jpg), [Twitch](evidence/noctiluca-real-sites-f309073/twitch-review.jpg), [Giphy](evidence/noctiluca-real-sites-f309073/giphy-review.jpg), [Speedtest](evidence/noctiluca-real-sites-f309073/speedtest-review.jpg), [MDN](evidence/noctiluca-real-sites-f309073/mdn-review.jpg), and [full site-by-site notes](noctiluca-real-sites-f309073-review.md).
+A fresh anonymous Kitty 0.41.1 run captured all five states at 120×40 for BBC News, Wikipedia, YouTube, Amazon, Twitch, Giphy, Speedtest, and MDN. F1/Escape restored the page on all sites and runner cleanup passed. The screenshots confirm that the new generic grid regressions are useful but do not establish that every real page is polished: BBC's opening columns remain awkward, Wikipedia retains a large placeholder, Twitch still shows overlapping controls and `PAUSED 0:00`, Giphy retains blank tiles and right-edge clipping, Speedtest's privacy dialog dominates, and MDN's navigation/code remain crowded. YouTube still fails with `ERR_TUNNEL_CONNECTION_FAILED`; Amazon shows an unsupported-client page. No consent, login, chat, playback, purchase, or speed-test interaction occurred. This qualitative review does not measure scrolling judder or frame rate; see the [full site-by-site notes](noctiluca-real-sites-f309073-review.md), which describe each capture. The captures themselves were removed from the tree for size and third-party-content reasons and remain in git history at `da011270`.
 
 Public Wikipedia shows opening paragraphs with a placeholder/right-edge truncation; BBC and MDN have large gaps or fragmented/clipped text. Their causes remain unresolved. YouTube failed with `ERR_TUNNEL_CONNECTION_FAILED`; Amazon returned an unsupported-client page titled `500 - Amazon.com`. These are failures/unknowns, not site passes. Ghostty, actual macOS iTerm2 and SSH remain unverified. Earlier source-specific captures remain preserved and are not relabeled as the current build.
 
@@ -63,4 +63,13 @@ Original limits: iTerm p95 ≤13.670ms, p99 ≤15.734ms, input maximum ≤5.417m
 | ANSI 2 | 3.678 / 3.904 | 2.828 | 0.235291 | 60 / 0 | none |
 | ANSI 3 | 3.730 / 4.012 | 2.248 | 0.230993 | 60 / 0 | none |
 
-Raw evidence: `/workspace/work/final-wave-release-measurements/` (all nine cbc7d93 recordings/logs/decodes), pre-run `final-wave-release-declaration.json`, complete statistics and identities `final-wave-release-comparison.json`, and file hashes `final-wave-release-raw-manifest.json`. Current-source f309 runs and machine-readable summaries are recorded in the [performance report](noctiluca-performance-qualification-f309073.md). Component allocation reductions do not override these application failures. This branch is open for review; merge and release acceptance remain separate, and iTerm needs targeted profiling of its latency/CPU tails followed by a passing qualification on a comparable quiet host.
+The raw evidence (all nine cbc7d93 recordings, logs and decodes, the pre-run declaration, the complete statistics and identities, and the file hashes) was not kept in the repository; the table above restates the results. Current-source f309 runs and machine-readable summaries are recorded in the [performance report](noctiluca-performance-qualification-f309073.md). Component allocation reductions do not override these application failures. The work was merged as #878 (merge `da011270`, 2026-11-09); release acceptance remains separate, and iTerm needs targeted profiling of its latency/CPU tails followed by a passing qualification on a comparable quiet host.
+
+## Open follow-ups
+
+- [#879](https://github.com/buchochelliq-labs/rs-rich-cli/issues/879): adapt page dialogs through shared popups with bounded layout.
+- [#880](https://github.com/buchochelliq-labs/rs-rich-cli/issues/880): cross-site projection reflow, whitespace and clipping.
+- [#881](https://github.com/buchochelliq-labs/rs-rich-cli/issues/881): align custom video controls and verify playback state.
+- [#882](https://github.com/buchochelliq-labs/rs-rich-cli/issues/882): complete Amazon product-page real-site validation.
+- [#883](https://github.com/buchochelliq-labs/rs-rich-cli/issues/883): profile and reduce iTerm2 video frame latency tails; the iTerm-compatible gate still fails 3/3 on `f309073`, and release acceptance waits on it.
+- [#884](https://github.com/buchochelliq-labs/rs-rich-cli/issues/884): prevent image artifacts and scroll judder across terminals.

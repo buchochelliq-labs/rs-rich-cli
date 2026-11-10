@@ -82,6 +82,25 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 - `Screen::cell`/`get` and `Canvas::cell` expose exact imported geometry;
   plain text, segment lines and the existing SVG export lose that geometry.
 
+### Fixes from the review of #877, #878 and #886
+
+- **intuiTUIve: an inline app no longer exits with the cursor hidden.**
+  `Driver::try_finish` built the restoration (styles reset, the cursor
+  shown, the caret's shape, graphics released) only after the last inline
+  repaint, so a last frame holding premeasured cells, which the inline
+  painter rejects, returned its error first; `App::run_on` then left the
+  terminal styled with the cursor hidden. The finish is now a fallible
+  repaint and a restoration that always runs: `run_on` writes the
+  restoration and returns the repaint's error after it. `try_finish` still
+  returns only the error; a loop of your own resets styles and shows the
+  cursor itself.
+- **Docs:** the Noctiluca media-quality pages (#878) no longer point at
+  paths on the measurement machine (they say what was not kept, or link the
+  committed evidence), the handoff says it was merged as #878 and lists its
+  follow-ups (#879 to #884), and the real-site contact sheets (about 2.2 MB
+  of third-party pages) left the tree: the review describes each in text,
+  and they remain in git history at `da011270`.
+
 ### Releases: rab v2.0.1
 
 - **PyPI publishes again from `release.yml`.** 0.0.25's run uploaded the
