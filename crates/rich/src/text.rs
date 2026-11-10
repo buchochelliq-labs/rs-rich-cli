@@ -1924,7 +1924,12 @@ fn full_justify(line: &[Segment], width: usize, style: &Style) -> Vec<Segment> {
     }
 
     let mut out: Vec<Segment> = Vec::new();
+    // Whether `out` ends with a gap that has no span upstream.
+    let mut bare_gap = false;
     for (index, word) in words.iter().enumerate() {
+        if !word.is_empty() {
+            bare_gap = false;
+        }
         out.extend(word.iter().cloned());
         if let Some(&gap) = spaces.get(index) {
             // Upstream styles the gap with the surrounding style when the two
@@ -1939,7 +1944,17 @@ fn full_justify(line: &[Segment], width: usize, style: &Style) -> Vec<Segment> {
             } else {
                 style.clone()
             };
-            out.push(Segment::new(" ".repeat(gap), Some(gap_style)));
+            // `Text(" " * n, style=space_style)` adds a span only for a truthy
+            // style. Two bare gaps either side of an empty word (a double
+            // space) are then one run of plain text, and one segment.
+            if bare_gap && gap_style.is_null() {
+                if let Some(last) = out.last_mut() {
+                    last.text.push_str(&" ".repeat(gap));
+                }
+            } else {
+                bare_gap = gap_style.is_null();
+                out.push(Segment::new(" ".repeat(gap), Some(gap_style)));
+            }
         }
     }
     out
@@ -2438,6 +2453,27 @@ mod tests {
     /// Two details worth pinning: the slack is handed out from the rightmost
     /// gap backwards (so the gaps are 5 then 6, not 6 then 5), and the last
     /// line is the one case where a justified line is left short of the width.
+    /// The gaps either side of an empty word (a double space) are one bare
+    /// run upstream: `Text(" " * n, style=space_style)` adds no span for a
+    /// null style. Real rich 15.0.0, width 8:
+    ///
+    /// ```text
+    /// Text.assemble(("a", "red"), "  ", ("b", "red"), " ", ("ccccccc", "red"), justify="full")
+    /// -> [Segment('a', red), Segment('      ', Style()), Segment('b', red)], [...]
+    /// ```
+    #[test]
+    fn full_justify_joins_the_bare_gaps_around_an_empty_word() {
+        let mut text = Text::new("").justify(Justify::Full);
+        text.append("a", Some("red".into()));
+        text.append("  ", None);
+        text.append("b", Some("red".into()));
+        text.append(" ", None);
+        text.append("ccccccc", Some("red".into()));
+        let lines = text.render_lines(&Theme::default_theme(), &Style::new(), Some(8));
+        let first: Vec<&str> = lines[0].iter().map(|s| s.text.as_str()).collect();
+        assert_eq!(first, vec!["a", "      ", "b"]);
+    }
+
     #[test]
     fn full_justify_matches_upstream() {
         let text = Text::new("aaa bbb ccc ddddddddddddddddddd ee ff").justify(Justify::Full);

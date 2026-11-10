@@ -508,18 +508,22 @@ fn image_text(
     outer: Option<Style>,
     hyperlinks: bool,
 ) -> Text {
+    // `ImageItem.on_text` appends the alt with `context.current_style`, so it
+    // carries whatever was open around the image — a heading's style, and the
+    // enclosing link's `markdown.link_url` for a badge wrapped in a link. The
+    // fallback, `Text(destination…)`, is built bare: `# ![](a)` shows a plain
+    // `a`.
     let mut title = if alt.plain().is_empty() {
         Text::new(image_fallback_title(destination))
     } else {
+        let mut alt = alt;
+        if let Some(style) = outer {
+            let end = alt.plain().len();
+            alt.stylize(style, 0, end);
+        }
         alt
     };
     let end = title.plain().len();
-    // `ImageItem.on_text` appends with `context.current_style`, so the title
-    // carries whatever was open around the image — a heading's style, and the
-    // enclosing link's `markdown.link_url` for a badge wrapped in a link.
-    if let Some(style) = outer {
-        title.stylize(style, 0, end);
-    }
     // `Style(link=self.link or self.destination or None)`: the enclosing link
     // wins, the image's own destination is the fallback, and neither being set
     // leaves the title unlinked.
@@ -568,22 +572,31 @@ const MAX_NESTING: usize = 20;
 /// block-level start must call this first, or it overwrites that text — which
 /// silently deleted the item's own content and reordered code blocks ahead of
 /// the paragraph introducing them.
+///
+/// Returns whether that closed one of markdown-it's hidden paragraphs: the
+/// buffer held text, or an image was lifted out of it (`image_in_buffer`).
+/// Its `paragraph_close` sets upstream's `new_line`, which is what puts a
+/// break above an image in a nested item (`- a\n  - ![]()`).
 fn flush_pending(
     current: &mut Option<Text>,
     blocks: &mut Vec<Block>,
     stack: &mut [Frame],
     justify: Justify,
-) {
+    image_in_buffer: &mut bool,
+) -> bool {
+    let touched = std::mem::take(image_in_buffer);
     let Some(mut text) = current.take() else {
-        return;
+        return false;
     };
     // A freshly opened item holds an empty buffer; committing it would emit a
-    // blank block.
-    if text.plain().is_empty() {
-        return;
+    // blank block. One an image was lifted out of is a real (empty) paragraph
+    // upstream, and keeps its row.
+    if text.plain().is_empty() && !touched {
+        return false;
     }
     text.set_justify(justify);
     sink(blocks, stack).push(Block::Text(text, None));
+    true
 }
 
 /// Emit a literal `~` for a single-tilde span, into whichever buffer the
@@ -1249,7 +1262,10 @@ fn split_paragraph_tables(source: &str) -> Option<String> {
             Event::End(TagEnd::BlockQuote(_) | TagEnd::List(_) | TagEnd::FootnoteDefinition) => {
                 depth = depth.saturating_sub(1)
             }
-            Event::Start(Tag::Paragraph) if depth == 0 => {
+            // A setext heading's lines are paragraph lines until its
+            // underline, and markdown-it's table interrupts those too
+            // (`~\na|b\n-|-\n-`: the last row reads as an underline here).
+            Event::Start(Tag::Paragraph | Tag::Heading { .. }) if depth == 0 => {
                 let lines: Vec<(usize, &str)> = source[range.clone()]
                     .split_inclusive('\n')
                     .scan(range.start, |at, line| {
@@ -1285,9 +1301,105 @@ fn split_paragraph_tables(source: &str) -> Option<String> {
     Some(split)
 }
 
+/// Two table rows markdown-it's `table` rule accepts and pulldown-cmark does
+/// not, rewritten into forms pulldown-cmark reads the same way:
+///
+/// - a delimiter row with no pipe (`|d\n--`, one column): markdown-it splits
+///   it on `|` like any other, while pulldown-cmark reads a setext heading or
+///   a paragraph. A `|` goes in front of its first character.
+/// - a body row of a lone pipe (`|`): markdown-it's `escapedSplit` leaves no
+///   cells and the row is filled with empty ones, while pulldown-cmark ends the
+///   table there. It becomes `| |`.
+///
+/// Parsed again after each rewrite, since the first can make a table that the
+/// second then continues. `None` when nothing changed.
+fn pipe_markdown_it_table_rows(source: &str) -> Option<String> {
+    // Each rewrite adds a byte to a table row; bound the passes anyway.
+    const MAX_PASSES: usize = 64;
+    let mut rewritten: Option<String> = None;
+    for _ in 0..MAX_PASSES {
+        let text = rewritten.as_deref().unwrap_or(source);
+        let Some((at, insert)) = next_table_row_rewrite(text) else {
+            break;
+        };
+        let mut next = String::with_capacity(text.len() + 1);
+        next.push_str(&text[..at]);
+        next.push_str(insert);
+        next.push_str(&text[at..]);
+        rewritten = Some(next);
+    }
+    rewritten
+}
+
+/// The first rewrite [`pipe_markdown_it_table_rows`] makes: a byte offset and
+/// the text to insert there.
+fn next_table_row_rewrite(source: &str) -> Option<(usize, &'static str)> {
+    let indent = |line: &str| line.len() - line.trim_start_matches(' ').len();
+    let mut depth = 0usize;
+    let mut table_start = 0usize;
+    for (event, range) in Parser::new_ext(source, Options::ENABLE_TABLES).into_offset_iter() {
+        match event {
+            Event::Start(Tag::BlockQuote(_) | Tag::List(_) | Tag::FootnoteDefinition(_)) => {
+                depth += 1
+            }
+            Event::End(TagEnd::BlockQuote(_) | TagEnd::List(_) | TagEnd::FootnoteDefinition) => {
+                depth = depth.saturating_sub(1)
+            }
+            Event::Start(Tag::Paragraph | Tag::Heading { .. }) => {
+                let (text, offsets) = strip_container_prefixes(source, range.clone(), depth);
+                let lines: Vec<(usize, &str)> = text
+                    .split_inclusive('\n')
+                    .scan(0, |at, line| {
+                        let start = *at;
+                        *at += line.len();
+                        Some((start, line.trim_end_matches(['\n', '\r'])))
+                    })
+                    .collect();
+                for pair in lines.windows(2) {
+                    let header = pair[0].1;
+                    let (start, delimiter) = pair[1];
+                    if indent(delimiter) < 4
+                        && !delimiter.contains('|')
+                        && markdown_it_table_start(header, delimiter)
+                    {
+                        return offsets.get(start + indent(delimiter)).map(|&at| (at, "|"));
+                    }
+                }
+            }
+            Event::Start(Tag::Table(_)) => table_start = range.start,
+            Event::End(TagEnd::Table) => {
+                // The line after the table's last row.
+                let mut end = range.end;
+                if end > 0 && source.as_bytes()[end - 1] != b'\n' {
+                    end += source[end..].find('\n')? + 1;
+                }
+                let line_end = source[end..].find('\n').map_or(source.len(), |i| end + i);
+                if line_end == end {
+                    continue;
+                }
+                let (text, offsets) =
+                    strip_container_prefixes(source, table_start..line_end, depth);
+                let start = text.rfind('\n').map_or(0, |i| i + 1);
+                let row = text[start..].trim_end_matches('\r');
+                if indent(row) < 4 && row.trim_matches([' ', '\t']) == "|" {
+                    let pipe = start + row.find('|').expect("a pipe");
+                    return offsets.get(pipe + 1).map(|&at| (at, " |"));
+                }
+            }
+            _ => {}
+        }
+    }
+    None
+}
+
 fn parse(source: &str, md: &MarkdownOptions, styles: &MarkdownStyles) -> Vec<Block> {
+    let piped = pipe_markdown_it_table_rows(source);
+    let source = piped.as_deref().unwrap_or(source);
     let split = split_paragraph_tables(source);
     let source = split.as_deref().unwrap_or(source);
+    // Again for the tables the split has just let start.
+    let repiped = pipe_markdown_it_table_rows(source);
+    let source = repiped.as_deref().unwrap_or(source);
     let escaped = escape_refused_definitions(source);
     let source = escaped.as_deref().unwrap_or(source);
     let hyperlinks = !md.no_hyperlinks;
@@ -1336,6 +1448,9 @@ fn parse(source: &str, md: &MarkdownOptions, styles: &MarkdownStyles) -> Vec<Blo
     // it, and it is why one lifted out of the *second* list item gets a blank
     // row above it while one lifted out of the first does not.
     let mut new_line = false;
+    // Whether an image was lifted out of the open paragraph buffer, which
+    // markdown-it still closes as a paragraph (see [`flush_pending`]).
+    let mut image_in_buffer = false;
     // The table being assembled while inside a GFM table.
     let mut table: Option<TableAccum> = None;
 
@@ -1385,11 +1500,32 @@ fn parse(source: &str, md: &MarkdownOptions, styles: &MarkdownStyles) -> Vec<Blo
             _ => {}
         }
         match event {
+            // A block start like any other: commit a tight item's text, or
+            // drop the empty buffer a fresh item opened. markdown-it gives
+            // `* <x>` an `html_block` and no paragraph, so no bullet row.
+            Event::Start(Tag::HtmlBlock) => {
+                new_line |= flush_pending(
+                    &mut current,
+                    &mut blocks,
+                    &mut stack,
+                    paragraph_justify,
+                    &mut image_in_buffer,
+                );
+            }
             Event::End(TagEnd::HtmlBlock) => {
                 sink(&mut blocks, &mut stack).push(Block::Html);
             }
             Event::Rule => {
-                flush_pending(&mut current, &mut blocks, &mut stack, paragraph_justify);
+                flush_pending(
+                    &mut current,
+                    &mut blocks,
+                    &mut stack,
+                    paragraph_justify,
+                    &mut image_in_buffer,
+                );
+                // `HorizontalRule.new_line = False`, after the paragraph it
+                // closed.
+                new_line = false;
                 sink(&mut blocks, &mut stack).push(Block::Rule);
             }
             Event::Start(Tag::Link {
@@ -1504,10 +1640,23 @@ fn parse(source: &str, md: &MarkdownOptions, styles: &MarkdownStyles) -> Vec<Blo
                         leading_break: new_line,
                     });
                     new_line = false;
+                    // The image's paragraph stays open upstream even where
+                    // pulldown-cmark gives a tight item's text no buffer yet
+                    // (after a heading), and renders as an empty row.
+                    if table.as_ref().is_none_or(|acc| !acc.in_cell) {
+                        current.get_or_insert_with(|| Text::new(""));
+                        image_in_buffer = true;
+                    }
                 }
             }
             Event::Start(Tag::CodeBlock(kind)) => {
-                flush_pending(&mut current, &mut blocks, &mut stack, paragraph_justify);
+                new_line |= flush_pending(
+                    &mut current,
+                    &mut blocks,
+                    &mut stack,
+                    paragraph_justify,
+                    &mut image_in_buffer,
+                );
                 let language = match kind {
                     CodeBlockKind::Fenced(info) => {
                         // The info string is `lang` (possibly with extra tokens).
@@ -1533,7 +1682,13 @@ fn parse(source: &str, md: &MarkdownOptions, styles: &MarkdownStyles) -> Vec<Blo
                 }
             }
             Event::Start(Tag::Table(aligns)) => {
-                flush_pending(&mut current, &mut blocks, &mut stack, paragraph_justify);
+                new_line |= flush_pending(
+                    &mut current,
+                    &mut blocks,
+                    &mut stack,
+                    paragraph_justify,
+                    &mut image_in_buffer,
+                );
                 // A cell is not a paragraph: no `markdown.paragraph` in it,
                 // even in a tight item whose hidden paragraph closed here.
                 block_style = None;
@@ -1588,7 +1743,13 @@ fn parse(source: &str, md: &MarkdownOptions, styles: &MarkdownStyles) -> Vec<Blo
                 }
             }
             Event::Start(Tag::BlockQuote(_)) => {
-                flush_pending(&mut current, &mut blocks, &mut stack, paragraph_justify);
+                new_line |= flush_pending(
+                    &mut current,
+                    &mut blocks,
+                    &mut stack,
+                    paragraph_justify,
+                    &mut image_in_buffer,
+                );
                 if stack.len() >= MAX_NESTING {
                     suppressed += 1;
                 } else {
@@ -1606,7 +1767,13 @@ fn parse(source: &str, md: &MarkdownOptions, styles: &MarkdownStyles) -> Vec<Blo
                 }
             }
             Event::Start(Tag::List(first)) => {
-                flush_pending(&mut current, &mut blocks, &mut stack, paragraph_justify);
+                new_line |= flush_pending(
+                    &mut current,
+                    &mut blocks,
+                    &mut stack,
+                    paragraph_justify,
+                    &mut image_in_buffer,
+                );
                 if stack.len() >= MAX_NESTING {
                     suppressed += 1;
                 } else {
@@ -1634,6 +1801,7 @@ fn parse(source: &str, md: &MarkdownOptions, styles: &MarkdownStyles) -> Vec<Blo
                 // no enclosing Paragraph, so open a buffer here for it to land
                 // in. A loose item simply resets this at its Start(Paragraph).
                 current = Some(Text::new(""));
+                image_in_buffer = false;
                 // markdown-it's hidden paragraph: `markdown.paragraph` is open.
                 block_style = Some(styles.paragraph.clone());
                 heading_open = None;
@@ -1673,7 +1841,13 @@ fn parse(source: &str, md: &MarkdownOptions, styles: &MarkdownStyles) -> Vec<Blo
                 }
             }
             Event::Start(Tag::Paragraph) => {
-                flush_pending(&mut current, &mut blocks, &mut stack, paragraph_justify);
+                new_line |= flush_pending(
+                    &mut current,
+                    &mut blocks,
+                    &mut stack,
+                    paragraph_justify,
+                    &mut image_in_buffer,
+                );
                 current = Some(Text::new(""));
                 // `context.enter_style("markdown.paragraph")`.
                 block_style = Some(styles.paragraph.clone());
@@ -1682,7 +1856,13 @@ fn parse(source: &str, md: &MarkdownOptions, styles: &MarkdownStyles) -> Vec<Blo
                 justify = paragraph_justify;
             }
             Event::Start(Tag::Heading { level, .. }) => {
-                flush_pending(&mut current, &mut blocks, &mut stack, paragraph_justify);
+                new_line |= flush_pending(
+                    &mut current,
+                    &mut blocks,
+                    &mut stack,
+                    paragraph_justify,
+                    &mut image_in_buffer,
+                );
                 let level = heading_level(level);
                 current = Some(Text::new(""));
                 // `context.enter_style(f"markdown.{tag}")`.
@@ -1696,7 +1876,12 @@ fn parse(source: &str, md: &MarkdownOptions, styles: &MarkdownStyles) -> Vec<Blo
                         .iter()
                         .rposition(|f| matches!(f, Frame::Item { .. } | Frame::Quote { .. }))
                         .is_some_and(|i| matches!(stack[i], Frame::Quote { .. }));
-                    if in_quote {
+                    // Under `justify="full"` the base style would reach only
+                    // the gaps `Lines.justify` makes, which upstream leaves
+                    // bare (the quote colour still arrives with the row's
+                    // style): a styled base gives each gap a span of its own,
+                    // so a double space printed as two runs.
+                    if in_quote && justify != Justify::Full {
                         // Quote paragraph: the quote style (over the document
                         // style) as its base, so its padding carries it too.
                         if let Some(root) = container_root(md, styles, &stack) {
@@ -1711,6 +1896,26 @@ fn parse(source: &str, md: &MarkdownOptions, styles: &MarkdownStyles) -> Vec<Blo
                     // to apply here; treating a quoted heading as body text
                     // flattened h1 to plain magenta and left-aligned it.
                     text.set_justify(justify);
+                    // An empty ATX heading's `inline` token has no children,
+                    // so upstream's `_flatten_tokens` yields the token itself
+                    // and its close sets `new_line` before the heading
+                    // renders: a top-level `##` opening the document prints a
+                    // blank line first. An empty `Html` block stands in for
+                    // that token's turn in the block spacing.
+                    let bare_atx = heading_open.is_some()
+                        && source[range.clone()]
+                            .trim()
+                            .trim_matches('#')
+                            .trim()
+                            .is_empty();
+                    // After any other block the usual gap already stands
+                    // for it.
+                    if bare_atx
+                        && stack.is_empty()
+                        && matches!(blocks.last(), None | Some(Block::Rule))
+                    {
+                        blocks.push(Block::Html);
+                    }
                     sink(&mut blocks, &mut stack).push(Block::Text(text, heading_open));
                 }
                 block_style = None;
@@ -1956,7 +2161,7 @@ fn render_text(
     width: usize,
 ) -> Vec<Vec<Segment>> {
     let justify = text.get_justify_option().unwrap_or(options.justify);
-    text.render_lines_wrapped_tabs(
+    let mut lines = text.render_lines_wrapped_tabs(
         console.theme(),
         console.base_style(),
         Some(width),
@@ -1966,7 +2171,19 @@ fn render_text(
             .unwrap_or(Overflow::Fold),
         text.get_no_wrap().or(options.no_wrap).unwrap_or(false),
         text.console_tab_size(console),
-    )
+    );
+    // Upstream's `Text.render` yields `Segment("")` for an empty line, so an
+    // empty paragraph is still a row: `render_lines` pads it, and a list item
+    // keeps its bullet on it. Under `justify="full"` the ragged last line is
+    // not padded here, and an empty row would read as the blank gap the item
+    // and quote handlers skip (`* []()` lost its bullet). At width 0
+    // `render_lines` crops every row away, so there it stays empty.
+    for line in &mut lines {
+        if line.is_empty() && width > 0 {
+            line.push(Segment::new("", None));
+        }
+    }
+    lines
 }
 
 fn render_blocks(
