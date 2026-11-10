@@ -8,7 +8,7 @@
 
 **Tech Stack:** Rust, Noctiluca model/source projection tests, existing `adaptive_columns` and `StackLayout`.
 
-**Spec:** `docs/superpowers/specs/2026-11-08-noctiluca-media-quality-design.md`, with real-site evidence in `/workspace/work/noctiluca-real-sites-review.md`.
+**Spec:** `docs/superpowers/specs/2026-11-08-noctiluca-media-quality-design.md`, with real-site evidence in the [f309073 real-site review](../../design/noctiluca-real-sites-f309073-review.md) (the earlier review notes were not kept in the repository).
 
 ## Global Constraints
 

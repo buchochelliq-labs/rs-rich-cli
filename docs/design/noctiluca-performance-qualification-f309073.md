@@ -9,7 +9,7 @@
 - The 1.20× baseline-median thresholds are unchanged: iTerm p95 ≤13.670 ms, p99 ≤15.734 ms, input max ≤5.417 ms, CPU ≤0.806 s; Kitty p95/p99/input ≤46.442/50.885/16.178 ms; ANSI ≤14.857/15.494/13.310 ms.
 - Same 120×40 stream/chat fixture and saved workload: 60 source frames at 30 fps over two seconds, 20 semantic updates, eight key inputs, 18 static images, 2.4-second drain, same protocol/quality budget. Runs were serial, with no concurrent Cargo/native job.
 - Runner and independent image/identity decoder verified actual protocol routing, 20 applied pages, 8/8 input events, and all 60 offered frame identities. Kitty’s 35 censored frames per run are the declared output-budget behavior. A separate offline check found no collision between the fixture PNGs and the uniform video-marker identity pattern.
-- Raw output and logs remain at `/workspace/work/noctiluca-perf-current-f309073/runs/`. The frozen run declaration and per-run machine-readable results are committed as [qualification-declaration.json](evidence/noctiluca-performance-f309073/qualification-declaration.json) and [comparison.json](evidence/noctiluca-performance-f309073/comparison.json).
+- Raw output and logs were not kept in the repository. The frozen run declaration and per-run machine-readable results are committed as [qualification-declaration.json](evidence/noctiluca-performance-f309073/qualification-declaration.json) and [comparison.json](evidence/noctiluca-performance-f309073/comparison.json).
 
 ## Current-source runs
 
@@ -52,6 +52,6 @@ After the qualification above, the same immutable f309073 harness binary was run
 
 Trace-on did not consistently worsen latency or CPU, though its second pair had a large p99 outlier. That run's slowest decoded frame was sequence 13 at 63.687 ms; the encoder trace also recorded a 22.813 ms encode while five pictures were live. This is a plausible correlation to investigate, not proof of causation. Five of the six diagnostic runs pass all four iTerm gates; one trace-on run fails p95 by 0.020 ms and p99 by 15.496 ms. The spread confirms that the original 0/3 failures cannot yet be attributed to a stable source-level bottleneck, and the diagnostic pass rate does not change the original qualification decision.
 
-Per-run hashes and full sampled values are in [trace-ab.json](evidence/noctiluca-performance-f309073/trace-ab.json); raw diagnostic logs and output captures remain under `/workspace/work/noctiluca-perf-current-f309073/`.
+Per-run hashes and full sampled values are in [trace-ab.json](evidence/noctiluca-performance-f309073/trace-ab.json); raw diagnostic logs and output captures were not kept in the repository.
 
 The production code remains unchanged. Before making an encoder or scheduler change, collect a low-overhead profile that separates image fitting, PNG compression, registry/cache work, and frame scheduling; then use the unchanged gate and full semantic/output checks on the resulting source.

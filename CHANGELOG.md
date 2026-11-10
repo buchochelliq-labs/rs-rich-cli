@@ -9,6 +9,31 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### The nightly differential run is green again (rs-rich, 0.0.26)
+
+- **Markdown parity fixes** (rs-rich), each found by the nightly run since
+  2026-10-26 and pinned by goldens `markdown_fuzz_10`–`30`: an empty
+  paragraph under `justify="full"` in a list item or quote keeps its row
+  (`* []()`, `>[]()`, `2) []()`, the last known case, #769); an html block
+  alone in an item draws no bullet; an image in a nested tight item gets
+  the break above it, and an image-only paragraph keeps its row; an image's
+  fallback title (`# ![](a)`) no longer takes the heading's style; the gaps
+  around a double space under full justification are one run, in a quote
+  too; and markdown-it's table rows pulldown-cmark refused now parse as
+  upstream's do: a delimiter row with no pipe (`|d\n--`), a body row of a
+  lone `|`, and a table interrupting a setext heading's lines. An empty
+  ATX heading opening the document (`##`) prints upstream's blank line
+  before it.
+- **Full justification** (rs-rich `Text`): the two bare gaps either side of
+  an empty word are one segment, as upstream's `Lines.justify` leaves them.
+- **The harness** (`scripts/diff_rich.py`): generated `set` values take an
+  order their rebuilt set iterates in (`set([1, 9, 6, 7])` iterates
+  `1, 7, 9, 6`), and differing Markdown cases under a documented divergence
+  are set aside and counted, decided from markdown-it's own parse: code
+  blocks (§18), a table before a list (§33), and markdown-it's backtick
+  cache after a failed link label (new §54). The fixed cases joined the
+  pull-request corpus; the known list is empty.
+
 ### Noctiluca and shared media presentation
 
 - **Noctiluca model migration:** `Page` now includes `overlays` for visible
@@ -81,6 +106,38 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   SIGKILL cannot be recovered by software.
 - `Screen::cell`/`get` and `Canvas::cell` expose exact imported geometry;
   plain text, segment lines and the existing SVG export lose that geometry.
+
+### Fixes from the review of #877, #878 and #886
+
+- **intuiTUIve: an inline app no longer exits with the cursor hidden.**
+  `Driver::try_finish` built the restoration (styles reset, the cursor
+  shown, the caret's shape, graphics released) only after the last inline
+  repaint, so a last frame holding premeasured cells, which the inline
+  painter rejects, returned its error first; `App::run_on` then left the
+  terminal styled with the cursor hidden. The finish is now a fallible
+  repaint and a restoration that always runs: `run_on` writes the
+  restoration and returns the repaint's error after it. `try_finish` still
+  returns only the error; a loop of your own resets styles and shows the
+  cursor itself.
+- **Docs:** the Noctiluca media-quality pages (#878) no longer point at
+  paths on the measurement machine (they say what was not kept, or link the
+  committed evidence), and the handoff says it was merged as #878 and lists its
+  follow-ups (#879 to #884).
+
+### Releases: rab v2.1.1
+
+- **rab v2.1.1** replaces v2.0.1 (`release.py install` from its tag).
+  - **The release record:** a crate no longer lists the files of a
+    same-named package (0.0.25's record gave crates.io `rs-rich` PyPI
+    `rs-rich`'s wheels; v2.1.1).
+  - **Stopped releases:** `tag --commit <sha>` carries a release that
+    stopped part-way to a later commit that has the fix, and `tag` finishes
+    a release whose tagged files fail `check` from `HEAD` when `HEAD` has
+    the fix.
+  - **Publish order:** `check` counts versioned dev-dependencies, which
+    cargo keeps in the published manifest. This repository's order passes.
+  - **Windows:** `publish-chocolatey` strips the CRs `jq` prints there
+    (v2.0.2). This repository does not publish to Chocolatey.
 
 ### Releases: rab v2.0.1
 

@@ -2,9 +2,8 @@
 
 What each release delivered, and where this goes next: the
 [plan to 1.0.0](plans/1.0.0.md), after the 0.0.25 cohort (published
-2026-11-05, the last release before 0.1.0) and with 0.1.0, the API review
-of [stage 3](plans/1.0.0.md#stage-3-api-review-and-stability-tooling-010),
-next.
+2026-11-05), with [0.0.26](plans/0.0.26.md) next and then 0.1.0, the API
+review of [stage 3](plans/1.0.0.md#stage-3-api-review-and-stability-tooling-010).
 Ordered by what unblocks people, not by what is most interesting to build.
 
 Two rules constrain everything here:
@@ -217,6 +216,15 @@ and #499). Delivered:
   and `capture` commands;
 - Atkinson dithering, OKLab distance, Sixel/GIF colour modes, alpha backgrounds
   (#498) and `--theme-file` (#499).
+
+## 0.0.26 — Noctiluca made steady, before the API review (planned)
+
+The [0.0.26 plan](plans/0.0.26.md) ships what merged after 0.0.25
+(Noctiluca's adaptive layouts and media, premeasured cells) with the fixes
+it needs: the iTerm2 video gate (#883) passing first, the reader view's
+stale cells, the YouTube audit's performance and layout fixes, sound on by
+default outside SSH, and the first PyPI upload through rab. 0.1.0, the API
+review, follows it.
 
 ## 0.0.25 — the two tracks' last release, and the first on rab (published 2026-11-05)
 

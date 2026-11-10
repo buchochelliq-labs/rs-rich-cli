@@ -46,7 +46,7 @@
         "decoded": "acc31ca53b23f1253a09cfb7f645054c2885468baf98ba1ff0a4eae8c4fcb5e0",
         "meta": "f01938e6568a182bbdae1394bd36730690d59a3a71d33c4785428ebd6c66f667"
       },
-      "workspace_artifacts": "/workspace/work/noctiluca-perf-current-f309073"
+      "workspace_artifacts": "raw logs and output captures were not kept in the repository; identified by the sha256 values above"
     },
     {
       "pair": 1,
@@ -83,7 +83,7 @@
         "decoded": "d24938d135d6e6f6b9025c6c1481de9b615e777dbfd60937678014df5d1bd1af",
         "meta": "4e20dc5c5ce3d571d0290d5d3442aa0a1768c6f02a22db00e45b1484d488f718"
       },
-      "workspace_artifacts": "/workspace/work/noctiluca-perf-current-f309073"
+      "workspace_artifacts": "raw logs and output captures were not kept in the repository; identified by the sha256 values above"
     },
     {
       "pair": 2,
@@ -118,7 +118,7 @@
         "decoded": "996a9477b05a1701bf2b15bb9256ef1ce8c369c6e0cf7ba1e11028cb15d323db",
         "meta": "916de14a8ea9d11a40c5de53cb7222074dd6374056b76b5cd0f69efeeb83f55f"
       },
-      "workspace_artifacts": "/workspace/work/noctiluca-perf-current-f309073"
+      "workspace_artifacts": "raw logs and output captures were not kept in the repository; identified by the sha256 values above"
     },
     {
       "pair": 2,
@@ -155,7 +155,7 @@
         "decoded": "d5989516ec151e39471437fe91ae45655fd2cca39666ee6f95b0cc28e39f7006",
         "meta": "3fd926d07a6f4490f962e26156401b06da91346d4ad52af58498967aae3ba134"
       },
-      "workspace_artifacts": "/workspace/work/noctiluca-perf-current-f309073"
+      "workspace_artifacts": "raw logs and output captures were not kept in the repository; identified by the sha256 values above"
     },
     {
       "pair": 3,
@@ -190,7 +190,7 @@
         "decoded": "51c726c8405e1942499b9f17ebabf377047e4e176ccca6456123e243c5c284c6",
         "meta": "a0de6677e1d7ffeb3194c27a2f11e5e35de537247e8ce028285aada04809c9e8"
       },
-      "workspace_artifacts": "/workspace/work/noctiluca-perf-current-f309073"
+      "workspace_artifacts": "raw logs and output captures were not kept in the repository; identified by the sha256 values above"
     },
     {
       "pair": 3,
@@ -227,7 +227,7 @@
         "decoded": "822ba41cc75a4cc3d91e61f067ebd72ec4e019df63573621d24063996361763b",
         "meta": "a5275b0a7c43e074e0f6b3d745d80aebb55d83a0080cd6e7b563ee28d240e27e"
       },
-      "workspace_artifacts": "/workspace/work/noctiluca-perf-current-f309073"
+      "workspace_artifacts": "raw logs and output captures were not kept in the repository; identified by the sha256 values above"
     }
   ]
 }
