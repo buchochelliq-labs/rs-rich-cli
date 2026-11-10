@@ -80,6 +80,10 @@ pub struct StyleTable {
     /// Each style's colour pair when it was interned as one (see
     /// [`pair_key`]), else 0.
     pairs: Vec<u64>,
+    /// Each style's colour pair when what it writes is one: true colours
+    /// and nothing else but metadata, which writes nothing (see
+    /// [`truecolor_look`]), else 0.
+    looks: Vec<u64>,
     /// Per id, the next id whose key is the same (0 ends the chain:
     /// [`StyleId::NONE`] is never in one).
     chain: Vec<u32>,
@@ -99,6 +103,7 @@ impl Default for StyleTable {
             styles: vec![None],
             keys: vec![0],
             pairs: vec![0],
+            looks: vec![0],
             chain: vec![0],
             index: HashMap::default(),
             rgb: HashMap::default(),
@@ -184,6 +189,17 @@ impl StyleTable {
         }
     }
 
+    /// The colours a style writes when they are all it writes: a style
+    /// [`rgb`](Self::rgb) has, or one that adds only metadata to one (a
+    /// picture's tagged cells). A painter can write these from the colours
+    /// alone; what is written is the same.
+    pub(crate) fn look_rgb(&self, id: StyleId) -> Option<(Option<Rgb>, Option<Rgb>)> {
+        match self.looks.get(id.index()).copied().unwrap_or(0) {
+            0 => None,
+            pair => Some((unpack(pair >> 32), unpack(pair))),
+        }
+    }
+
     fn find(&self, key: u64, style: &Style) -> Option<StyleId> {
         let mut at = self.index.get(&key).copied().unwrap_or(0);
         while at != 0 {
@@ -200,9 +216,15 @@ impl StyleTable {
         // A style of true colours alone is a pair, whichever way it came:
         // a painter writes it from the colours.
         let pair = truecolor_pair(&style).unwrap_or(0);
+        let look = if pair != 0 {
+            pair
+        } else {
+            truecolor_look(&style).unwrap_or(0)
+        };
         self.styles.push(Some(style));
         self.keys.push(key);
         self.pairs.push(pair);
+        self.looks.push(look);
         if pair != 0 {
             self.rgb.entry(pair).or_insert(StyleId(id));
         }
@@ -268,12 +290,14 @@ impl StyleTable {
                 self.styles.swap(old, next);
                 self.keys[next] = self.keys[old];
                 self.pairs[next] = self.pairs[old];
+                self.looks[next] = self.looks[old];
             }
             next += 1;
         }
         self.styles.truncate(next);
         self.keys.truncate(next);
         self.pairs.truncate(next);
+        self.looks.truncate(next);
         self.chain.clear();
         self.chain.resize(next, 0);
         self.index.clear();
@@ -380,6 +404,16 @@ fn truecolor_pair(style: &Style) -> Option<u64> {
     }
     let plain = Style::from_color(style.color().cloned(), style.bgcolor().cloned());
     (plain == *style).then(|| pair_key(fg, bg))
+}
+
+/// [`truecolor_pair`] of `style` without its metadata, which no SGR
+/// writes: the pair of a style whose only other part is metadata.
+fn truecolor_look(style: &Style) -> Option<u64> {
+    style.meta_ref()?;
+    if style.link().is_some() {
+        return None;
+    }
+    truecolor_pair(&style.clear_meta_and_links())
 }
 
 /// Whether every character of `text` is its own grapheme, one or two
