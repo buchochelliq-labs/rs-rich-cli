@@ -69,10 +69,10 @@ pub(crate) struct Trace {
 }
 impl Trace {
     pub fn emit(self) {
-        eprintln!(
-            "RICH_MEDIA {{\"stage\":\"delivery_queue\",\"waiting\":{},\"waiting_peak\":{},\"rgb_bytes\":{},\"rgb_peak\":{},\"replaced\":{}}}",
+        crate::trace::media(&format!(
+            "{{\"stage\":\"delivery_queue\",\"waiting\":{},\"waiting_peak\":{},\"rgb_bytes\":{},\"rgb_peak\":{},\"replaced\":{}}}",
             self.waiting, self.high_water, self.retained, self.retained_high_water, self.replaced
-        );
+        ));
     }
 }
 fn key_of(update: &Update) -> Option<Option<i64>> {

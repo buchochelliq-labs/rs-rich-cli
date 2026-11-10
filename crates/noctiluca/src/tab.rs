@@ -619,14 +619,14 @@ impl Worker<'_> {
     /// Read the page and publish it; `None` if the engine refused (a
     /// navigation swapping the page's process, say).
     fn read(&mut self) -> Option<Arc<Page>> {
-        if crate::diagnostics::enabled() {
-            eprintln!("RICH_MEDIA {{\"stage\":\"model_snapshot_attempt\"}}");
+        if crate::trace::on() {
+            crate::trace::media(r#"{"stage":"model_snapshot_attempt"}"#);
         }
         let at = crate::trace::start();
         let snapshot = self.engine.snapshot(TabId(0)).ok()?;
         let snapshot_ms = crate::trace::ms(at);
-        if crate::diagnostics::enabled() {
-            eprintln!("RICH_MEDIA {{\"stage\":\"model_read\"}}");
+        if crate::trace::on() {
+            crate::trace::media(r#"{"stage":"model_read"}"#);
         }
         if let Ok(boxes) = self.engine.appended(TabId(0)) {
             self.appended = boxes.into_iter().collect();

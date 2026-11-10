@@ -131,7 +131,6 @@ pub mod clean;
 pub mod config;
 pub mod control;
 mod delivery;
-mod diagnostics;
 pub mod draft;
 pub mod dump;
 pub mod engine;

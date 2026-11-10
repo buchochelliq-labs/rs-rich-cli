@@ -8,9 +8,10 @@
 //! check. Counts and timings only, never an address or a page's text.
 //! `docs/design/noctiluca-youtube-perf.md` reads these.
 //!
-//! `RICH_MEDIA_TRACE` ([`crate::diagnostics`]) is the other trace: the
-//! media path's stages, to stderr, for the qualification harness. This
-//! one goes to a file, so it can be on while Noctiluca owns the terminal.
+//! The media path's stages (`{"k": "media", "stage": …}`: model reads,
+//! delivery and prepared queues, encoder and inline-resource work) go here
+//! too: there is one trace, and nothing is written to stderr, which the
+//! terminal shows while Noctiluca owns it.
 
 use std::fs::File;
 use std::io::{BufWriter, Write};
@@ -83,6 +84,17 @@ pub(crate) fn event(kind: &str, fields: Value) {
     let _ = out.flush();
 }
 
+/// Write one media-path event: `json` is an object's text (`{"stage":
+/// …}`), kept whole under kind `media`; text that is not JSON is kept as
+/// `v`.
+pub(crate) fn media(json: &str) {
+    if !on() {
+        return;
+    }
+    let fields = serde_json::from_str(json).unwrap_or_else(|_| Value::from(json));
+    event("media", fields);
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -95,10 +107,42 @@ mod tests {
         assert_eq!(line["snapshot_ms"], 1.5);
         let bare = super::line("note", Value::from(3), 0.0);
         assert_eq!(bare["v"], 3);
+        let stage: Value = serde_json::from_str(r#"{"stage":"model_read"}"#).unwrap();
+        assert_eq!(super::line("media", stage, 1.0)["stage"], "model_read");
         // Unset in tests: nothing is measured.
         if std::env::var_os(VAR).is_none() {
             assert!(!on());
             assert_eq!(ms(start()), 0.0);
+        }
+    }
+
+    #[test]
+    fn nothing_of_the_media_path_writes_to_stderr() {
+        // stderr is the terminal while Noctiluca owns it: the media path's
+        // stages go to the one file trace, from here and from the library
+        // crates it draws with.
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+        let mut files: Vec<_> = std::fs::read_dir(root.join("src"))
+            .unwrap()
+            .map(|e| e.unwrap().path())
+            .filter(|p| {
+                p.file_name()
+                    .is_some_and(|n| n != "main.rs" && n != "trace.rs")
+            })
+            .collect();
+        files.push(root.join("../rich-art/src/picture.rs"));
+        files.push(root.join("../rich-ext/src/frame/graphics.rs"));
+        for file in files {
+            let Ok(text) = std::fs::read_to_string(&file) else {
+                continue;
+            };
+            let old = ["RICH_MEDIA", "_TRACE"].concat();
+            assert!(!text.contains(&old), "{} reads {old}", file.display());
+            assert!(
+                !text.contains("eprintln!(\"RICH_MEDIA") && !text.contains("\"RICH_MEDIA {"),
+                "{} prints the media trace",
+                file.display()
+            );
         }
     }
 }

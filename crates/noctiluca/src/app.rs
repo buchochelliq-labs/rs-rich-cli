@@ -2132,14 +2132,14 @@ fn apply_pair(b: Browser, update: Update, source: Option<crate::model::SourcePag
             .as_ref()
             .is_none_or(|s| matches!(&update, Update::Page(p) if Arc::ptr_eq(p, s.page())))
     );
-    if crate::diagnostics::enabled() {
+    if crate::trace::on() {
         match &update {
-            Update::Frame(f) => eprintln!(
-                "RICH_MEDIA {{\"stage\":\"frame_apply\",\"seq\":{},\"bytes\":{}}}",
+            Update::Frame(f) => crate::trace::media(&format!(
+                "{{\"stage\":\"frame_apply\",\"seq\":{},\"bytes\":{}}}",
                 f.seq,
                 f.pixels.rgb.len()
-            ),
-            Update::Page(_) => eprintln!("RICH_MEDIA {{\"stage\":\"page_apply\"}}"),
+            )),
+            Update::Page(_) => crate::trace::media(r#"{"stage":"page_apply"}"#),
             _ => {}
         }
     }
@@ -2218,11 +2218,11 @@ fn apply_pair(b: Browser, update: Update, source: Option<crate::model::SourcePag
         }
         Update::Frame(frame) => {
             video_frame(b, &frame);
-            if crate::diagnostics::enabled() {
-                eprintln!(
-                    "RICH_MEDIA {{\"stage\":\"frame_done\",\"seq\":{}}}",
+            if crate::trace::on() {
+                crate::trace::media(&format!(
+                    "{{\"stage\":\"frame_done\",\"seq\":{}}}",
                     frame.seq
-                );
+                ));
             }
         }
         Update::Screen(frame) => crate::pixel_view::frame(b, &frame),
@@ -3430,7 +3430,7 @@ pub fn app_with_presentation(
             let trace = {
                 let mut inbox = inbox.lock().unwrap();
                 inbox.push_source(update, source);
-                crate::diagnostics::enabled().then(|| inbox.trace())
+                crate::trace::on().then(|| inbox.trace())
             };
             let _ = send.try_send(());
             if let Some(trace) = trace { trace.emit(); }
@@ -3508,11 +3508,11 @@ pub fn app_with_presentation(
             let trace = {
                 let mut q = completions.lock().unwrap();
                 if !q.complete(job) { return; }
-                crate::diagnostics::enabled().then(|| (q.waiting.len(), q.waiting.iter().map(|job| job.picture.image().as_bytes().len()).sum::<usize>()))
+                crate::trace::on().then(|| (q.waiting.len(), q.waiting.iter().map(|job| job.picture.image().as_bytes().len()).sum::<usize>()))
             };
             let _ = wake_prepared.try_send(());
             if let Some((waiting, bytes)) = trace {
-                eprintln!("RICH_MEDIA {{\"stage\":\"prepared_queue\",\"waiting\":{waiting},\"decoded_bytes\":{bytes}}}");
+                crate::trace::media(&format!("{{\"stage\":\"prepared_queue\",\"waiting\":{waiting},\"decoded_bytes\":{bytes}}}"));
             }
         });
         let b = Browser {
@@ -5214,7 +5214,7 @@ mod update_measurements {
     fn combined_update_baseline() {
         let (mut d, b, mut p, proxy) = setup();
         let start = d.stats();
-        eprintln!("RICH_MEDIA {{\"window\":\"begin\"}}");
+        crate::trace::media(r#"{"window":"begin"}"#);
         let mut latency = Vec::new();
         let mut layouts = 0;
         let mut bytes = 0;
@@ -5248,7 +5248,7 @@ mod update_measurements {
         latency.sort_by(f64::total_cmp);
         let q = |p: f64| latency[((latency.len() - 1) as f64 * p).round() as usize];
         let end = d.stats();
-        eprintln!("RICH_MEDIA {{\"window\":\"end\"}}");
+        crate::trace::media(r#"{"window":"end"}"#);
         println!(
             "combined: config=120x40/visible-body/saved-stream-with-log/100-serial-updates reads=100 playback=100 decode=20 log=25 layouts={layouts} emitted={emitted} censored={} exact_bytes={bytes} latency_ms p50={} p95={} p99={} widget_draw_ms={} paint_encode_ms={}",
             100 - emitted,
@@ -5346,17 +5346,17 @@ mod update_measurements {
         TEST_LAYOUTS.with(|n| n.set(0));
         let start = d.stats();
         let initial_reads = b.reads.get_untracked();
-        eprintln!("RICH_MEDIA {{\"window\":\"begin\",\"workload\":\"frames+chat\"}}");
+        crate::trace::media(r#"{"window":"begin","workload":"frames+chat"}"#);
         let producer = std::thread::spawn(move || {
             for seq in 1..=60u64 {
                 sent.lock().unwrap().insert(seq, Instant::now());
                 let pixels =
                     rich_embed::Pixels::new(480, 270, [seq as u8, 77, 91].repeat(480 * 270))
                         .unwrap();
-                eprintln!(
-                    "RICH_MEDIA {{\"stage\":\"frame_offer\",\"seq\":{seq},\"bytes\":{}}}",
+                crate::trace::media(&format!(
+                    "{{\"stage\":\"frame_offer\",\"seq\":{seq},\"bytes\":{}}}",
                     pixels.rgb.len()
-                );
+                ));
                 offer(Update::Frame(Arc::new(VideoFrame { node, pixels, seq })));
                 if seq % 3 == 0 {
                     let mut runs = vec![Run::plain(format!("new chat {seq} "))];
@@ -5437,7 +5437,7 @@ mod update_measurements {
             std::thread::sleep(Duration::from_millis(1));
         }
         producer.join().unwrap();
-        eprintln!("RICH_MEDIA {{\"window\":\"end\"}}");
+        crate::trace::media(r#"{"window":"end"}"#);
         let q = |values: &mut Vec<f64>| {
             values.sort_by(f64::total_cmp);
             [0.5, 0.95, 0.99].map(|p| {
