@@ -96,10 +96,8 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   cursor itself.
 - **Docs:** the Noctiluca media-quality pages (#878) no longer point at
   paths on the measurement machine (they say what was not kept, or link the
-  committed evidence), the handoff says it was merged as #878 and lists its
-  follow-ups (#879 to #884), and the real-site contact sheets (about 2.2 MB
-  of third-party pages) left the tree: the review describes each in text,
-  and they remain in git history at `da011270`.
+  committed evidence), and the handoff says it was merged as #878 and lists its
+  follow-ups (#879 to #884).
 
 ### Releases: rab v2.0.1
 

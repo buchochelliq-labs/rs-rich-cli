@@ -3,17 +3,7 @@
 **Build:** `f3090737be9d569fd29b0260ba18148b65caa57b`, CLI SHA-256 `047dbbb26204b43c9a6fc0b30192d73b0dd7c5323f3fd9923c338cfeac11ede4`
 
 **Terminal:** Kitty 0.41.1, 120×40 cells. Eight public sites, separate anonymous browser profiles, five captures each: initial, scroll down, scroll back, F1 actions, Escape dismissal. All 40 images were visually inspected. Cleanup passed with no live owned process, X socket, or temporary browser root.
-**Evidence:** the raw captures and their manifest were not kept in the repository. The nine contact sheets #878 committed (an overview and one per site, each with the initial, scroll down, scroll back, F1 actions and Escape dismissal states) were removed from the tree for size and third-party-content reasons: they showed live third-party pages, with those sites' branding, images and text. They remain in git history at `da011270` under `docs/design/evidence/noctiluca-real-sites-f309073/`. What each showed:
-
-- **Overview:** the initial capture of all eight sites side by side, as a 4×2 grid.
-- **BBC News:** a lead image and headline in a narrow left column beside a separate story column, empty space between them; scrolled down, a readable multi-column list of image stories; F1 opens the actions list over the page and Escape restores the first view.
-- **Wikipedia (Coral reef):** the opening view is mostly a gray image placeholder and empty space around the title, contents and language links; scrolled down, the article body reads as dense linked text.
-- **YouTube:** every state shows Chromium's "This site can't be reached" page with `ERR_TUNNEL_CONNECTION_FAILED`; the actions overlay opens over it.
-- **Amazon:** every state shows the logo and a one-line "we do not support your session or client" message, under the page title `500 - Amazon.com`.
-- **Twitch:** stream thumbnails with `LIVE` labels and viewer counts, whose Play/Mute/Settings buttons overlap neighbouring content; the status bar reads `media PAUSED 0:00`; scrolled down, category cover images with their captions.
-- **Giphy:** three GIF tiles load in the first row while the rest stay gray placeholders, and captions at the right edge are clipped; after scrolling back, every tile is a placeholder.
-- **Speedtest:** the privacy consent dialog, its long text and its three buttons (more options, Reject All, I Accept) fill the viewport, with site controls clipped at both sides.
-- **MDN (`<video>` reference):** the opening navigation and table of contents are crowded, and the demo's code line is clipped at the right edge; scrolled down, the attribute reference reads cleanly.
+**Evidence:** the raw captures and their manifest were not kept in the repository. Committed contact sheets: [overview](evidence/noctiluca-real-sites-f309073/review-overview.jpg), [BBC](evidence/noctiluca-real-sites-f309073/bbc-review.jpg), [Wikipedia](evidence/noctiluca-real-sites-f309073/wikipedia-review.jpg), [YouTube](evidence/noctiluca-real-sites-f309073/youtube-review.jpg), [Amazon](evidence/noctiluca-real-sites-f309073/amazon-review.jpg), [Twitch](evidence/noctiluca-real-sites-f309073/twitch-review.jpg), [Giphy](evidence/noctiluca-real-sites-f309073/giphy-review.jpg), [Speedtest](evidence/noctiluca-real-sites-f309073/speedtest-review.jpg), [MDN](evidence/noctiluca-real-sites-f309073/mdn-review.jpg).
 
 | Site | Current observation |
 |---|---|
