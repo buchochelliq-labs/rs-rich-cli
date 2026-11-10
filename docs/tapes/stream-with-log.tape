@@ -14,10 +14,12 @@ Set Size 110x32
 Set TypingDelay 40ms
 Mask /\d:\d\d \/ \d:\d\d/ "<time>"
 Mask /\d:\d\d \/ live/ "<time>-live"
-# Decoder-dependent frame pixels vary as the video advances; normalize the
-# stream's wide runs of them only (the badges and emotes, a few cells each,
-# stay checked) in text grids, keeping the image in the PNG and SVG captures.
-Mask /▀[▀ ]{12,}▀/ "<stream>"
+# The pictures are Sixel, which leaves no text in a grid; a slow machine's
+# pacer steps a region down to half-block cells for a while, which does.
+# So each half-block cell is blanked one for one in the text grids (every
+# column stays where it is, and the layout around the pictures is still
+# checked); the PNG and SVG captures keep the pictures.
+Mask /▀/ " "
 Hide
 Type "export NOCTILUCA_FAKE_ENGINE=$REPO/crates/noctiluca/tests/snapshots XDG_CONFIG_HOME=$PWD/config; clear"
 Enter
@@ -46,8 +48,10 @@ Escape
 Sleep 300ms
 Type "a"
 Wait /faithful/
-# The faithful view draws the stream again from its next frame.
-Wait /▀{30}/
+# The faithful view draws the stream again from its next frame, beside
+# the chat: wait for that layout's own row (the view before it still shows
+# half blocks the moment the key is read), then for the frame to settle.
+Wait /▀{30}[▀ ]*Chat/
 Sleep 800ms
 Screenshot faithful
 Type "q"
