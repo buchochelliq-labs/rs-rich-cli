@@ -20,6 +20,7 @@ use image::imageops::FilterType;
 use image::{AnimationDecoder, DynamicImage, Frame, ImageDecoder, ImageError, RgbaImage};
 
 use crate::image_art::{ImageAnchor, ImageFit};
+use crate::resample::{self, Filter};
 
 /// The size of one terminal cell in pixels.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -81,7 +82,10 @@ pub fn fit_to_pixels(image: &DynamicImage, width: u32, height: u32) -> RgbaImage
         // Upscaling a tiny icon: keep its pixels crisp.
         FilterType::Nearest
     };
-    let scaled = image.resize_exact(fw, fh, filter).to_rgba8();
+    let scaled = (filter == FilterType::Lanczos3)
+        .then(|| resample::resize_rgba(image, Filter::Lanczos3, fw, fh))
+        .flatten()
+        .unwrap_or_else(|| image.resize_exact(fw, fh, filter).to_rgba8());
     let mut canvas = RgbaImage::new(width, height);
     let (x, y) = ((width - fw) / 2, (height - fh) / 2);
     image::imageops::overlay(&mut canvas, &scaled, x as i64, y as i64);
@@ -115,7 +119,10 @@ pub fn fill_pixels(
         ImageFit::Contain | ImageFit::Native => fit_to_pixels(image, width, height),
         ImageFit::Stretch => {
             let scale = f64::min(width as f64 / iw as f64, height as f64 / ih as f64);
-            image.resize_exact(width, height, filter(scale)).to_rgba8()
+            (scale < 1.0)
+                .then(|| resample::resize_rgba(image, Filter::Lanczos3, width, height))
+                .flatten()
+                .unwrap_or_else(|| image.resize_exact(width, height, filter(scale)).to_rgba8())
         }
         ImageFit::Cover => {
             // The smallest size of the same shape that covers the canvas.
@@ -134,10 +141,19 @@ pub fn fill_pixels(
                 }
                 _ => (rh - height) / 2,
             };
-            image
-                .resize_exact(rw, rh, filter(scale))
-                .crop_imm(x, y, width, height)
-                .to_rgba8()
+            // Resampling only the pixels the crop keeps.
+            let resized = (scale < 1.0)
+                .then(|| {
+                    let filter = Filter::Lanczos3;
+                    resample::resize_crop(image, filter, (rw, rh), (x, y), (width, height))
+                })
+                .flatten();
+            resized.map(DynamicImage::into_rgba8).unwrap_or_else(|| {
+                image
+                    .resize_exact(rw, rh, filter(scale))
+                    .crop_imm(x, y, width, height)
+                    .to_rgba8()
+            })
         }
     }
 }

@@ -39,7 +39,7 @@ golden parity tests. Read [AGENTS.md](../../../AGENTS.md) first.
    behavior — not our conveniences).
 2. Capture from the real library at the pinned version:
    ```bash
-   pip install "rich==<version-from-UPSTREAM.toml>"
+   pip install "rich==<version-from-UPSTREAM.toml>" -c scripts/upstream-oracle-constraints.txt
    python scripts/capture_golden.py
    ```
 3. Assert byte-equality in `crates/rich/tests/` (extend `golden.rs` or add a

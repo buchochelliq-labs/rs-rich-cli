@@ -170,7 +170,9 @@ pub fn status(b: Browser) -> Node {
         if let Some((_, playback)) = current_media(b) {
             parts.push(markup(&media_state(&playback)));
             if !b.config.with(|c| c.audio) {
-                parts.push("sound off (--audio)".into());
+                // Off by default only over SSH, where it would play on the
+                // far machine; else the user muted it.
+                parts.push(sound_off(rich_art::picture::over_ssh()).into());
             }
         }
         let rows = b.layout.with(|l| l.lines.len());
@@ -242,9 +244,26 @@ fn key_at(b: Browser, column: usize) -> Option<&'static str> {
     })
 }
 
+/// The status line's word for pages kept quiet: over SSH (`far`) by
+/// default, which `--audio` turns on; else muted (`--mute`, or an app's
+/// config that leaves sound off).
+pub(crate) fn sound_off(far: bool) -> &'static str {
+    if far {
+        "sound off over SSH (--audio)"
+    } else {
+        "sound off"
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_status_says_why_sound_is_off() {
+        assert_eq!(sound_off(true), "sound off over SSH (--audio)");
+        assert_eq!(sound_off(false), "sound off");
+    }
 
     #[test]
     fn the_media_state_says_what_the_element_does() {

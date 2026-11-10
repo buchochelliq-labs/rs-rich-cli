@@ -76,8 +76,35 @@ pub const SETTLE_MAX: Duration = Duration::from_secs(3);
 /// How long a new document is watched at least: a quiet step sooner does
 /// not settle it, since a script's first move can come after one.
 pub const SETTLE_MIN: Duration = Duration::from_secs(1);
+/// A reading the page pinged for waits this many times the last
+/// reading's cost after it ended, so pinged readings take at most a
+/// quarter of the tab's time however large the page is (a large page's
+/// snapshot costs hundreds of milliseconds). A reading for an action of
+/// ours, a navigation or a load never waits.
+pub const READ_DUTY: u32 = 3;
+/// While the screencast runs for a video, a reading the page pinged for
+/// waits at least this long after the last: a player's clock and progress
+/// bar change the page several times a second.
+pub const READ_WHILE_PLAYING: Duration = Duration::from_secs(1);
+
+/// How long after a reading that cost `cost` a reading the page pinged
+/// for may run: [`DEBOUNCE`], [`READ_DUTY`] times the cost, and
+/// [`READ_WHILE_PLAYING`] while a video plays, whichever is longest.
+pub fn ping_read_gap(cost: Duration, playing: bool) -> Duration {
+    let gap = DEBOUNCE.max(cost * READ_DUTY);
+    if playing {
+        gap.max(READ_WHILE_PLAYING)
+    } else {
+        gap
+    }
+}
+
 /// How often the tab looks at its engine when nothing happens.
 const TICK: Duration = Duration::from_millis(25);
+/// How long an action waits for a reading the engine refuses for a moment
+/// (the viewport's metrics being applied), and how often it tries again.
+const ACTION_READ_WAIT: Duration = Duration::from_secs(1);
+const ACTION_READ_RETRY: Duration = Duration::from_millis(25);
 /// At most this many stills are captured per reading.
 const STILLS_PER_READ: usize = 8;
 /// How often a playing video's or audio's time is read again.
@@ -450,6 +477,12 @@ struct Worker<'a> {
     state: PageState,
     /// When the first change ping since the last reading came.
     dirty: Option<Instant>,
+    /// When the last reading ended and what it cost: a pinged reading
+    /// waits [`ping_read_gap`] after it.
+    last_read: Option<(Instant, Duration)>,
+    /// The last reading was refused (a navigation swapping the page's
+    /// process): no frame is cut with the old model until one succeeds.
+    refused: bool,
     stills: HashMap<StillKey, Arc<[u8]>>,
     /// The pictures decoded from the stills.
     pictures: HashMap<StillKey, Picture>,
@@ -484,6 +517,14 @@ struct Worker<'a> {
     /// was last given.
     scale: f64,
     scale_given: f64,
+    /// The part of the document the engine was last asked to screencast
+    /// (`None`: the viewport), and Chrome's viewport's width in CSS pixels
+    /// (from the pane's size).
+    area_given: Option<Rect>,
+    view_width: Option<f64>,
+    /// When Chrome's view was last looked at while only an area is cast:
+    /// a page that scrolls itself moves its viewport off the area.
+    view_at: Option<Instant>,
     /// A paused region's time when its frame was last taken: a seek while
     /// paused takes one more.
     shown_time: HashMap<NodeId, f64>,
@@ -610,17 +651,38 @@ impl Worker<'_> {
 
     /// Read the page and publish it; `None` if the engine refused (a
     /// navigation swapping the page's process, say).
-    fn read(&mut self) -> Option<Arc<Page>> {
-        if crate::diagnostics::enabled() {
-            eprintln!("RICH_MEDIA {{\"stage\":\"model_snapshot_attempt\"}}");
+    /// A reading for an action the user or a script asked for: the engine
+    /// can refuse one for a moment (the viewport's metrics not applied yet,
+    /// or the document or viewport changing during the read), so it is
+    /// tried again for up to [`ACTION_READ_WAIT`] before the action is
+    /// refused as not ready.
+    fn read_for_action(&mut self) -> Option<Arc<Page>> {
+        let until = Instant::now() + ACTION_READ_WAIT;
+        loop {
+            if let Some(page) = self.read() {
+                return Some(page);
+            }
+            if Instant::now() >= until {
+                return None;
+            }
+            std::thread::sleep(ACTION_READ_RETRY);
         }
+    }
+
+    fn read(&mut self) -> Option<Arc<Page>> {
+        if crate::trace::on() {
+            crate::trace::media(r#"{"stage":"model_snapshot_attempt"}"#);
+        }
+        let at = crate::trace::start();
         let snapshot = self.engine.snapshot(TabId(0)).ok()?;
-        if crate::diagnostics::enabled() {
-            eprintln!("RICH_MEDIA {{\"stage\":\"model_read\"}}");
+        let snapshot_ms = crate::trace::ms(at);
+        if crate::trace::on() {
+            crate::trace::media(r#"{"stage":"model_read"}"#);
         }
         if let Ok(boxes) = self.engine.appended(TabId(0)) {
             self.appended = boxes.into_iter().collect();
         }
+        let built = crate::trace::start();
         let source = self
             .source_update
             .map(|_| build_source_with(&snapshot, &mut self.revisions, &self.appended));
@@ -628,6 +690,7 @@ impl Worker<'_> {
             Some(source) => source.page().as_ref().clone(),
             None => build_with(&snapshot, &mut self.revisions, &self.appended),
         };
+        let build_ms = crate::trace::ms(built);
         self.dress_error(&mut page);
         if self.page.as_ref().map(|p| p.document) != Some(page.document) {
             self.live.clear();
@@ -684,6 +747,14 @@ impl Worker<'_> {
             _ => None,
         };
         let page = self.publish(Arc::new(page), source);
+        if crate::trace::on() {
+            crate::trace::event(
+                "read",
+                serde_json::json!({"snapshot_ms": snapshot_ms, "build_ms": build_ms,
+                    "total_ms": crate::trace::ms(at), "blocks": page.blocks.len(),
+                    "media": page.media.len()}),
+            );
+        }
         self.dirty = None;
         self.stills_pending = true;
         Some(page)
@@ -1374,6 +1445,13 @@ impl Worker<'_> {
         {
             return;
         }
+        if crate::trace::on() {
+            crate::trace::event(
+                "frame",
+                serde_json::json!({"node": video.node, "seq": video.seq,
+                    "w": video.pixels.width, "h": video.pixels.height}),
+            );
+        }
         (self.update)(Update::Frame(Arc::new(video)));
     }
 
@@ -1385,6 +1463,8 @@ impl Worker<'_> {
         }
         self.pixels = on;
         if on {
+            // The pixel view shows the whole viewport.
+            self.set_area(None);
             let _ = self.engine.set_screencast_scale(TabId(0), 1.0);
             self.pixels_cast = self.engine.set_screencast(TabId(0), true).is_ok();
             self.scale_given = 1.0;
@@ -1421,11 +1501,18 @@ impl Worker<'_> {
         let regions = self.regions();
         let now = Instant::now();
         let plan = self.frames.plan(&regions, now);
-        // The scale first, so the screencast starts at it.
-        if self.scale != self.scale_given && (self.frames.on || plan.screencast == Some(true)) {
+        // The scale and the area first, so the screencast starts at them.
+        let casting = self.frames.on || plan.screencast == Some(true);
+        if self.scale != self.scale_given && casting {
             self.scale_given = self.scale;
             let _ = self.engine.set_screencast_scale(TabId(0), self.scale);
         }
+        let area = if casting && plan.screencast != Some(false) {
+            crate::video::screencast_area(&regions, self.chrome_view(now))
+        } else {
+            None
+        };
+        self.set_area(area);
         if let Some(on) = plan.screencast {
             let _ = self.engine.set_screencast(TabId(0), on);
             self.last_frame = on.then_some(now);
@@ -1437,9 +1524,17 @@ impl Worker<'_> {
         if !plan.due {
             return;
         }
+        let at = crate::trace::start();
         let frame = self.engine.screencast_frame(TabId(0));
         if frame.is_some() {
             self.last_frame = Some(now);
+        }
+        if let Some(f) = frame.as_ref().filter(|_| crate::trace::on()) {
+            crate::trace::event(
+                "cast",
+                serde_json::json!({"take_ms": crate::trace::ms(at),
+                    "w": f.pixels.width, "h": f.pixels.height}),
+            );
         }
         // No new frame for a while: what Chrome's viewport does not hold
         // is not painted there, so it is captured on its own.
@@ -1459,6 +1554,74 @@ impl Worker<'_> {
         // adapted view shows. Capture that whole region through the model's
         // guarded path; waiting for a quiet screencast would starve it forever.
         self.capture_regions(&missing, now);
+    }
+
+    /// Chrome's viewport in the document's CSS pixels, if known. While the
+    /// screencast runs it is looked at again every [`PLAYBACK`]: a page
+    /// that scrolls itself moves Chrome's viewport off the area, or onto it.
+    fn chrome_view(&mut self, now: Instant) -> Option<Rect> {
+        let stale = self
+            .view_at
+            .is_none_or(|at| now.duration_since(at) >= PLAYBACK);
+        if stale {
+            self.view_at = Some(now);
+            if let Ok(metrics) = self.engine.metrics(TabId(0)) {
+                self.metrics = Some(metrics);
+            }
+        }
+        let m = self.metrics?;
+        let width = self
+            .view_width
+            .or_else(|| self.page.as_ref().map(|p| p.width))?;
+        Some(Rect::new(0.0, m.scroll_y, width, m.viewport_height))
+    }
+
+    /// Ask the engine to screencast `area` (`None`: the viewport) when it
+    /// is not what it was last asked; a box that moved less than a pixel
+    /// keeps its area, so a reading's rounding never restarts the cast.
+    fn set_area(&mut self, area: Option<Rect>) {
+        let same = match (area, self.area_given) {
+            (Some(a), Some(b)) => {
+                (a.x - b.x).abs() < 1.0
+                    && (a.y - b.y).abs() < 1.0
+                    && (a.width - b.width).abs() < 1.0
+                    && (a.height - b.height).abs() < 1.0
+            }
+            (a, b) => a.is_none() && b.is_none(),
+        };
+        if same {
+            return;
+        }
+        if crate::trace::on() {
+            crate::trace::event(
+                "area",
+                serde_json::json!({"area": area.map(|r| [r.x, r.y, r.width, r.height])}),
+            );
+        }
+        self.area_given = area;
+        let _ = self.engine.set_screencast_area(TabId(0), area);
+    }
+
+    /// Whether a reading the page pinged for may run now (see
+    /// [`ping_read_gap`]).
+    fn ping_due(&self, now: Instant) -> bool {
+        let Some(since) = self.dirty else {
+            return false;
+        };
+        let held = self
+            .last_read
+            .is_some_and(|(end, cost)| now < end + ping_read_gap(cost, self.frames.on));
+        now.duration_since(since) >= DEBOUNCE && !held
+    }
+
+    /// Whether video frames may be cut and captured now: with a model of
+    /// this document (none asked for or refused). A change the page pinged
+    /// waits its turn ([`ping_read_gap`]) without stopping the frames: a
+    /// player's own clock pings several times a second, and the frames
+    /// would stop with it. The engine still checks each frame's document
+    /// and viewport.
+    fn video_may_run(&self, read_now: bool) -> bool {
+        !read_now && !self.refused && self.page.is_some() && !self.pixels
     }
 
     /// How long the tab may wait for a command before it looks at its
@@ -1483,7 +1646,16 @@ impl Worker<'_> {
     /// Frames of regions taken with a capture of each.
     fn capture_regions(&mut self, regions: &[Region], now: Instant) {
         for region in regions {
-            if let Some(pixels) = self.capture_pixels(region.rect, Format::Jpeg) {
+            let at = crate::trace::start();
+            let pixels = self.capture_pixels(region.rect, Format::Jpeg);
+            if crate::trace::on() {
+                crate::trace::event(
+                    "capture",
+                    serde_json::json!({"node": region.node, "ms": crate::trace::ms(at),
+                        "ok": pixels.is_some()}),
+                );
+            }
+            if let Some(pixels) = pixels {
                 let video = self.frames.stamp(region.node, pixels, now);
                 self.deliver(video, now);
             }
@@ -1554,7 +1726,10 @@ impl Worker<'_> {
                 }
                 self.engine.history(TabId(0), step).map_err(failed)
             }
-            Command::Resize(columns, rows) => self.engine.resize(columns, rows).map_err(failed),
+            Command::Resize(columns, rows) => {
+                self.view_width = Some(f64::from(columns) * f64::from(crate::cdp::CELL.0));
+                self.engine.resize(columns, rows).map_err(failed)
+            }
             Command::Scroll(y) => self.scroll(PageAction::ScrollTo(y)).map_err(failed),
             Command::Wheel(delta) => self.scroll(PageAction::Wheel(delta)).map_err(failed),
             Command::LoadMore => self.scroll(PageAction::ScrollTo(f64::MAX)).map_err(failed),
@@ -1564,7 +1739,7 @@ impl Worker<'_> {
             }
             Command::ScrollBox { document, node, by } => {
                 let page = self
-                    .read()
+                    .read_for_action()
                     .ok_or_else(|| Refusal::Stale("The page is not ready.".into()))?;
                 if page.document != document {
                     return Err(Refusal::Stale(
@@ -1612,7 +1787,7 @@ impl Worker<'_> {
 
             Command::Media { document, node, op } => {
                 let page = self
-                    .read()
+                    .read_for_action()
                     .ok_or_else(|| Refusal::Stale("The page is not ready.".into()))?;
                 if page.document != document {
                     return Err(Refusal::Stale(
@@ -1639,7 +1814,7 @@ impl Worker<'_> {
                 y,
             } => {
                 let page = self
-                    .read()
+                    .read_for_action()
                     .ok_or_else(|| Refusal::Stale("The page is not ready.".into()))?;
                 if page.document != document {
                     return Err(Refusal::Stale(
@@ -1655,7 +1830,7 @@ impl Worker<'_> {
             }
             Command::Act { binding, intent } => {
                 let page = self
-                    .read()
+                    .read_for_action()
                     .ok_or_else(|| Refusal::Stale("The page is not ready.".into()))?;
                 let control = page.check(&binding).map_err(Refusal::Stale)?;
                 guard(control, &intent)?;
@@ -1665,7 +1840,7 @@ impl Worker<'_> {
             }
             Command::Activate { role, name, nth } => {
                 let page = self
-                    .read()
+                    .read_for_action()
                     .ok_or_else(|| Refusal::Stale("The page is not ready.".into()))?;
                 let found = page.find(&role, &name);
                 let control = found.get(nth).ok_or_else(|| {
@@ -1858,6 +2033,8 @@ fn run_with_source(
         page: None,
         state: PageState::default(),
         dirty: None,
+        last_read: None,
+        refused: false,
         stills: HashMap::new(),
         pictures: HashMap::new(),
         decode,
@@ -1879,6 +2056,9 @@ fn run_with_source(
         starved: false,
         scale: 1.0,
         scale_given: 1.0,
+        area_given: None,
+        view_width: None,
+        view_at: None,
         shown_time: HashMap::new(),
         live: HashMap::new(),
         appended: HashSet::new(),
@@ -1937,15 +2117,27 @@ fn run_with_source(
             probed = Instant::now();
             worker.follow_playback();
         }
-        let due = worker
-            .dirty
-            .is_some_and(|since| since.elapsed() >= DEBOUNCE)
+        let due = worker.ping_due(Instant::now())
             || worker
                 .settle
                 .is_some_and(|(next, _, _)| Instant::now() >= next);
         if read_now || due {
+            if crate::trace::on() {
+                let why = if read_now {
+                    "asked"
+                } else if worker.dirty.is_some() {
+                    "changed"
+                } else {
+                    "settling"
+                };
+                crate::trace::event("read_why", serde_json::json!({ "why": why }));
+            }
             // A refused reading stays due, and is tried at the next tick.
-            if worker.read().is_some() {
+            let began = Instant::now();
+            let read = worker.read();
+            worker.last_read = Some((Instant::now(), began.elapsed()));
+            worker.refused = read.is_none();
+            if read.is_some() {
                 read_now = false;
                 live_due = false;
             } else {
@@ -1970,13 +2162,16 @@ fn run_with_source(
         }
         // Never capture old-model video or still media while a known
         // invalidation or refused snapshot waits.
-        if !read_now && worker.dirty.is_none() && worker.page.is_some() {
-            if !worker.pixels {
-                worker.video();
-            }
-            if worker.stills_pending || worker.still_retry_due(Instant::now()) {
-                worker.capture_stills();
-            }
+        if worker.video_may_run(read_now) {
+            worker.video();
+        }
+        // Stills wait for a model that no known change outdates.
+        if !read_now
+            && worker.dirty.is_none()
+            && worker.page.is_some()
+            && (worker.stills_pending || worker.still_retry_due(Instant::now()))
+        {
+            worker.capture_stills();
         }
         // A sole fresh frame belongs to the model published for its document.
         // Keep it in the engine while an initial/navigation snapshot is refused.
@@ -2025,6 +2220,8 @@ mod tests {
             page: None,
             state: PageState::default(),
             dirty: None,
+            last_read: None,
+            refused: false,
             stills: HashMap::new(),
             pictures: HashMap::new(),
             decode,
@@ -2046,6 +2243,9 @@ mod tests {
             starved: false,
             scale: 1.0,
             scale_given: 1.0,
+            area_given: None,
+            view_width: None,
+            view_at: None,
             shown_time: HashMap::new(),
             live: HashMap::new(),
             appended: HashSet::new(),
@@ -2946,6 +3146,8 @@ mod tests {
             page: None,
             state: PageState::default(),
             dirty: None,
+            last_read: None,
+            refused: false,
             stills: HashMap::new(),
             pictures: HashMap::new(),
             decode,
@@ -2967,6 +3169,9 @@ mod tests {
             starved: false,
             scale: 1.0,
             scale_given: 1.0,
+            area_given: None,
+            view_width: None,
+            view_at: None,
             shown_time: HashMap::new(),
             live: HashMap::new(),
             appended: HashSet::new(),
@@ -3188,6 +3393,8 @@ mod tests {
                 page: Some(Arc::new(page)),
                 state: PageState::default(),
                 dirty: None,
+                last_read: None,
+                refused: false,
                 stills: HashMap::new(),
                 pictures: HashMap::new(),
                 decode,
@@ -3217,6 +3424,9 @@ mod tests {
                 starved: false,
                 scale: 1.0,
                 scale_given: 1.0,
+                area_given: None,
+                view_width: None,
+                view_at: None,
                 shown_time: HashMap::new(),
                 live: HashMap::new(),
                 appended: HashSet::new(),
@@ -3257,6 +3467,68 @@ mod tests {
             );
             assert_eq!(delivered.borrow().len(), usize::from(visible), "{name}");
         }
+    }
+
+    #[test]
+    fn the_screencast_is_of_the_playing_region_while_chrome_shows_all_of_it() {
+        use crate::{engine::Playback, testing::PageBuilder};
+        let dir = std::env::temp_dir().join(format!("tab-area-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let engine = FakeEngine::from_dir(&dir).unwrap();
+        let state = engine.state.clone();
+        {
+            let mut state = state.lock().unwrap();
+            state.scroll_y = 0.0;
+            state.viewport_height = 600.0;
+        }
+        let rect = Rect::new(20.0, 100.0, 400.0, 225.0);
+        let mut source = PageBuilder::new("https://example.test", "Video", 960.0, 2000.0);
+        source.element(
+            source.body(),
+            "VIDEO",
+            &[("src", "m.webm")],
+            &[],
+            Some(rect),
+        );
+        let mut page = crate::model::build(&source.snapshot(), &mut Revisions::new());
+        let node = page.media[0].node;
+        page.media[0].playback = Some(Playback {
+            ready: 4,
+            ..Playback::default()
+        });
+        let update = |_| {};
+        let (mut worker, _jobs, _done) = recovery_worker(engine, &update);
+        worker.page = Some(Arc::new(page));
+        worker.on_screen.insert(node);
+        worker.view_width = Some(960.0);
+        // It plays wholly in Chrome's viewport: only its box is cast.
+        worker.video();
+        assert!(state.lock().unwrap().screencast);
+        assert_eq!(state.lock().unwrap().screencast_area, Some(rect));
+        // Again with nothing changed: the area is not asked for again.
+        worker.video();
+        assert_eq!(state.lock().unwrap().screencast_areas.len(), 1);
+        // The page scrolled itself half past it: the whole viewport again,
+        // once Chrome's view is looked at.
+        state.lock().unwrap().scroll_y = 200.0;
+        worker.view_at = Some(Instant::now() - PLAYBACK);
+        worker.video();
+        assert_eq!(state.lock().unwrap().screencast_area, None);
+        // The pixel view shows the whole viewport.
+        state.lock().unwrap().scroll_y = 0.0;
+        worker.view_at = Some(Instant::now() - PLAYBACK);
+        worker.video();
+        assert_eq!(state.lock().unwrap().screencast_area, Some(rect));
+        worker.set_pixels(true);
+        assert_eq!(state.lock().unwrap().screencast_area, None);
+        worker.set_pixels(false);
+        // It stops: the screencast stops, of the viewport.
+        worker.video();
+        assert_eq!(state.lock().unwrap().screencast_area, Some(rect));
+        worker.on_screen.clear();
+        worker.video();
+        assert!(!state.lock().unwrap().screencast);
+        assert_eq!(state.lock().unwrap().screencast_area, None);
     }
 
     #[test]
@@ -3532,6 +3804,8 @@ mod tests {
             page: None,
             state: PageState::default(),
             dirty: None,
+            last_read: None,
+            refused: false,
             stills: HashMap::new(),
             pictures: HashMap::new(),
             decode,
@@ -3553,6 +3827,9 @@ mod tests {
             starved: false,
             scale: 1.0,
             scale_given: 1.0,
+            area_given: None,
+            view_width: None,
+            view_at: None,
             shown_time: HashMap::new(),
             live: HashMap::new(),
             appended: HashSet::new(),
@@ -3625,6 +3902,8 @@ mod tests {
                 page: None,
                 state: PageState::default(),
                 dirty: None,
+                last_read: None,
+                refused: false,
                 stills: HashMap::new(),
                 pictures: HashMap::new(),
                 decode,
@@ -3646,6 +3925,9 @@ mod tests {
                 starved: false,
                 scale: 1.0,
                 scale_given: 1.0,
+                area_given: None,
+                view_width: None,
+                view_at: None,
                 shown_time: HashMap::new(),
                 live: HashMap::new(),
                 appended: HashSet::new(),
@@ -3757,6 +4039,8 @@ mod tests {
             page: None,
             state: PageState::default(),
             dirty: None,
+            last_read: None,
+            refused: false,
             stills: HashMap::new(),
             pictures: HashMap::new(),
             decode,
@@ -3778,6 +4062,9 @@ mod tests {
             starved: false,
             scale: 1.0,
             scale_given: 1.0,
+            area_given: None,
+            view_width: None,
+            view_at: None,
             shown_time: HashMap::new(),
             live: HashMap::new(),
             appended: HashSet::new(),
@@ -4002,6 +4289,8 @@ mod tests {
             page: None,
             state: PageState::default(),
             dirty: None,
+            last_read: None,
+            refused: false,
             stills: HashMap::new(),
             pictures: HashMap::new(),
             decode,
@@ -4023,6 +4312,9 @@ mod tests {
             starved: false,
             scale: 1.0,
             scale_given: 1.0,
+            area_given: None,
+            view_width: None,
+            view_at: None,
             shown_time: HashMap::new(),
             live: HashMap::new(),
             appended: HashSet::new(),
@@ -4090,6 +4382,138 @@ mod tests {
         );
         assert!(pages.last().unwrap().inline_pictures.contains_key(last));
         assert_eq!(pages.last().unwrap().logs[0].entries.len(), 200);
+    }
+
+    /// An engine whose page pings a change at every look and whose
+    /// snapshot takes `cost`, counting the snapshots and their time.
+    struct Busy {
+        inner: FakeEngine,
+        cost: Duration,
+        spent: Arc<std::sync::Mutex<(u32, Duration)>>,
+    }
+
+    impl Engine for Busy {
+        fn resize(&mut self, columns: u16, rows: u16) -> std::io::Result<()> {
+            self.inner.resize(columns, rows)
+        }
+        fn open(&mut self, tab: TabId, url: &str) -> std::io::Result<()> {
+            self.inner.open(tab, url)
+        }
+        fn history(&mut self, tab: TabId, step: HistoryStep) -> std::io::Result<()> {
+            self.inner.history(tab, step)
+        }
+        fn state(&self, tab: TabId) -> PageState {
+            self.inner.state(tab)
+        }
+        fn snapshot(&mut self, tab: TabId) -> std::io::Result<crate::engine::PageSnapshot> {
+            thread::sleep(self.cost);
+            let mut spent = self.spent.lock().unwrap();
+            spent.0 += 1;
+            spent.1 += self.cost;
+            self.inner.snapshot(tab)
+        }
+        fn capture(
+            &mut self,
+            tab: TabId,
+            region: Rect,
+            format: Format,
+        ) -> std::io::Result<crate::engine::Frame> {
+            self.inner.capture(tab, region, format)
+        }
+        fn act(&mut self, tab: TabId, action: &PageAction) -> std::io::Result<()> {
+            self.inner.act(tab, action)
+        }
+        fn events(&mut self) -> Vec<EngineEvent> {
+            let mut events = self.inner.events();
+            events.push(EngineEvent::Changed);
+            events
+        }
+    }
+
+    #[test]
+    fn a_page_that_keeps_changing_is_read_at_most_a_quarter_of_the_time() {
+        let snapshots = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/snapshots");
+        let spent = Arc::new(std::sync::Mutex::new((0, Duration::ZERO)));
+        let engine = Busy {
+            inner: FakeEngine::from_dir(&snapshots).unwrap(),
+            cost: Duration::from_millis(120),
+            spent: spent.clone(),
+        };
+        let tab = Tab::spawn(Box::new(engine), |_| {});
+        tab.send(Command::Open("https://fixture.example/second.html".into()));
+        // Past the new document's settling, then a span of pings alone.
+        thread::sleep(SETTLE_MAX + Duration::from_millis(200));
+        let before = *spent.lock().unwrap();
+        let span = Duration::from_secs(3);
+        thread::sleep(span);
+        let after = *spent.lock().unwrap();
+        drop(tab);
+        let reads = after.0 - before.0;
+        let share = (after.1 - before.1).as_secs_f64() / span.as_secs_f64();
+        // Read again and again (a ping is never dropped), but each reading
+        // waits three times its cost: about a quarter of the time. Without
+        // the wait it reads after each debounce, over half the time.
+        assert!(reads >= 2, "{reads} readings");
+        assert!(
+            share < 0.4,
+            "reading took {:.0}% of the time",
+            share * 100.0
+        );
+    }
+
+    #[test]
+    fn pinged_readings_wait_for_their_cost_and_for_playing_video() {
+        assert_eq!(ping_read_gap(Duration::from_millis(5), false), DEBOUNCE);
+        assert_eq!(
+            ping_read_gap(Duration::from_millis(300), false),
+            Duration::from_millis(900)
+        );
+        assert_eq!(
+            ping_read_gap(Duration::from_millis(50), true),
+            READ_WHILE_PLAYING
+        );
+        assert_eq!(
+            ping_read_gap(Duration::from_millis(500), true),
+            Duration::from_millis(1500)
+        );
+        let dir = std::env::temp_dir().join(format!("tab-ping-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let update = |_| {};
+        let (mut worker, _jobs, _done) =
+            recovery_worker(FakeEngine::from_dir(&dir).unwrap(), &update);
+        let now = Instant::now();
+        worker.dirty = Some(now - DEBOUNCE);
+        assert!(worker.ping_due(now));
+        // Just read at a cost of 200 ms: the ping waits 600 ms, a second
+        // while the video's screencast runs.
+        worker.last_read = Some((now, Duration::from_millis(200)));
+        assert!(!worker.ping_due(now + Duration::from_millis(500)));
+        assert!(worker.ping_due(now + Duration::from_millis(600)));
+        worker.frames.on = true;
+        assert!(!worker.ping_due(now + Duration::from_millis(900)));
+        assert!(worker.ping_due(now + READ_WHILE_PLAYING));
+    }
+
+    #[test]
+    fn video_frames_go_on_while_a_pinged_reading_waits() {
+        let dir = std::env::temp_dir().join(format!("tab-ping-video-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let update = |_| {};
+        let (mut worker, _jobs, _done) =
+            recovery_worker(FakeEngine::from_dir(&dir).unwrap(), &update);
+        assert!(!worker.video_may_run(false), "no model yet");
+        worker.page = Some(Arc::new(Page::default()));
+        assert!(worker.video_may_run(false));
+        // The page pinged a change (a player's clock): frames go on.
+        worker.dirty = Some(Instant::now());
+        assert!(worker.video_may_run(false));
+        // A reading asked for (navigation, an action) or refused: none.
+        assert!(!worker.video_may_run(true));
+        worker.refused = true;
+        assert!(!worker.video_may_run(false));
+        worker.refused = false;
+        worker.pixels = true;
+        assert!(!worker.video_may_run(false));
     }
 
     #[test]

@@ -38,12 +38,12 @@ impl InlineResources {
                     }
                     q.waiting.pop_front().unwrap()
                 };
-                let measured = crate::diagnostics::enabled().then(std::time::Instant::now);
+                let measured = crate::trace::on().then(std::time::Instant::now);
                 if measured.is_some() {
-                    eprintln!(
-                        "RICH_MEDIA {{\"stage\":\"inline_start\",\"document\":{}}}",
+                    crate::trace::media(&format!(
+                        "{{\"stage\":\"inline_start\",\"document\":{}}}",
                         request.0
-                    );
+                    ));
                 }
                 let bytes = if let Some(data) = request.1.strip_prefix("data:") {
                     crate::tab::data_bytes(data)
@@ -75,23 +75,23 @@ impl InlineResources {
                         return None;
                     }
                     if let Some(start) = measured {
-                        eprintln!(
-                            "RICH_MEDIA {{\"stage\":\"inline_resource\",\"document\":{},\"ns\":{},\"source_bytes\":{}}}",
+                        crate::trace::media(&format!(
+                            "{{\"stage\":\"inline_resource\",\"document\":{},\"ns\":{},\"source_bytes\":{}}}",
                             request.0,
                             start.elapsed().as_nanos(),
                             bytes.len()
-                        );
+                        ));
                     }
                     let picture = Picture::decode_animated(&bytes).ok()?;
                     if retained_bytes(&picture) > 16 << 20 {
                         return None;
                     }
-                    if crate::diagnostics::enabled() {
-                        eprintln!(
-                            "RICH_MEDIA {{\"stage\":\"inline_decoded\",\"document\":{},\"retained_decoded_bytes\":{}}}",
+                    if crate::trace::on() {
+                        crate::trace::media(&format!(
+                            "{{\"stage\":\"inline_decoded\",\"document\":{},\"retained_decoded_bytes\":{}}}",
                             request.0,
                             retained_bytes(&picture)
-                        );
+                        ));
                     }
                     Some(picture)
                 })();
@@ -128,12 +128,12 @@ impl InlineResources {
             return false;
         }
         q.waiting.push_back((document, src));
-        if crate::diagnostics::enabled() {
-            eprintln!(
-                "RICH_MEDIA {{\"stage\":\"inline_queue\",\"waiting\":{},\"source_url_bytes\":{}}}",
+        if crate::trace::on() {
+            crate::trace::media(&format!(
+                "{{\"stage\":\"inline_queue\",\"waiting\":{},\"source_url_bytes\":{}}}",
                 q.waiting.len(),
                 q.waiting.iter().map(|(_, s)| s.len()).sum::<usize>()
-            );
+            ));
         }
         self.queue.1.notify_one();
         true

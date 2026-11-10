@@ -246,6 +246,31 @@ impl Frames {
     }
 }
 
+/// The part of the document the screencast need show: the one moving
+/// region's box, when it is the only one and Chrome's viewport (`view`, in
+/// the document's CSS pixels) holds all of it. Chrome then encodes, and
+/// the tab decodes, that region's pixels rather than the whole
+/// viewport's. `None`, the whole viewport, otherwise: no region moves,
+/// several do (one frame cuts them all), the view is not known, or the
+/// region is partly out of Chrome's viewport, which paints only what it
+/// holds (the part out of it is captured on its own, as a frame of the
+/// viewport tells).
+pub fn screencast_area(regions: &[Region], view: Option<Rect>) -> Option<Rect> {
+    let mut moving = regions.iter().filter(|r| r.moving());
+    let region = moving.next()?;
+    if moving.next().is_some() {
+        return None;
+    }
+    let view = view?;
+    let r = region.rect;
+    // Half a pixel of slack: a box's edge and the viewport's round apart.
+    let inside = r.x >= view.x - 0.5
+        && r.y >= view.y - 0.5
+        && r.right() <= view.right() + 0.5
+        && r.bottom() <= view.bottom() + 0.5;
+    inside.then_some(r)
+}
+
 /// The app's side of the frames: one live [`Picture`] per region (its
 /// frames keep one id, so Kitty replaces the image it holds), drawn as
 /// rs-rich-art's [`Pacer`] allows within the terminal's [`ByteBudget`].
@@ -547,13 +572,14 @@ impl Encoder {
                 if let Some(presentation) = presentation {
                     job.picture = presentation.picture(&job.picture);
                 }
-                let tracing = crate::diagnostics::enabled();
+                let tracing = crate::trace::on();
                 if tracing {
-                    eprintln!(
-                        "RICH_MEDIA {{\"stage\":\"encoder_start\",\"decoded_bytes\":{}}}",
+                    crate::trace::media(&format!(
+                        "{{\"stage\":\"encoder_start\",\"decoded_bytes\":{}}}",
                         job.picture.image().as_bytes().len()
-                    );
+                    ));
                 }
+                let at = crate::trace::start();
                 let cell = metrics
                     .filter(|&(w, h)| w > 0 && h > 0)
                     .map(|(w, h)| rich_art::graphics::CellPixels::new(w.into(), h.into()))
@@ -568,7 +594,15 @@ impl Encoder {
                     },
                 );
                 if tracing {
-                    eprintln!("RICH_MEDIA {{\"stage\":\"encoder_done\"}}");
+                    crate::trace::media(r#"{"stage":"encoder_done"}"#);
+                }
+                if crate::trace::on() {
+                    crate::trace::event(
+                        "encode",
+                        serde_json::json!({"node": job.node, "ms": crate::trace::ms(at),
+                            "pixels": format!("{:?}", job.pixels),
+                            "cols": job.cols, "rows": job.rows}),
+                    );
                 }
                 done(job);
             }
@@ -610,16 +644,16 @@ impl Encoder {
             .waiting
             .retain(|(waiting, _)| waiting.node != job.node);
         queue.waiting.push((job, metrics));
-        if crate::diagnostics::enabled() {
-            eprintln!(
-                "RICH_MEDIA {{\"stage\":\"encoder_queue\",\"waiting\":{},\"decoded_bytes\":{}}}",
+        if crate::trace::on() {
+            crate::trace::media(&format!(
+                "{{\"stage\":\"encoder_queue\",\"waiting\":{},\"decoded_bytes\":{}}}",
                 queue.waiting.len(),
                 queue
                     .waiting
                     .iter()
                     .map(|(job, _)| job.picture.image().as_bytes().len())
                     .sum::<usize>()
-            );
+            ));
         }
         ready.notify_one();
     }
@@ -681,6 +715,30 @@ mod tests {
             on_screen,
             interval: None,
         }
+    }
+
+    #[test]
+    fn the_screencast_shows_only_the_region_when_one_plays_wholly_in_view() {
+        let view = Some(Rect::new(0.0, 0.0, 960.0, 648.0));
+        let one = [region(1, 10.0, true, true), region(2, 100.0, false, true)];
+        assert_eq!(
+            screencast_area(&one, view),
+            Some(Rect::new(10.0, 10.0, 40.0, 20.0))
+        );
+        // Nothing plays, or it plays off screen.
+        assert_eq!(screencast_area(&[region(1, 10.0, false, true)], view), None);
+        assert_eq!(screencast_area(&[region(1, 10.0, true, false)], view), None);
+        // Two play: the viewport's frame cuts both.
+        let two = [region(1, 10.0, true, true), region(2, 100.0, true, true)];
+        assert_eq!(screencast_area(&two, view), None);
+        // Partly out of Chrome's viewport, below it or beside it.
+        assert_eq!(screencast_area(&[region(1, 640.0, true, true)], view), None);
+        let beside = Some(Rect::new(0.0, 0.0, 30.0, 648.0));
+        assert_eq!(screencast_area(&one, beside), None);
+        // Wholly in a view scrolled down to it; not known, the viewport.
+        let scrolled = Some(Rect::new(0.0, 600.0, 960.0, 648.0));
+        assert!(screencast_area(&[region(1, 640.0, true, true)], scrolled).is_some());
+        assert_eq!(screencast_area(&one, None), None);
     }
 
     #[test]

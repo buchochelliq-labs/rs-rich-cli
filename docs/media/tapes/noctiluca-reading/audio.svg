@@ -36,7 +36,7 @@
 .rich-record-r2 { fill: #fdfdc5;font-weight: bold }
 .rich-record-r3 { fill: #7d738c }
 .rich-record-r4 { fill: #c8cbd7 }
-.rich-record-r5 { fill: #fdfdc5;font-weight: bold;text-decoration: underline; }
+.rich-record-r5 { fill: #c5c8c6;font-weight: bold;text-decoration: underline; }
 .rich-record-r6 { fill: #9a9b99;font-style: italic; }
 .rich-record-r7 { fill: #898b8a }
 .rich-record-r8 { fill: #398280 }
@@ -151,7 +151,7 @@
 </text><text class="rich-record-r5" x="0" y="68.8" textLength="134.2" clip-path="url(#rich-record-line-2)">A&#160;test&#160;tone</text><text class="rich-record-r1" x="1220" y="68.8" textLength="12.2" clip-path="url(#rich-record-line-2)">
 </text><text class="rich-record-r1" x="1220" y="93.2" textLength="12.2" clip-path="url(#rich-record-line-3)">
 </text><text class="rich-record-r6" x="0" y="117.6" textLength="195.2" clip-path="url(#rich-record-line-4)">audio:&#160;Test&#160;tone</text><text class="rich-record-r1" x="1220" y="117.6" textLength="12.2" clip-path="url(#rich-record-line-4)">
-</text><text class="rich-record-r7" x="0" y="142" textLength="73.2" clip-path="url(#rich-record-line-5)">&#160;Play&#160;</text><text class="rich-record-r7" x="85.4" y="142" textLength="73.2" clip-path="url(#rich-record-line-5)">&#160;Mute&#160;</text><text class="rich-record-r1" x="158.6" y="142" textLength="97.6" clip-path="url(#rich-record-line-5)">&#160;Volume&#160;</text><text class="rich-record-r8" x="256.2" y="142" textLength="195.2" clip-path="url(#rich-record-line-5)">━━━━━━━━━━━━━━━●</text><text class="rich-record-r9" x="451.4" y="142" textLength="109.8" clip-path="url(#rich-record-line-5)">not&#160;ready</text><text class="rich-record-r9" x="585.6" y="142" textLength="390.4" clip-path="url(#rich-record-line-5)">sound&#160;is&#160;off:&#160;start&#160;with&#160;--audio</text><text class="rich-record-r1" x="1220" y="142" textLength="12.2" clip-path="url(#rich-record-line-5)">
+</text><text class="rich-record-r7" x="0" y="142" textLength="73.2" clip-path="url(#rich-record-line-5)">&#160;Play&#160;</text><text class="rich-record-r7" x="85.4" y="142" textLength="73.2" clip-path="url(#rich-record-line-5)">&#160;Mute&#160;</text><text class="rich-record-r1" x="158.6" y="142" textLength="97.6" clip-path="url(#rich-record-line-5)">&#160;Volume&#160;</text><text class="rich-record-r8" x="256.2" y="142" textLength="195.2" clip-path="url(#rich-record-line-5)">━━━━━━━━━━━━━━━●</text><text class="rich-record-r9" x="451.4" y="142" textLength="109.8" clip-path="url(#rich-record-line-5)">not&#160;ready</text><text class="rich-record-r1" x="1220" y="142" textLength="12.2" clip-path="url(#rich-record-line-5)">
 </text><text class="rich-record-r1" x="1220" y="166.4" textLength="12.2" clip-path="url(#rich-record-line-6)">
 </text><text class="rich-record-r1" x="0" y="190.8" textLength="1220" clip-path="url(#rich-record-line-7)">Sound&#160;plays&#160;on&#160;the&#160;machine&#160;Chrome&#160;runs&#160;on.&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;</text><text class="rich-record-r1" x="1220" y="190.8" textLength="12.2" clip-path="url(#rich-record-line-7)">
 </text><text class="rich-record-r1" x="1220" y="215.2" textLength="12.2" clip-path="url(#rich-record-line-8)">

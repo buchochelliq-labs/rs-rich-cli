@@ -1976,3 +1976,64 @@ fn source_dialog_fits_narrow_off_right_and_short_viewports_with_reachable_contro
         }
     }
 }
+
+#[test]
+fn a_skip_link_parked_above_a_top_bar_is_not_drawn() {
+    // masthead.html: a fixed bar whose skip link sits at `top: -1000px`
+    // until focused, read with the page scrolled 1500 px down (so the link
+    // is inside the document, far above the viewport). Chrome draws it
+    // nowhere; the bar's other controls stay.
+    let page = page("masthead");
+    let projected = noctiluca::layout::project(&page, 120, (8.0, 18.0), &Marks::default());
+    let bar: Vec<String> = projected
+        .pinned
+        .as_ref()
+        .expect("the bar is pinned")
+        .lines
+        .iter()
+        .map(Line::plain)
+        .collect();
+    let all = bar.join("\n");
+    assert!(!all.contains("Skip navigation"), "{all}");
+    for kept in [
+        "[Guide]",
+        "ClipTube",
+        "Search",
+        "[Voice]",
+        "[Settings]",
+        "[Sign in]",
+    ] {
+        assert!(all.contains(kept), "{kept} missing from\n{all}");
+    }
+}
+
+#[test]
+fn wrapping_action_labels_keep_their_row_and_source_order() {
+    // WrapActionLabels (on by default) once left its buttons out of their
+    // row: form.html's `[Send]` went to the next row, after
+    // `[Unavailable]`, and media-grid's "Like this video" wrapped over
+    // three rows in its narrow box.
+    let rows = |name: &str| -> Vec<String> {
+        noctiluca::layout::project(&page(name), 100, (8.0, 18.0), &Marks::default())
+            .lines
+            .iter()
+            .map(Line::plain)
+            .collect()
+    };
+    let form = rows("form");
+    let row = form
+        .iter()
+        .find(|r| r.contains("[Unavailable]"))
+        .expect("the disabled button");
+    let send = row
+        .find("[Send]")
+        .unwrap_or_else(|| panic!("[Send] left its row:\n{}", form.join("\n")));
+    assert!(send < row.find("[Unavailable]").unwrap(), "{row}");
+    let grid = rows("media-grid");
+    assert!(
+        grid.iter()
+            .any(|r| r.contains("[Like this video]") && r.contains("[Share]")),
+        "{}",
+        grid.join("\n")
+    );
+}

@@ -1559,6 +1559,13 @@ fn project_part(
         {
             continue;
         }
+        // In a top or bottom bar, wholly above it: a skip link parked at
+        // `top: -1000px` until it is focused (focused, the page moves it
+        // into view, and the next reading has it there). Chrome shows it
+        // nowhere, wherever the page is scrolled.
+        if matches!(part, Part::Pinned | Part::Docked) && block.rect.bottom() + dy < 0.0 {
+            continue;
+        }
         // Scrolled out of a shelf's box sideways: Chrome shows it only
         // once the shelf is paged to it.
         if block
@@ -1821,9 +1828,11 @@ fn project_part(
                     control: Some(*index),
                     picture: None,
                 };
-                if !wrap_action {
-                    one_row.push(items.len());
-                }
+                // Wrapping or not, a control keeps its place in its row:
+                // one whose face needs more cells pushes those after it
+                // right (source order), and a run past the edge shortens
+                // its faces with `…`.
+                one_row.push(items.len());
                 let mut item = text_item(
                     control.node,
                     control.rect,

@@ -343,7 +343,7 @@ fn media_controls_follow_the_element_and_run_from_keys_and_f1() {
     wait_for(&mut driver, "Play");
     // Sound is off unless asked for, and the widget says so.
     assert!(
-        screen(&driver).contains("sound is off: start with --audio"),
+        screen(&driver).contains("sound is off: --audio turns it on"),
         "{}",
         screen(&driver)
     );
@@ -717,4 +717,20 @@ fn a_page_that_fits_in_two_screens_is_not_scrolled_to_its_end() {
             .any(|a| matches!(a, PageAction::ScrollTo(y) if *y == f64::MAX)),
         "{actions:?}"
     );
+}
+
+#[test]
+fn hints_in_the_reader_leave_no_old_cells_behind() {
+    // The root is a layers stack; the reader's scroll view draws into a
+    // buffer of its own, which must be cleared where a row no longer draws
+    // (the hints move each control's face right).
+    let mut driver =
+        app(Box::new(engine()), options(Config::default(), "form.html")).driver(100, 40);
+    wait_for(&mut driver, "Sign up");
+    driver.press("f");
+    wait_for(&mut driver, "[d]");
+    let shown = screen(&driver);
+    for stale in ["nSend", "newsews", "dAda", "Small Small"] {
+        assert!(!shown.contains(stale), "{stale:?} in\n{shown}");
+    }
 }

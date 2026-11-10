@@ -22,7 +22,10 @@ pub struct Args {
     /// An address, a file, or a keyword and its words.
     pub target: Vec<String>,
     pub view: Option<View>,
+    /// `--audio`: sound on, over SSH too.
     pub audio: bool,
+    /// `--mute` (or `--no-audio`): sound off, here too.
+    pub mute: bool,
     pub profile: Option<String>,
     pub chrome: Option<PathBuf>,
     pub images: Option<Images>,
@@ -88,8 +91,10 @@ usage: noctiluca [OPTIONS] [URL | FILE | KEYWORD WORDS…]
                                        the first view (default: projection;
                                        pixels needs Kitty graphics)
   --view NAME                          the same: projection, reader, pixels, raster
-  --audio                              let pages play sound (off by default;
-                                       it plays where Chrome runs, never over SSH)
+  --audio                              let pages play sound over SSH too (on by
+                                       default here, off over SSH: it plays where
+                                       Chrome runs)
+  --mute, --no-audio                   keep pages quiet
   --profile NAME                       keep a profile between runs (opt-in)
   --chrome PATH                        the browser to run (default: a system Chrome)
   --images ansi|kitty|sixel|iterm2|none
@@ -203,6 +208,7 @@ pub fn parse_args(args: &[String]) -> Result<Run, String> {
             "--control" => parsed.control = true,
             "--read-only" => parsed.read_only = true,
             "--audio" => parsed.audio = true,
+            "--mute" | "--no-audio" => parsed.mute = true,
             "--no-js" => parsed.no_js = true,
             "--no-mouse" => parsed.no_mouse = true,
             "--transparent" => parsed.transparent = true,
@@ -289,6 +295,20 @@ pub fn parse_args(args: &[String]) -> Result<Run, String> {
 /// The adaptations `args` ask for, starting from `configured` (the
 /// config's): `--adapt`'s list applied, then `--no-adapt` switching all
 /// of them off.
+/// Whether pages play sound: on where Noctiluca runs on the terminal's own
+/// machine, off when it runs over SSH (`over_ssh`: `SSH_CONNECTION` or
+/// `SSH_TTY` set), where Chrome's sound would play on a machine the user is
+/// not at. `--ssh HOST` keeps Chrome (and its sound) on this machine, with
+/// only the network on the far side, so it changes nothing here. `--audio`
+/// (or `[media] audio = true`) turns sound on over SSH too; `--mute` turns
+/// it off anywhere.
+pub fn sound_on(args: &Args, config_audio: bool, over_ssh: bool) -> bool {
+    if args.mute {
+        return false;
+    }
+    args.audio || config_audio || !over_ssh
+}
+
 pub fn adapt_of(
     args: &Args,
     configured: crate::adapt::Adapt,
@@ -367,6 +387,7 @@ mod tests {
             panic!()
         };
         assert!(args.audio && args.no_js && args.no_mouse);
+        assert!(!args.mute);
         assert_eq!(
             (args.profile.as_deref(), args.dump),
             (Some("work"), Some(Dump::Ax))
@@ -510,5 +531,42 @@ mod tests {
             panic!()
         };
         assert_eq!(args.target, ["--reader"]);
+    }
+
+    #[test]
+    fn sound_is_on_here_off_over_ssh_and_the_flags_win() {
+        let browse = |words: &[&str]| match parse(words).unwrap() {
+            Run::Browse(args) => args,
+            _ => panic!(),
+        };
+        let plain = browse(&["x.html"]);
+        // Here: on. Over SSH (the environment says so): off.
+        assert!(sound_on(&plain, false, false));
+        assert!(!sound_on(&plain, false, true));
+        // `--ssh HOST`: Chrome runs here, only its network is far: the
+        // sound plays here, so it stays on (and off when this session is
+        // itself over SSH).
+        let tunnel = Args {
+            ssh: Some("far".into()),
+            ..plain.clone()
+        };
+        assert!(sound_on(&tunnel, false, false));
+        assert!(!sound_on(&tunnel, false, true));
+        // `--audio`, or the config, turn it on over SSH too.
+        let loud = browse(&["--audio", "x.html"]);
+        assert!(sound_on(&loud, false, true));
+        assert!(sound_on(&plain, true, true));
+        // `--mute` / `--no-audio`: off anywhere, whatever else says.
+        for flag in ["--mute", "--no-audio"] {
+            let quiet = browse(&[flag, "x.html"]);
+            assert!(quiet.mute);
+            assert!(!sound_on(&quiet, false, false));
+            assert!(!sound_on(&quiet, true, false));
+        }
+        assert!(!sound_on(
+            &browse(&["--audio", "--mute", "x.html"]),
+            false,
+            false
+        ));
     }
 }

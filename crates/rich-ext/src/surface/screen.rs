@@ -2886,7 +2886,7 @@ impl Painter {
                 if style != Some(cell.style) {
                     style = Some(cell.style);
                     // A change of style: at most a reset and its parameters.
-                    cost += match screen.styles.rgb(cell.style) {
+                    cost += match screen.styles.look_rgb(cell.style) {
                         Some(_) => 40,
                         None if cell.style == StyleId::NONE => 4,
                         None => 4 + self.sgr(screen, cell.style).full.len(),
@@ -2951,7 +2951,7 @@ impl Painter {
         // straight to the colours.
         if pen.link.is_none()
             && let (Some(pair), Some(ColorSystem::Truecolor), Some(old)) =
-                (screen.styles.rgb(style), self.system, pen.rgb)
+                (screen.styles.look_rgb(style), self.system, pen.rgb)
         {
             if old != pair {
                 rgb_delta(old, pair, self.rgb_codes.get(style, pair), out);
@@ -2977,7 +2977,8 @@ impl Painter {
             }
             pen.link = link.map(str::to_string);
         }
-        if let (Some(pair), Some(ColorSystem::Truecolor)) = (screen.styles.rgb(style), self.system)
+        if let (Some(pair), Some(ColorSystem::Truecolor)) =
+            (screen.styles.look_rgb(style), self.system)
         {
             // A colour pair in true colour: written straight from the
             // colours, as `Style::ansi_codes` would, with nothing cached,
@@ -3552,6 +3553,59 @@ mod tests {
         assert_eq!(second, "\x1b[1;6H\x1b[0m2");
         // Nothing damaged, nothing written.
         assert_eq!(painter.paint(&screen, &[]), "");
+    }
+
+    #[test]
+    fn colour_pairs_tagged_with_metadata_paint_as_the_pairs_from_their_colours() {
+        use rich::{Color, Meta, MetaValue};
+        let pair = |r: u8, g: u8| {
+            Style::from_color(
+                Some(Color::from_rgb(r, g, 7)),
+                Some(Color::from_rgb(7, g, r)),
+            )
+        };
+        let tagged = |r: u8, g: u8, n: i64| {
+            let mut meta = Meta::new();
+            meta.insert("picture.row", MetaValue::Int(n));
+            pair(r, g).combine(&Style::from_meta(meta))
+        };
+        let bold = Style::parse("bold red").unwrap();
+        // Rows of a picture's tagged cells among plain pairs, a bold style
+        // and blanks; the same rows untagged.
+        let rows = |tag: bool| -> Vec<Vec<Segment>> {
+            (0..3)
+                .map(|row| {
+                    (0..30u8)
+                        .map(|i| {
+                            let (r, g) = (i.wrapping_mul(37), i.wrapping_mul(91) ^ row);
+                            let style = match i % 5 {
+                                0 => Some(bold.clone()),
+                                1 => Some(pair(r, g)),
+                                2 => None,
+                                _ if tag => Some(tagged(r, g, i64::from(row))),
+                                _ => Some(pair(r, g)),
+                            };
+                            Segment::new("▀", style)
+                        })
+                        .collect()
+                })
+                .collect()
+        };
+        let paint = |tag: bool| {
+            let mut screen = Screen::new(30, 3);
+            screen.write_lines(screen.area(), &rows(tag));
+            let mut painter = Painter::new(Some(ColorSystem::Truecolor));
+            let out = painter.paint(&screen, &[]);
+            // The SGR parameters worked out from a style, not its colours.
+            let worked_out = painter.codes.iter().filter(|c| c.is_some()).count();
+            (out, worked_out)
+        };
+        let (plain, plain_worked) = paint(false);
+        let (tags, tags_worked) = paint(true);
+        // The same bytes, written from the colours as the plain pairs are,
+        // not worked out from each tagged style.
+        assert_eq!(tags, plain);
+        assert_eq!(tags_worked, plain_worked);
     }
 
     #[test]

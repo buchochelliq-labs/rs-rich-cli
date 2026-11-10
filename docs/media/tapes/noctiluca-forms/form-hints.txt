@@ -1,9 +1,9 @@
  NOCTILUCA   READER + CELLS   ◀ ▶ ↻   Form fixture
  https://fixture.example/form.html
 Sign up
-[a]Name                           dAda
+[a]Name                            Ada
 [s]Secret
-[d][ ]nSend news
+[d][ ] Send news
 
 Size
 [f][g]( ) Small

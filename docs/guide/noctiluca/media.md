@@ -1,8 +1,8 @@
 # Pictures, video and sound
 
 Noctiluca 0.0.23 draws a page's pictures where the page puts them, moves
-its animated GIFs, and plays its videos in their regions. Sound plays with
-`--audio`.
+its animated GIFs, and plays its videos in their regions, with their sound
+(except over SSH: see [Sound](#sound)).
 
 ## Pictures and video
 
@@ -41,6 +41,12 @@ the files it loaded.
   SSH only ever lower), at most `[media] fps` frames a second. Short of it, a picture steps down:
   Kitty, then iTerm2, then Sixel, then half blocks. Over SSH, video starts
   as half blocks unless `--images` names a protocol.
+- **Only what plays is cast.** While one video plays wholly inside
+  Chrome's view, Chrome paints and encodes that region alone, not the
+  whole viewport; the page does not see it. In Kitty graphics its frames
+  go zlib-compressed. A page that keeps changing as it plays (a player's
+  clock and progress bar) is read again at most once a second while the
+  video plays, and its frames go on meanwhile.
 
 ![A news page in Noctiluca: a picture with its caption, a headline, and a video's poster](../../media/tapes/news/news.png)
 
@@ -54,13 +60,22 @@ the status line. See [the recordings](../../recordings.md#a-news-page).
 
 ## Sound
 
-Sound is **off by default**: Chrome starts muted. Turn it on for a run
-with `--audio`, or for every run with the config:
+Sound is **on** when Noctiluca runs on your own machine: pages play
+through Chrome as a desktop browser does (sites still mute autoplay until
+you play something). `--mute` (or `--no-audio`) keeps every page quiet.
+
+When Noctiluca itself runs **over SSH** (`SSH_CONNECTION` or `SSH_TTY` is
+set), Chrome runs on the far machine and its sound would play there, so it
+starts muted and the status line says `sound off over SSH (--audio)`. Turn
+it on with `--audio`, or for every run with the config:
 
 ```toml
 [media]
 audio = true
 ```
+
+`--ssh HOST` is different: Chrome runs here and only its network goes
+through the far machine, so sound plays here as usual.
 
 **Sound plays on the machine Chrome runs on.** No terminal can carry
 sound. Run Noctiluca over SSH, and the sound plays on the server, never on
@@ -82,7 +97,7 @@ second.
 ![An audio element's controls, not ready, with sound off](../../media/tapes/noctiluca-reading/audio.png)
 
 The controls say when the media is not ready yet, and, when sound is off,
-"sound is off: start with --audio". (This screenshot replays a saved
+"sound is off: --audio turns it on". (This screenshot replays a saved
 page, which never plays, so its controls stay "not ready".)
 
 The media keys work from anywhere on the page:

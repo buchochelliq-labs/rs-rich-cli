@@ -27,3 +27,19 @@ item = "intuituive::screen::Cell::width"
 from = "u8"
 to = "u16"
 reason = "The re-exported surface Cell width widens; migrate width variables/conversions to u16."
+
+[[manual_break]]
+crate = "noctiluca"
+version = "0.1.0"
+item = "noctiluca::args::Args::mute"
+from = "no field"
+to = "pub mute: bool"
+reason = "`--mute`/`--no-audio` now that sound is on by default when not over SSH; a struct literal of Args adds `mute: false` (or uses ..Args::default())."
+
+[[manual_break]]
+crate = "noctiluca"
+version = "0.1.0"
+item = "noctiluca::testing::FakeState::screencast_area, noctiluca::testing::FakeState::screencast_areas"
+from = "no fields"
+to = "pub screencast_area: Option<Rect>, pub screencast_areas: Vec<Option<Rect>>"
+reason = "The fake engine records the screencast area the tab asks for (Engine::set_screencast_area); a struct literal of FakeState adds them (or uses ..FakeState::default())."

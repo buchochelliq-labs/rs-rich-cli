@@ -702,20 +702,25 @@ impl Picture {
         // Adjust the image's sampling aspect to match the physical cell,
         // bounded before resampling. The protocol raster keeps the original.
         let image = if cell.width.saturating_mul(2) == cell.height {
-            DynamicImage::clone(&self.shown.image)
+            Arc::clone(&self.shown.image)
         } else {
             let image = &self.shown.image;
             let ratio = (f64::from(cell.width) * 2.0) / f64::from(cell.height.max(1));
             let w = f64::from(image.width().max(1));
             let h = f64::from(image.height().max(1)) * ratio;
             let scale = (f64::from(KEEP) / w.max(h)).min(1.0);
-            image.resize_exact(
+            let size = (
                 (w * scale).round().max(1.0) as u32,
                 (h * scale).round().max(1.0) as u32,
-                image::imageops::FilterType::Lanczos3,
+            );
+            let filter = crate::resample::Filter::Lanczos3;
+            Arc::new(
+                crate::resample::resize_crop(image, filter, size, (0, 0), size).unwrap_or_else(
+                    || image.resize_exact(size.0, size.1, image::imageops::FilterType::Lanczos3),
+                ),
             )
         };
-        let mut art = ImageArt::new(image)
+        let mut art = ImageArt::from_shared(image)
             .mode(mode)
             .anchor(view.anchor)
             .background_mode(match view.background {
@@ -1068,39 +1073,7 @@ impl Picture {
         anchor: ImageAnchor,
         context: PictureEncoding,
     ) -> Option<String> {
-        let measured = media_trace_enabled().then(std::time::Instant::now);
-        let result = self.encode_new_inner(pixels, cols, rows, fit, anchor, context);
-        if let Some(start) = measured {
-            let pictures = PICTURES.lock().unwrap_or_else(|e| e.into_inner());
-            let mut decoded = 0usize;
-            let mut encoded = 0usize;
-            let mut live = 0usize;
-            for weak in pictures.values() {
-                if let Some(p) = weak.upgrade() {
-                    live += 1;
-                    decoded += p.image.as_bytes().len();
-                    decoded += p.animation.as_ref().map_or(0, |a| {
-                        a.iter().map(|f| f.image.as_raw().len()).sum::<usize>()
-                    });
-                    encoded += p
-                        .encoded
-                        .lock()
-                        .unwrap_or_else(|e| e.into_inner())
-                        .as_ref()
-                        .map_or(0, |(_, s)| s.len());
-                }
-            }
-            eprintln!(
-                "RICH_MEDIA {{\"stage\":\"encode\",\"ns\":{},\"bytes\":{},\"decoded_bytes\":{},\"cached_escapes_bytes\":{},\"live_pictures\":{},\"weak_slots\":{}}}",
-                start.elapsed().as_nanos(),
-                result.as_ref().map_or(0, |s| s.len()),
-                decoded,
-                encoded,
-                live,
-                pictures.len()
-            );
-        }
-        result
+        self.encode_new_inner(pixels, cols, rows, fit, anchor, context)
     }
 
     fn encode_new_inner(
@@ -1147,16 +1120,22 @@ impl Picture {
                 let fitted = fitted(&self.shown.image);
                 if self.shown.raw {
                     let (width, height) = fitted.dimensions();
-                    // A video's frames are opaque: three bytes a pixel.
+                    // A video's frames are opaque: three bytes a pixel,
+                    // zlib-compressed at its fastest (`o=z`): a camera's
+                    // picture about halves, a flat one shrinks tenfold, for
+                    // a few milliseconds on the thread that encodes it,
+                    // against hundreds of kilobytes of base64 a frame the
+                    // terminal would otherwise read.
                     if fitted.pixels().all(|p| p[3] == 255) {
                         let rgb = DynamicImage::ImageRgba8(fitted).into_rgb8();
-                        return Some(crate::kitty::transmit_rgb(
-                            id,
-                            rgb.as_raw(),
-                            width,
-                            height,
-                            cols,
-                            rows,
+                        return Some(crate::kitty::transmit_raw(
+                            &crate::kitty::RawImage::new(
+                                crate::kitty::RawFormat::Rgb,
+                                rgb.as_raw(),
+                                width,
+                                height,
+                            ),
+                            &crate::kitty::Transmit::new(id, cols, rows).compress(true),
                         ));
                     }
                     return Some(crate::kitty::transmit_rgba(
@@ -2211,11 +2190,6 @@ impl Pacer {
     }
 }
 
-fn media_trace_enabled() -> bool {
-    static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
-    *ON.get_or_init(|| std::env::var_os("RICH_MEDIA_TRACE").is_some())
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -3059,7 +3033,12 @@ mod tests {
         // A raw frame goes to Kitty as raw pixels, not PNG: RGB when it is
         // opaque, RGBA when it is not.
         let raw = Picture::from_rgba(2, 2, vec![255; 16]).unwrap();
-        assert!(raw.encode(Pixels::Kitty, 4, 2).unwrap().contains("f=24"));
+        let sent = raw.encode(Pixels::Kitty, 4, 2).unwrap();
+        assert!(sent.contains("f=24") && sent.contains(",o=z,"), "{sent}");
+        // Compressed: a flat 64x64 frame takes under a tenth of its raw size.
+        let flat = Picture::from_rgba(64, 64, vec![255; 64 * 64 * 4]).unwrap();
+        let sent = flat.encode(Pixels::Kitty, 8, 4).unwrap();
+        assert!(sent.len() < 64 * 64 * 3 / 10, "{} bytes", sent.len());
         let clear = Picture::from_rgba(2, 2, [255, 0, 0, 128].repeat(4)).unwrap();
         assert!(clear.encode(Pixels::Kitty, 4, 2).unwrap().contains("f=32"));
         assert!(Picture::from_rgba(2, 2, vec![0; 3]).is_none());

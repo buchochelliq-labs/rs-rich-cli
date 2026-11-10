@@ -1,0 +1,9 @@
+# The Python side of every parity check: upstream rich's own dependencies,
+# pinned so the oracle does not move under a comparison. rich itself is
+# pinned by UPSTREAM.toml. markdown-it-py 4.3.0 (2026-11-10) changed how
+# a failed link label caches backticks, which DIVERGENCES.md §54 records
+# for the version the goldens were captured with. Moving one of these is
+# done like an upstream sync: re-capture, review the diff, update here.
+markdown-it-py==4.2.0
+mdurl==0.1.2
+pygments==2.21.0

@@ -58,7 +58,7 @@ optionally open/refresh its roadmap issue.
 ## 5. Refresh parity fixtures
 
 ```bash
-pip install "rich==<new_version>"
+pip install "rich==<new_version>"   # then re-pin scripts/upstream-oracle-constraints.txt
 python scripts/capture_golden.py
 ```
 

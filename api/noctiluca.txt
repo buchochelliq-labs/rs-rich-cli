@@ -352,6 +352,7 @@ pub noctiluca::args::Args::control: bool
 pub noctiluca::args::Args::dump: core::option::Option<noctiluca::args::Dump>
 pub noctiluca::args::Args::fps: core::option::Option<u32>
 pub noctiluca::args::Args::images: core::option::Option<noctiluca::config::Images>
+pub noctiluca::args::Args::mute: bool
 pub noctiluca::args::Args::no_adapt: bool
 pub noctiluca::args::Args::no_js: bool
 pub noctiluca::args::Args::no_mouse: bool
@@ -383,6 +384,7 @@ impl core::panic::unwind_safe::UnwindSafe for noctiluca::args::Args
 pub const noctiluca::args::USAGE: &str
 pub fn noctiluca::args::adapt_of(&noctiluca::args::Args, noctiluca::adapt::Adapt) -> core::result::Result<noctiluca::adapt::Adapt, alloc::string::String>
 pub fn noctiluca::args::parse_args(&[alloc::string::String]) -> core::result::Result<noctiluca::args::Run, alloc::string::String>
+pub fn noctiluca::args::sound_on(&noctiluca::args::Args, bool, bool) -> bool
 pub fn noctiluca::args::without_split(&[alloc::string::String]) -> alloc::vec::Vec<alloc::string::String>
 pub mod noctiluca::bars
 pub fn noctiluca::bars::clock(f64) -> alloc::string::String
@@ -463,6 +465,7 @@ pub fn noctiluca::cdp::ChromeBackend::resize(&mut self, u16, u16) -> std::io::er
 pub fn noctiluca::cdp::ChromeBackend::resource(&mut self, noctiluca::engine::TabId, &str) -> std::io::error::Result<alloc::vec::Vec<u8>>
 pub fn noctiluca::cdp::ChromeBackend::screencast_frame(&mut self, noctiluca::engine::TabId) -> core::option::Option<rich_embed::chrome::ScreencastFrame>
 pub fn noctiluca::cdp::ChromeBackend::set_screencast(&mut self, noctiluca::engine::TabId, bool) -> std::io::error::Result<()>
+pub fn noctiluca::cdp::ChromeBackend::set_screencast_area(&mut self, noctiluca::engine::TabId, core::option::Option<noctiluca::engine::Rect>) -> std::io::error::Result<()>
 pub fn noctiluca::cdp::ChromeBackend::set_screencast_scale(&mut self, noctiluca::engine::TabId, f64) -> std::io::error::Result<()>
 pub fn noctiluca::cdp::ChromeBackend::snapshot(&mut self, noctiluca::engine::TabId) -> std::io::error::Result<noctiluca::engine::PageSnapshot>
 pub fn noctiluca::cdp::ChromeBackend::state(&self, noctiluca::engine::TabId) -> rich_embed::web::PageState
@@ -1224,6 +1227,7 @@ pub fn noctiluca::engine::Engine::resize(&mut self, u16, u16) -> std::io::error:
 pub fn noctiluca::engine::Engine::resource(&mut self, noctiluca::engine::TabId, &str) -> std::io::error::Result<alloc::vec::Vec<u8>>
 pub fn noctiluca::engine::Engine::screencast_frame(&mut self, noctiluca::engine::TabId) -> core::option::Option<rich_embed::chrome::ScreencastFrame>
 pub fn noctiluca::engine::Engine::set_screencast(&mut self, noctiluca::engine::TabId, bool) -> std::io::error::Result<()>
+pub fn noctiluca::engine::Engine::set_screencast_area(&mut self, noctiluca::engine::TabId, core::option::Option<noctiluca::engine::Rect>) -> std::io::error::Result<()>
 pub fn noctiluca::engine::Engine::set_screencast_scale(&mut self, noctiluca::engine::TabId, f64) -> std::io::error::Result<()>
 pub fn noctiluca::engine::Engine::snapshot(&mut self, noctiluca::engine::TabId) -> std::io::error::Result<noctiluca::engine::PageSnapshot>
 pub fn noctiluca::engine::Engine::state(&self, noctiluca::engine::TabId) -> rich_embed::web::PageState
@@ -1248,6 +1252,7 @@ pub fn noctiluca::cdp::ChromeBackend::resize(&mut self, u16, u16) -> std::io::er
 pub fn noctiluca::cdp::ChromeBackend::resource(&mut self, noctiluca::engine::TabId, &str) -> std::io::error::Result<alloc::vec::Vec<u8>>
 pub fn noctiluca::cdp::ChromeBackend::screencast_frame(&mut self, noctiluca::engine::TabId) -> core::option::Option<rich_embed::chrome::ScreencastFrame>
 pub fn noctiluca::cdp::ChromeBackend::set_screencast(&mut self, noctiluca::engine::TabId, bool) -> std::io::error::Result<()>
+pub fn noctiluca::cdp::ChromeBackend::set_screencast_area(&mut self, noctiluca::engine::TabId, core::option::Option<noctiluca::engine::Rect>) -> std::io::error::Result<()>
 pub fn noctiluca::cdp::ChromeBackend::set_screencast_scale(&mut self, noctiluca::engine::TabId, f64) -> std::io::error::Result<()>
 pub fn noctiluca::cdp::ChromeBackend::snapshot(&mut self, noctiluca::engine::TabId) -> std::io::error::Result<noctiluca::engine::PageSnapshot>
 pub fn noctiluca::cdp::ChromeBackend::state(&self, noctiluca::engine::TabId) -> rich_embed::web::PageState
@@ -1272,6 +1277,7 @@ pub fn noctiluca::testing::FakeEngine::resize(&mut self, u16, u16) -> std::io::e
 pub fn noctiluca::testing::FakeEngine::resource(&mut self, noctiluca::engine::TabId, &str) -> std::io::error::Result<alloc::vec::Vec<u8>>
 pub fn noctiluca::testing::FakeEngine::screencast_frame(&mut self, noctiluca::engine::TabId) -> core::option::Option<rich_embed::chrome::ScreencastFrame>
 pub fn noctiluca::testing::FakeEngine::set_screencast(&mut self, noctiluca::engine::TabId, bool) -> std::io::error::Result<()>
+pub fn noctiluca::testing::FakeEngine::set_screencast_area(&mut self, noctiluca::engine::TabId, core::option::Option<noctiluca::engine::Rect>) -> std::io::error::Result<()>
 pub fn noctiluca::testing::FakeEngine::set_screencast_scale(&mut self, noctiluca::engine::TabId, f64) -> std::io::error::Result<()>
 pub fn noctiluca::testing::FakeEngine::snapshot(&mut self, noctiluca::engine::TabId) -> std::io::error::Result<noctiluca::engine::PageSnapshot>
 pub fn noctiluca::testing::FakeEngine::state(&self, noctiluca::engine::TabId) -> rich_embed::web::PageState
@@ -2632,10 +2638,13 @@ pub const noctiluca::tab::DEBOUNCE: core::time::Duration
 pub const noctiluca::tab::ERROR_NOTICE: noctiluca::engine::NodeId
 pub const noctiluca::tab::ERROR_PAGE: &str
 pub const noctiluca::tab::MAX_LIVE_CANVASES: usize
+pub const noctiluca::tab::READ_DUTY: u32
+pub const noctiluca::tab::READ_WHILE_PLAYING: core::time::Duration
 pub const noctiluca::tab::SETTLE_MAX: core::time::Duration
 pub const noctiluca::tab::SETTLE_MIN: core::time::Duration
 pub const noctiluca::tab::SETTLE_STEP: core::time::Duration
 pub fn noctiluca::tab::describe(&noctiluca::model::Control) -> alloc::string::String
+pub fn noctiluca::tab::ping_read_gap(core::time::Duration, bool) -> core::time::Duration
 pub fn noctiluca::tab::stop_all(core::time::Duration)
 pub mod noctiluca::testing
 pub struct noctiluca::testing::FakeEngine
@@ -2665,6 +2674,7 @@ pub fn noctiluca::testing::FakeEngine::resize(&mut self, u16, u16) -> std::io::e
 pub fn noctiluca::testing::FakeEngine::resource(&mut self, noctiluca::engine::TabId, &str) -> std::io::error::Result<alloc::vec::Vec<u8>>
 pub fn noctiluca::testing::FakeEngine::screencast_frame(&mut self, noctiluca::engine::TabId) -> core::option::Option<rich_embed::chrome::ScreencastFrame>
 pub fn noctiluca::testing::FakeEngine::set_screencast(&mut self, noctiluca::engine::TabId, bool) -> std::io::error::Result<()>
+pub fn noctiluca::testing::FakeEngine::set_screencast_area(&mut self, noctiluca::engine::TabId, core::option::Option<noctiluca::engine::Rect>) -> std::io::error::Result<()>
 pub fn noctiluca::testing::FakeEngine::set_screencast_scale(&mut self, noctiluca::engine::TabId, f64) -> std::io::error::Result<()>
 pub fn noctiluca::testing::FakeEngine::snapshot(&mut self, noctiluca::engine::TabId) -> std::io::error::Result<noctiluca::engine::PageSnapshot>
 pub fn noctiluca::testing::FakeEngine::state(&self, noctiluca::engine::TabId) -> rich_embed::web::PageState
@@ -2696,6 +2706,8 @@ pub noctiluca::testing::FakeState::resource_root: core::option::Option<std::path
 pub noctiluca::testing::FakeState::resource_steps: std::collections::hash::map::HashMap<alloc::string::String, alloc::collections::vec_deque::VecDeque<core::option::Option<alloc::vec::Vec<u8>>>>
 pub noctiluca::testing::FakeState::resources: std::collections::hash::map::HashMap<alloc::string::String, alloc::vec::Vec<u8>>
 pub noctiluca::testing::FakeState::screencast: bool
+pub noctiluca::testing::FakeState::screencast_area: core::option::Option<noctiluca::engine::Rect>
+pub noctiluca::testing::FakeState::screencast_areas: alloc::vec::Vec<core::option::Option<noctiluca::engine::Rect>>
 pub noctiluca::testing::FakeState::screencast_scale: f64
 pub noctiluca::testing::FakeState::scroll_y: f64
 pub noctiluca::testing::FakeState::viewport_height: f64
@@ -2895,6 +2907,7 @@ impl core::panic::unwind_safe::UnwindSafe for noctiluca::video::VideoFrame
 pub const noctiluca::video::HEADROOM: f64
 pub const noctiluca::video::MAX_FPS: u32
 pub const noctiluca::video::MIN_INTERVAL: core::time::Duration
+pub fn noctiluca::video::screencast_area(&[noctiluca::video::Region], core::option::Option<noctiluca::engine::Rect>) -> core::option::Option<noctiluca::engine::Rect>
 pub type noctiluca::video::ByteCounter = fn(u32) -> u64
 pub mod noctiluca::widgets
 pub struct noctiluca::widgets::WebControl

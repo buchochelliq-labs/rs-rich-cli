@@ -69,13 +69,24 @@ share a byte budget, and step down when the terminal is short of it. Over
 SSH the budget is small. Raise it with `[media] bandwidth`, or press `F4`
 to freeze them.
 
+**Video is slow, or the page lags.** Run with `NOCTILUCA_TRACE` set to a
+file's path (`NOCTILUCA_TRACE=/tmp/noctiluca.jsonl noctiluca URL`): each
+reading of the page, each video frame and its encode, the media path's
+stages and, once a second, the frames, bytes and write time sent to the
+terminal go there as JSON lines (counts and timings, never an address or
+a page's text; nothing is written to the screen). Its `paint` lines say
+what your terminal takes; its `read` lines what a reading of the page
+costs. What the numbers mean, and what was measured, is in
+[the performance audit](../../design/noctiluca-youtube-perf.md).
+
 **Blocky pictures.** By default Noctiluca picks what your terminal can
 show, and falls back to half blocks. In a terminal with Kitty graphics,
 Sixel or iTerm2 images, name it with `--images` (or `[media] images`).
 
-**No sound.** Sound needs `--audio` (or `[media] audio = true`). It plays
-where Chrome runs: over SSH, that is the server. A site table with
-`audio = false` keeps that site muted.
+**No sound.** Sound is on by default, except when Noctiluca runs over SSH
+(it plays where Chrome runs, which is then the server): there `--audio`
+(or `[media] audio = true`) turns it on. `--mute` turns it off. A site
+table with `audio = false` keeps that site muted.
 
 **A video stays on its poster.** Press `p` to play it. Its frames are
 drawn only while it is on screen.

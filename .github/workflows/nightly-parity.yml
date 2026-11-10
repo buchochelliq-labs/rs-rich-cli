@@ -53,7 +53,7 @@ jobs:
         run: |
           version="$(python scripts/read_upstream_version.py)"
           echo "Pinned rich version: $version"
-          python -m pip install "rich==$version"
+          python -m pip install "rich==$version" -c scripts/upstream-oracle-constraints.txt
 
       - name: Build the Rust renderer
         run: cargo build --release -p rs-rich --example diff_render

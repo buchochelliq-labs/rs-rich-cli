@@ -64,7 +64,8 @@ noctiluca action [--session PID] [--json] [--no-wait] VERB [ARGS…]
 |---|---|
 | `--reader`, `--projection`, `--pixels`, `--raster` | The first view (default: the config's `[startup] view`, else the projection). Choose one. `--pixels` needs Kitty graphics: see [the pixel view](media.md#the-pixel-view) |
 | `--view NAME` | The same, by name: `projection`, `reader`, `pixels` or `raster` |
-| `--audio` | Let pages play sound. Off by default. It plays where Chrome runs, never over SSH |
+| `--audio` | Let pages play sound over SSH too. Sound is on by default on your own machine and off over SSH, as it plays where Chrome runs |
+| `--mute`, `--no-audio` | Keep every page quiet |
 | `--profile NAME` | Keep a profile, with its cookies and storage, between runs (opt-in). A name of letters, digits, `-` and `_` |
 | `--chrome PATH` | The browser to run (default: [the one found](getting-started.md#the-chrome-it-needs)) |
 | `--images MODE` | How images reach the terminal: `ansi`, `kitty`, `sixel`, `iterm2` or `none` (default: the config's, else detected). See [images](media.md#images) |

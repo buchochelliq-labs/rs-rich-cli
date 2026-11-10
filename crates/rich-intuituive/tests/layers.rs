@@ -598,3 +598,58 @@ fn controlled_scope_pointer_hits_follow_scrolled_clipped_content() {
         "scope did not track viewport translation/clipping"
     );
 }
+
+/// A line that prints only its glyphs: the node clears the cells first.
+struct Word(Signal<u32>);
+
+impl intuituive::widget::Widget for Word {
+    fn measure(
+        &mut self,
+        _cx: &intuituive::widget::MeasureCx,
+        axis: intuituive::node::Axis,
+        _width: u16,
+        _height: u16,
+    ) -> u16 {
+        match axis {
+            intuituive::node::Axis::Horizontal => 12,
+            intuituive::node::Axis::Vertical => 1,
+        }
+    }
+
+    fn draw(
+        &mut self,
+        _cx: &mut intuituive::widget::DrawCx,
+        canvas: &mut intuituive::widget::Canvas,
+    ) {
+        let word = if self.0.get() == 0 {
+            "[Send news]"
+        } else {
+            "[Send]"
+        };
+        canvas.print(0, 0, word, None);
+    }
+}
+
+#[test]
+fn a_scroll_view_inside_layers_clears_what_it_no_longer_draws() {
+    let ticks = std::rc::Rc::new(std::cell::Cell::new(None));
+    let given = ticks.clone();
+    let app = App::new(move || {
+        let word = signal(0u32);
+        given.set(Some(word));
+        // The view's own buffer is not the layers' screen: what a line no
+        // longer draws goes blank in the buffer too, not only outside it.
+        layers([
+            scroll(intuituive::widget::widget(Word(word))),
+            // A second layer over it, so the stack composes.
+            label("top").inset(3, 0, 0, 16),
+        ])
+    });
+    let mut driver = app.driver(20, 4);
+    driver.settle();
+    assert!(driver.screen().plain()[0].starts_with("[Send news]"));
+    ticks.get().unwrap().set(1);
+    driver.settle();
+    let rows = driver.screen().plain();
+    assert_eq!(rows[0].trim_end(), "[Send]", "{rows:?}");
+}

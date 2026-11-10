@@ -9,6 +9,16 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### The parity oracle's own dependencies are pinned
+
+- **`scripts/upstream-oracle-constraints.txt`** pins upstream rich's
+  dependencies (markdown-it-py 4.2.0, mdurl 0.1.2, Pygments 2.21.0) for the
+  golden and differential parity jobs, the docs and the skills. rich itself
+  stays pinned by `UPSTREAM.toml`. markdown-it-py 4.3.0, released on
+  2026-11-10, changed how a failed link label caches backticks (the quirk
+  DIVERGENCES.md §54 records), which turned the harness's own tests red on
+  every branch. The goldens regenerate byte for byte under the pins.
+
 ### The nightly differential run is green again (rs-rich, 0.0.26)
 
 - **Markdown parity fixes** (rs-rich), each found by the nightly run since
@@ -33,6 +43,87 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   blocks (§18), a table before a list (§33), and markdown-it's backtick
   cache after a failed link label (new §54). The fixed cases joined the
   pull-request corpus; the known list is empty.
+
+### Noctiluca: video at 24 frames a second on a page that keeps changing; sound on by default
+
+- **A hint or a click no longer fails with "The page is not ready."**
+  while Chrome applies new viewport metrics: Chrome refuses a page's
+  snapshot for that moment, and an action asked for in it was refused at
+  once. An action now waits up to a second for a reading.
+Measured with a release build in a PTY at 120x40 against main as it was
+(`b8ce24e2`): [Noctiluca's video and readings, measured](docs/design/noctiluca-youtube-perf.md).
+
+- **noctiluca:** a reading the page pinged for (a player's clock and
+  progress bar, a live counter) waits three times the last reading's cost,
+  and at least a second while a video plays; a reading for an action, a
+  navigation, a load or a settling document never waits. Video frames go
+  on while such a reading waits (not while one is asked for or refused).
+  A test card beside a ticking clock: one frame a second to 24 in Kitty,
+  Sixel, iTerm2 and half blocks; readings 60% of the tab's thread to 13%.
+  New `tab::READ_DUTY`, `tab::READ_WHILE_PLAYING`, `tab::ping_read_gap`.
+- **rs-rich-embed, noctiluca:** the screencast shows only the playing
+  region when one plays wholly inside Chrome's view:
+  `ChromeEngine::set_screencast_area` and `ScreencastArea`, through
+  `Emulation.setDeviceMetricsOverride`'s `viewport` (the page sees no
+  change). Frames Chrome painted before the area changed are dropped
+  whatever their size. Chrome's CPU while a video plays: 52% to 31% of a
+  core on Twitch. New `Engine::set_screencast_area` (default: ignored),
+  `video::screencast_area`, `FakeState::screencast_area(s)`.
+- **rs-rich-art:** Kitty video frames are zlib-compressed (`o=z`,
+  fastest level): 9.9 to 2.7 MB a second on a test card, 8.0 to 4.8 MB on
+  a live stream.
+- **noctiluca:** sound is **on by default** when Noctiluca runs on your
+  own machine, and off when it runs over SSH (`SSH_CONNECTION` or
+  `SSH_TTY` set), where Chrome's sound would play on the far machine;
+  `--audio` turns it on there, and the new `--mute` (or `--no-audio`)
+  turns it off anywhere. `--ssh HOST` keeps Chrome here, so its sound
+  plays here. The status line says `sound off over SSH (--audio)` or
+  `sound off`. New `args::sound_on` and `Args::mute`. rs-rich-embed's
+  `ChromeEngine` still starts muted unless `.audio(true)`.
+- **noctiluca:** `NOCTILUCA_TRACE=FILE` writes the pipeline's timings as
+  JSON lines (readings, frames, encodes, the screencast's area, the media
+  path's stages, the painter each second). The undocumented
+  `RICH_MEDIA_TRACE`, which printed to stderr (the terminal, while
+  Noctiluca draws), is gone: its stages go to this one file, and
+  rs-rich-art and rs-rich-ext print nothing.
+- **noctiluca:** the delivery mailbox keeps one waiting page (and one
+  state and metrics update), the newest, as it does one frame a region:
+  a UI thread that falls behind no longer finds whole pages piled up.
+  Command results, downloads and stills are never dropped.
+- **intuiTUIve:** a scroll view inside a `layers` stack clears, in its own
+  buffer, what its children no longer draw (Noctiluca's reader showed
+  `[d][ ]nSend news`).
+- **noctiluca layout:** a control wholly above a top or bottom bar (a skip
+  link parked at `top: -1000px`) is not drawn; buttons under
+  WrapActionLabels keep their row and source order again (`[Send]` before
+  `[Unavailable]`, "Like this video" on one row). Relates to #880.
+- Already on main and measured again: Kitty pictures that only moved are
+  not sent again on scroll (26 kB a row on YouTube's results). Sixel and
+  iTerm2 still redraw moved pictures (about 0.5 MB a row): #884.
+- **noctiluca:** `NOCTILUCA_MEASURE_PROTOCOL=iterm` runs the ignored
+  frame/chat qualification workload in iTerm2, and its Kitty run works
+  again (#883).
+- **rs-rich-art, rs-rich-ext, rs-rich-embed:** iTerm2 video passes the
+  f309073 qualification gate 3/3 with room to spare (#883); before, it
+  failed 0/3 on one quiet host and scraped by on another (one run in six
+  over p99, one 0.005 ms under p95). p95 12.8 to 13.7 ms down to 8.7 to
+  8.9, p99 13.5 to 15.9 down to 8.8 to 9.5, CPU 0.71 to 0.78 s down to
+  0.54 to 0.56; input max 2.7 to 4.1 ms before and 3.1 to 4.1 after.
+  Kitty and ANSI still pass 3/3, a little faster. Pictures, goldens and
+  tapes are unchanged, byte for byte:
+  - rs-rich-art fits pictures and frames (Lanczos3 for the protocols,
+    Triangle for cells) with its own resampler, which does `image`'s
+    arithmetic in its order and so gives its pixels exactly, resampling
+    only what a `Cover` crop keeps: a 480x270 frame's fit 4.6 ms to 1.2 to
+    1.5 ms. No new dependency. A frame's cells no longer copy the frame.
+  - rs-rich-ext's painter writes a colour pair tagged with metadata (a
+    picture's cells under iTerm2 or Sixel) from its colours, as it writes
+    a plain pair, instead of working out each one's SGR from its style:
+    the iTerm2 painter's time on the app's thread down by two thirds.
+  - rs-rich-embed's `Pixels::to_rgba` fills and copies instead of pushing
+    a byte at a time (0.9 ms a 480x270 frame, on the app's thread).
+  - rs-rich-art is optimised in dev builds too, like `image`: unoptimised,
+    a frame's fit took 17 to 63 ms in a debug build (now 2.9 ms).
 
 ### Noctiluca and shared media presentation
 

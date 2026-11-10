@@ -233,7 +233,8 @@ Use the [`port-module`](.claude/skills/port-module/SKILL.md) skill. In short:
 - Golden fixtures are captured from the **real Python `rich`** at the version in
   `UPSTREAM.toml`:
   ```bash
-  pip install "rich==$(grep -A2 '\[rich\]' UPSTREAM.toml | grep version | cut -d'"' -f2)"
+  pip install "rich==$(grep -A2 '\[rich\]' UPSTREAM.toml | grep version | cut -d'"' -f2)" \
+      -c scripts/upstream-oracle-constraints.txt
   python scripts/capture_golden.py
   ```
 - The Rust test (`crates/rich/tests/golden.rs`) asserts our output matches those

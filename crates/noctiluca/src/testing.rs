@@ -40,6 +40,11 @@ pub struct FakeState {
     pub screencast: bool,
     /// The screencast's scale, as last asked for (0 until it is).
     pub screencast_scale: f64,
+    /// The part of the document the screencast shows, as last asked for
+    /// (`None`: the viewport).
+    pub screencast_area: Option<Rect>,
+    /// Every change of the screencast's area, in order.
+    pub screencast_areas: Vec<Option<Rect>>,
     /// Screencast frames waiting to be taken, oldest first: a test pushes
     /// them.
     pub frames: Vec<ScreencastFrame>,
@@ -953,6 +958,13 @@ impl Engine for FakeEngine {
 
     fn set_screencast_scale(&mut self, _tab: TabId, scale: f64) -> io::Result<()> {
         self.lock().screencast_scale = scale;
+        Ok(())
+    }
+
+    fn set_screencast_area(&mut self, _tab: TabId, area: Option<Rect>) -> io::Result<()> {
+        let mut state = self.lock();
+        state.screencast_area = area;
+        state.screencast_areas.push(area);
         Ok(())
     }
 

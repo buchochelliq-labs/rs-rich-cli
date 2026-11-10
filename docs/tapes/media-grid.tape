@@ -12,9 +12,11 @@ Set Title "Noctiluca · a video page"
 Set Size 100x40
 Set TypingDelay 40ms
 Mask /\d:\d\d \/ \d:\d\d/ "<time>"
-# Keep decoder-dependent frame pixels out of the deterministic text grid;
-# the PNG and SVG screenshots still capture the actual image.
-Mask /▀/ " "
+# Keep decoder-dependent frame pixels out of the deterministic text grid,
+# in the player's rows only (from under the page's address to the video's
+# title): the thumbnails, avatars and the rest stay checked, and the PNG
+# and SVG screenshots still capture the actual image.
+Mask /(?s)(Search videos \[_\][^\n]*\n).*?(\n The bloom from the air)/ "${1}<player rows>${2}"
 Hide
 Type "export NOCTILUCA_FAKE_ENGINE=$REPO/crates/noctiluca/tests/snapshots XDG_CONFIG_HOME=$PWD/config; clear"
 Enter

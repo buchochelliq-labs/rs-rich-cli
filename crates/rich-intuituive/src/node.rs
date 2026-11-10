@@ -4046,6 +4046,10 @@ impl Node {
             );
         }
         let saved = std::mem::take(&mut frame.damage);
+        // The view's buffer is a screen of its own: no layers stack outside
+        // draws on it, so what its children no longer draw is cleared there
+        // even when the view is inside one.
+        let composing = std::mem::take(&mut frame.composing);
         let all = view.buffer.area();
         for (i, child) in widget.children().iter().enumerate() {
             match areas.get(i).map(|area| area.intersection(all)) {
@@ -4053,6 +4057,7 @@ impl Node {
                 _ => child.hide(),
             }
         }
+        frame.composing = composing;
         let inner = !std::mem::replace(&mut frame.damage, saved).is_empty();
         frame.shift = outer;
         // The content is copied onto the screen by style, not by id, so

@@ -139,7 +139,15 @@ fn the_header_and_status_bar_say_the_mode_the_address_and_the_media() {
     let lines = driver.screen().plain();
     let status = &lines[lines.len() - 2];
     assert!(status.contains("row 1/"), "{status}");
-    assert!(status.contains("sound off (--audio)"), "{status}");
+    // The app's config leaves sound off; over SSH the status says how
+    // to turn it on.
+    let off =
+        if std::env::var_os("SSH_CONNECTION").is_some() || std::env::var_os("SSH_TTY").is_some() {
+            "sound off over SSH (--audio)"
+        } else {
+            "sound off"
+        };
+    assert!(status.contains(off), "{status}");
     let keys = &lines[lines.len() - 1];
     assert!(keys.contains("p play/pause"), "{keys}");
     assert!(keys.contains("[/] seek"), "{keys}");

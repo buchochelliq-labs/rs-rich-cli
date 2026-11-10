@@ -24,6 +24,7 @@
 //! Invalid fit dimensions produce no segments through this infallible trait;
 //! use [`ImageArt::render`] to receive the validation error.
 
+use std::borrow::Cow;
 use std::sync::Arc;
 
 use image::{DynamicImage, GenericImageView, Rgb, RgbImage, Rgba, RgbaImage, imageops::FilterType};
@@ -36,6 +37,7 @@ use crate::ascii::AsciiArt;
 use crate::block::BlockArt;
 use crate::braille::BrailleArt;
 use crate::quadrant::QuadrantArt;
+use crate::resample::{self, Filter};
 use crate::{ColorDistance, Dither, ImageColorMode};
 
 /// Which backend renders the image.
@@ -726,8 +728,12 @@ impl ImageArt {
         } else {
             None
         };
+        // An RGBA image keeping its alpha is used as it is, not copied.
         let source = if keep_alpha {
-            DynamicImage::ImageRgba8(image.to_rgba8())
+            match &*image {
+                DynamicImage::ImageRgba8(_) => Cow::Borrowed(&*image),
+                other => Cow::Owned(DynamicImage::ImageRgba8(other.to_rgba8())),
+            }
         } else {
             let mut flattened = RgbImage::new(image.width(), image.height());
             for (x, y, pixel) in flattened.enumerate_pixels_mut() {
@@ -740,7 +746,7 @@ impl ImageArt {
                         / 255) as u8;
                 }
             }
-            DynamicImage::ImageRgb8(flattened)
+            Cow::Owned(DynamicImage::ImageRgb8(flattened))
         };
         let checkered = self.background == Some(ImageBackground::Checkerboard);
         let Some((width, height)) = target else {
@@ -749,7 +755,7 @@ impl ImageArt {
                 let flat = checkerboard(&source.to_rgba8(), (side, side));
                 return Ok(Arc::new(DynamicImage::ImageRgb8(flat)));
             }
-            return Ok(Arc::new(source));
+            return Ok(Arc::new(source.into_owned()));
         };
         let Some(fit) = fit else {
             // Native at the image's own size: every pixel lands on exactly one
@@ -767,7 +773,14 @@ impl ImageArt {
         };
         let result = match fit {
             ImageFit::Native => unreachable!("native sizing resolves to a fit or a canvas"),
-            ImageFit::Stretch => source.resize_exact(width, height, FilterType::Triangle),
+            ImageFit::Stretch => resample::resize_crop(
+                &source,
+                Filter::Triangle,
+                (width, height),
+                (0, 0),
+                (width, height),
+            )
+            .unwrap_or_else(|| source.resize_exact(width, height, FilterType::Triangle)),
             ImageFit::Contain if keep_alpha => {
                 let fitted = source
                     .resize(width, height, FilterType::Triangle)
@@ -830,9 +843,13 @@ impl ImageArt {
                     }
                     _ => (rh - height) / 2,
                 };
-                source
-                    .resize_exact(rw, rh, FilterType::Triangle)
-                    .crop_imm(x, y, width, height)
+                // Resampling only the pixels the crop keeps.
+                resample::resize_crop(&source, Filter::Triangle, (rw, rh), (x, y), (width, height))
+                    .unwrap_or_else(|| {
+                        source
+                            .resize_exact(rw, rh, FilterType::Triangle)
+                            .crop_imm(x, y, width, height)
+                    })
             }
         };
         Ok(Arc::new(self.checkered(result, mode)))
