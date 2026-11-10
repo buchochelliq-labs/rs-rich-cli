@@ -34,13 +34,13 @@
 **Files:**
 - Modify/test: `crates/rich-ext/src/surface/screen.rs` (`write_simple_lines`, `write_runs`, existing parity tests).
 - Reference only: `crates/rich-ext/src/frame.rs`, `crates/rich-ext/src/frame/regions.rs`, `crates/rich/src/protocol.rs`.
-- Create external diagnostic/consumer artifacts under `/workspace/work/noctiluca-continuation-screen/` (not production APIs).
+- Create external diagnostic/consumer artifacts outside the repository (not production APIs; they were not kept).
 
 **Interfaces:**
 - Consumes unchanged `Screen::write_lines(&mut self, rect: Rect, lines: &[Vec<Segment>])` and `Screen::write_runs<'t, L: AsRef<[TextRun<'t>]>>(&mut self, rect: Rect, lines: &[L])`.
 - Produces the same signatures and exact cells, with ordinary-metadata rows taking `write_simple_lines`/direct runs rather than a temporary Frame. Private eligibility helpers are optional; use the existing public recognised-region decoder as the single authority, not copied region-format logic.
 
-- [ ] **Step 1: Diagnostic activation.** Read `/workspace/work/noctiluca-continuation-perf-probe/report.md` and the root activation ruling in this plan's progress ledger. Do not implement unless current bound temporary-Frame insertion is established as material; report a mismatch before editing.
+- [ ] **Step 1: Diagnostic activation.** Read the continuation performance probe's report (kept outside the repository, not committed) and the root activation ruling in this plan's progress ledger. Do not implement unless current bound temporary-Frame insertion is established as material; report a mismatch before editing.
 - [ ] **Step 2: Add regression proof before implementation.** Extend the existing private Frame parity harness: ordinary metadata alone and with links/visual styles; mixed ordinary+valid semantic region metadata; malformed/negative/unknown region values; metadata on ASCII, CJK, combining fragments across Segments and joined emoji. Check full exported styles, cell text/width/continuations and overwrite clearing at nonzero origins and narrow edges. Cover suppressed control Segments, control characters in text and embedded newlines. For ordinary no-newline cases assert the direct writer accepts them; that assertion must fail on the current source while Frame-result parity holds. For actual region/newline cases assert fallback remains required. Repeat semantically relevant cases through public `write_runs` using interned styles.
 - [ ] **Step 3: Run the targeted regression and record RED.** `cargo +1.91.0 test -p rs-rich-ext --lib metadata` with task-specific test names/filter as needed. Failure must be the intended rejected ordinary direct path, not a compile/setup error.
 - [ ] **Step 4: Narrow direct eligibility in Screen.** Permit ordinary metadata; use the existing recognised-region interpretation for the fallback decision. Keep full ordinary Style interning and all write-row/control/newline semantics. Apply the same rule to `write_runs`. No image-specific key checks, metadata stripping, new cache, Frame refactor or unrelated cleanup.

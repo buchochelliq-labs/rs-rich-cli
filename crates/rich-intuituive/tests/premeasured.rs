@@ -273,3 +273,57 @@ fn premeasured_inline_rollback_keeps_style_ids_valid_until_frame_success() {
     driver.try_render().unwrap();
     assert!(driver.screen().style_count() < 1024);
 }
+
+/// An inline app whose last handler brings in premeasured cells, which the
+/// inline painter rejects, with or without printing above the region: the
+/// error comes back, and the terminal is left as it was all the same.
+#[test]
+fn premeasured_inline_final_repaint_failure_still_restores_the_terminal() {
+    use intuituive::interact::headless::{Headless, Script};
+    struct Late(intuituive::Signal<bool>);
+    impl Widget for Late {
+        fn draw(&mut self, _cx: &mut DrawCx, canvas: &mut Canvas) {
+            if self.0.get() {
+                canvas
+                    .write_premeasured(&[PremeasuredCell {
+                        text: "字",
+                        width: 1,
+                        style: None,
+                    }])
+                    .unwrap();
+            } else {
+                canvas.print(0, 0, "A", Some(&rich::Style::parse("red").unwrap()));
+            }
+        }
+    }
+    for print in [true, false] {
+        let mut backend = Headless::new(Script::new().keys("x"), 1, 3);
+        let record = backend.record();
+        let error = App::new(move || {
+            let late = signal(false);
+            widget(Late(late)).on_key("x", move |cx| {
+                late.set(true);
+                if print {
+                    cx.print_above("done");
+                }
+                cx.quit();
+            })
+        })
+        .inline(1)
+        .run_on(&mut backend)
+        .unwrap_err();
+        assert_eq!(error.kind(), std::io::ErrorKind::InvalidInput);
+        let writes = record.borrow().writes.concat();
+        // The first frame was drawn, hiding the cursor.
+        assert!(writes.contains('A'), "{writes:?}");
+        assert!(
+            writes.ends_with("\x1b[0m\x1b[?25h"),
+            "print {print}: {writes:?}"
+        );
+        // The rejected frame, and the lines it would have shown, are not.
+        assert!(
+            !writes.contains('字') && !writes.contains("done"),
+            "{writes:?}"
+        );
+    }
+}

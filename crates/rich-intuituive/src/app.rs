@@ -4090,21 +4090,22 @@ impl App {
         };
         let rows = driver.printed_rows(&printed);
         // A preflight failure before the first frame owns no output yet.
+        // The restoration is written even when the last repaint fails
+        // (premeasured cells inline): that error is returned after it.
         let cleanup = if driver.started {
-            driver.try_finish_output().and_then(|mut output| {
-                let written = put(backend, linear, output.as_str());
-                if written.is_ok() {
-                    output.output_written();
-                }
-                written
-            })
+            let (mut output, repaint) = driver.finish_output_parts();
+            let written = put(backend, linear, output.as_str());
+            if written.is_ok() {
+                output.output_written();
+            }
+            if !inline && !linear && (repaint.is_err() || written.is_err()) {
+                let _ = backend.write("\x1b[?2026l\x1b[?7h\x1b[0m\x1b[?25h");
+            }
+            repaint.and(written)
         } else {
             drop(driver);
             Ok(())
         };
-        if !inline && !linear && cleanup.is_err() {
-            let _ = backend.write("\x1b[?2026l\x1b[?7h\x1b[0m\x1b[?25h");
-        }
         let result = result.and(cleanup);
         let mut printed = Vec::new();
         if write_printed {
@@ -9088,13 +9089,23 @@ impl Driver {
     /// Fallible [`finish_output`](Self::finish_output), retaining graphics
     /// reservations until the returned output is confirmed written.
     pub fn try_finish_output(self) -> io::Result<FinishOutput> {
+        let (output, repaint) = self.finish_output_parts();
+        repaint.map(|()| output)
+    }
+
+    /// [`try_finish_output`](Self::try_finish_output) in its two parts: the
+    /// output, which always leaves the terminal as it was, and whether the
+    /// last repaint in it was made. On a failed repaint the output holds
+    /// only the restoration, so it can still be written.
+    fn finish_output_parts(self) -> (FinishOutput, io::Result<()>) {
         let graphics = self.app.graphics.clone();
-        let output = self.try_finish()?;
-        Ok(FinishOutput {
+        let (output, repaint) = self.finish_parts();
+        let output = FinishOutput {
             output,
             written: 0,
             graphics,
-        })
+        };
+        (output, repaint)
     }
 
     /// Stop: the bytes that show the last change and leave the terminal
@@ -9110,23 +9121,70 @@ impl Driver {
 
     /// Fallible [`finish`](Self::finish). Fullscreen cleanup includes
     /// enabled autowrap; custom loops must actually write and flush it.
-    pub fn try_finish(mut self) -> io::Result<String> {
-        let mut out = String::new();
+    /// An error (the last inline frame holds premeasured cells) returns no
+    /// bytes: a loop of yours then resets styles and shows the cursor
+    /// itself, as [`App::run_on`] does before it returns the error.
+    pub fn try_finish(self) -> io::Result<String> {
+        let (out, repaint) = self.finish_parts();
+        repaint.map(|()| out)
+    }
+
+    /// [`try_finish`](Self::try_finish) in its two parts: the bytes, and
+    /// whether the last repaint in them was made. The repaint can fail
+    /// (premeasured cells inline); the restoration after it cannot, so it
+    /// is always there: on a failed repaint the bytes are the restoration
+    /// alone, and the region keeps the last frame that was sent.
+    fn finish_parts(mut self) -> (String, io::Result<()>) {
         if self.app.linear {
             // Nothing was drawn, so there is nothing to put back.
             self.app.runtime.close();
-            return Ok(out);
+            return (String::new(), Ok(()));
         }
         // Inline, the last frame stays in the scrollback: show what the
         // last handler changed (and printed) before leaving.
+        let repaint = self.finish_repaint();
+        let restoration = self.restoration();
+        match repaint {
+            Ok(mut out) => {
+                out.push_str(&restoration);
+                (out, Ok(()))
+            }
+            Err(error) => (restoration, Err(error)),
+        }
+    }
+
+    /// Inline, the last frame with what the last handler changed and
+    /// printed; nothing fullscreen. On an error nothing it built was
+    /// sent, so the painter's idea of the terminal still holds.
+    fn finish_repaint(&mut self) -> io::Result<String> {
         if self.app.inline.is_some() && !self.app.printed.is_empty() {
             let damage = self.prepare_paint(true);
             self.painter.check_screen(&self.screen)?;
-            out.push_str(&self.print_inline());
-            out.push_str(&self.paint_prepared(damage)?);
+            // The lines and the frame go together or not at all: a frame
+            // that fails after them leaves the painter where it was.
+            let painter = self.painter.clone();
+            let mut out = self.print_inline();
+            match self.paint_prepared(damage) {
+                Ok(frame) => out.push_str(&frame),
+                Err(error) => {
+                    self.painter = painter;
+                    return Err(error);
+                }
+            }
+            Ok(out)
         } else if self.app.inline.is_some() && (self.app.restack || self.app.runtime.has_dirty()) {
-            out.push_str(&self.paint(false)?);
+            self.paint(false)
+        } else {
+            Ok(String::new())
         }
+    }
+
+    /// The bytes that leave the terminal as it was, whatever the last
+    /// repaint did: graphics released, the cursor below an inline region,
+    /// styles reset, the cursor shown, the caret's shape and autowrap
+    /// back. The runtime closes.
+    fn restoration(&mut self) -> String {
+        let mut out = String::new();
         if let Some(source) = &self.app.graphics {
             // Inline, the last frame stays, with its graphics.
             let retained = match self.app.inline {
@@ -9144,7 +9202,7 @@ impl Driver {
             out.push_str("\x1b[?7h");
         }
         self.app.runtime.close();
-        Ok(out)
+        out
     }
 
     /// Draw what changed: the bytes to send.

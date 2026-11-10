@@ -8,8 +8,10 @@ ordinary CI can replay it quickly; generated runs can use `--generate`.
 from __future__ import annotations
 
 import argparse
+import collections
 import copy
 import importlib.metadata
+import itertools
 import json
 import os
 from pathlib import Path
@@ -33,6 +35,9 @@ from rich.json import JSON
 from rich.markdown import Markdown
 from rich.pretty import Pretty
 from rich.progress import BarColumn, Progress, TaskProgressColumn, TextColumn
+
+from markdown_it import MarkdownIt
+from markdown_it.rules_inline.backticks import backtick
 
 from parity_docs import python_value
 
@@ -63,6 +68,9 @@ BOXES = ["square", "rounded", "heavy", "double", "ascii", "minimal"]
 # Tables also take `box=None`, the borderless layout `Table.grid` builds on.
 TABLE_BOXES = BOXES + ["none"]
 ALIGNS = ["left", "center", "right"]
+# Differing cases set aside as documented divergences (see `known_divergence`),
+# by divergence; reported, never failed.
+SKIPPED: collections.Counter = collections.Counter()
 
 
 def word(rng: random.Random, low: int = 0, high: int = 12) -> str:
@@ -112,6 +120,25 @@ def markdown_source(rng: random.Random) -> str:
     return "\n".join(lines) + rng.choice(["", "\n"])
 
 
+def stable_set_items(values) -> list[int]:
+    """An order for a set of small ints that the set rebuilt from it iterates in.
+
+    `parity_docs.python_value` builds `set(items)`, and the port prints the
+    items in the order given. Small ints hash to themselves, so the order is
+    the same on every CPython, but where two collide (1 and 9 in an 8-slot
+    table) it depends on insertion order: `set([1, 9, 6, 7])` iterates
+    `1, 7, 9, 6`. So the spec takes an order that comes back unchanged.
+    `{1, 6, 7, 9}` has none, and its largest member is dropped. No draws from
+    the generator, so every other case of a seed stays as it was.
+    """
+    values = sorted(set(values))
+    while True:
+        for order in itertools.permutations(values):
+            if list(set(order)) == list(order):
+                return list(order)
+        values.pop()
+
+
 def python_value_spec(rng: random.Random, depth: int = 0):
     """A random value spec (see `parity_docs.python_value`)."""
     roll = rng.random()
@@ -126,9 +153,7 @@ def python_value_spec(rng: random.Random, depth: int = 0):
     if roll < 0.75:
         return {"$": "tuple", "items": items}
     if roll < 0.8:
-        # Small ints hash to themselves, so this interpreter's iteration order
-        # is the order every CPython gives the set.
-        return {"$": "set", "items": list(set(rng.randint(0, 9) for _ in range(len(items))))}
+        return {"$": "set", "items": stable_set_items(rng.randint(0, 9) for _ in range(len(items)))}
     return {word(rng, 1, 6): python_value_spec(rng, depth + 1) for _ in range(rng.randint(0, 4))}
 
 
@@ -440,6 +465,53 @@ def python_worker() -> int:
     return 0
 
 
+# Markdown parsed the way upstream's `Markdown` parses it, and once more with
+# markdown-it's backtick cache reset before every backtick run (see below).
+_MARKDOWN_IT = MarkdownIt().enable("strikethrough").enable("table")
+_MARKDOWN_IT_UNCACHED = MarkdownIt().enable("strikethrough").enable("table")
+
+
+def _uncached_backtick(state, silent: bool) -> bool:
+    state.backticksScanned = False
+    state.backticks = {}
+    return backtick(state, silent)
+
+
+_MARKDOWN_IT_UNCACHED.inline.ruler.at("backticks", _uncached_backtick)
+# A table header line that starts with a list marker, after any quote markers.
+_LIST_MARKER_LINE = re.compile(r"^[ >]*(?:[-*+]|\d{1,9}[.)])(?:[ \t]|$)")
+
+
+def known_divergence(case: dict) -> str | None:
+    """The documented divergence a differing case falls under, or None.
+
+    Only exactly these, each decided from upstream's own parse of the source,
+    so a case outside them is still compared byte for byte:
+
+    - a code block: syntect colours it, not Pygments (DIVERGENCES §18). The
+      generator writes none, but its pieces can make one (`~~` and `~` make a
+      `~~~` fence) and shrinking can too.
+    - a table whose header line starts with a list marker: markdown-it tries
+      its table rule first, pulldown-cmark starts a list (§33).
+    - a code span markdown-it leaves literal because a failed link label
+      before it scanned the backticks and cached the miss (`[` `e``): reset
+      the cache and it parses as a code span, as pulldown-cmark does (§54).
+    """
+    if case.get("kind") != "markdown":
+        return None
+    source = case.get("source", "")
+    tokens = _MARKDOWN_IT.parse(source)
+    lines = source.split("\n")
+    for token in tokens:
+        if token.type in ("fence", "code_block"):
+            return "DIVERGENCES §18: code blocks are highlighted by syntect"
+        if token.type == "table_open" and token.map and _LIST_MARKER_LINE.match(lines[token.map[0]]):
+            return "DIVERGENCES §33: markdown-it reads a table before a list"
+    if tokens != _MARKDOWN_IT_UNCACHED.parse(source):
+        return "DIVERGENCES §54: markdown-it's backtick cache after a failed link label"
+    return None
+
+
 def outcome(py: dict, rust: dict) -> str | None:
     """Classify one comparison; None means the outputs agree."""
     if not py.get("ok") and not rust.get("ok"):
@@ -464,6 +536,10 @@ def mismatches(cases: list[dict], rust_command: list[str], mutate_oracle: bool) 
         elif kind == "rust_error":
             found.append({"case": case, "kind": kind, "python": py["output"], "rust_error": rust.get("error")})
         elif kind == "output":
+            divergence = known_divergence(case)
+            if divergence:
+                SKIPPED[divergence] += 1
+                continue
             found.append({"case": case, "kind": kind, "python": py["output"], "rust": rust["output"]})
     return found
 
@@ -559,6 +635,8 @@ def main() -> int:
     if args.generate:
         cases.extend(generated_cases(args.seed, args.generate))
     found = mismatches(cases, args.rust_command, args.self_test_mutation)
+    for divergence, count in sorted(SKIPPED.items()):
+        print(f"skipped {count} differing case(s) under {divergence}", file=sys.stderr)
     if not found:
         print(f"ok: {len(cases)} cases matched Python rich {version}")
         return 0

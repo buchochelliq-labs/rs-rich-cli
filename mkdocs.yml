@@ -240,6 +240,7 @@ nav:
   - Known issues: known-issues.md
   - Development plans:
       - "Plan to 1.0.0": plans/1.0.0.md
+      - "Noctiluca made steady, before the API review": plans/0.0.26.md
       - "The two tracks' last release": plans/0.0.25.md
       - "The apps track, the stable set's groundwork, Zensical": plans/0.0.24.md
       - "Parity, the marketplace and round 7's last items": plans/0.0.22.md

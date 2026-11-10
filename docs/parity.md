@@ -96,8 +96,17 @@ renders each case through the pinned Python `rich` and through the Rust
   `scripts/fixtures/diff_rich_known.jsonl`, one line per case, each naming its
   issue. 0.0.11 fixed the first eight families (#442–#449). The document
   kinds' first runs (5,000 cases over five seeds) found six Markdown families,
-  fixed in 0.0.22; one remains there, an empty link as the only content of
-  an ordered item under `justify="full"`.
+  fixed in 0.0.22. The nightly's next families (0.0.26), that last known
+  case (an empty link as the only content of an ordered item under
+  `justify="full"`) among them, are fixed and pinned by goldens
+  `markdown_fuzz_10` onwards; the known list is empty.
+- **Documented divergences** are set aside, not failed, and counted on
+  stderr (`skipped N differing case(s) under DIVERGENCES §…`). Each is
+  decided from markdown-it's own parse of the source, and only for a case
+  that differs: a code block (§18; the generator writes none, but its pieces
+  can make a `~~~` fence), a table whose header line starts with a list
+  marker (§33), and a code span markdown-it's backtick cache leaves literal
+  (§54). Everything else is compared byte for byte.
 
 The Python side renders each colour system in its own interpreter. rich memoises
 a `Style`'s escape codes on the instance whatever the colour system, so a shared

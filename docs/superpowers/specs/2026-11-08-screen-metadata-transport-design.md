@@ -16,7 +16,7 @@ The user has asked to continue the remaining work. The [parent design](2026-11-0
 
 ## Evidence and boundaries
 
-Read-only diagnosis: `/workspace/work/noctiluca-continuation-perf-diagnosis.md`. Current Screen rejects every style with metadata, so tagged image rows deep-copy styles into temporary Frames before interning into Screen. Only recognised semantic region tags require special Frame interpretation. Diagnostic ownership is recorded separately in `/workspace/work/noctiluca-continuation-perf-probe/`.
+Read-only diagnosis: the continuation performance diagnosis, not kept in the repository. Current Screen rejects every style with metadata, so tagged image rows deep-copy styles into temporary Frames before interning into Screen. Only recognised semantic region tags require special Frame interpretation. Diagnostic ownership was recorded separately, in the continuation performance probe's notes, which were not kept in the repository.
 
 The separate Screen-to-Frame graphics discovery path, image decode failure/retry state, narrow labels and page-group projection remain follow-up scopes. Do not introduce a typed attachment plane, browser group model or new generic widget as part of this change.
 
