@@ -132,6 +132,12 @@ opt-level = 3
 opt-level = 3
 [profile.dev.package.image]
 opt-level = 3
+# rs-rich-art resamples pictures and video frames itself (its `resample`,
+# `image`'s filters made faster): unoptimised, that is several times slower
+# than the optimised `image` it replaces, so it is optimised in dev builds
+# as well.
+[profile.dev.package.rs-rich-art]
+opt-level = 3
 # crossterm 0.29 subtracts one from mouse coordinates unchecked, so a report
 # of 0 (`\e[<0;0;0M`) panicked debug builds; release builds wrap it as well.
 [profile.dev.package.crossterm]
