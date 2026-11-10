@@ -3,7 +3,24 @@
 Status: handoff note, updated when a session ends mid-round. The loop and its
 rules are in [the demo gaps](intuituive-demo-gaps.md).
 
-## Where things stand (2026-11-05)
+## Where things stand (2026-11-10)
+
+- **0.0.26 is in release** ([the plan](../plans/0.0.26.md), one more
+  release before 0.1.0, decision 15). #887 (the review fixes of #877, #878
+  and #886, rab v2.1.1, the nightly parity fixes) and #888 (Noctiluca's
+  video on changing pages, #883's iTerm2 gate passed 3 of 3, sound on by
+  default, the parity oracle's pins) are merged. The release PR, on
+  `claude/next-priority-items-3c5p8e`, sets every package back to its
+  0.0.25 version plus one patch (core 0.0.16 to CLI 0.0.26, `rs-rich`
+  0.0.14 on PyPI) and adds [the release notes](../releases/0.0.26.md),
+  with the real-site check's results.
+- **Before the tag:** one Cornacai run with a real agent, by the
+  maintainer or with an agent's API key.
+- **After the tag:** the publication notes, then the commit that opens
+  0.1.0 again; then 0.0.27, with #889 to #892, #884, a reader thread for
+  readings and layout L2, L6 and L8.
+
+## Where things stood (2026-11-05)
 
 - **0.0.25 is published** (21 crates from `main` at `b0bfdc4c` by one
   release run, `release-0.0.25`, on 2026-11-05, the first on rab v2.0.0;

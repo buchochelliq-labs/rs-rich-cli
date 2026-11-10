@@ -53,24 +53,23 @@ console.print_str("[bold red]Hello[/] [green]World[/] — 42");
 [Getting started](docs/getting-started.md) has a complete program; the
 [tutorial](docs/tutorial/index.md) builds up from there.
 
-## New in 0.0.25
+## New in 0.0.26
 
-Published on 2026-11-05 ([release notes](docs/releases/0.0.25.md)), the
-last before 0.1.0's API review:
+To be published ([release notes](docs/releases/0.0.26.md)), one more
+release before 0.1.0's API review:
 
-- **[Cornacai](docs/guide/cornacai.md):** resumes sessions with
-  `session/load`, signs in when the agent asks, runs agent terminals on a
-  PTY behind `--pty`, and finds agents in the marketplace.
-- **intuiTUIve:** #812's last stylesheet properties (`offset`, `opacity`,
-  `tint`, `outline`, `hatch`, `keyline`, scrollbar size), `DataTable` row
-  labels and renderable cells, list separators, and new `dial`, `rating`
-  and `carousel` widgets.
-- **[Noctiluca](docs/guide/noctiluca.md) on real sites:** live canvas and
-  SVG gauges, meters and ratings as native controls, pinned and docked
-  bars, shelves that page, and better prices and icon buttons.
-- **Also:** the control socket and `rich console` on Windows over named
-  pipes, releases on rab (the Release Asset Bundle), and every public item
-  documented in ten stable crates.
+- **[Noctiluca](docs/guide/noctiluca.md) plays video smoothly on a page that
+  keeps changing:** about 24 frames a second where it managed about one
+  before, with the screencast limited to the playing region. It passes the
+  iTerm2 video gate (#883), and sound is on by default (off over SSH;
+  `--audio`, `--mute`).
+- **intuiTUIve and rs-rich-ext:** premeasured cells for fullscreen
+  terminals (`write_premeasured`; `Cell.width` is now `u16`),
+  `ImagePresentation` for fitted pictures, and an inline app that restores
+  the terminal when its last repaint fails.
+- **Also:** the nightly differential parity run is green again, with
+  Markdown fixes in `rs-rich` and upstream's own dependencies pinned for
+  the parity jobs, and releases run on rab v2.1.1.
 
 The [changelog](CHANGELOG.md) lists every change.
 
@@ -94,27 +93,27 @@ in the release notes; the crates.io links show available packages.
 <!-- BEGIN MANIFEST VERSIONS -->
 | Package | Manifest version |
 |---|---|
-| [`rs-rich`](https://crates.io/crates/rs-rich) | `0.1.0` |
-| [`rs-rich-plugin-api`](https://crates.io/crates/rs-rich-plugin-api) | `0.1.0` |
-| [`rs-rich-macros`](https://crates.io/crates/rs-rich-macros) | `0.1.0` |
-| [`rs-rich-ext`](https://crates.io/crates/rs-rich-ext) | `0.1.0` |
-| [`rs-rich-cli`](https://crates.io/crates/rs-rich-cli) | `0.1.0` |
-| [`rs-rich-art`](https://crates.io/crates/rs-rich-art) | `0.1.0` |
-| [`rs-rich-mermaid`](https://crates.io/crates/rs-rich-mermaid) | `0.1.0` |
-| [`rs-rich-lumis`](https://crates.io/crates/rs-rich-lumis) | `0.1.0` |
-| [`rs-rich-record`](https://crates.io/crates/rs-rich-record) | `0.1.0` |
-| [`rs-rich-interact`](https://crates.io/crates/rs-rich-interact) | `0.1.0` |
-| [`rs-rich-micro`](https://crates.io/crates/rs-rich-micro) | `0.1.0` |
-| [`rs-rich-diagram`](https://crates.io/crates/rs-rich-diagram) | `0.1.0` |
-| [`rs-rich-data`](https://crates.io/crates/rs-rich-data) | `0.1.0` |
-| [`rs-rich-ratatui`](https://crates.io/crates/rs-rich-ratatui) | `0.1.0` |
-| [`rs-rich-intuituive`](https://crates.io/crates/rs-rich-intuituive) | `0.1.0` |
-| [`rs-rich-web`](https://crates.io/crates/rs-rich-web) | `0.1.0` |
-| [`rs-rich-embed`](https://crates.io/crates/rs-rich-embed) | `0.1.0` |
-| [`rs-rich-marketplace`](https://crates.io/crates/rs-rich-marketplace) | `0.1.0` |
-| [`rs-rich-acp`](https://crates.io/crates/rs-rich-acp) | `0.1.0` |
-| [`noctiluca`](https://crates.io/crates/noctiluca) | `0.1.0` |
-| [`cornacai`](https://crates.io/crates/cornacai) | `0.1.0` |
+| [`rs-rich`](https://crates.io/crates/rs-rich) | `0.0.16` |
+| [`rs-rich-plugin-api`](https://crates.io/crates/rs-rich-plugin-api) | `0.0.10` |
+| [`rs-rich-macros`](https://crates.io/crates/rs-rich-macros) | `0.0.10` |
+| [`rs-rich-ext`](https://crates.io/crates/rs-rich-ext) | `0.0.23` |
+| [`rs-rich-cli`](https://crates.io/crates/rs-rich-cli) | `0.0.26` |
+| [`rs-rich-art`](https://crates.io/crates/rs-rich-art) | `0.0.19` |
+| [`rs-rich-mermaid`](https://crates.io/crates/rs-rich-mermaid) | `0.0.12` |
+| [`rs-rich-lumis`](https://crates.io/crates/rs-rich-lumis) | `0.0.10` |
+| [`rs-rich-record`](https://crates.io/crates/rs-rich-record) | `0.0.14` |
+| [`rs-rich-interact`](https://crates.io/crates/rs-rich-interact) | `0.0.14` |
+| [`rs-rich-micro`](https://crates.io/crates/rs-rich-micro) | `0.0.12` |
+| [`rs-rich-diagram`](https://crates.io/crates/rs-rich-diagram) | `0.0.9` |
+| [`rs-rich-data`](https://crates.io/crates/rs-rich-data) | `0.0.10` |
+| [`rs-rich-ratatui`](https://crates.io/crates/rs-rich-ratatui) | `0.0.11` |
+| [`rs-rich-intuituive`](https://crates.io/crates/rs-rich-intuituive) | `0.0.11` |
+| [`rs-rich-web`](https://crates.io/crates/rs-rich-web) | `0.0.9` |
+| [`rs-rich-embed`](https://crates.io/crates/rs-rich-embed) | `0.0.9` |
+| [`rs-rich-marketplace`](https://crates.io/crates/rs-rich-marketplace) | `0.0.5` |
+| [`rs-rich-acp`](https://crates.io/crates/rs-rich-acp) | `0.0.3` |
+| [`noctiluca`](https://crates.io/crates/noctiluca) | `0.0.5` |
+| [`cornacai`](https://crates.io/crates/cornacai) | `0.0.3` |
 <!-- END MANIFEST VERSIONS -->
 
 | | Package | Role | Import / installed name |

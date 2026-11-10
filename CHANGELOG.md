@@ -9,6 +9,22 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## 0.0.26 cohort — to be published
+
+To be published from `main` by one `release.yml` run on rab v2.1.1 (tag
+`release-0.0.26`): core 0.0.16 / macros 0.0.10 / plugin API 0.0.10 /
+art 0.0.19 / diagram 0.0.9 / mermaid 0.0.12 / lumis 0.0.10 / ext 0.0.23 /
+micro 0.0.12 / record 0.0.14 / interact 0.0.14 / ratatui 0.0.11 /
+intuituive 0.0.11 / embed 0.0.9 / web 0.0.9 / data 0.0.10 /
+marketplace 0.0.5 / acp 0.0.3 / noctiluca 0.0.5 / cornacai 0.0.3 /
+CLI 0.0.26, and `rs-rich` 0.0.14 on PyPI (`python-v0.0.14`, same commit).
+One more release before 0.1.0's API review: Noctiluca plays video at
+about 24 frames a second on a page that keeps changing, passes #883's
+iTerm2 gate and plays sound by default; #877's premeasured cells and
+#878's media and adaptive layouts ship with their review fixes; the
+nightly differential parity run is green again. See
+[the release notes](docs/releases/0.0.26.md).
+
 ### The parity oracle's own dependencies are pinned
 
 - **`scripts/upstream-oracle-constraints.txt`** pins upstream rich's
@@ -19,7 +35,7 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   DIVERGENCES.md §54 records), which turned the harness's own tests red on
   every branch. The goldens regenerate byte for byte under the pins.
 
-### The nightly differential run is green again (rs-rich, 0.0.26)
+### The nightly differential run is green again (rs-rich 0.0.16)
 
 - **Markdown parity fixes** (rs-rich), each found by the nightly run since
   2026-10-26 and pinned by goldens `markdown_fuzz_10`–`30`: an empty
@@ -46,12 +62,13 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ### Noctiluca: video at 24 frames a second on a page that keeps changing; sound on by default
 
+Measured with a release build in a PTY at 120x40 against main as it was
+(`b8ce24e2`): [Noctiluca's video and readings, measured](docs/design/noctiluca-youtube-perf.md).
+
 - **A hint or a click no longer fails with "The page is not ready."**
   while Chrome applies new viewport metrics: Chrome refuses a page's
   snapshot for that moment, and an action asked for in it was refused at
   once. An action now waits up to a second for a reading.
-Measured with a release build in a PTY at 120x40 against main as it was
-(`b8ce24e2`): [Noctiluca's video and readings, measured](docs/design/noctiluca-youtube-perf.md).
 
 - **noctiluca:** a reading the page pinged for (a player's clock and
   progress bar, a live counter) waits three times the last reading's cost,
@@ -162,11 +179,11 @@ Measured with a release build in a PTY at 120x40 against main as it was
   final cleanup resources across failed or partial writes. Existing low-level
   picture and `Driver::finish()` APIs remain available; see the image guide for
   their lifetime and simultaneous-fit limits.
-- Release validation remains blocked by the original iTerm-compatible frame,
-  input and process-CPU limits across the final three-run sample. Kitty and ANSI
-  meet their frozen frame/input limits; all observations and remaining native
-  limitations are recorded in the [media-quality handoff](docs/design/noctiluca-media-quality-status.md).
-### Premeasured fullscreen cells (rs-rich-ext / rs-rich-intuituive 0.1.0)
+- The iTerm-compatible frame, input and process-CPU limits that held up
+  release validation are met since #883's fix (3 of 3 runs, below); Kitty and
+  ANSI meet theirs too. All observations and remaining native limitations are
+  recorded in the [media-quality handoff](docs/design/noctiluca-media-quality-status.md).
+### Premeasured fullscreen cells (rs-rich-ext 0.0.23 / rs-rich-intuituive 0.0.11)
 
 - Import borrowed `PremeasuredCell` grids through `Screen::write_premeasured`
   or full-canvas `Canvas::write_premeasured`. The complete input is validated

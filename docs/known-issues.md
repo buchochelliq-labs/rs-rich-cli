@@ -4,7 +4,7 @@ What does not work yet, what was never meant to, and what works differently on
 purpose. Three different things, kept apart — a deliberate trade-off listed as a
 bug makes a considered decision look like neglect.
 
-**Applies to** the 0.0.25 release (`rs-rich-cli` 0.0.25, `rs-rich` 0.0.15),
+**Applies to** the 0.0.26 release (`rs-rich-cli` 0.0.26, `rs-rich` 0.0.16),
 reviewed against Python `rich` 15.0.0. Older entries
 name the release they were found in. Each entry links to its issue or report
 so you can check the status without waiting for this page to be updated.
@@ -34,17 +34,8 @@ frames over 0.8 s, so its video plays in jumps. 0.0.22 splits a late read
 into the updates inside it, which did not fix macOS: its runners still kept
 5 frames over 0.5 s. The cause there is not known yet, and the frame-rate
 test keeps its lower bound on Linux only until it is. Record games on Linux
-for now. Found in 0.0.20, still open in 0.0.25
+for now. Found in 0.0.20, still open in 0.0.26
 ([plan](plans/0.0.22.md#1-round-7s-last-items-record-intuituive)).
-
-### An ordered Markdown item holding only an empty link loses its row under `justify="full"`
-
-The differential fuzzer found it in 0.0.22: an ordered list item whose
-only content is an empty link, `2) []()`, renders no row when the
-Markdown is fully justified, where rich 15.0.0 prints the item's number.
-With the default justify the output matches. The case is kept in
-`scripts/fixtures/diff_rich_known.jsonl` until it is fixed
-([#769](https://github.com/buchochelliq-labs/rs-rich-cli/issues/769)).
 
 ---
 

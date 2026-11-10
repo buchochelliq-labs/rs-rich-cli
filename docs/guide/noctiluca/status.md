@@ -3,9 +3,41 @@
 Noctiluca grows in phases, each unlocked by what people use a browser in a
 terminal for. The phases and their tests are in
 [the design note](../../design/browser.md#phases). This page says what the
-0.0.22 to 0.0.24 releases have, what 0.0.25 adds, and what comes next.
+0.0.22 to 0.0.25 releases have, what 0.0.26 adds, and what comes next.
 
-## Coming in 0.0.25 (Noctiluca 0.0.4): real sites, second pass
+## Coming in 0.0.26 (Noctiluca 0.0.5): steady video, sound on
+
+Measured in [Noctiluca's video and readings](../../design/noctiluca-youtube-perf.md).
+
+| Works | Notes |
+|---|---|
+| Video on a page that keeps changing | About 24 frames a second where a ticking clock or progress bar held it to about one: readings the page asks for wait, frames go on meanwhile, and the screencast covers only the playing region. Done |
+| iTerm2 video | Passes #883's qualification gate 3 of 3 runs, with Kitty and ANSI. Done |
+| Sound | On by default when Noctiluca runs on your machine; off over SSH unless `--audio`; `--mute` turns it off. Done |
+| One trace | `NOCTILUCA_TRACE=FILE` writes the pipeline's timings as JSON lines; nothing goes to stderr. Done |
+| Hints while the viewport settles | An action waits up to a second for a reading Chrome refuses for a moment. Done |
+
+### Known limits in 0.0.26
+
+From the [real-site check](../../releases/0.0.26.md#noctiluca-on-real-sites)
+of 2026-11-10; each was also seen on 0.0.25 or not checked there:
+
+- **Media keys** can pick a page's `<video>` with no source after a pause
+  ([#889](https://github.com/buchochelliq-labs/rs-rich-cli/issues/889)).
+- **A busy live stream** can stop drawing after 12 to 25 s while the status
+  line says it plays
+  ([#890](https://github.com/buchochelliq-labs/rs-rich-cli/issues/890)).
+- **A live chat log** can stop taking new lines
+  ([#891](https://github.com/buchochelliq-labs/rs-rich-cli/issues/891)),
+  and `{` blanks it instead of holding it
+  ([#892](https://github.com/buchochelliq-labs/rs-rich-cli/issues/892)).
+- **Sixel and iTerm2** still redraw pictures that only moved on scroll
+  ([#884](https://github.com/buchochelliq-labs/rs-rich-cli/issues/884));
+  Kitty does not.
+- **Also seen:** CodeMirror examples read as one line; in-page links do
+  not scroll; chat badges are drawn as alt text; stacked toasts overlap.
+
+## In 0.0.25 (Noctiluca 0.0.4): real sites, second pass
 
 Planned in
 [Noctiluca on real sites, second pass](../../design/noctiluca-real-sites-2.md)
