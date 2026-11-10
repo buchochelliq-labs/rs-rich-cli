@@ -63,9 +63,28 @@ Measured with a release build in a PTY at 120x40 against main as it was
   iTerm2 still redraw moved pictures (about 0.5 MB a row): #884.
 - **noctiluca:** `NOCTILUCA_MEASURE_PROTOCOL=iterm` runs the ignored
   frame/chat qualification workload in iTerm2, and its Kitty run works
-  again (#883). On a quiet host Kitty and ANSI pass 3/3 and iTerm2 still
-  fails 0/3: its frames' fitting (Lanczos3, 4.5 ms of each 4.6 ms encode)
-  is the cost, not PNG compression. #883 stays open.
+  again (#883).
+- **rs-rich-art, rs-rich-ext, rs-rich-embed:** iTerm2 video passes the
+  f309073 qualification gate 3/3 with room to spare (#883); before, it
+  failed 0/3 on one quiet host and scraped by on another (one run in six
+  over p99, one 0.005 ms under p95). p95 12.8 to 13.7 ms down to 8.7 to
+  8.9, p99 13.5 to 15.9 down to 8.8 to 9.5, CPU 0.71 to 0.78 s down to
+  0.54 to 0.56; input max 2.7 to 4.1 ms before and 3.1 to 4.1 after.
+  Kitty and ANSI still pass 3/3, a little faster. Pictures, goldens and
+  tapes are unchanged, byte for byte:
+  - rs-rich-art fits pictures and frames (Lanczos3 for the protocols,
+    Triangle for cells) with its own resampler, which does `image`'s
+    arithmetic in its order and so gives its pixels exactly, resampling
+    only what a `Cover` crop keeps: a 480x270 frame's fit 4.6 ms to 1.2 to
+    1.5 ms. No new dependency. A frame's cells no longer copy the frame.
+  - rs-rich-ext's painter writes a colour pair tagged with metadata (a
+    picture's cells under iTerm2 or Sixel) from its colours, as it writes
+    a plain pair, instead of working out each one's SGR from its style:
+    the iTerm2 painter's time on the app's thread down by two thirds.
+  - rs-rich-embed's `Pixels::to_rgba` fills and copies instead of pushing
+    a byte at a time (0.9 ms a 480x270 frame, on the app's thread).
+  - rs-rich-art is optimised in dev builds too, like `image`: unoptimised,
+    a frame's fit took 17 to 63 ms in a debug build (now 2.9 ms).
 
 ### Noctiluca and shared media presentation
 

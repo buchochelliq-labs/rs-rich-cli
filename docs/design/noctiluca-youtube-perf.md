@@ -161,16 +161,94 @@ check repaired: since #877/#878 Kitty's inline pictures are the image
 presentation's own resources, not cells tagged with the picture's id, so
 the check failed on main before the window.
 
-Where an iTerm2 frame's time goes, measured inside rs-rich-art on the
+Where an iTerm2 frame's time went, measured inside rs-rich-art on the
 encoder's thread: fitting the 480x270 frame to the region's 328x224 pixels
-(Lanczos3, then the crop `Cover` asks for) is **4.5 ms of 4.6**; the PNG
+(Lanczos3, then the crop `Cover` asks for) was **4.5 ms of 4.6**; the PNG
 encode is 0.1 ms on this workload's flat frames. A micro-benchmark of the
-choices: as now 4.96 ms, resampling as RGB 4.75 (no gain once the
+choices: as it was 4.96 ms, resampling as RGB 4.75 (no gain once the
 conversion is paid), cropping before resampling 4.10, a bilinear filter
-3.80. None of them takes the gate's 1 to 3 ms off p95 and 0.05 to 0.15 s
-off CPU on this host, and the bilinear one changes the picture; **#883 is
-not fixed here**. What would: a SIMD resampler (none is in the lockfile or
-reachable offline) or resampling in bands on several threads.
+3.80 (which changes the picture).
+
+### Fixed
+
+What fixed it, on this branch after `47905250`, in four commits:
+
+1. **rs-rich-art's own resampler** (`resample`, crate-private; `3bac4f20`).
+   It does `image`'s arithmetic in `image`'s order: the same `f32`
+   weights computed the same way, a vertical pass then a horizontal one,
+   each sum built tap by tap from zero, rounded half away from zero. So
+   it gives `image`'s pixels **exactly**, for Lanczos3 and Triangle,
+   RGB and RGBA. It is faster because it reads contiguous rows the
+   compiler vectorises, sums eight output rows side by side, and works
+   out only the pixels a `Cover` crop keeps and the columns they read.
+   The frame's fit went from 4.6 ms to 1.2 to 1.5 ms; the cells' Triangle
+   fit from 0.6 to 0.15 ms. `fast_image_resize` (MIT or Apache-2.0, MSRV
+   1.87) was the brief's first choice. It was not used: its fixed-point
+   arithmetic does not give `image`'s pixels, so every picture, golden
+   and tape would have changed, and it would have been a new dependency
+   in five lockfiles. Resampling in bands on threads was not needed
+   either.
+2. **The painter** (rs-rich-ext; `a627ca78`). A picture's cells under
+   iTerm2 or Sixel are tagged with its metadata. To the painter each
+   tagged style was new, so it worked out each one's SGR through
+   `Style::ansi_codes`, about 10,000 instructions a cell. It now writes a
+   colour pair tagged only with metadata from its colours, as it writes a
+   plain pair. The bytes are the same. The iTerm2 run's `paint_encode_ms`
+   went from 65 to 71 down to 22 to 29.
+3. **Copies on the app's thread** (`5f2a4cf3`): `Pixels::to_rgba` wrote a
+   byte at a time (0.9 ms a frame), `Picture::lines` cloned the frame, and
+   `ImageArt` copied an RGBA image into a new one.
+4. **Dev builds** (`aca95eac`): rs-rich-art is optimised in them, as
+   `image` already was. Both resamplers are generic code instantiated in
+   rs-rich-art, so unoptimised, a frame's fit took 17 ms (`image`) or 63
+   ms (the resampler) in a debug build. The media-grid tape, which runs
+   a debug build, showed its last screen before `G` had scrolled it.
+
+The gate after these, on a quiet host (load average under 0.5, nothing
+else running), the same release test binary each run. CPU is the test
+process's user and system time (`getrusage` of the child). Input max is
+the largest of the eight key latencies. Each run, from `crates/noctiluca`,
+after `cargo test --release -p noctiluca --lib --no-run`:
+
+```bash
+NOCTILUCA_MEASURE_PROTOCOL=iterm ../../target/release/deps/noctiluca-<hash> \
+  app::update_measurements::combined_frame_pipeline --exact --ignored --nocapture
+```
+
+(`kitty` and `ansi` for the others; the frame and input latencies are on
+the `pipeline:` line it prints.)
+
+| Protocol / run | load avg (1 min) | p95 ms | p99 ms | input max ms | CPU s | Gate |
+|---|---:|---:|---:|---:|---:|---|
+| iTerm2 1 | 0.48 | 8.85 | 9.46 | 4.14 | 0.564 | pass |
+| iTerm2 2 | 0.38 | 8.65 | 8.85 | 3.10 | 0.537 | pass |
+| iTerm2 3 | 0.32 | 8.86 | 9.49 | 3.92 | 0.539 | pass |
+| Kitty 1 | 0.25 | 3.80 | 4.33 | 3.08 | 0.247 | pass |
+| Kitty 2 | 0.27 | 3.95 | 4.02 | 2.64 | 0.246 | pass |
+| Kitty 3 | 0.21 | 3.48 | 3.80 | 2.22 | 0.250 | pass |
+| ANSI 1 | 0.16 | 3.43 | 3.90 | 1.86 | 0.253 | pass |
+| ANSI 2 | 0.12 | 3.60 | 3.80 | 1.98 | 0.242 | pass |
+| ANSI 3 | 0.18 | 3.56 | 3.57 | 2.81 | 0.264 | pass |
+
+The same harness on `47905250`, before the fix, on the same host. iTerm2's
+six runs scraped by: one over p99, one 0.005 ms under p95, CPU 0.71 to
+0.78 s.
+
+| Run | load avg (1 min) | p95 ms | p99 ms | input max ms | CPU s | Gate |
+|---|---:|---:|---:|---:|---:|---|
+| iTerm2 1 | 1.43 | 13.67 | 15.51 | 2.75 | 0.713 | pass (p95 by 0.005) |
+| iTerm2 2 | 1.31 | 12.84 | 13.47 | 2.71 | 0.755 | pass |
+| iTerm2 3 | 1.11 | 13.19 | 13.95 | 2.99 | 0.750 | pass |
+| iTerm2 4 | 0.86 | 12.82 | 13.47 | 4.05 | 0.746 | pass |
+| iTerm2 5 | 0.73 | 13.59 | 15.90 | 2.98 | 0.775 | **fail**: p99 |
+| iTerm2 6 | 0.62 | 13.42 | 14.52 | 3.61 | 0.741 | pass |
+
+The earlier session's 0/3 above had CPU at 0.79 to 0.85 s. It was a
+slower host, or CPU counted with more than the test process; this
+session did not reproduce it. What is left in an iTerm2 frame on the
+app's thread (about 2.6 ms a render, against under 1 ms in Kitty) is
+its tagged cells: one style per cell, whose metadata is cloned through
+the draw. That is not needed for the gate.
 
 ## Layout
 
