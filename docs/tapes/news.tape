@@ -12,6 +12,13 @@ Set Title "Noctiluca · a news page"
 Set Size 100x40
 Set TypingDelay 40ms
 Mask /\d:\d\d \/ \d:\d\d/ "<time>"
+# The pictures are Sixel, which leaves no text in a grid; a slow machine's
+# pacer steps the playing region down to half-block cells for a while,
+# which does. So each half-block cell is blanked in the text grids, and a
+# row left with only those blanks at its end is trimmed, as a row with no
+# text is; the PNG and SVG captures keep the pictures (as stream-with-log).
+Mask /▀/ " "
+Mask /(?m) +$/ ""
 Hide
 Type "export NOCTILUCA_FAKE_ENGINE=$REPO/crates/noctiluca/tests/snapshots XDG_CONFIG_HOME=$PWD/config; clear"
 Enter
