@@ -3717,8 +3717,34 @@ pub fn app_with_presentation(
     })
     .graphics(media_presentation.graphics());
     let stats = app.stats_handle();
-    OUTPUT.with(|o| o.borrow_mut().stats = Some(stats));
+    OUTPUT.with(|o| o.borrow_mut().stats = Some(stats.clone()));
+    if crate::trace::on() {
+        return trace_frames(app, stats);
+    }
     app
+}
+
+/// Once a second while tracing ([`crate::trace`]), the painter's counters
+/// over that second: frames drawn and skipped, bytes written, and the time
+/// drawing, painting and writing took.
+fn trace_frames(app: App, stats: rich_intuituive::StatsHandle) -> App {
+    let mut last = rich_intuituive::FrameStats::default();
+    app.every(Duration::from_secs(1), move |_| {
+        let now = stats.get();
+        let ms = |a: Duration, b: Duration| {
+            (a.saturating_sub(b).as_secs_f64() * 1e3 * 1e3).round() / 1e3
+        };
+        crate::trace::event(
+            "paint",
+            serde_json::json!({"frames": now.frames - last.frames,
+                "skipped": now.skipped - last.skipped,
+                "bytes": now.total_bytes - last.total_bytes,
+                "draw_ms": ms(now.total_draw, last.total_draw),
+                "paint_ms": ms(now.total_paint, last.total_paint),
+                "write_ms": ms(now.total_write, last.total_write)}),
+        );
+        last = now;
+    })
 }
 
 #[cfg(test)]

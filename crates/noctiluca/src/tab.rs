@@ -614,13 +614,16 @@ impl Worker<'_> {
         if crate::diagnostics::enabled() {
             eprintln!("RICH_MEDIA {{\"stage\":\"model_snapshot_attempt\"}}");
         }
+        let at = crate::trace::start();
         let snapshot = self.engine.snapshot(TabId(0)).ok()?;
+        let snapshot_ms = crate::trace::ms(at);
         if crate::diagnostics::enabled() {
             eprintln!("RICH_MEDIA {{\"stage\":\"model_read\"}}");
         }
         if let Ok(boxes) = self.engine.appended(TabId(0)) {
             self.appended = boxes.into_iter().collect();
         }
+        let built = crate::trace::start();
         let source = self
             .source_update
             .map(|_| build_source_with(&snapshot, &mut self.revisions, &self.appended));
@@ -628,6 +631,7 @@ impl Worker<'_> {
             Some(source) => source.page().as_ref().clone(),
             None => build_with(&snapshot, &mut self.revisions, &self.appended),
         };
+        let build_ms = crate::trace::ms(built);
         self.dress_error(&mut page);
         if self.page.as_ref().map(|p| p.document) != Some(page.document) {
             self.live.clear();
@@ -684,6 +688,14 @@ impl Worker<'_> {
             _ => None,
         };
         let page = self.publish(Arc::new(page), source);
+        if crate::trace::on() {
+            crate::trace::event(
+                "read",
+                serde_json::json!({"snapshot_ms": snapshot_ms, "build_ms": build_ms,
+                    "total_ms": crate::trace::ms(at), "blocks": page.blocks.len(),
+                    "media": page.media.len()}),
+            );
+        }
         self.dirty = None;
         self.stills_pending = true;
         Some(page)
@@ -1374,6 +1386,13 @@ impl Worker<'_> {
         {
             return;
         }
+        if crate::trace::on() {
+            crate::trace::event(
+                "frame",
+                serde_json::json!({"node": video.node, "seq": video.seq,
+                    "w": video.pixels.width, "h": video.pixels.height}),
+            );
+        }
         (self.update)(Update::Frame(Arc::new(video)));
     }
 
@@ -1437,9 +1456,17 @@ impl Worker<'_> {
         if !plan.due {
             return;
         }
+        let at = crate::trace::start();
         let frame = self.engine.screencast_frame(TabId(0));
         if frame.is_some() {
             self.last_frame = Some(now);
+        }
+        if let Some(f) = frame.as_ref().filter(|_| crate::trace::on()) {
+            crate::trace::event(
+                "cast",
+                serde_json::json!({"take_ms": crate::trace::ms(at),
+                    "w": f.pixels.width, "h": f.pixels.height}),
+            );
         }
         // No new frame for a while: what Chrome's viewport does not hold
         // is not painted there, so it is captured on its own.
@@ -1483,7 +1510,16 @@ impl Worker<'_> {
     /// Frames of regions taken with a capture of each.
     fn capture_regions(&mut self, regions: &[Region], now: Instant) {
         for region in regions {
-            if let Some(pixels) = self.capture_pixels(region.rect, Format::Jpeg) {
+            let at = crate::trace::start();
+            let pixels = self.capture_pixels(region.rect, Format::Jpeg);
+            if crate::trace::on() {
+                crate::trace::event(
+                    "capture",
+                    serde_json::json!({"node": region.node, "ms": crate::trace::ms(at),
+                        "ok": pixels.is_some()}),
+                );
+            }
+            if let Some(pixels) = pixels {
                 let video = self.frames.stamp(region.node, pixels, now);
                 self.deliver(video, now);
             }
@@ -1944,6 +1980,16 @@ fn run_with_source(
                 .settle
                 .is_some_and(|(next, _, _)| Instant::now() >= next);
         if read_now || due {
+            if crate::trace::on() {
+                let why = if read_now {
+                    "asked"
+                } else if worker.dirty.is_some() {
+                    "changed"
+                } else {
+                    "settling"
+                };
+                crate::trace::event("read_why", serde_json::json!({ "why": why }));
+            }
             // A refused reading stays due, and is tried at the next tick.
             if worker.read().is_some() {
                 read_now = false;

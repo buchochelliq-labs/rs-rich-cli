@@ -554,6 +554,7 @@ impl Encoder {
                         job.picture.image().as_bytes().len()
                     );
                 }
+                let at = crate::trace::start();
                 let cell = metrics
                     .filter(|&(w, h)| w > 0 && h > 0)
                     .map(|(w, h)| rich_art::graphics::CellPixels::new(w.into(), h.into()))
@@ -569,6 +570,14 @@ impl Encoder {
                 );
                 if tracing {
                     eprintln!("RICH_MEDIA {{\"stage\":\"encoder_done\"}}");
+                }
+                if crate::trace::on() {
+                    crate::trace::event(
+                        "encode",
+                        serde_json::json!({"node": job.node, "ms": crate::trace::ms(at),
+                            "pixels": format!("{:?}", job.pixels),
+                            "cols": job.cols, "rows": job.rows}),
+                    );
                 }
                 done(job);
             }

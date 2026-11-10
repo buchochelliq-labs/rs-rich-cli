@@ -599,6 +599,24 @@ impl ChromeBackend {
     }
 }
 
+/// The trace's line for a snapshot: its two calls' times and its size.
+fn trace_snapshot(dom: &Value, ax: &Value, dom_ms: f64, ax_ms: f64) {
+    let documents = dom["documents"].as_array().map_or(&[][..], Vec::as_slice);
+    let count = |key: &str, list: &str| -> usize {
+        documents
+            .iter()
+            .map(|d| d[key][list].as_array().map_or(0, Vec::len))
+            .sum()
+    };
+    crate::trace::event(
+        "snapshot",
+        json!({"dom_ms": dom_ms, "ax_ms": ax_ms,
+               "nodes": count("nodes", "nodeName"), "boxes": count("layout", "nodeIndex"),
+               "documents": documents.len(),
+               "ax_nodes": ax["nodes"].as_array().map_or(0, Vec::len)}),
+    );
+}
+
 /// Standard base64, as DevTools sends captures.
 pub fn base64_decode(text: &str) -> Option<Vec<u8>> {
     let mut out = Vec::with_capacity(text.len() / 4 * 3);
@@ -675,11 +693,13 @@ impl Engine for ChromeBackend {
         let context = self.world().ok().filter(|&context| {
             source_formatting::begin(&|method, args| self.call(method, args), context).is_ok()
         });
+        let at = crate::trace::start();
         let captured = self.call(
             "DOMSnapshot.captureSnapshot",
             json!({"computedStyles": SNAPSHOT_STYLES, "includeDOMRects": true,
                    "includePaintOrder": true}),
         );
+        let dom_ms = crate::trace::ms(at);
         let mut dom = match captured {
             Ok(dom) => dom,
             Err(error) => {
@@ -694,9 +714,13 @@ impl Engine for ChromeBackend {
             }
         };
         // The page reads without its AX tree when Chrome refuses one.
+        let at = crate::trace::start();
         let ax = self
             .call("Accessibility.getFullAXTree", json!({}))
             .unwrap_or(Value::Null);
+        if crate::trace::on() {
+            trace_snapshot(&dom, &ax, dom_ms, crate::trace::ms(at));
+        }
         if let Some(context) = context {
             source_formatting::finish(&|method, args| self.call(method, args), context, &mut dom);
         }

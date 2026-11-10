@@ -147,6 +147,7 @@ pub mod ssh;
 pub mod start;
 pub mod tab;
 pub mod testing;
+mod trace;
 pub mod url;
 pub mod video;
 pub mod widgets;
