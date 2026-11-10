@@ -5333,15 +5333,11 @@ mod update_measurements {
             .flatten()
             .filter_map(|s| s.style.as_ref().and_then(rich_art::picture::PictureTag::of))
             .collect();
-        if b.images.get_untracked() == Images::Kitty {
-            assert!(
-                visible_tags.iter().any(|tag| p
-                    .inline_pictures
-                    .values()
-                    .any(|picture| picture.id() == tag.id)),
-                "no inline picture in rendered body"
-            );
-        }
+        // Kitty's inline pictures reach the screen as the shared image
+        // presentation's own resources (since #877/#878), not as cells
+        // tagged with the source picture's id, so they are not looked for
+        // by tag here; the layout's inline regions above say they are laid
+        // out, and the frames below are matched by their own escapes.
         eprintln!(
             "workload: stream_node={node} kind={:?} rect={:?} cells={}x{} inline_tags={}",
             p.media[stream].kind,
