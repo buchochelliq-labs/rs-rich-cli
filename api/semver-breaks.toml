@@ -11,10 +11,10 @@
 # Documentation-only breaks not represented by a cargo-semver-checks lint.
 # These are not lint allowances: known_breaks() reads only [[break]]. The
 # exact public API snapshots and CHANGELOG migration note expose this change.
-# 0.1.0 is already Cargo-incompatible with the published 0.0.x versions.
+# A 0.0.x patch is already Cargo-incompatible with the version before it.
 [[manual_break]]
 crate = "rs-rich-ext"
-version = "0.1.0"
+version = "0.0.23"
 item = "rich_ext::surface::Cell::width"
 from = "u8"
 to = "u16"
@@ -22,7 +22,7 @@ reason = "Caller-measured atoms may occupy more than 255 columns; migrate width 
 
 [[manual_break]]
 crate = "rs-rich-intuituive"
-version = "0.1.0"
+version = "0.0.11"
 item = "intuituive::screen::Cell::width"
 from = "u8"
 to = "u16"
@@ -30,7 +30,7 @@ reason = "The re-exported surface Cell width widens; migrate width variables/con
 
 [[manual_break]]
 crate = "noctiluca"
-version = "0.1.0"
+version = "0.0.5"
 item = "noctiluca::args::Args::mute"
 from = "no field"
 to = "pub mute: bool"
@@ -38,7 +38,7 @@ reason = "`--mute`/`--no-audio` now that sound is on by default when not over SS
 
 [[manual_break]]
 crate = "noctiluca"
-version = "0.1.0"
+version = "0.0.5"
 item = "noctiluca::testing::FakeState::screencast_area, noctiluca::testing::FakeState::screencast_areas"
 from = "no fields"
 to = "pub screencast_area: Option<Rect>, pub screencast_areas: Vec<Option<Rect>>"
