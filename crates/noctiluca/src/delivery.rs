@@ -36,14 +36,38 @@ impl Mailbox {
         if let Update::Page(p) = &update {
             self.document = p.document;
         }
+        // A page moving to the back takes its document's waiting frames
+        // with it, so they still follow it: before it, the app would take
+        // them for an earlier document's and drop them.
+        let mut follow = Vec::new();
         if let Some(key) = key_of(&update) {
             let before = self.queue.len();
+            if key == Key::Page
+                && let Some(at) = self
+                    .queue
+                    .iter()
+                    .position(|(_, old)| key_of(&old.update) == Some(Key::Page))
+            {
+                let document = self.document;
+                let mut index = at + 1;
+                while index < self.queue.len() {
+                    let (tag, old) = &self.queue[index];
+                    if *tag == document
+                        && matches!(old.update, Update::Frame(_) | Update::Screen(_))
+                    {
+                        follow.extend(self.queue.remove(index));
+                    } else {
+                        index += 1;
+                    }
+                }
+            }
             self.queue
                 .retain(|(_, old)| key_of(&old.update) != Some(key));
-            self.replaced += before - self.queue.len();
+            self.replaced += before - follow.len() - self.queue.len();
         }
         self.queue
             .push_back((self.document, Envelope { update, source }));
+        self.queue.extend(follow);
         self.high_water = self.high_water.max(self.queue.len());
         let retained = self.queue.iter().map(|(_, u)| bytes(&u.update)).sum();
         self.retained_high_water = self.retained_high_water.max(retained);
@@ -181,6 +205,50 @@ mod tests {
         assert_eq!(done, (0..50).collect::<Vec<_>>());
     }
 
+    #[test]
+    fn a_coalesced_page_keeps_its_documents_frames_after_it() {
+        // A frame queued after its document's page stays after it when a
+        // newer reading of that page takes the waiting one's place: before
+        // it, the app would drop the frame as an earlier document's.
+        let page = |document| {
+            Update::Page(Arc::new(crate::model::Page {
+                document,
+                ..Default::default()
+            }))
+        };
+        let screen = || {
+            Update::Screen(Arc::new(rich_embed::ScreencastFrame {
+                pixels: rich_embed::Pixels::new(2, 2, vec![0; 12]).unwrap(),
+                meta: Default::default(),
+            }))
+        };
+        let mut q = Mailbox::default();
+        q.push(page(5));
+        q.push(screen());
+        q.push(frame(1));
+        q.push(Update::Done(1, Ok(())));
+        q.push(page(5));
+        let seen: Vec<&str> = std::iter::from_fn(|| q.pop())
+            .map(|(document, update)| {
+                assert_eq!(document, 5);
+                match update {
+                    Update::Page(_) => "page",
+                    Update::Screen(_) => "screen",
+                    Update::Frame(_) => "frame",
+                    Update::Done(..) => "done",
+                    _ => "other",
+                }
+            })
+            .collect();
+        assert_eq!(seen, ["done", "page", "screen", "frame"]);
+        // A newer document's page leaves the earlier one's frames before it.
+        let mut q = Mailbox::default();
+        q.push(page(5));
+        q.push(screen());
+        q.push(page(6));
+        let order: Vec<u64> = std::iter::from_fn(|| q.pop()).map(|(d, _)| d).collect();
+        assert_eq!(order, [5, 6]);
+    }
     #[test]
     fn frames_are_bounded_and_semantic_updates_are_lossless() {
         let mut q = Mailbox::default();
