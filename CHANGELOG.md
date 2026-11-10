@@ -99,9 +99,12 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   committed evidence), and the handoff says it was merged as #878 and lists its
   follow-ups (#879 to #884).
 
-### Releases: rab v2.1.0
+### Releases: rab v2.1.1
 
-- **rab v2.1.0** replaces v2.0.1 (`release.py install` from its tag).
+- **rab v2.1.1** replaces v2.0.1 (`release.py install` from its tag).
+  - **The release record:** a crate no longer lists the files of a
+    same-named package (0.0.25's record gave crates.io `rs-rich` PyPI
+    `rs-rich`'s wheels; v2.1.1).
   - **Stopped releases:** `tag --commit <sha>` carries a release that
     stopped part-way to a later commit that has the fix, and `tag` finishes
     a release whose tagged files fail `check` from `HEAD` when `HEAD` has
