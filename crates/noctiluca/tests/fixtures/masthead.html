@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Masthead</title>
+<style>
+  /* A fixed top bar as video sites draw one: a skip link parked far above
+     the page until it is focused, a menu button and a logo at the start, a
+     search box and its buttons in the middle, sign-in at the end; all on
+     one 56 px row, each vertically centred in it. The page is read
+     scrolled down, as after the reader scrolled: the skip link is then
+     well inside the document, still far above the viewport. */
+  body { margin: 0; font: 14px/20px sans-serif; }
+  #bar { position: fixed; top: 0; left: 0; right: 0; height: 56px;
+         display: flex; align-items: center; justify-content: space-between;
+         padding: 0 16px; background: #fff; }
+  #start { display: flex; align-items: center; position: relative; }
+  #skip { position: absolute; top: -1000px; left: 16px; }
+  #skip:focus { top: 8px; }
+  #guide { width: 40px; height: 40px; }
+  #logo { margin-left: 16px; width: 90px; height: 20px; background: #c00;
+          color: #fff; font: bold 12px/20px sans-serif; text-align: center; }
+  #center { display: flex; align-items: center; }
+  #search { width: 360px; height: 40px; box-sizing: border-box;
+            padding: 0 12px; border: 1px solid #ccc; border-radius: 20px 0 0 20px; }
+  #go, #voice { height: 40px; }
+  #voice { margin-left: 12px; border-radius: 20px; }
+  #end { display: flex; align-items: center; }
+  #end button { height: 36px; }
+  main { padding: 72px 16px 0; height: 3000px; }
+  main p { margin: 0 0 12px; }
+</style>
+</head>
+<body>
+<div id="bar">
+  <div id="start">
+    <button id="skip">Skip navigation</button>
+    <button id="guide" aria-label="Guide">&#9776;</button>
+    <div id="logo">ClipTube</div>
+  </div>
+  <div id="center">
+    <input id="search" type="text" name="q" placeholder="Search" aria-label="Search">
+    <button id="go" aria-label="Search">Go</button>
+    <button id="voice">Voice</button>
+  </div>
+  <div id="end">
+    <button>Settings</button>
+    <button>Sign in</button>
+  </div>
+</div>
+<main>
+  <p>First result: the glowing coast at night.</p>
+  <p>Second result: waves under the pier.</p>
+</main>
+<script>scrollTo(0, 1500);</script>
+</body>
+</html>
