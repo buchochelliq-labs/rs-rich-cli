@@ -432,11 +432,20 @@ fn legacy_resource_only_engine_keeps_inline_pictures_after_publishing_text() {
     started
         .recv_timeout(Duration::from_secs(2))
         .expect("legacy URI was not fetched");
-    d.settle();
-    assert!(
-        d.screen().plain().join("\n").contains("Legacy useful text"),
-        "text was held behind legacy resource"
-    );
+    // The resource is still held: the text shows meanwhile, once its
+    // reading has reached the screen (one settle can come before it).
+    let until = Instant::now() + Duration::from_secs(2);
+    loop {
+        d.settle();
+        if d.screen().plain().join("\n").contains("Legacy useful text") {
+            break;
+        }
+        assert!(
+            Instant::now() < until,
+            "text was held behind legacy resource"
+        );
+        std::thread::sleep(Duration::from_millis(10));
+    }
     release.send(()).unwrap();
     let until = Instant::now() + Duration::from_secs(2);
     loop {
