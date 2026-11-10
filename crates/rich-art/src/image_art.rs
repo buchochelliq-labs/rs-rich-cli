@@ -24,6 +24,7 @@
 //! Invalid fit dimensions produce no segments through this infallible trait;
 //! use [`ImageArt::render`] to receive the validation error.
 
+use std::borrow::Cow;
 use std::sync::Arc;
 
 use image::{DynamicImage, GenericImageView, Rgb, RgbImage, Rgba, RgbaImage, imageops::FilterType};
@@ -727,8 +728,12 @@ impl ImageArt {
         } else {
             None
         };
+        // An RGBA image keeping its alpha is used as it is, not copied.
         let source = if keep_alpha {
-            DynamicImage::ImageRgba8(image.to_rgba8())
+            match &*image {
+                DynamicImage::ImageRgba8(_) => Cow::Borrowed(&*image),
+                other => Cow::Owned(DynamicImage::ImageRgba8(other.to_rgba8())),
+            }
         } else {
             let mut flattened = RgbImage::new(image.width(), image.height());
             for (x, y, pixel) in flattened.enumerate_pixels_mut() {
@@ -741,7 +746,7 @@ impl ImageArt {
                         / 255) as u8;
                 }
             }
-            DynamicImage::ImageRgb8(flattened)
+            Cow::Owned(DynamicImage::ImageRgb8(flattened))
         };
         let checkered = self.background == Some(ImageBackground::Checkerboard);
         let Some((width, height)) = target else {
@@ -750,7 +755,7 @@ impl ImageArt {
                 let flat = checkerboard(&source.to_rgba8(), (side, side));
                 return Ok(Arc::new(DynamicImage::ImageRgb8(flat)));
             }
-            return Ok(Arc::new(source));
+            return Ok(Arc::new(source.into_owned()));
         };
         let Some(fit) = fit else {
             // Native at the image's own size: every pixel lands on exactly one

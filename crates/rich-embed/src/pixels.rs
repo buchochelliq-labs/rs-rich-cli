@@ -51,10 +51,13 @@ impl Pixels {
     /// The pixels as red, green, blue and alpha (opaque), for encoders that
     /// take RGBA.
     pub fn to_rgba(&self) -> Vec<u8> {
-        let mut out = Vec::with_capacity(self.rgb.len() / 3 * 4);
-        for pixel in self.rgb.as_chunks::<3>().0 {
-            out.extend_from_slice(pixel);
-            out.push(255);
+        // Filled opaque, then each pixel's colour copied in: no capacity
+        // check per byte, so a video frame converts in a fraction of the
+        // time on the thread that offers it.
+        let pixels = self.rgb.as_chunks::<3>().0;
+        let mut out = vec![255u8; pixels.len() * 4];
+        for (rgba, rgb) in out.as_chunks_mut::<4>().0.iter_mut().zip(pixels) {
+            rgba[..3].copy_from_slice(rgb);
         }
         out
     }

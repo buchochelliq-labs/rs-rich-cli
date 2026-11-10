@@ -702,20 +702,25 @@ impl Picture {
         // Adjust the image's sampling aspect to match the physical cell,
         // bounded before resampling. The protocol raster keeps the original.
         let image = if cell.width.saturating_mul(2) == cell.height {
-            DynamicImage::clone(&self.shown.image)
+            Arc::clone(&self.shown.image)
         } else {
             let image = &self.shown.image;
             let ratio = (f64::from(cell.width) * 2.0) / f64::from(cell.height.max(1));
             let w = f64::from(image.width().max(1));
             let h = f64::from(image.height().max(1)) * ratio;
             let scale = (f64::from(KEEP) / w.max(h)).min(1.0);
-            image.resize_exact(
+            let size = (
                 (w * scale).round().max(1.0) as u32,
                 (h * scale).round().max(1.0) as u32,
-                image::imageops::FilterType::Lanczos3,
+            );
+            let filter = crate::resample::Filter::Lanczos3;
+            Arc::new(
+                crate::resample::resize_crop(image, filter, size, (0, 0), size).unwrap_or_else(
+                    || image.resize_exact(size.0, size.1, image::imageops::FilterType::Lanczos3),
+                ),
             )
         };
-        let mut art = ImageArt::new(image)
+        let mut art = ImageArt::from_shared(image)
             .mode(mode)
             .anchor(view.anchor)
             .background_mode(match view.background {
