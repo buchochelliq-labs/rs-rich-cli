@@ -11,7 +11,7 @@ does not authorize creating tags or uploading packages.
 
 ## 0. Select the packages
 
-Releases run on rab, the Release Asset Bundle (formerly release-kit; v2.0.1,
+Releases run on rab, the Release Asset Bundle (formerly release-kit; v2.1.0,
 installed under `.github/rab/`; `docs/BRANCHING.md`, "Which path is current";
 docs at https://buchochelliq-labs.github.io/release-asset-bundle/). Every crate owns its
 independent SemVer. A release is every package of `rab.yml` (the

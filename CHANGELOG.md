@@ -99,6 +99,18 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   committed evidence), and the handoff says it was merged as #878 and lists its
   follow-ups (#879 to #884).
 
+### Releases: rab v2.1.0
+
+- **rab v2.1.0** replaces v2.0.1 (`release.py install` from its tag).
+  - **Stopped releases:** `tag --commit <sha>` carries a release that
+    stopped part-way to a later commit that has the fix, and `tag` finishes
+    a release whose tagged files fail `check` from `HEAD` when `HEAD` has
+    the fix.
+  - **Publish order:** `check` counts versioned dev-dependencies, which
+    cargo keeps in the published manifest. This repository's order passes.
+  - **Windows:** `publish-chocolatey` strips the CRs `jq` prints there
+    (v2.0.2). This repository does not publish to Chocolatey.
+
 ### Releases: rab v2.0.1
 
 - **PyPI publishes again from `release.yml`.** 0.0.25's run uploaded the
