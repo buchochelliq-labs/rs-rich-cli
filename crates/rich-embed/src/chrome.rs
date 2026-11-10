@@ -122,6 +122,8 @@ enum Request {
     /// Frames this fraction of the viewport's size (`maxWidth`,
     /// `maxHeight`).
     ScreencastScale(f64),
+    /// Frames of this part of the document only, or of the viewport.
+    ScreencastArea(Option<ScreencastArea>),
     /// Acknowledge the screencast frame with this session id: Chrome sends
     /// the next one only after it.
     Ack(i64),
@@ -160,6 +162,73 @@ impl FrameMeta {
             device_height: f("deviceHeight", 0.0),
             timestamp: metadata["timestamp"].as_f64(),
         }
+    }
+}
+
+/// A part of the document the screencast shows instead of the whole
+/// viewport ([`ChromeEngine::set_screencast_area`]), in CSS pixels from the
+/// document's top left, in whole pixels.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct ScreencastArea {
+    /// The left edge.
+    pub x: u32,
+    /// The top edge.
+    pub y: u32,
+    /// The width.
+    pub width: u32,
+    /// The height.
+    pub height: u32,
+}
+
+impl ScreencastArea {
+    /// The whole pixels that hold the rectangle `x`, `y`, `width`,
+    /// `height` (CSS pixels, as a layout box gives it); `None` when it is
+    /// empty or not on the document.
+    pub fn around(x: f64, y: f64, width: f64, height: f64) -> Option<ScreencastArea> {
+        let finite = [x, y, width, height].iter().all(|n| n.is_finite());
+        if !finite || width <= 0.0 || height <= 0.0 || x + width <= 0.0 || y + height <= 0.0 {
+            return None;
+        }
+        let (x0, y0) = (x.max(0.0).floor(), y.max(0.0).floor());
+        let (x1, y1) = ((x + width).ceil(), (y + height).ceil());
+        Some(ScreencastArea {
+            x: x0 as u32,
+            y: y0 as u32,
+            width: (x1 - x0) as u32,
+            height: (y1 - y0) as u32,
+        })
+    }
+}
+
+/// `Emulation.setDeviceMetricsOverride`'s parameters for a viewport of
+/// `width` x `height` CSS pixels whose screencast shows `area`: its
+/// `viewport`, the visible area, which the page does not see (its layout,
+/// its scroll position and its viewport's size stay as they are).
+fn device_metrics(width: u32, height: u32, area: Option<ScreencastArea>) -> Value {
+    let mut params = json!({"width": width, "height": height, "deviceScaleFactor": 1,
+                            "mobile": false});
+    if let Some(a) = area {
+        params["viewport"] = json!({"x": a.x, "y": a.y, "width": a.width,
+                                    "height": a.height, "scale": 1});
+    }
+    params
+}
+
+/// Where a frame of `meta` was taken while the screencast shows `area`:
+/// Chrome says the page's scroll position and the area's size, so a
+/// frame of the area is placed at the area's top left, at a zoom of one,
+/// and [`ScreencastFrame::crop`] cuts a rectangle of the document from it
+/// as from a frame of the viewport.
+fn placed(meta: FrameMeta, area: Option<ScreencastArea>) -> FrameMeta {
+    match area {
+        Some(a) => FrameMeta {
+            scroll_x: f64::from(a.x),
+            scroll_y: f64::from(a.y),
+            offset_top: 0.0,
+            page_scale: 1.0,
+            ..meta
+        },
+        None => meta,
     }
 }
 
@@ -412,6 +481,8 @@ pub struct ChromeEngine {
     on_demand: bool,
     /// The screencast's frames as a fraction of the viewport's size.
     scale: f64,
+    /// The part of the document the screencast shows, if not the viewport.
+    area: Option<ScreencastArea>,
 }
 
 impl fmt::Debug for ChromeEngine {
@@ -448,6 +519,7 @@ impl ChromeEngine {
             screencast: true,
             on_demand: false,
             scale: 1.0,
+            area: None,
         }
     }
 
@@ -561,6 +633,39 @@ impl ChromeEngine {
             return Ok(());
         }
         self.send(Request::ScreencastScale(scale))
+    }
+
+    /// Screencast only `area` of the document (`None`: the viewport), where
+    /// one region is all the app shows of the frames: Chrome encodes, and
+    /// the engine decodes, that region's pixels rather than the whole
+    /// viewport's. The page sees no change (`setDeviceMetricsOverride`'s
+    /// `viewport`, the visible area): its layout, scroll position, input
+    /// and screenshots stay. Chrome paints only what its viewport holds, so
+    /// the area is one the viewport shows. Frames are of the area's size
+    /// (times the [scale](Self::set_screencast_scale)), and say where they
+    /// were taken as the area's top left, so [`ScreencastFrame::crop`] cuts
+    /// a rectangle of the document from them as from a frame of the
+    /// viewport. Taking effect restarts the screencast: a frame waiting to
+    /// be taken is dropped, and so is every frame Chrome painted before it
+    /// restarted, whatever its size. The capture scope stays: the page did
+    /// not change.
+    pub fn set_screencast_area(&mut self, area: Option<ScreencastArea>) -> io::Result<()> {
+        if area == self.area {
+            return Ok(());
+        }
+        self.area = area;
+        if self.commands.is_none() {
+            return Ok(());
+        }
+        let ack = {
+            let mut shared = lock(&self.shared);
+            shared.frame = None;
+            shared.raw.take().and_then(|(_, _, ack)| ack)
+        };
+        if let Some(ack) = ack {
+            self.send(Request::Ack(ack))?;
+        }
+        self.send(Request::ScreencastArea(area))
     }
 
     /// The newest screencast frame since the last call, with where it was
@@ -773,6 +878,7 @@ impl ChromeEngine {
             screencast: self.screencast,
             on_demand: self.on_demand,
             scale: self.scale,
+            area: self.area,
         };
         thread::spawn(move || {
             if let Err(error) = run(connect, stderr, receiver, called, &shared, cell, wiring) {
@@ -1419,6 +1525,9 @@ enum Pending {
     Attach,
     History,
     Viewport(u64),
+    /// The screencast started again after its area changed (the restart's
+    /// number): frames before its answer were painted before the change.
+    Restarted(u64),
     /// An app's, through [`DevTools`]: the answer goes back to it.
     Call(Sender<io::Result<Value>>),
     Other,
@@ -1449,6 +1558,14 @@ struct Session {
     on_demand: bool,
     /// The frames as a fraction of the viewport's size.
     scale: f64,
+    /// The part of the document the screencast shows, if not the viewport.
+    area: Option<ScreencastArea>,
+    /// The area's changes, counted, and the one whose restart Chrome has
+    /// not answered yet: until it does, a frame may have been painted
+    /// before the change, and placed at the new area it would be cut in
+    /// the wrong place, so it is dropped.
+    restarts: u64,
+    restarting: Option<u64>,
 }
 
 /// What the engine's thread is set up with besides its channels.
@@ -1458,6 +1575,7 @@ struct Wiring {
     screencast: bool,
     on_demand: bool,
     scale: f64,
+    area: Option<ScreencastArea>,
 }
 
 /// The `Browser.setDownloadBehavior` parameters for `downloads`.
@@ -1498,7 +1616,7 @@ impl Session {
         let (width, height) = viewport(self.size.0, self.size.1, self.cell);
         self.send(
             "Emulation.setDeviceMetricsOverride",
-            json!({"width": width, "height": height, "deviceScaleFactor": 1, "mobile": false}),
+            device_metrics(width, height, self.area),
             Pending::Viewport(self.viewport_revision),
             true,
         )?;
@@ -1506,12 +1624,19 @@ impl Session {
         if !self.screencast {
             return Ok(());
         }
-        let (max_width, max_height) = scaled((width, height), self.scale);
-        self.page(
-            "Page.startScreencast",
-            json!({"format": "jpeg", "quality": 70, "maxWidth": max_width,
-                   "maxHeight": max_height, "everyNthFrame": 1}),
-        )
+        let shown = self.area.map_or((width, height), |a| (a.width, a.height));
+        let (max_width, max_height) = scaled(shown, self.scale);
+        let params = json!({"format": "jpeg", "quality": 70, "maxWidth": max_width,
+                            "maxHeight": max_height, "everyNthFrame": 1});
+        match self.restarting {
+            Some(restart) => self.send(
+                "Page.startScreencast",
+                params,
+                Pending::Restarted(restart),
+                true,
+            ),
+            None => self.page("Page.startScreencast", params),
+        }
     }
 
     fn ensure_viewport(&mut self, shared: &Mutex<Shared>) -> io::Result<()> {
@@ -1579,6 +1704,12 @@ impl Session {
                 self.scale = scale;
                 self.screencast()
             }
+            Request::ScreencastArea(area) => {
+                self.area = area;
+                self.restarts += 1;
+                self.restarting = Some(self.restarts);
+                self.screencast()
+            }
             Request::Ack(id) => self.page("Page.screencastFrameAck", json!({"sessionId": id})),
         }
     }
@@ -1603,7 +1734,10 @@ impl Session {
                     // to a `file://` page, or to another site) is refused
                     // with "Not attached to an active page"; that must not
                     // end the engine.
-                    Pending::Other | Pending::History | Pending::Viewport(_) => Ok(()),
+                    Pending::Other
+                    | Pending::History
+                    | Pending::Viewport(_)
+                    | Pending::Restarted(_) => Ok(()),
                     // An app's call failing fails only that call.
                     Pending::Call(answer) => {
                         let _ = answer.send(Err(io::Error::other(error.to_string())));
@@ -1666,6 +1800,11 @@ impl Session {
                         state.applied_viewport = Some(revision);
                     }
                 }
+                Pending::Restarted(restart) => {
+                    if self.restarting == Some(restart) {
+                        self.restarting = None;
+                    }
+                }
                 Pending::Other => {}
             }
             return Ok(());
@@ -1700,10 +1839,17 @@ impl Session {
             "Page.screencastFrame" => {
                 let meta = FrameMeta::of(&params["metadata"]);
                 let ack = params["sessionId"].as_i64();
-                let matching_viewport = lock(shared).expected_viewport.is_none_or(|(w, h)| {
+                // Of the viewport, or of the area: Chrome gives an area's
+                // frames the area's size.
+                let expected = match self.area {
+                    Some(a) => Some((a.width, a.height)),
+                    None => lock(shared).expected_viewport,
+                };
+                let matching_viewport = expected.is_none_or(|(w, h)| {
                     meta.device_width == f64::from(w) && meta.device_height == f64::from(h)
                 });
-                if !matching_viewport {
+                let meta = placed(meta, self.area);
+                if !matching_viewport || self.restarting.is_some() {
                     if let Some(ack) = ack {
                         self.page("Page.screencastFrameAck", json!({"sessionId": ack}))?;
                     }
@@ -1802,6 +1948,9 @@ fn run(
         screencast: wiring.screencast,
         on_demand: wiring.on_demand,
         scale: wiring.scale,
+        area: wiring.area,
+        restarts: 0,
+        restarting: None,
     };
     session.send(
         "Browser.setDownloadBehavior",
@@ -2105,6 +2254,9 @@ mod tests {
             screencast: true,
             on_demand: true,
             scale: 1.0,
+            area: None,
+            restarts: 0,
+            restarting: None,
         };
         session.screencast().unwrap();
         session
@@ -2189,6 +2341,130 @@ mod tests {
                 }
             );
         }
+    }
+
+    #[test]
+    fn an_area_is_whole_pixels_and_the_visible_area_override() {
+        let area = ScreencastArea::around(16.4, 1072.0, 501.2, 281.5).unwrap();
+        assert_eq!(
+            area,
+            ScreencastArea {
+                x: 16,
+                y: 1072,
+                width: 502,
+                height: 282
+            }
+        );
+        // The page's own size stays; the visible area is the box.
+        let params = device_metrics(960, 648, Some(area));
+        assert_eq!(
+            (params["width"].as_u64(), params["height"].as_u64()),
+            (Some(960), Some(648))
+        );
+        assert_eq!(
+            params["viewport"],
+            json!({"x": 16, "y": 1072, "width": 502, "height": 282, "scale": 1})
+        );
+        assert!(device_metrics(960, 648, None).get("viewport").is_none());
+        assert_eq!(ScreencastArea::around(0.0, 0.0, 0.0, 10.0), None);
+        assert_eq!(ScreencastArea::around(-50.0, 0.0, 40.0, 10.0), None);
+        assert_eq!(ScreencastArea::around(f64::NAN, 0.0, 40.0, 10.0), None);
+        // Chrome says the page's scroll position (1000 here) and the area's
+        // size: the frame is placed at the area's top left, so the box is
+        // the whole frame.
+        let chrome = FrameMeta::of(&json!({"scrollOffsetY": 1000, "pageScaleFactor": 1,
+            "deviceWidth": 502, "deviceHeight": 282}));
+        let frame = ScreencastFrame {
+            pixels: Pixels::new(251, 141, vec![0; 251 * 141 * 3]).unwrap(),
+            meta: placed(chrome, Some(area)),
+        };
+        let cut = frame.crop(16.4, 1072.0, 501.2, 281.5).unwrap();
+        assert_eq!((cut.width, cut.height), (251, 141));
+        assert_eq!(placed(chrome, None), chrome);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn frames_painted_before_an_area_change_are_dropped_whatever_their_size() {
+        use std::io::Read;
+        let (mut engine, mut session, mut output, requests) = pending_session();
+        let area = |x| ScreencastArea {
+            x,
+            y: 40,
+            width: 30,
+            height: 20,
+        };
+        let sized = json!({"deviceWidth": 30, "deviceHeight": 20, "pageScaleFactor": 1});
+        // An area at x 10 is cast, and Chrome answered its restart.
+        session
+            .apply(Request::ScreencastArea(Some(area(10))))
+            .unwrap();
+        let start = session.next;
+        session
+            .message(
+                &json!({"id": start, "result": {}}).to_string(),
+                &engine.shared,
+            )
+            .unwrap();
+        send_test_frame_with_meta(&mut session, &engine.shared, 1, [255, 0, 0], sized.clone());
+        let taken = engine.take_screencast().unwrap();
+        assert_eq!((taken.meta.scroll_x, taken.meta.scroll_y), (10.0, 40.0));
+        // The area moves to x 50, the same size. Frames that come before
+        // Chrome answers the restart were painted at x 10: placed at x 50
+        // they would be cut wrong, so they are dropped (and acknowledged).
+        session
+            .apply(Request::ScreencastArea(Some(area(50))))
+            .unwrap();
+        let restart = session.next;
+        send_test_frame_with_meta(&mut session, &engine.shared, 2, [0, 255, 0], sized.clone());
+        assert!(
+            engine.take_screencast().is_none(),
+            "a stale frame came through"
+        );
+        session
+            .message(
+                &json!({"id": restart, "result": {}}).to_string(),
+                &engine.shared,
+            )
+            .unwrap();
+        send_test_frame_with_meta(&mut session, &engine.shared, 3, [0, 0, 255], sized);
+        let taken = engine.take_screencast().unwrap();
+        assert_eq!(taken.pixels.rgb, [0, 0, 255]);
+        assert_eq!((taken.meta.scroll_x, taken.meta.scroll_y), (50.0, 40.0));
+        // A frame of another size than the area's is not the area's.
+        let viewport = json!({"deviceWidth": 800, "deviceHeight": 480, "pageScaleFactor": 1});
+        send_test_frame_with_meta(&mut session, &engine.shared, 4, [9, 9, 9], viewport);
+        assert!(engine.take_screencast().is_none());
+        // The app asking for another area drops the frame waiting to be
+        // taken, and acknowledges it so Chrome sends the next: the first
+        // of two was acknowledged as it came, the second waits with its id.
+        engine.area = Some(area(50));
+        let small = json!({"deviceWidth": 30, "deviceHeight": 20});
+        send_test_frame_with_meta(&mut session, &engine.shared, 5, [1, 2, 3], small.clone());
+        send_test_frame_with_meta(&mut session, &engine.shared, 6, [1, 2, 3], small);
+        engine.set_screencast_area(None).unwrap();
+        assert!(engine.take_screencast().is_none());
+        let asked: Vec<_> = requests.try_iter().collect();
+        assert_eq!(asked, [Request::Ack(6), Request::ScreencastArea(None)]);
+        drop(session);
+        let mut wire = String::new();
+        output.read_to_string(&mut wire).unwrap();
+        let sent: Vec<Value> = wire
+            .split('\0')
+            .filter_map(|m| serde_json::from_str(m).ok())
+            .collect();
+        let metrics: Vec<_> = sent
+            .iter()
+            .filter(|m| m["method"] == "Emulation.setDeviceMetricsOverride")
+            .map(|m| m["params"]["viewport"]["x"].clone())
+            .collect();
+        assert_eq!(metrics, [Value::Null, json!(10), json!(50)]);
+        let acks: Vec<_> = sent
+            .iter()
+            .filter(|m| m["method"] == "Page.screencastFrameAck")
+            .map(|m| m["params"]["sessionId"].as_i64().unwrap())
+            .collect();
+        assert_eq!(acks, [1, 2, 3, 4, 5]);
     }
 
     #[cfg(unix)]

@@ -484,6 +484,14 @@ struct Worker<'a> {
     /// was last given.
     scale: f64,
     scale_given: f64,
+    /// The part of the document the engine was last asked to screencast
+    /// (`None`: the viewport), and Chrome's viewport's width in CSS pixels
+    /// (from the pane's size).
+    area_given: Option<Rect>,
+    view_width: Option<f64>,
+    /// When Chrome's view was last looked at while only an area is cast:
+    /// a page that scrolls itself moves its viewport off the area.
+    view_at: Option<Instant>,
     /// A paused region's time when its frame was last taken: a seek while
     /// paused takes one more.
     shown_time: HashMap<NodeId, f64>,
@@ -1404,6 +1412,8 @@ impl Worker<'_> {
         }
         self.pixels = on;
         if on {
+            // The pixel view shows the whole viewport.
+            self.set_area(None);
             let _ = self.engine.set_screencast_scale(TabId(0), 1.0);
             self.pixels_cast = self.engine.set_screencast(TabId(0), true).is_ok();
             self.scale_given = 1.0;
@@ -1440,11 +1450,18 @@ impl Worker<'_> {
         let regions = self.regions();
         let now = Instant::now();
         let plan = self.frames.plan(&regions, now);
-        // The scale first, so the screencast starts at it.
-        if self.scale != self.scale_given && (self.frames.on || plan.screencast == Some(true)) {
+        // The scale and the area first, so the screencast starts at them.
+        let casting = self.frames.on || plan.screencast == Some(true);
+        if self.scale != self.scale_given && casting {
             self.scale_given = self.scale;
             let _ = self.engine.set_screencast_scale(TabId(0), self.scale);
         }
+        let area = if casting && plan.screencast != Some(false) {
+            crate::video::screencast_area(&regions, self.chrome_view(now))
+        } else {
+            None
+        };
+        self.set_area(area);
         if let Some(on) = plan.screencast {
             let _ = self.engine.set_screencast(TabId(0), on);
             self.last_frame = on.then_some(now);
@@ -1486,6 +1503,52 @@ impl Worker<'_> {
         // adapted view shows. Capture that whole region through the model's
         // guarded path; waiting for a quiet screencast would starve it forever.
         self.capture_regions(&missing, now);
+    }
+
+    /// Chrome's viewport in the document's CSS pixels, if known. While the
+    /// screencast runs it is looked at again every [`PLAYBACK`]: a page
+    /// that scrolls itself moves Chrome's viewport off the area, or onto it.
+    fn chrome_view(&mut self, now: Instant) -> Option<Rect> {
+        let stale = self
+            .view_at
+            .is_none_or(|at| now.duration_since(at) >= PLAYBACK);
+        if stale {
+            self.view_at = Some(now);
+            if let Ok(metrics) = self.engine.metrics(TabId(0)) {
+                self.metrics = Some(metrics);
+            }
+        }
+        let m = self.metrics?;
+        let width = self
+            .view_width
+            .or_else(|| self.page.as_ref().map(|p| p.width))?;
+        Some(Rect::new(0.0, m.scroll_y, width, m.viewport_height))
+    }
+
+    /// Ask the engine to screencast `area` (`None`: the viewport) when it
+    /// is not what it was last asked; a box that moved less than a pixel
+    /// keeps its area, so a reading's rounding never restarts the cast.
+    fn set_area(&mut self, area: Option<Rect>) {
+        let same = match (area, self.area_given) {
+            (Some(a), Some(b)) => {
+                (a.x - b.x).abs() < 1.0
+                    && (a.y - b.y).abs() < 1.0
+                    && (a.width - b.width).abs() < 1.0
+                    && (a.height - b.height).abs() < 1.0
+            }
+            (a, b) => a.is_none() && b.is_none(),
+        };
+        if same {
+            return;
+        }
+        if crate::trace::on() {
+            crate::trace::event(
+                "area",
+                serde_json::json!({"area": area.map(|r| [r.x, r.y, r.width, r.height])}),
+            );
+        }
+        self.area_given = area;
+        let _ = self.engine.set_screencast_area(TabId(0), area);
     }
 
     /// How long the tab may wait for a command before it looks at its
@@ -1590,7 +1653,10 @@ impl Worker<'_> {
                 }
                 self.engine.history(TabId(0), step).map_err(failed)
             }
-            Command::Resize(columns, rows) => self.engine.resize(columns, rows).map_err(failed),
+            Command::Resize(columns, rows) => {
+                self.view_width = Some(f64::from(columns) * f64::from(crate::cdp::CELL.0));
+                self.engine.resize(columns, rows).map_err(failed)
+            }
             Command::Scroll(y) => self.scroll(PageAction::ScrollTo(y)).map_err(failed),
             Command::Wheel(delta) => self.scroll(PageAction::Wheel(delta)).map_err(failed),
             Command::LoadMore => self.scroll(PageAction::ScrollTo(f64::MAX)).map_err(failed),
@@ -1915,6 +1981,9 @@ fn run_with_source(
         starved: false,
         scale: 1.0,
         scale_given: 1.0,
+        area_given: None,
+        view_width: None,
+        view_at: None,
         shown_time: HashMap::new(),
         live: HashMap::new(),
         appended: HashSet::new(),
@@ -2092,6 +2161,9 @@ mod tests {
             starved: false,
             scale: 1.0,
             scale_given: 1.0,
+            area_given: None,
+            view_width: None,
+            view_at: None,
             shown_time: HashMap::new(),
             live: HashMap::new(),
             appended: HashSet::new(),
@@ -3013,6 +3085,9 @@ mod tests {
             starved: false,
             scale: 1.0,
             scale_given: 1.0,
+            area_given: None,
+            view_width: None,
+            view_at: None,
             shown_time: HashMap::new(),
             live: HashMap::new(),
             appended: HashSet::new(),
@@ -3263,6 +3338,9 @@ mod tests {
                 starved: false,
                 scale: 1.0,
                 scale_given: 1.0,
+                area_given: None,
+                view_width: None,
+                view_at: None,
                 shown_time: HashMap::new(),
                 live: HashMap::new(),
                 appended: HashSet::new(),
@@ -3303,6 +3381,68 @@ mod tests {
             );
             assert_eq!(delivered.borrow().len(), usize::from(visible), "{name}");
         }
+    }
+
+    #[test]
+    fn the_screencast_is_of_the_playing_region_while_chrome_shows_all_of_it() {
+        use crate::{engine::Playback, testing::PageBuilder};
+        let dir = std::env::temp_dir().join(format!("tab-area-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let engine = FakeEngine::from_dir(&dir).unwrap();
+        let state = engine.state.clone();
+        {
+            let mut state = state.lock().unwrap();
+            state.scroll_y = 0.0;
+            state.viewport_height = 600.0;
+        }
+        let rect = Rect::new(20.0, 100.0, 400.0, 225.0);
+        let mut source = PageBuilder::new("https://example.test", "Video", 960.0, 2000.0);
+        source.element(
+            source.body(),
+            "VIDEO",
+            &[("src", "m.webm")],
+            &[],
+            Some(rect),
+        );
+        let mut page = crate::model::build(&source.snapshot(), &mut Revisions::new());
+        let node = page.media[0].node;
+        page.media[0].playback = Some(Playback {
+            ready: 4,
+            ..Playback::default()
+        });
+        let update = |_| {};
+        let (mut worker, _jobs, _done) = recovery_worker(engine, &update);
+        worker.page = Some(Arc::new(page));
+        worker.on_screen.insert(node);
+        worker.view_width = Some(960.0);
+        // It plays wholly in Chrome's viewport: only its box is cast.
+        worker.video();
+        assert!(state.lock().unwrap().screencast);
+        assert_eq!(state.lock().unwrap().screencast_area, Some(rect));
+        // Again with nothing changed: the area is not asked for again.
+        worker.video();
+        assert_eq!(state.lock().unwrap().screencast_areas.len(), 1);
+        // The page scrolled itself half past it: the whole viewport again,
+        // once Chrome's view is looked at.
+        state.lock().unwrap().scroll_y = 200.0;
+        worker.view_at = Some(Instant::now() - PLAYBACK);
+        worker.video();
+        assert_eq!(state.lock().unwrap().screencast_area, None);
+        // The pixel view shows the whole viewport.
+        state.lock().unwrap().scroll_y = 0.0;
+        worker.view_at = Some(Instant::now() - PLAYBACK);
+        worker.video();
+        assert_eq!(state.lock().unwrap().screencast_area, Some(rect));
+        worker.set_pixels(true);
+        assert_eq!(state.lock().unwrap().screencast_area, None);
+        worker.set_pixels(false);
+        // It stops: the screencast stops, of the viewport.
+        worker.video();
+        assert_eq!(state.lock().unwrap().screencast_area, Some(rect));
+        worker.on_screen.clear();
+        worker.video();
+        assert!(!state.lock().unwrap().screencast);
+        assert_eq!(state.lock().unwrap().screencast_area, None);
     }
 
     #[test]
@@ -3599,6 +3739,9 @@ mod tests {
             starved: false,
             scale: 1.0,
             scale_given: 1.0,
+            area_given: None,
+            view_width: None,
+            view_at: None,
             shown_time: HashMap::new(),
             live: HashMap::new(),
             appended: HashSet::new(),
@@ -3692,6 +3835,9 @@ mod tests {
                 starved: false,
                 scale: 1.0,
                 scale_given: 1.0,
+                area_given: None,
+                view_width: None,
+                view_at: None,
                 shown_time: HashMap::new(),
                 live: HashMap::new(),
                 appended: HashSet::new(),
@@ -3824,6 +3970,9 @@ mod tests {
             starved: false,
             scale: 1.0,
             scale_given: 1.0,
+            area_given: None,
+            view_width: None,
+            view_at: None,
             shown_time: HashMap::new(),
             live: HashMap::new(),
             appended: HashSet::new(),
@@ -4069,6 +4218,9 @@ mod tests {
             starved: false,
             scale: 1.0,
             scale_given: 1.0,
+            area_given: None,
+            view_width: None,
+            view_at: None,
             shown_time: HashMap::new(),
             live: HashMap::new(),
             appended: HashSet::new(),

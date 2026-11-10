@@ -1036,6 +1036,12 @@ impl Engine for ChromeBackend {
         self.engine.set_screencast_scale(scale)
     }
 
+    fn set_screencast_area(&mut self, _tab: TabId, area: Option<Rect>) -> io::Result<()> {
+        let area =
+            area.and_then(|r| rich_embed::ScreencastArea::around(r.x, r.y, r.width, r.height));
+        self.engine.set_screencast_area(area)
+    }
+
     fn screencast_frame(&mut self, _tab: TabId) -> Option<ScreencastFrame> {
         self.engine.take_screencast_for(self.model_scope.as_ref()?)
     }

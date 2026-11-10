@@ -320,6 +320,14 @@ pub trait Engine: Send {
     fn set_screencast_scale(&mut self, _tab: TabId, _scale: f64) -> io::Result<()> {
         Ok(())
     }
+    /// Screencast only `area` of the document (`None`: the viewport), when
+    /// one region is all the frames are for: the browser encodes that
+    /// region's pixels rather than the viewport's, and each frame says
+    /// where it was taken, so [`ScreencastFrame::crop`] cuts it as before.
+    /// The page sees no change. Backends that cannot ignore it.
+    fn set_screencast_area(&mut self, _tab: TabId, _area: Option<Rect>) -> io::Result<()> {
+        Ok(())
+    }
     /// The newest screencast frame since the last call, with where it was
     /// taken. Taking it lets the browser send the next.
     fn screencast_frame(&mut self, _tab: TabId) -> Option<ScreencastFrame> {

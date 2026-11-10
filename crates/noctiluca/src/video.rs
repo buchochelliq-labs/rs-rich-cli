@@ -246,6 +246,31 @@ impl Frames {
     }
 }
 
+/// The part of the document the screencast need show: the one moving
+/// region's box, when it is the only one and Chrome's viewport (`view`, in
+/// the document's CSS pixels) holds all of it. Chrome then encodes, and
+/// the tab decodes, that region's pixels rather than the whole
+/// viewport's. `None`, the whole viewport, otherwise: no region moves,
+/// several do (one frame cuts them all), the view is not known, or the
+/// region is partly out of Chrome's viewport, which paints only what it
+/// holds (the part out of it is captured on its own, as a frame of the
+/// viewport tells).
+pub fn screencast_area(regions: &[Region], view: Option<Rect>) -> Option<Rect> {
+    let mut moving = regions.iter().filter(|r| r.moving());
+    let region = moving.next()?;
+    if moving.next().is_some() {
+        return None;
+    }
+    let view = view?;
+    let r = region.rect;
+    // Half a pixel of slack: a box's edge and the viewport's round apart.
+    let inside = r.x >= view.x - 0.5
+        && r.y >= view.y - 0.5
+        && r.right() <= view.right() + 0.5
+        && r.bottom() <= view.bottom() + 0.5;
+    inside.then_some(r)
+}
+
 /// The app's side of the frames: one live [`Picture`] per region (its
 /// frames keep one id, so Kitty replaces the image it holds), drawn as
 /// rs-rich-art's [`Pacer`] allows within the terminal's [`ByteBudget`].
@@ -690,6 +715,30 @@ mod tests {
             on_screen,
             interval: None,
         }
+    }
+
+    #[test]
+    fn the_screencast_shows_only_the_region_when_one_plays_wholly_in_view() {
+        let view = Some(Rect::new(0.0, 0.0, 960.0, 648.0));
+        let one = [region(1, 10.0, true, true), region(2, 100.0, false, true)];
+        assert_eq!(
+            screencast_area(&one, view),
+            Some(Rect::new(10.0, 10.0, 40.0, 20.0))
+        );
+        // Nothing plays, or it plays off screen.
+        assert_eq!(screencast_area(&[region(1, 10.0, false, true)], view), None);
+        assert_eq!(screencast_area(&[region(1, 10.0, true, false)], view), None);
+        // Two play: the viewport's frame cuts both.
+        let two = [region(1, 10.0, true, true), region(2, 100.0, true, true)];
+        assert_eq!(screencast_area(&two, view), None);
+        // Partly out of Chrome's viewport, below it or beside it.
+        assert_eq!(screencast_area(&[region(1, 640.0, true, true)], view), None);
+        let beside = Some(Rect::new(0.0, 0.0, 30.0, 648.0));
+        assert_eq!(screencast_area(&one, beside), None);
+        // Wholly in a view scrolled down to it; not known, the viewport.
+        let scrolled = Some(Rect::new(0.0, 600.0, 960.0, 648.0));
+        assert!(screencast_area(&[region(1, 640.0, true, true)], scrolled).is_some());
+        assert_eq!(screencast_area(&one, None), None);
     }
 
     #[test]
