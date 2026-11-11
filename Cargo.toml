@@ -26,24 +26,24 @@ rust-version = "1.90"
 # External users get the same short names via each crate's `[lib] name`.
 # `default-features = false`: each member asks for `syntax` / `markdown` only
 # if it uses them, so `rs-rich-ext` without its defaults stays syntect-free.
-rich = { package = "rs-rich", path = "crates/rich", version = "0.0.16", default-features = false }
-rich-plugin-api = { package = "rs-rich-plugin-api", path = "crates/rich-plugin-api", version = "0.0.10" }
-rich-macros = { package = "rs-rich-macros", path = "crates/rich-macros", version = "0.0.10" }
-rich-ext = { package = "rs-rich-ext", path = "crates/rich-ext", version = "0.0.23" }
-rich-art = { package = "rs-rich-art", path = "crates/rich-art", version = "0.0.19" }
-rich-diagram = { package = "rs-rich-diagram", path = "crates/rich-diagram", version = "0.0.9" }
-rich-mermaid = { package = "rs-rich-mermaid", path = "crates/rich-mermaid", version = "0.0.12" }
-rich-lumis = { package = "rs-rich-lumis", path = "crates/rich-lumis", version = "0.0.10" }
-rich-record = { package = "rs-rich-record", path = "crates/rich-record", version = "0.0.14" }
-rich-interact = { package = "rs-rich-interact", path = "crates/rich-interact", version = "0.0.14" }
-rich-micro = { package = "rs-rich-micro", path = "crates/rich-micro", version = "0.0.12" }
-rich-data = { package = "rs-rich-data", path = "crates/rich-data", version = "0.0.10" }
-rich-ratatui = { package = "rs-rich-ratatui", path = "crates/rich-ratatui", version = "0.0.11" }
-rich-intuituive = { package = "rs-rich-intuituive", path = "crates/rich-intuituive", version = "0.0.11" }
-rich-web = { package = "rs-rich-web", path = "crates/rich-web", version = "0.0.9" }
-rich-embed = { package = "rs-rich-embed", path = "crates/rich-embed", version = "0.0.9" }
-rich-marketplace = { package = "rs-rich-marketplace", path = "crates/rich-marketplace", version = "0.0.5", default-features = false }
-rich-acp = { package = "rs-rich-acp", path = "crates/rich-acp", version = "0.0.3" }
+rich = { package = "rs-rich", path = "crates/rich", version = "0.0.17", default-features = false }
+rich-plugin-api = { package = "rs-rich-plugin-api", path = "crates/rich-plugin-api", version = "0.0.11" }
+rich-macros = { package = "rs-rich-macros", path = "crates/rich-macros", version = "0.0.11" }
+rich-ext = { package = "rs-rich-ext", path = "crates/rich-ext", version = "0.0.24" }
+rich-art = { package = "rs-rich-art", path = "crates/rich-art", version = "0.0.20" }
+rich-diagram = { package = "rs-rich-diagram", path = "crates/rich-diagram", version = "0.0.10" }
+rich-mermaid = { package = "rs-rich-mermaid", path = "crates/rich-mermaid", version = "0.0.13" }
+rich-lumis = { package = "rs-rich-lumis", path = "crates/rich-lumis", version = "0.0.11" }
+rich-record = { package = "rs-rich-record", path = "crates/rich-record", version = "0.0.15" }
+rich-interact = { package = "rs-rich-interact", path = "crates/rich-interact", version = "0.0.15" }
+rich-micro = { package = "rs-rich-micro", path = "crates/rich-micro", version = "0.0.13" }
+rich-data = { package = "rs-rich-data", path = "crates/rich-data", version = "0.0.11" }
+rich-ratatui = { package = "rs-rich-ratatui", path = "crates/rich-ratatui", version = "0.0.12" }
+rich-intuituive = { package = "rs-rich-intuituive", path = "crates/rich-intuituive", version = "0.0.12" }
+rich-web = { package = "rs-rich-web", path = "crates/rich-web", version = "0.0.10" }
+rich-embed = { package = "rs-rich-embed", path = "crates/rich-embed", version = "0.0.10" }
+rich-marketplace = { package = "rs-rich-marketplace", path = "crates/rich-marketplace", version = "0.0.6", default-features = false }
+rich-acp = { package = "rs-rich-acp", path = "crates/rich-acp", version = "0.0.4" }
 # Cargo's default caret requirement treats 0.0.x specially: `version = "0.0.2"`
 # means >=0.0.2,<0.0.3, not >=0.0.2,<0.1.0. Therefore any internal crate bump
 # must also update every direct dependent's workspace requirement.

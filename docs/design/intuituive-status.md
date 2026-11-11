@@ -3,7 +3,23 @@
 Status: handoff note, updated when a session ends mid-round. The loop and its
 rules are in [the demo gaps](intuituive-demo-gaps.md).
 
-## Where things stand (2026-11-10)
+## Where things stand (2026-11-11)
+
+- **0.0.26 is published** (21 crates and `rs-rich` 0.0.14 on PyPI from
+  `main` at `e5422bf9`, `release-0.0.26`, on 2026-11-11, by one run on rab
+  v2.1.2; see the [0.0.26 release notes](../releases/0.0.26.md#publication)).
+  It is the first release whose PyPI upload went through rab: the
+  maintainer added `release.yml` (environment `pypi`) as a trusted
+  publisher on PyPI and re-ran `publish-pypi`. The old path
+  (`RELEASES.toml`, `release_cohort.py`, `pypi-release.yml` and its PyPI
+  publisher) can retire, as `docs/BRANCHING.md` says.
+- **The 0.0.27 versions are open** (every package one patch up; 0.1.0's
+  open after 0.0.27 is published).
+- **Next: 0.0.27**, a point release: #889 to #892, #884, a reader thread
+  for readings, layout L2, L6 and L8, and the Cornacai run with a real
+  agent; then 0.1.0's API review.
+
+## Where things stood (2026-11-10)
 
 - **0.0.26 is in release** ([the plan](../plans/0.0.26.md), one more
   release before 0.1.0, decision 15). #887 (the review fixes of #877, #878

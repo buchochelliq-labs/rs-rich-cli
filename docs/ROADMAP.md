@@ -1,8 +1,8 @@
 # Roadmap
 
 What each release delivered, and where this goes next: the
-[plan to 1.0.0](plans/1.0.0.md), after the 0.0.25 cohort (published
-2026-11-05), with [0.0.26](plans/0.0.26.md) next and then 0.1.0, the API
+[plan to 1.0.0](plans/1.0.0.md), after the 0.0.26 cohort (published
+2026-11-11), with 0.0.27, a point release, next and then 0.1.0, the API
 review of [stage 3](plans/1.0.0.md#stage-3-api-review-and-stability-tooling-010).
 Ordered by what unblocks people, not by what is most interesting to build.
 
@@ -217,14 +217,15 @@ and #499). Delivered:
 - Atkinson dithering, OKLab distance, Sixel/GIF colour modes, alpha backgrounds
   (#498) and `--theme-file` (#499).
 
-## 0.0.26 — Noctiluca made steady, before the API review (planned)
+## 0.0.26 — Noctiluca made steady, before the API review (published 2026-11-11)
 
 The [0.0.26 plan](plans/0.0.26.md) ships what merged after 0.0.25
 (Noctiluca's adaptive layouts and media, premeasured cells) with the fixes
 it needs: the iTerm2 video gate (#883) passing first, the reader view's
 stale cells, the YouTube audit's performance and layout fixes, sound on by
-default outside SSH, and the first PyPI upload through rab. 0.1.0, the API
-review, follows it.
+default outside SSH, and the first PyPI upload through rab (see the
+[release notes](releases/0.0.26.md)). 0.0.27, with what the real-site check
+found (#889 to #892), and then 0.1.0, the API review, follow it.
 
 ## 0.0.25 — the two tracks' last release, and the first on rab (published 2026-11-05)
 
