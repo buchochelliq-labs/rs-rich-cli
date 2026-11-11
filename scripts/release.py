@@ -1,8 +1,8 @@
 """Select, publish, and verify a release of the crates.
 
 A release tag (`release-X.Y.Z`, X.Y.Z being the release's name, rs-rich-cli's
-version) publishes every crate of its RELEASES.toml not yet on crates.io, in
-one run: release_cohort.py computes that selection, `plan` checks it against
+version) publishes every crate of its rab.yml not yet on crates.io, in
+one run: rab's `gate` computes that selection, `plan` checks it against
 the manifests, and `preflight`, `publish` and `verify` act on all of it at
 once. A crate tag (`<crate>-vX.Y.Z`, by manual dispatch) still publishes that
 crate alone. The workflow carries one validated selection between jobs; no
@@ -11,6 +11,7 @@ and Cargo.
 """
 
 import argparse
+import importlib.util
 import json
 import os
 from pathlib import Path
@@ -52,28 +53,47 @@ def validate_tag(tag):
     return sha
 
 
+def only_rab_yml(text):
+    """A reader for rab's `load` that has rab.yml's `text` and no other file."""
+    def read(path):
+        if path != "rab.yml":
+            raise KeyError(path)
+        return text
+    return read
+
+
+def kit():
+    """The installed rab's release.py (it reads rab.yml), under a name that
+    does not shadow this script."""
+    path = Path(__file__).resolve().parent.parent / ".github/rab/scripts/release.py"
+    spec = importlib.util.spec_from_file_location("rab_release", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
 def release_entries(text):
-    """A RELEASES.toml's crates in order, {name: version}, and its release name."""
-    crates = {entry["name"]: entry["version"] for entry in tomllib.loads(text).get("package", [])
-              if entry.get("registry") == "crates.io"}
+    """A rab.yml's crates in order, {name: version}, and its release name
+    (rs-rich-cli's version, the last crate's)."""
+    crates = {p.name: p.version for p in kit().load(only_rab_yml(text)).packages if p.registry == "crates.io"}
     if not crates:
-        raise ValueError("RELEASES.toml lists no crates.io package")
+        raise ValueError("rab.yml lists no crates.io package")
     return crates, list(crates.values())[-1]
 
 
 def select(tag, metadata, root, wanted=None, releases=None):
     """The {crate: version} a tag publishes, checked against the manifests and
     the internal requirements. A release tag publishes `wanted` (the gate's
-    selection, in RELEASES.toml order), or, without it, every crate of the
-    release in `releases` (RELEASES.toml's text); a crate tag its one crate,
+    selection, in rab.yml order), or, without it, every crate of the
+    release in `releases` (rab.yml's text); a crate tag its one crate,
     which `wanted` must then agree with."""
     if release_match := RELEASE.fullmatch(tag):
         if wanted is None:
             if releases is None:
-                raise ValueError(f"{tag}: a release tag needs its selection (or RELEASES.toml)")
+                raise ValueError(f"{tag}: a release tag needs its selection (or rab.yml)")
             wanted, name = release_entries(releases)
             if name != release_match[1]:
-                raise ValueError(f"{tag}: RELEASES.toml names release {name}")
+                raise ValueError(f"{tag}: rab.yml names release {name}")
         if not isinstance(wanted, dict) or not wanted:
             raise ValueError(f"{tag}: the selection is empty")
         planned = dict(wanted)
@@ -198,7 +218,7 @@ def publish_runs(selection, new, dependencies):
     """The uploads, as [(new?, [crate, ...])]: one `cargo publish` per run of
     crates that share a credential (the token for new crates, the Trusted
     Publishing exchange for existing ones). Each run takes, in the selection's
-    (RELEASES.toml's) order, every crate of its kind whose selected
+    (rab.yml's) order, every crate of its kind whose selected
     dependencies are already in an earlier run or in this one, so a new crate
     that needs an existing one in the release goes after it, and the reverse."""
     new, wanted, done, runs = set(new), set(selection), set(), []
@@ -308,7 +328,7 @@ def main():
         ))
         root = tomllib.loads(Path("Cargo.toml").read_text(encoding="utf-8"))
         wanted = os.environ.get("RELEASE_SELECTION") or None
-        releases = Path("RELEASES.toml")
+        releases = Path("rab.yml")
         selection = select(args.tag, metadata, root, json.loads(wanted) if wanted else None,
                            releases.read_text(encoding="utf-8") if releases.exists() else None)
         if args.semver_checks:

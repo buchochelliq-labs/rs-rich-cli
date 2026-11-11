@@ -97,9 +97,11 @@ class SelectionTests(unittest.TestCase):
                 release.select("release-0.0.2", *workspace(), wanted)
 
     def test_a_release_tag_without_a_selection_plans_the_whole_release(self):
-        releases = "".join(f'[[package]]\nname = "{n}"\nregistry = "crates.io"\nversion = "0.0.2"\n'
-                           for n in NAMES)
-        releases += '[[package]]\nname = "rs-rich"\nregistry = "pypi"\nversion = "9.9.9"\n'
+        # rab.yml's form (RELEASES.toml's before rab).
+        releases = "packages:\n" + "".join(
+            f'  - name: {n}\n    registry: crates.io\n    manifest: crates/{n}/Cargo.toml\n    version: "0.0.2"\n'
+            for n in NAMES)
+        releases += '  - name: rs-rich\n    registry: pypi\n    manifest: crates/rich-py/Cargo.toml\n    version: "9.9.9"\n'
         self.assertEqual(release.select("release-0.0.2", *workspace(), releases=releases),
                          dict.fromkeys(NAMES, "0.0.2"))
         with self.assertRaisesRegex(ValueError, "names release 0.0.2"):

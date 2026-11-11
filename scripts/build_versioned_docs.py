@@ -2,10 +2,10 @@
 """Build the documentation site with one copy of the docs per release.
 
 Each release's docs (a release is named by rs-rich-cli's version; see
-release_cohort.py) are built into `<out>/X.Y.Z/` from the last commit on main
+rab.yml) are built into `<out>/X.Y.Z/` from the last commit on main
 that still ships that release: the commit `docs-versions.toml` pins for it,
 else its `rs-rich-cli-vX.Y.Z` tag or a later commit up to the one before
-`RELEASES.toml` first moves a crate past it. Docs fixed after a release so show
+`rab.yml` (`RELEASES.toml` before rab) first moves a crate past it. Docs fixed after a release so show
 under it, and the docs of the next release's work do not. Main's docs are built into `<out>/dev/`. The theme's version selector reads `versions.json`
 at the site's root, the format `mike` writes, so no `gh-pages` branch is needed:
 the whole site is rebuilt and deployed as one Pages artifact.
@@ -38,6 +38,7 @@ script. A release without one keeps plain code blocks: the script finds no
     python scripts/build_versioned_docs.py --releases 1    # a quick check
     python scripts/build_versioned_docs.py --no-playground # no downloads
 """
+import importlib.util
 import argparse
 import html
 import io
@@ -83,15 +84,36 @@ def releases():
     return [(".".join(map(str, key)), tag) for key, tag in found]
 
 
+def only_rab_yml(text):
+    """A reader for rab's `load` that has rab.yml's `text` and no other file."""
+    def read(path):
+        if path != "rab.yml":
+            raise KeyError(path)
+        return text
+    return read
+
+
+def kit():
+    """The installed rab's release.py, which reads rab.yml."""
+    spec = importlib.util.spec_from_file_location("rab_release", ROOT / ".github/rab/scripts/release.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
 def versions_at(commit):
-    """RELEASES.toml's (name, registry) -> version at `commit`, or None where it
-    has none."""
-    shown = subprocess.run(["git", "show", f"{commit}:RELEASES.toml"], cwd=ROOT,
-                           capture_output=True, text=True, encoding="utf-8")
-    if shown.returncode:
-        return None
-    packages = tomllib.loads(shown.stdout).get("package", [])
-    return {(p["name"], p.get("registry")): p["version"] for p in packages}
+    """(name, registry) -> version at `commit`, from its rab.yml, else (before
+    rab) its RELEASES.toml, or None where it has neither."""
+    def show(path):
+        shown = subprocess.run(["git", "show", f"{commit}:{path}"], cwd=ROOT,
+                               capture_output=True, text=True, encoding="utf-8")
+        return None if shown.returncode else shown.stdout
+    if (text := show("rab.yml")) is not None:
+        return {(p.name, p.registry): p.version for p in kit().load(only_rab_yml(text)).packages}
+    if (text := show("RELEASES.toml")) is not None:
+        packages = tomllib.loads(text).get("package", [])
+        return {(p["name"], p.get("registry")): p["version"] for p in packages}
+    return None
 
 
 def pinned(version):
@@ -108,9 +130,9 @@ def docs_commit(version, tag):
     The commit `docs-versions.toml` pins for it, when that is behind HEAD: the
     commit that opens the next release's versions records there the last
     commit of this release's docs (its notes come before the version change).
-    Otherwise the last commit on HEAD's first-parent line before RELEASES.toml
-    moves a version past the tag's, else HEAD. The tag itself when it is not
-    behind HEAD or has no RELEASES.toml to compare."""
+    Otherwise the last commit on HEAD's first-parent line before rab.yml (or
+    RELEASES.toml, before rab) moves a version past the tag's, else HEAD. The
+    tag itself when it is not behind HEAD or has neither file to compare."""
     pin = pinned(version)
     if pin and not subprocess.run(["git", "merge-base", "--is-ancestor", pin, "HEAD"], cwd=ROOT,
                                   capture_output=True).returncode:
@@ -120,7 +142,7 @@ def docs_commit(version, tag):
     if shipped is None or ancestor.returncode:
         return tag
     changes = git("log", "--first-parent", "--reverse", "--format=%H", f"{tag}..HEAD",
-                  "--", "RELEASES.toml").split()
+                  "--", "rab.yml", "RELEASES.toml").split()
     for commit in changes:
         if versions_at(commit) != shipped:
             return git("rev-parse", f"{commit}^1").strip()

@@ -9,6 +9,18 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Releases: the old release path is retired
+
+- 0.0.26 was the first release rab published in full, crates and PyPI in
+  one run, so the pieces kept beside it go, as `docs/BRANCHING.md` planned:
+  `RELEASES.toml` (rab.yml lists the packages), `scripts/release_cohort.py`
+  and its tests, and the `pypi-release.yml` fallback (its trusted publisher
+  is removed from PyPI). `scripts/release.py plan`, which `release.yml`'s
+  SemVer job runs, and `scripts/build_versioned_docs.py` read `rab.yml`
+  through rab's own loader; the docs builder still reads `RELEASES.toml` at
+  tags from before rab. CI and `validate_release.py` run rab's `check` and
+  the rab tests instead of `release_cohort.py`'s.
+
 ## 0.0.26 cohort — published 2026-11-11
 
 Published on 2026-11-11 from `e5422bf9` by one `release.yml` run on rab

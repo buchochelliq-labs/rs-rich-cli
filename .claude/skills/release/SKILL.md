@@ -30,8 +30,7 @@ crates it depends on; `python3 .github/rab/scripts/release.py check` enforces it
 that order. New crates may be in the same release as existing ones: their
 first versions upload with the environment's token. Versions accept
 prereleases such as `-rc.1`. Manual workflow dispatch takes an existing
-release tag, never a branch name. `RELEASES.toml` stays in step with
-`rab.yml` until the kit has published a release (CI checks both).
+release tag, never a branch name.
 
 Choose versions from the non-empty `Unreleased` changelog. Cargo's `^0.0.2`
 means `>=0.0.2,<0.0.3`: an internal dependency bump requires updating dependent
@@ -81,9 +80,8 @@ ambient color suppression invalidates tests that assert ANSI output.
 
 Update each selected manifest version, every affected internal requirement in
 the root `Cargo.toml`, and `Cargo.lock`. Do not invent a workspace package version.
-Re-run `cargo check --workspace --locked`, then `python3 .github/rab/scripts/release.py sync` and
-`python3 scripts/release_cohort.py sync` so `rab.yml` and
-`RELEASES.toml` carry the new versions (each `check` fails CI until it does).
+Re-run `cargo check --workspace --locked`, then `python3 .github/rab/scripts/release.py sync`
+so `rab.yml` carries the new versions (its `check` fails CI until it does).
 Audit the intended release locally:
 
 ```bash

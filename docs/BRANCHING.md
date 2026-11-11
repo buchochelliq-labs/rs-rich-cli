@@ -311,7 +311,7 @@ python scripts/validate_release.py --tag release-0.0.20
 `--tag` is required. The wrapper always ends by running
 `scripts/release.py plan <tag> --semver-checks`, so the local validation list proves the selected
 release tag as well as build/test health. Run locally, `plan` of a release
-tag checks every crate of the release's `RELEASES.toml` (the run checks the
+tag checks every crate of the release's `rab.yml` (the run checks the
 unpublished ones); a crate tag checks that crate. Its Python release checks are listed
 explicitly (`test_release.py` and `test_release_readiness.py`) instead of through
 a glob, so adding another release test module requires updating the wrapper on
@@ -354,15 +354,14 @@ test, or whose crates fail the SemVer check, publishes nothing anywhere.
 
 **rab (formerly release-kit) is the release path, from 0.0.25 on:**
 `rab.yml`, the kit installed under `.github/rab/`, and `release.yml` on the
-kit. Until rab has published its first release, the old path's pieces stay
-beside it, and retire together once it has:
+kit. 0.0.26 was the first release rab published in full (every crate and the
+PyPI package in one run), so the old path's pieces retired together after it:
 
 | Old piece | Now |
 |---|---|
-| `RELEASES.toml`, `scripts/release_cohort.py check`/`sync` | kept in step with `rab.yml` (CI checks both; `scripts/build_versioned_docs.py` still reads `RELEASES.toml`). Bump the manifests, then run both `sync`s |
-| `release_cohort.py tag`/`status` | **not used**: `.github/rab/scripts/release.py tag`/`status` |
-| `pypi-release.yml` | no longer starts on `python-v…` tags; a manual fallback (`gh workflow run pypi-release.yml -f tag=python-vX.Y.Z`) that can upload only while PyPI still trusts it |
-| `scripts/release.py` | `plan --semver-checks` runs in `release.yml`'s `semver` job; its `preflight`, `publish` and `verify` are the kit's now |
+| `RELEASES.toml`, `scripts/release_cohort.py check`/`sync`/`tag`/`status` | removed: `rab.yml` and `.github/rab/scripts/release.py check`/`sync`/`tag`/`status`. `scripts/build_versioned_docs.py` reads `rab.yml` (and `RELEASES.toml` at tags from before rab) |
+| `pypi-release.yml` | removed, with its trusted publisher on PyPI: `release.yml`'s `publish-pypi` uploads `rs-rich` |
+| `scripts/release.py` | `plan --semver-checks` runs in `release.yml`'s `semver` job and reads `rab.yml`; its `preflight`, `publish` and `verify` are the kit's now |
 
 ### Release numbers and tagging (`rab.yml`)
 
@@ -376,7 +375,7 @@ owns `rs-rich-v…`. Each package's `paths` is what it ships (a crate's
 `include`, plus `Cargo.lock` for the three binaries; for the PyPI package, its
 directory, the workspace manifest and the crates it builds from): the files
 the kit's split check compares. The PyPI package's `artifacts` is one maturin
-wheel per target (pypi-release.yml's five, on the same runners) and an sdist;
+wheel per target (five, on the runners the old `pypi-release.yml` used) and an sdist;
 each wheel is installed and imported (`crates/rich-py/tests/smoke.py`) where
 its runner can run it, and the linux x86_64 one also runs the compatibility
 suite against rich 15.0.0 and the stub check.
@@ -536,14 +535,14 @@ old workflow: a release publishes whatever of it is due.
 The docs site keeps a copy of each release's docs
 (`scripts/build_versioned_docs.py`). Release X.Y.Z's are built from the commit
 `docs-versions.toml` names for it; without a line there, from `main` while
-`RELEASES.toml` still lists what X.Y.Z shipped, and from the last commit on
+`rab.yml` still lists what X.Y.Z shipped, and from the last commit on
 `main`'s first-parent line before that changes. So, after a release:
 
 1. Commit the post-release docs (the release notes, the CHANGELOG's cohort
    heading, docs fixes for that release) with no version change.
 2. In a later commit (the same pull request is fine), open the next
-   release's versions (the manifests, then `release.py sync` and
-   `release_cohort.py sync`), and add X.Y.Z's line to `docs-versions.toml`
+   release's versions (the manifests, then rab's `release.py sync`), and
+   add X.Y.Z's line to `docs-versions.toml`
    naming the last commit of step 1.
 
 Docs fixed for X.Y.Z later show under **dev**; to show them under X.Y.Z too,
@@ -609,9 +608,10 @@ dependents.
 **PyPI.** `publish-pypi` uploads with `pypa/gh-action-pypi-publish`, which
 exchanges the job's OIDC token: PyPI's trusted publisher for `rs-rich` must
 name repository `buchochelliq-labs/rs-rich-cli`, workflow **`release.yml`** and
-environment `pypi`. Until 0.0.24 it named `pypi-release.yml`; PyPI accepts more
-than one trusted publisher per project, so the `release.yml` one is added
-beside it, and the old one is removed when `pypi-release.yml` retires.
+environment `pypi`. Until 0.0.26 it named only `pypi-release.yml`, the old
+path's workflow: 0.0.26's first `publish-pypi` attempt was refused
+(`invalid-publisher`) until the `release.yml` publisher was added. With
+`pypi-release.yml` removed, its publisher is removed from PyPI too.
 
 Publishing is **irreversible**: versions are immutable and can only be
 yanked. Planning and documentation updates do not create tags or publish
