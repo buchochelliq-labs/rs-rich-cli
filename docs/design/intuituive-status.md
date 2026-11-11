@@ -13,7 +13,8 @@ rules are in [the demo gaps](intuituive-demo-gaps.md).
   publisher on PyPI and re-ran `publish-pypi`. The old path
   (`RELEASES.toml`, `release_cohort.py`, `pypi-release.yml` and its PyPI
   publisher) can retire, as `docs/BRANCHING.md` says.
-- **The 0.1.0 versions are open again**, after these notes.
+- **The 0.0.27 versions are open** (every package one patch up; 0.1.0's
+  open after 0.0.27 is published).
 - **Next: 0.0.27**, a point release: #889 to #892, #884, a reader thread
   for readings, layout L2, L6 and L8, and the Cornacai run with a real
   agent; then 0.1.0's API review.

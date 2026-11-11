@@ -29,127 +29,127 @@ packages:
   - name: rs-rich
     registry: crates.io
     manifest: crates/rich/Cargo.toml
-    version: "0.0.16"
+    version: "0.0.17"
     paths: ["crates/rich/src/**", "crates/rich/README.md", "crates/rich/LICENSE", "crates/rich/Cargo.toml"]
 
   - name: rs-rich-macros
     registry: crates.io
     manifest: crates/rich-macros/Cargo.toml
-    version: "0.0.10"
+    version: "0.0.11"
     paths: ["crates/rich-macros/src/**", "crates/rich-macros/README.md", "crates/rich-macros/LICENSE", "crates/rich-macros/Cargo.toml"]
 
   - name: rs-rich-plugin-api
     registry: crates.io
     manifest: crates/rich-plugin-api/Cargo.toml
-    version: "0.0.10"
+    version: "0.0.11"
     paths: ["crates/rich-plugin-api/src/**", "crates/rich-plugin-api/README.md", "crates/rich-plugin-api/LICENSE", "crates/rich-plugin-api/Cargo.toml"]
 
   - name: rs-rich-art
     registry: crates.io
     manifest: crates/rich-art/Cargo.toml
-    version: "0.0.19"
+    version: "0.0.20"
     paths: ["crates/rich-art/src/**", "crates/rich-art/fonts/**", "crates/rich-art/examples/**", "crates/rich-art/tests/**", "crates/rich-art/README.md", "crates/rich-art/LICENSE", "crates/rich-art/Cargo.toml"]
 
   - name: rs-rich-diagram
     registry: crates.io
     manifest: crates/rich-diagram/Cargo.toml
-    version: "0.0.9"
+    version: "0.0.10"
     paths: ["crates/rich-diagram/src/**", "crates/rich-diagram/README.md", "crates/rich-diagram/LICENSE", "crates/rich-diagram/Cargo.toml"]
 
   - name: rs-rich-mermaid
     registry: crates.io
     manifest: crates/rich-mermaid/Cargo.toml
-    version: "0.0.12"
+    version: "0.0.13"
     paths: ["crates/rich-mermaid/src/**", "crates/rich-mermaid/README.md", "crates/rich-mermaid/LICENSE", "crates/rich-mermaid/Cargo.toml"]
 
   - name: rs-rich-lumis
     registry: crates.io
     manifest: crates/rich-lumis/Cargo.toml
-    version: "0.0.10"
+    version: "0.0.11"
     paths: ["crates/rich-lumis/src/**", "crates/rich-lumis/README.md", "crates/rich-lumis/LICENSE", "crates/rich-lumis/Cargo.toml"]
 
   - name: rs-rich-ext
     registry: crates.io
     manifest: crates/rich-ext/Cargo.toml
-    version: "0.0.23"
+    version: "0.0.24"
     paths: ["crates/rich-ext/src/**", "crates/rich-ext/examples/**", "crates/rich-ext/README.md", "crates/rich-ext/LICENSE", "crates/rich-ext/Cargo.toml"]
 
   - name: rs-rich-micro
     registry: crates.io
     manifest: crates/rich-micro/Cargo.toml
-    version: "0.0.12"
+    version: "0.0.13"
     paths: ["crates/rich-micro/src/**", "crates/rich-micro/builtin/**", "crates/rich-micro/README.md", "crates/rich-micro/LICENSE", "crates/rich-micro/Cargo.toml"]
 
   - name: rs-rich-record
     registry: crates.io
     manifest: crates/rich-record/Cargo.toml
-    version: "0.0.14"
+    version: "0.0.15"
     paths: ["crates/rich-record/src/**", "crates/rich-record/fonts/**", "crates/rich-record/README.md", "crates/rich-record/LICENSE", "crates/rich-record/Cargo.toml"]
 
   - name: rs-rich-interact
     registry: crates.io
     manifest: crates/rich-interact/Cargo.toml
-    version: "0.0.14"
+    version: "0.0.15"
     paths: ["crates/rich-interact/src/**", "crates/rich-interact/README.md", "crates/rich-interact/LICENSE", "crates/rich-interact/Cargo.toml"]
 
   - name: rs-rich-ratatui
     registry: crates.io
     manifest: crates/rich-ratatui/Cargo.toml
-    version: "0.0.11"
+    version: "0.0.12"
     paths: ["crates/rich-ratatui/src/**", "crates/rich-ratatui/examples/**", "crates/rich-ratatui/README.md", "crates/rich-ratatui/LICENSE", "crates/rich-ratatui/Cargo.toml"]
 
   - name: rs-rich-intuituive
     registry: crates.io
     manifest: crates/rich-intuituive/Cargo.toml
-    version: "0.0.11"
+    version: "0.0.12"
     paths: ["crates/rich-intuituive/src/**", "crates/rich-intuituive/README.md", "crates/rich-intuituive/LICENSE", "crates/rich-intuituive/THIRD_PARTY.md", "crates/rich-intuituive/Cargo.toml"]
 
   - name: rs-rich-embed
     registry: crates.io
     manifest: crates/rich-embed/Cargo.toml
-    version: "0.0.9"
+    version: "0.0.10"
     paths: ["crates/rich-embed/src/**", "crates/rich-embed/README.md", "crates/rich-embed/LICENSE", "crates/rich-embed/Cargo.toml"]
 
   - name: rs-rich-web
     registry: crates.io
     manifest: crates/rich-web/Cargo.toml
-    version: "0.0.9"
+    version: "0.0.10"
     paths: ["crates/rich-web/src/**", "crates/rich-web/assets/**", "crates/rich-web/examples/**", "crates/rich-web/build.rs", "crates/rich-web/README.md", "crates/rich-web/LICENSE", "crates/rich-web/Cargo.toml"]
 
   - name: rs-rich-data
     registry: crates.io
     manifest: crates/rich-data/Cargo.toml
-    version: "0.0.10"
+    version: "0.0.11"
     paths: ["crates/rich-data/src/**", "crates/rich-data/README.md", "crates/rich-data/LICENSE", "crates/rich-data/Cargo.toml"]
 
   - name: rs-rich-marketplace
     registry: crates.io
     manifest: crates/rich-marketplace/Cargo.toml
-    version: "0.0.5"
+    version: "0.0.6"
     paths: ["crates/rich-marketplace/src/**", "crates/rich-marketplace/keys/*.json", "crates/rich-marketplace/README.md", "crates/rich-marketplace/LICENSE", "crates/rich-marketplace/Cargo.toml"]
 
   - name: rs-rich-acp
     registry: crates.io
     manifest: crates/rich-acp/Cargo.toml
-    version: "0.0.3"
+    version: "0.0.4"
     paths: ["crates/rich-acp/src/**", "crates/rich-acp/README.md", "crates/rich-acp/LICENSE", "crates/rich-acp/Cargo.toml"]
 
   - name: noctiluca
     registry: crates.io
     manifest: crates/noctiluca/Cargo.toml
-    version: "0.0.5"
+    version: "0.0.6"
     paths: ["crates/noctiluca/src/**", "crates/noctiluca/tests/snapshots/source-native/**", "crates/noctiluca/README.md", "crates/noctiluca/LICENSE", "crates/noctiluca/config.sample.toml", "crates/noctiluca/Cargo.toml", "Cargo.lock"]
 
   - name: cornacai
     registry: crates.io
     manifest: crates/cornacai/Cargo.toml
-    version: "0.0.3"
+    version: "0.0.4"
     paths: ["crates/cornacai/src/**", "crates/cornacai/README.md", "crates/cornacai/LICENSE", "crates/cornacai/Cargo.toml", "Cargo.lock"]
 
   - name: rs-rich-cli
     registry: crates.io
     manifest: crates/rich-cli/Cargo.toml
-    version: "0.0.26"
+    version: "0.0.27"
     paths: ["crates/rich-cli/src/**", "crates/rich-cli/README.md", "crates/rich-cli/LICENSE", "crates/rich-cli/Cargo.toml", "Cargo.lock"]
 
   # The Python bindings: PyPI `rs-rich`, outside the Cargo workspace. Its own
@@ -158,7 +158,7 @@ packages:
   - name: rs-rich
     registry: pypi
     manifest: crates/rich-py/pyproject.toml
-    version: "0.0.14"
+    version: "0.0.15"
     tag: "python-v{version}"
     paths:
       - "crates/rich-py/**"
