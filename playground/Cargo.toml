@@ -4,8 +4,8 @@
 # in, ANSI or HTML out.
 #
 # Not a workspace member and never published: it has its own empty
-# `[workspace]`, so the release tooling (release_cohort.py,
-# check_packages.py, release.py), which reads the root workspace's members,
+# `[workspace]`, so the release tooling (rab's release.py,
+# check_packages.py, scripts/release.py), which reads the root workspace's members,
 # never sees it. `build.sh` builds the two modules the site loads.
 [package]
 name = "rich-playground"

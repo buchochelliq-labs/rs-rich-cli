@@ -1,7 +1,7 @@
 # The Python bindings (`crates/rich-py`, the `rs-rich` wheel): lint, the
 # compatibility tests against Python rich 15.0.0, and a wheel for every
 # release target that must install and import on the oldest and newest
-# supported Python. `pypi-release.yml` builds the same wheels from a tag.
+# supported Python. `release.yml` (rab's build) builds the same wheels for a release.
 name: python
 
 on:
@@ -29,7 +29,6 @@ on:
       - "scripts/capture_python_docs.py"
       - "scripts/check_python_stubs.py"
       - ".github/workflows/python.yml"
-      - ".github/workflows/pypi-release.yml"
   push:
     branches: [main]
     paths:
@@ -55,7 +54,6 @@ on:
       - "scripts/capture_python_docs.py"
       - "scripts/check_python_stubs.py"
       - ".github/workflows/python.yml"
-      - ".github/workflows/pypi-release.yml"
 
 # A pull request's newer run cancels its older one. Every other event gets a
 # group of its own (the run id), so runs on main, tags, schedules and release

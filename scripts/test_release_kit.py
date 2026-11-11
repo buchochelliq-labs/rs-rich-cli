@@ -31,15 +31,25 @@ def job_names():
 
 
 class Config(unittest.TestCase):
-    """rab.yml against RELEASES.toml, which it replaces."""
+    """rab.yml, the release configuration (RELEASES.toml before rab)."""
 
     def test_the_kit_finds_no_problem(self):
         self.assertEqual(KIT.check(KIT.files_on_disk(ROOT)), [])
 
-    def test_every_package_of_releases_toml_in_its_order(self):
-        old = tomllib.loads((ROOT / "RELEASES.toml").read_text())["package"]
-        self.assertEqual([(p["name"], p["registry"], p["manifest"], p["version"]) for p in old],
-                         [(p.name, p.registry, p.manifest, p.version) for p in CONFIG.packages])
+    def test_the_old_release_path_is_retired(self):
+        # 0.0.26 was the first release rab published in full (crates and
+        # PyPI), so RELEASES.toml, release_cohort.py and pypi-release.yml went.
+        for path in ["RELEASES.toml", "scripts/release_cohort.py", ".github/workflows/pypi-release.yml"]:
+            self.assertFalse((ROOT / path).exists(), path)
+
+    def test_scripts_read_the_crates_from_rab_yml(self):
+        import release as old_release
+        import build_versioned_docs
+        crates, name = old_release.release_entries((ROOT / "rab.yml").read_text())
+        self.assertEqual(list(crates), [p.name for p in CONFIG.packages if p.registry == "crates.io"])
+        self.assertEqual(name, crates["rs-rich-cli"])
+        versions = build_versioned_docs.versions_at("HEAD")
+        self.assertEqual(versions[("rs-rich-cli", "crates.io")], crates["rs-rich-cli"])
 
     def test_the_release_is_named_by_the_cli(self):
         self.assertEqual(CONFIG.name_from, "rs-rich-cli")
