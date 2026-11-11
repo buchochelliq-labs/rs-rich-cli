@@ -9,15 +9,16 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
-## 0.0.26 cohort — to be published
+## 0.0.26 cohort — published 2026-11-11
 
-To be published from `main` by one `release.yml` run on rab v2.1.2 (tag
-`release-0.0.26`): core 0.0.16 / macros 0.0.10 / plugin API 0.0.10 /
+Published on 2026-11-11 from `e5422bf9` by one `release.yml` run on rab
+v2.1.2 (tag `release-0.0.26`): core 0.0.16 / macros 0.0.10 / plugin API 0.0.10 /
 art 0.0.19 / diagram 0.0.9 / mermaid 0.0.12 / lumis 0.0.10 / ext 0.0.23 /
 micro 0.0.12 / record 0.0.14 / interact 0.0.14 / ratatui 0.0.11 /
 intuituive 0.0.11 / embed 0.0.9 / web 0.0.9 / data 0.0.10 /
 marketplace 0.0.5 / acp 0.0.3 / noctiluca 0.0.5 / cornacai 0.0.3 /
-CLI 0.0.26, and `rs-rich` 0.0.14 on PyPI (`python-v0.0.14`, same commit).
+CLI 0.0.26, and `rs-rich` 0.0.14 on PyPI (`python-v0.0.14`, same commit and
+run: the first PyPI upload through rab).
 One more release before 0.1.0's API review: Noctiluca plays video at
 about 24 frames a second on a page that keeps changing, passes #883's
 iTerm2 gate and plays sound by default; #877's premeasured cells and

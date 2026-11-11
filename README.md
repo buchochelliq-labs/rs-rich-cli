@@ -55,7 +55,7 @@ console.print_str("[bold red]Hello[/] [green]World[/] — 42");
 
 ## New in 0.0.26
 
-To be published ([release notes](docs/releases/0.0.26.md)), one more
+Published on 2026-11-11 ([release notes](docs/releases/0.0.26.md)), one more
 release before 0.1.0's API review:
 
 - **[Noctiluca](docs/guide/noctiluca.md) plays video smoothly on a page that
@@ -184,7 +184,7 @@ why, is in [docs/ROADMAP.md](docs/ROADMAP.md); the tracking epic is
 ## Releases
 
 Each release has notes in [`docs/releases/`](docs/releases/) (the newest
-published one is [0.0.25](docs/releases/0.0.25.md)), and
+published one is [0.0.26](docs/releases/0.0.26.md)), and
 [`CHANGELOG.md`](CHANGELOG.md) lists every change. What comes next is in the
 [roadmap](docs/ROADMAP.md) and the [plan to 1.0.0](docs/plans/1.0.0.md),
 whose stage 3 is 0.1.0. The
