@@ -11,11 +11,14 @@ rules are in [the demo gaps](intuituive-demo-gaps.md).
   It is the first release whose PyPI upload went through rab: the
   maintainer added `release.yml` (environment `pypi`) as a trusted
   publisher on PyPI and re-ran `publish-pypi`. The old path
-  (`RELEASES.toml`, `release_cohort.py`, `pypi-release.yml` and its PyPI
-  publisher) can retire, as `docs/BRANCHING.md` says.
+  (`RELEASES.toml`, `release_cohort.py`, `pypi-release.yml`) is retired
+  after it; the maintainer removes `pypi-release.yml`'s trusted publisher
+  from PyPI.
 - **The 0.0.27 versions are open** (every package one patch up; 0.1.0's
   open after 0.0.27 is published).
-- **Next: 0.0.27**, a point release: #889 to #892, #884, a reader thread
+- **Next: 0.0.27** ([the plan](../plans/0.0.27.md), with
+  [the findings](noctiluca-0027-findings.md) on video jitter and flicker,
+  Amazon and "the browser has gone"), a point release: #889 to #892, #884, a reader thread
   for readings, layout L2, L6 and L8, and the Cornacai run with a real
   agent; then 0.1.0's API review.
 

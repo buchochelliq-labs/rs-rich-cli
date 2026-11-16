@@ -2,7 +2,7 @@
 
 What each release delivered, and where this goes next: the
 [plan to 1.0.0](plans/1.0.0.md), after the 0.0.26 cohort (published
-2026-11-11), with 0.0.27, a point release, next and then 0.1.0, the API
+2026-11-11), with [0.0.27](plans/0.0.27.md), a point release, next and then 0.1.0, the API
 review of [stage 3](plans/1.0.0.md#stage-3-api-review-and-stability-tooling-010).
 Ordered by what unblocks people, not by what is most interesting to build.
 

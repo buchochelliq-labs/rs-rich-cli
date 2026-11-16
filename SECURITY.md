@@ -24,7 +24,7 @@ A useful report says:
 
 rs-rich is young and every crate is at `0.0.x`. Only **the latest
 release** gets security fixes: the newest cohort listed in
-[`RELEASES.toml`](RELEASES.toml) and on crates.io, the `rich` binary built
+[`rab.yml`](rab.yml) and on crates.io, the `rich` binary built
 from it, and the newest `rs-rich` package on PyPI. A fix ships as a new
 release of the affected crates; older releases are not patched.
 

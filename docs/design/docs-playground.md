@@ -346,8 +346,8 @@ iframe, as the spike does.
 
 - **The crate.** `playground/` is a `cdylib` + `rlib` with its own empty
   `[workspace]` and `publish = false`, so the release tooling, which reads
-  the root workspace's members (`release_cohort.py`, `check_packages.py`,
-  `release.py`), never sees it, and `cargo metadata` at the root does not
+  the root workspace's members (rab's `release.py`, `check_packages.py`,
+  `scripts/release.py`), never sees it, and `cargo metadata` at the root does not
   list it. Its API: `render(kind, input, options)` to ANSI,
   `render_html(..)` to an HTML document (`Console::export_html_with`, the
   SVG export's dark theme, fixed 17 px lines so the page can size the
@@ -401,7 +401,7 @@ iframe, as the spike does.
   `publish` and only for a `release-*` tag, builds the archive, renders the
   blocks with it, creates the GitHub release if there is none, attaches
   `playground-X.Y.Z.tar.gz`, and re-runs `docs.yml`. It is
-  `continue-on-error`, so it can never fail the run `release_cohort.py`
+  `continue-on-error`, so it can never fail the run rab's `tag`
   waits on. `build_versioned_docs.py` downloads each release's archive
   (only for docs that have the script; a 404 or a network error leaves
   plain blocks) and unpacks it with tarfile's `data` filter after checking
