@@ -123,6 +123,11 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   `seg(..).on_click(action)` runs an action when its segment is clicked;
   `breadcrumb(..).on_select(|i, cx| ..)` is told the part clicked, also
   when the trail is cut from its start.
+- **A notice bar.** `notice_bar(shown, title, text)` is a bar that folds
+  to one row (the text cut with `…`), opens on Enter or a click to show
+  all of it, has action buttons (`.notice_action(label, run)`) and a `×`
+  that dismisses it (Esc too). `.notice_level(Level)` puts the level's
+  mark before the title; `.notice_open(signal)` opens it from the app.
 
 ### intuiTUIve: pictures without flicker between frames
 

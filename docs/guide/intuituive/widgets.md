@@ -123,6 +123,30 @@ placeholder("sidebar")                            // a coloured block for a prot
   and its label; `.placeholder_variant(PlaceholderVariant::Size)` shows its
   size, `Text` a paragraph, and a click cycles them.
 
+### Notice bars
+
+```rust
+use intuituive::{notice_bar, Level};
+
+notice_bar(shown, || "Changed".into(), move || format!("{name} changed on disk"))
+    .notice_level(Level::Warn)
+    .notice_action("Reload", move |cx| reload(cx))
+    .notice_action("Keep mine", |_| {})
+    .notice_closes(true)
+```
+
+- **`notice_bar(shown, title, text)`** shows while `shown` holds: one row,
+  `▸`, the level's mark (`ℹ ✓ ⚠ ✗`), the title in bold and the text cut
+  with `…`, its actions and a `×` at the right. Enter or a click on the
+  text opens it: the title on the first row, the whole text wrapped
+  under it. `×`, or Esc while it has the focus, sets `shown` false.
+- ← and → pick the text, an action or `×`; Enter or Space runs it.
+  `.notice_closes(true)` dismisses the bar after an action runs, and
+  `.notice_open(signal)` opens it from the app and says whether it is.
+- It is drawn on the theme's `notice` style (reversed by default), the
+  picked part in `notice.picked`, the mark in the level's `notify.*`
+  style. A screen reader hears it as a status: `Warning: Changed: …`.
+
 ### Clickable spans of markup
 
 A span of markup in a `text` or `label` can run an action, as Textual's

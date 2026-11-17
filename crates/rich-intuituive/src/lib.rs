@@ -145,6 +145,7 @@ pub mod micro_sprite;
 pub mod miller;
 pub mod node;
 mod node_list;
+mod notice;
 mod notify;
 mod palette;
 mod parity;
@@ -263,6 +264,7 @@ pub use node::{
 };
 pub use node::{described, drawn, drawn_described};
 pub use node_list::{list_of, list_of_virtual};
+pub use notice::notice_bar;
 pub use notify::{Corner, Level};
 pub use palette::Palette;
 pub use parity::{

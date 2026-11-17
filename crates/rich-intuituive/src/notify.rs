@@ -9,24 +9,47 @@ use crate::app::Theme;
 use crate::screen::{Rect, Screen};
 
 /// How much a [notification](crate::Ctx::notify) matters: its title and
-/// border are in the theme's `notify.info`, `notify.warn` or
-/// `notify.error` style, else its `accent`, `warn` or `bad`.
+/// border are in the theme's `notify.info`, `notify.success`,
+/// `notify.warn` or `notify.error` style, else its `accent`, `good`,
+/// `warn` or `bad`.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+#[non_exhaustive]
 pub enum Level {
     #[default]
     Info,
     Warn,
     Error,
+    /// Something finished well (Textual has no such severity; Toad's
+    /// and most toolkits' toasts do).
+    Success,
 }
 
 impl Level {
-    /// The theme style its title and border are drawn in.
-    fn style(self, theme: &Theme) -> Style {
-        let (own, fallback, definition) = match self {
+    /// Its theme style's name, the theme style it falls back on, and the
+    /// definition used when the theme has neither.
+    pub(crate) fn names(self) -> (&'static str, &'static str, &'static str) {
+        match self {
             Level::Info => ("notify.info", "accent", "bright_cyan"),
             Level::Warn => ("notify.warn", "warn", "yellow"),
             Level::Error => ("notify.error", "bad", "bold red"),
-        };
+            Level::Success => ("notify.success", "good", "green"),
+        }
+    }
+
+    /// The mark shown before its title where there is no border: `ℹ`,
+    /// `✓`, `⚠`, `✗`.
+    pub(crate) fn mark(self) -> &'static str {
+        match self {
+            Level::Info => "ℹ",
+            Level::Warn => "⚠",
+            Level::Error => "✗",
+            Level::Success => "✓",
+        }
+    }
+
+    /// The theme style its title and border are drawn in.
+    fn style(self, theme: &Theme) -> Style {
+        let (own, fallback, definition) = self.names();
         let find = |name: &str| theme.styles.iter().find(|(n, _)| n == name);
         find(own)
             .or_else(|| find(fallback))
@@ -35,11 +58,12 @@ impl Level {
     }
 
     /// How a screen reader is told it, before the title.
-    fn spoken(self) -> &'static str {
+    pub(crate) fn spoken(self) -> &'static str {
         match self {
             Level::Info => "",
             Level::Warn => "Warning: ",
             Level::Error => "Error: ",
+            Level::Success => "",
         }
     }
 }
