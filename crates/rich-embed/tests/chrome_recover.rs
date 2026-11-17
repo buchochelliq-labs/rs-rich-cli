@@ -143,7 +143,10 @@ fn a_killed_browser_is_started_again_by_the_next_navigation() {
     }
     assert!(engine.ended());
     let error = engine.state().error.unwrap();
-    assert!(error.starts_with("Chrome: the browser closed"), "{error}");
+    assert!(
+        error.starts_with("Chrome: the browser closed (killed by signal 9 (SIGKILL))"),
+        "{error}"
+    );
     // Gone, and reaped.
     assert!(!std::path::Path::new(&format!("/proc/{}", started[0])).exists());
     // The next navigation starts another, and DevTools from before reach

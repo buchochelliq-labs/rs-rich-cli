@@ -100,7 +100,16 @@ pub const CRASHED: &str = "The page crashed";
 pub fn stopped(error: &str) -> String {
     let error = clean(error);
     let cause = error.strip_prefix("Chrome: ").unwrap_or(&error);
-    let said = if let Some(last) = cause.strip_prefix("the browser closed: ") {
+    // How it went, when rs-rich-embed knows ("killed by signal 9"), says
+    // more than its last line on standard error.
+    let how = cause.strip_prefix("the browser closed (").and_then(|rest| {
+        rest.split_once("): ")
+            .map(|(how, _)| how)
+            .or_else(|| rest.strip_suffix(')'))
+    });
+    let said = if let Some(how) = how {
+        format!("Chrome exited: {how}")
+    } else if let Some(last) = cause.strip_prefix("the browser closed: ") {
         format!("Chrome exited ({last})")
     } else {
         match cause {
@@ -177,6 +186,10 @@ mod tests {
         assert_eq!(
             stopped("Chrome: the browser closed: [123:FATAL] out of memory\x1b[2J"),
             "The browser stopped: Chrome exited ([123:FATAL] out of memory[2J)."
+        );
+        assert_eq!(
+            stopped("Chrome: the browser closed (killed by signal 9 (SIGKILL)): [1:ERROR] dbus"),
+            "The browser stopped: Chrome exited: killed by signal 9 (SIGKILL)."
         );
         assert_eq!(
             stopped("Chrome: the browser did not open a page in time"),

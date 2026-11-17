@@ -1002,15 +1002,22 @@ impl ChromeEngine {
             if let Err(error) = run(connect, stderr, receiver, called, &shared, cell, wiring) {
                 // A browser that is still there (it did not open a page,
                 // or its page detached) is no use now: it ends too.
+                let mut child = lock(&shared).child.take();
+                // How the browser went, when it did: killed, or its exit.
+                let mut error = error.to_string();
+                if let Some(rest) = error.strip_prefix("the browser closed")
+                    && let Some(how) = child.as_mut().and_then(exited)
+                {
+                    error = format!("the browser closed ({how}){rest}");
+                }
+                if let Some(child) = &mut child {
+                    end_browser(child);
+                }
                 let mut state = lock(&shared);
                 state.state.error = Some(format!("Chrome: {error}"));
                 state.state.loading = false;
                 state.ended = true;
-                let child = state.child.take();
                 drop(state);
-                if let Some(mut child) = child {
-                    end_browser(&mut child);
-                }
                 notify(&shared);
             }
         });
@@ -1076,6 +1083,32 @@ impl Drop for ChromeEngine {
         // This engine ends its own browser here.
         self.retire();
     }
+}
+
+/// How the browser exited, if it has (waiting a moment: its pipe closes
+/// as it goes): the signal that killed it, or its exit status.
+fn exited(child: &mut Child) -> Option<String> {
+    for _ in 0..20 {
+        match child.try_wait() {
+            Ok(Some(status)) => {
+                #[cfg(unix)]
+                if let Some(signal) = std::os::unix::process::ExitStatusExt::signal(&status) {
+                    let name = match signal {
+                        6 => " (SIGABRT)",
+                        9 => " (SIGKILL)",
+                        11 => " (SIGSEGV)",
+                        15 => " (SIGTERM)",
+                        _ => "",
+                    };
+                    return Some(format!("killed by signal {signal}{name}"));
+                }
+                return status.code().map(|code| format!("exit status {code}"));
+            }
+            Ok(None) => thread::sleep(Duration::from_millis(25)),
+            Err(_) => return None,
+        }
+    }
+    None
 }
 
 /// End the browser and every helper in its process group, then reap it.
