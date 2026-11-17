@@ -3015,12 +3015,15 @@ impl Node {
     /// Tell `children` where each is among those of its kind; a change
     /// draws it again (`:first-of-type`, `:last-of-type`).
     fn place_kinds(children: &[Node], dirty: &mut HashSet<NodeId>) {
-        for (index, child) in children.iter().enumerate() {
-            let same = |other: &&Node| other.what == child.what;
-            let kind_place = (
-                children[..index].iter().filter(same).count(),
-                children.iter().filter(same).count(),
-            );
+        let mut totals: HashMap<&'static str, usize> = HashMap::new();
+        for child in children {
+            *totals.entry(child.what).or_default() += 1;
+        }
+        let mut seen: HashMap<&'static str, usize> = HashMap::new();
+        for child in children {
+            let before = seen.entry(child.what).or_default();
+            let kind_place = (*before, totals[child.what]);
+            *before += 1;
             let mut sheet = child.sheet.borrow_mut();
             if sheet.kind_place != kind_place {
                 sheet.kind_place = kind_place;
