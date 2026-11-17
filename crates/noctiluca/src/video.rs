@@ -128,7 +128,8 @@ struct Last {
 ///
 /// A frame is shown when it is at least the spacing on from the last one
 /// on the source's clock, the spacing rounded up to a whole number of the
-/// source's frames once their rate is known (less [`SLACK`]): every one
+/// source's frames once their rate is known (give or take a quarter of a
+/// frame): every one
 /// of a 24 fps video at 30 a second (not every fourth twice), every other
 /// one of a 30 fps video at 20 a second (15 evenly, not a mix of one and
 /// two). A frame the page painted before the source's next (its player's
@@ -145,10 +146,6 @@ struct Source {
     seen: Option<f64>,
     gaps: Vec<f64>,
 }
-
-/// How far before its slot on the source's clock a stamped frame may be
-/// painted and still be shown, in seconds.
-const SLACK: f64 = 0.002;
 
 /// How many gaps between stamps the source's rate is learned from.
 const GAPS: usize = 15;
@@ -211,14 +208,18 @@ impl Source {
     }
 
     /// Whether a frame stamped `ts` comes too soon after the last shown one
-    /// on the source's clock: less than the spacing on, less [`SLACK`].
+    /// on the source's clock: less than the spacing on, give or take a
+    /// quarter of a source frame (of the spacing while their rate is not
+    /// known), as the browser's stamps of one source's frames vary.
     fn early(&self, ts: f64, every: Duration) -> bool {
         let Some(shown) = self.shown else {
             return false;
         };
+        let target = self.target(every).as_secs_f64();
+        let slack = self.period().unwrap_or(every.as_secs_f64().min(target)) / 4.0;
         let gap = ts - shown;
         // A clock that went back far (a restarted stream): start again.
-        gap > -0.5 && gap < self.target(every).as_secs_f64() - SLACK
+        gap > -0.5 && gap < target - slack
     }
 }
 
@@ -996,7 +997,8 @@ mod tests {
 
     /// A source of `fps` frames a second for `seconds`, each painted a
     /// millisecond or few after its time, and the page's own paints (its
-    /// player's clock) four times a second between them.
+    /// player's clock) about four times a second, half way between two of
+    /// the source's frames.
     fn source(fps: f64, seconds: f64) -> Vec<(f64, f64)> {
         let mut paints: Vec<(f64, f64)> = (0..(fps * seconds) as usize)
             .map(|k| {
@@ -1004,8 +1006,9 @@ mod tests {
                 (ts + 0.001 * ((k * 7) % 4) as f64, ts)
             })
             .collect();
+        let every = (fps / 4.0).round() as usize;
         paints.extend((0..(seconds * 4.0) as usize).map(|j| {
-            let ts = j as f64 * 0.25 + 0.013;
+            let ts = ((j * every) as f64 + 0.5) / fps;
             (ts + 0.001, ts)
         }));
         paints.sort_by(|a, b| a.0.total_cmp(&b.0));
