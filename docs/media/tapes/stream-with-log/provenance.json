@@ -1,9 +1,9 @@
 {
   "tape": "docs/tapes/stream-with-log.tape",
-  "tape_fnv1a64": "fc99a2ac2f3b4396",
+  "tape_fnv1a64": "959891fd7aeb1be4",
   "recorder": "rs-rich-record 0.0.15",
   "rich": null,
-  "commit": "01f40e0635c1030ba40bf6c68a6e4f2e8901422b",
+  "commit": "88fd644db8f670a81286188b08c3b640b6e1680e",
   "screenshots": [
     "stream",
     "paused",

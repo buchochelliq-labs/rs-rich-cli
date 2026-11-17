@@ -2194,19 +2194,14 @@ fn project_part(
     };
     for (_, mut row) in rows_of {
         row.sort_by_key(|&n| items[n].x0);
-        // Where each goes, past the screen's edge if it must: as far
-        // right as the one before it grew, the cells free between them
-        // taken first (a cell kept between boxes that had one).
+        let mut push = 0;
+        // Where each goes, past the screen's edge if it must.
         let mut at: Vec<(usize, usize)> = Vec::with_capacity(row.len());
-        let mut before: Option<(usize, usize)> = None;
         for &n in &row {
             let item = &items[n];
-            let x0 = match before {
-                Some((end, was)) => item.x0.max(end + usize::from(item.x0 > was)),
-                None => item.x0,
-            };
-            let grown = (x0 + (item.x1 - item.x0)).max(x0 + need_of(item));
-            before = Some((grown, item.x1));
+            let (x0, x1) = (item.x0 + push, item.x1 + push);
+            let grown = x1.max(x0 + need_of(item));
+            push += grown - x1;
             at.push((x0, grown));
         }
         // Past the right edge, the end of the run moves left first, into
