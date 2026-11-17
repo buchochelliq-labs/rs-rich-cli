@@ -37,6 +37,16 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   of the screencast that Chrome refuses no longer drops every frame after
   it. Tested on a new busy-stream fixture (`tests/fixtures/busy-stream.html`,
   a playing video beside a chat that never rests and moves it).
+- Video frames are paced by the video's own clock: Chrome's frame stamps
+  set the slots, the spacing is a whole number of the video's frames (a
+  24 fps video shows at 24 or 12 a second, not on a 30 Hz clock that holds
+  every fourth frame twice), a paint of the page between two of the video's
+  frames is not shown, and frames after a stall (a reading) keep their
+  spacing instead of bunching up. When the encoder takes longer per frame
+  than the pacing allows (iTerm2 and Sixel on a slow terminal), the tab is
+  asked for frames at a rate the encoder keeps up with, so frames are
+  dropped once, evenly, rather than by the pacing and the encoder's queue
+  in turn.
 
 ## 0.0.26 cohort — published 2026-11-11
 

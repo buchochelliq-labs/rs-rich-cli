@@ -37,7 +37,7 @@ use crate::model::{Binding, MediaKind, Page, Role, Shelf};
 use crate::pictures::{self, Live};
 use crate::shelf::page_by;
 use crate::tab::{Command, Intent, Refusal, Tab, Update};
-use crate::video::{Encoder, Job, Pacing, VideoFrame};
+use crate::video::{Encoder, Job, Pacing, VideoFrame, take_every};
 use crate::widgets::{WebControl, web_widget};
 
 mod labels;
@@ -1096,12 +1096,19 @@ fn send_regions(b: Browser) {
     } else {
         regions_on_screen(b)
     };
+    // The encoder's cost too: frames it cannot keep up with are not taken.
     let intervals: Vec<(NodeId, Duration)> = b.pacing.with_untracked(|p| {
-        p.borrow()
-            .intervals()
-            .into_iter()
-            .map(|(node, d)| (node, whole_rate(d)))
-            .collect()
+        let pacing = p.borrow();
+        b.encoder.with_untracked(|encoder| {
+            pacing
+                .intervals()
+                .into_iter()
+                .map(|(node, d)| {
+                    let cost = encoder.cost(node, pacing.pixels(node));
+                    (node, whole_rate(take_every(d, cost)))
+                })
+                .collect()
+        })
     });
     let scale = screencast_scale(b, &on_screen);
     let next = (on_screen, intervals, scale);
