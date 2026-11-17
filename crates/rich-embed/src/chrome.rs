@@ -3578,7 +3578,6 @@ mod tests {
         session.message(&message.to_string(), shared)
     }
 
-    #[cfg(unix)]
     #[test]
     fn a_retired_browsers_thread_ending_late_leaves_the_next_one_alone() {
         let shared = Arc::new(Mutex::new(Shared::default()));
@@ -3604,6 +3603,7 @@ mod tests {
         );
     }
 
+    #[cfg(unix)]
     #[test]
     fn only_the_pages_own_detach_ends_the_engine() {
         let (engine, mut session, _output, _requests) = pending_session();
