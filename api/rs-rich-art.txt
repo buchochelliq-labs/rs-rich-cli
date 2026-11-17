@@ -931,6 +931,7 @@ pub struct rich_art::picture::Picture
 impl rich_art::picture::Picture
 pub fn rich_art::picture::Picture::animated(alloc::vec::Vec<rich_art::graphics::AnimationFrame>) -> core::option::Option<rich_art::picture::Picture>
 pub fn rich_art::picture::Picture::bound(&self, bool) -> Self
+pub fn rich_art::picture::Picture::covers_cells(&self, &rich_art::picture::PictureTag, rich_art::graphics::CellPixels) -> bool
 pub fn rich_art::picture::Picture::decode(&[u8]) -> core::result::Result<rich_art::picture::Picture, alloc::string::String>
 pub fn rich_art::picture::Picture::decode_animated(&[u8]) -> core::result::Result<rich_art::picture::Picture, alloc::string::String>
 pub fn rich_art::picture::Picture::encode(&self, rich_art::picture::Pixels, usize, usize) -> core::option::Option<alloc::string::String>
@@ -946,6 +947,7 @@ pub fn rich_art::picture::Picture::from_rgba(u32, u32, alloc::vec::Vec<u8>) -> c
 pub fn rich_art::picture::Picture::id(&self) -> u32
 pub fn rich_art::picture::Picture::image(&self) -> &alloc::sync::Arc<image::images::dynimage::DynamicImage>
 pub fn rich_art::picture::Picture::is_animated(&self) -> bool
+pub fn rich_art::picture::Picture::is_opaque(&self) -> bool
 pub fn rich_art::picture::Picture::is_prepared_with_context(&self, rich_art::picture::ImageView, usize, usize, rich_art::picture::PictureEncoding) -> bool
 pub fn rich_art::picture::Picture::is_prepared_with_metrics(&self, rich_art::picture::ImageView, usize, usize, rich_art::graphics::CellPixels) -> bool
 pub fn rich_art::picture::Picture::kitty_resource(&self, rich_art::picture::ImageView, usize, usize, bool) -> core::option::Option<alloc::sync::Arc<rich_art::picture::KittyResource>>
@@ -1085,6 +1087,7 @@ pub const rich_art::picture::KEEP: u32
 pub fn rich_art::picture::count_picture_bytes(u32, u64)
 pub fn rich_art::picture::over_ssh() -> bool
 pub fn rich_art::picture::picture_bytes(u32) -> u64
+pub fn rich_art::picture::picture_encodes(u32) -> u64
 pub fn rich_art::picture::shrink(image::images::dynimage::DynamicImage) -> image::images::dynimage::DynamicImage
 pub mod rich_art::quadrant
 pub struct rich_art::quadrant::QuadrantArt

@@ -270,7 +270,12 @@ fn legacy_tags_only_accept_whole_width_and_missing_pictures_fall_back() {
 
 #[test]
 fn background_provenance_changes_native_graphic_identity() {
-    for picture in [picture(), picture().bound(false)] {
+    let translucent = Picture::new(DynamicImage::ImageRgba8(RgbaImage::from_pixel(
+        64,
+        64,
+        Rgba([9, 9, 9, 128]),
+    )));
+    for picture in [picture(), picture().bound(false), translucent] {
         let console = rich::Console::builder().width(8).build();
         let source = image_graphics();
         let placed = |background| {
@@ -288,7 +293,12 @@ fn background_provenance_changes_native_graphic_identity() {
         let first = placed([1, 2, 3]);
         let other = placed([4, 5, 6]);
         assert_ne!(first[0].graphic.key(), other[0].graphic.key());
-        assert!(first[0].graphic.draw(0).contains("48;2;1;2;3m"));
+        // Cleared in the background before a picture with alpha; an
+        // opaque one hides its cells, so it is drawn over them as they are.
+        assert_eq!(
+            first[0].graphic.draw(0).contains("48;2;1;2;3m"),
+            !picture.is_opaque()
+        );
     }
 }
 

@@ -90,6 +90,42 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   frames lined up with one. Readings for an action, a navigation or a load
   are still read at once on the tab's thread.
 
+### intuiTUIve: pictures without flicker between frames
+
+- **Kitty uploads go before the cells that name them.** A frame used to
+  write a picture's placeholder cells under its new image id, then upload
+  the image, then delete the old id. Without synchronized output (a link
+  too slow to answer the start-up query, a multiplexer without mode 2026,
+  `RICH_SYNC_OUTPUT=0`) the terminal showed the region empty for the
+  whole upload. The upload now comes first, with no cursor move, and the
+  delete still comes after the cells. `Painter::starts_over` (rs-rich-ext)
+  tells whether a paint begins by clearing the screen; the uploads follow
+  such a clear rather than precede it.
+- **An opaque live picture in iTerm2 and Sixel is drawn over its cells as
+  they are.** Each frame of a video used to write the region's half
+  blocks, erase them (`ESC [ n X` on every row), then draw the image: three
+  states of the same cells in one frame, a flash without synchronized
+  output, and the half blocks' bytes every frame. A picture whose fitted
+  pixels have no transparency and fill its cells (rs-rich-art's
+  `Picture::is_opaque` and `Picture::covers_cells`) is no longer erased
+  under, and while it is drawn over cells it covered the frame before,
+  the painter leaves them alone (rs-rich-ext's `Graphic::opaque` and
+  `Painter::set_covered`): one image escape a frame. A picture with alpha
+  is still erased under, so the half blocks do not show through.
+- **The painter no longer moves the cursor by rewriting a picture's
+  cells.** Writing a few unchanged cells again can be shorter than a
+  cursor move; under an iTerm2 or Sixel picture it wiped the picture
+  there without the graphics plan knowing.
+- **Scrolling pictures in iTerm2 and Sixel (#884, the overlay part).** A
+  picture that only moved is drawn again from the escape already made
+  (the terminal does not move overlay images with the text), and a part of
+  one cut by the view's edge is now cut from the picture fitted once, not
+  resampled again at every step (rs-rich-art keeps the last fit of each
+  frame). `rich_art::picture::picture_encodes` counts the escapes made of
+  a picture, as `picture_bytes` counts the bytes sent. Tests scroll a page
+  of pictures down and back under each protocol: no unchanged part is
+  encoded twice, and every step's terminal matches a fresh draw.
+
 ## 0.0.26 cohort — published 2026-11-11
 
 Published on 2026-11-11 from `e5422bf9` by one `release.yml` run on rab

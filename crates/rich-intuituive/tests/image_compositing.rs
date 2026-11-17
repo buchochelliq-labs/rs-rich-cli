@@ -387,12 +387,20 @@ mod scenes {
                     }
                     terminal.process(output.as_bytes()).unwrap();
                     let snapshot = terminal.snapshot(&Theme::default());
+                    // Cells some image shows in: an opaque picture drawn
+                    // again over cells left as they were lies over the last.
+                    let shown: std::collections::HashSet<(u16, u16)> = snapshot
+                        .images
+                        .iter()
+                        .flat_map(|tile| {
+                            (tile.row..tile.row + tile.rows).flat_map(move |row| {
+                                (tile.column..tile.column + tile.columns)
+                                    .map(move |column| (row, column))
+                            })
+                        })
+                        .collect();
                     assert_eq!(
-                        snapshot
-                            .images
-                            .iter()
-                            .map(|tile| usize::from(tile.columns) * usize::from(tile.rows))
-                            .sum::<usize>(),
+                        shown.len(),
                         usize::from(cols * 3 * rows) - if covered { 2 } else { 0 },
                         "visible {pixels:?} {cols}x{rows} step={step}"
                     );
@@ -411,6 +419,169 @@ mod scenes {
                         "{pixels:?} {cols}x{rows} step={step} differs from fresh scene"
                     );
                 }
+            }
+        }
+    }
+}
+mod scroll {
+    //! #884: a page of pictures scrolled through a view, in the overlay
+    //! protocols: an unchanged picture is encoded once for each part of it
+    //! shown, and the terminal ends each step as a fresh draw of it would.
+    use intuituive::node::{column, label, scroll_with};
+    use intuituive::{App, Driver, ImageFit, ImageView, Picture, Pixels, image_graphics};
+    use rich_art::image::{DynamicImage, Rgb, RgbImage};
+    use rich_art::picture::picture_encodes;
+    use rich_record::{
+        render::raster::{self, Fonts, Frame},
+        screen::Theme,
+        terminal::Terminal,
+    };
+    use std::{cell::Cell, rc::Rc, time::Duration};
+
+    const WIDTH: u16 = 8;
+    const HEIGHT: u16 = 6;
+    /// Each picture's first row on the page: three rows each, a label above.
+    const TOPS: [u16; 3] = [1, 5, 9];
+
+    fn pictures() -> Vec<Picture> {
+        (0..3u8)
+            .map(|k| {
+                Picture::new(DynamicImage::ImageRgb8(RgbImage::from_fn(
+                    32,
+                    24,
+                    |x, y| Rgb([(x * 8) as u8, (y * 10) as u8, 80 * k]),
+                )))
+            })
+            .collect()
+    }
+
+    fn page(
+        pictures: &[Picture],
+        pixels: Pixels,
+        at: u16,
+    ) -> (Driver, Rc<Cell<Option<intuituive::Signal<u16>>>>) {
+        let handle = Rc::new(Cell::new(None));
+        let copy = handle.clone();
+        let pictures = pictures.to_vec();
+        let app = App::new(move || {
+            let offset = intuituive::signal(at);
+            copy.set(Some(offset));
+            let view = ImageView::new().fit(ImageFit::Stretch).pixels(pixels);
+            let mut nodes = Vec::new();
+            for (k, picture) in pictures.iter().enumerate() {
+                nodes.push(label(format!("text {k}")).fixed(1));
+                let picture = picture.clone();
+                nodes.push(intuituive::picture_of(move || Some(picture.clone()), view).fixed(3));
+            }
+            nodes.push(label("end").fixed(1));
+            scroll_with(column(nodes), offset)
+        })
+        .graphics(image_graphics());
+        let mut driver = app.driver(WIDTH, HEIGHT);
+        driver.set_cell_pixels(Some((8, 16)));
+        (driver, handle)
+    }
+
+    fn raster(term: &Terminal) -> Vec<u8> {
+        let theme = Theme::default();
+        raster::render(
+            &term.snapshot(&theme),
+            &theme,
+            &Fonts::embedded(),
+            &Frame {
+                title: "",
+                key: None,
+                size: 16.,
+                window: false,
+                caption: None,
+            },
+        )
+        .pixels
+    }
+
+    /// Offsets down the page and back.
+    fn steps() -> Vec<u16> {
+        (0..=7).chain((0..7).rev()).collect()
+    }
+
+    #[test]
+    fn scrolling_encodes_an_unchanged_picture_once_for_each_part_shown() {
+        for pixels in [Pixels::Sixel, Pixels::Iterm] {
+            let pictures = pictures();
+            let (mut driver, offset) = page(&pictures, pixels, 0);
+            driver.update(Duration::ZERO);
+            let _ = driver.render();
+            let mut seen = std::collections::HashSet::new();
+            let mut last = 0;
+            for at in steps().into_iter().skip(1) {
+                let before: Vec<u64> = pictures.iter().map(|p| picture_encodes(p.id())).collect();
+                offset.get().unwrap().set(at);
+                driver.update(Duration::ZERO);
+                let _ = driver.render();
+                for (k, picture) in pictures.iter().enumerate() {
+                    let encodes = picture_encodes(picture.id()) - before[k];
+                    // The rows of it in view, before and now.
+                    let part = |at: u16| {
+                        let top = TOPS[k].max(at);
+                        let bottom = (TOPS[k] + 3).min(at + HEIGHT);
+                        (top < bottom).then(|| (top - TOPS[k], bottom - top))
+                    };
+                    let (was, now) = (part(last), part(at));
+                    if was == now || now.is_none() || seen.contains(&(k, now)) {
+                        assert_eq!(
+                            encodes, 0,
+                            "{pixels:?} {last}->{at}: picture {k} encoded again"
+                        );
+                    } else {
+                        assert!(
+                            encodes <= 1,
+                            "{pixels:?} {last}->{at}: picture {k} {encodes}"
+                        );
+                    }
+                    seen.insert((k, now));
+                }
+                last = at;
+            }
+        }
+    }
+
+    #[test]
+    fn scrolling_a_page_of_pictures_leaves_no_stale_cells() {
+        for pixels in [Pixels::Cells, Pixels::Kitty, Pixels::Sixel, Pixels::Iterm] {
+            let pictures = pictures();
+            let (mut driver, offset) = page(&pictures, pixels, 0);
+            let mut terminal = Terminal::new(HEIGHT, WIDTH);
+            for (step, at) in steps().into_iter().enumerate() {
+                offset.get().unwrap().set(at);
+                driver.update(Duration::from_millis(step as u64));
+                terminal
+                    .process(driver.render().unwrap_or_default().as_bytes())
+                    .unwrap();
+                let (mut fresh, _) = page(&pictures, pixels, at);
+                fresh.update(Duration::ZERO);
+                let mut expected = Terminal::new(HEIGHT, WIDTH);
+                expected
+                    .process(fresh.render().unwrap_or_default().as_bytes())
+                    .unwrap();
+                let (a, b) = (raster(&terminal), raster(&expected));
+                let differ = a.chunks(3).zip(b.chunks(3)).filter(|(a, b)| a != b).count();
+                assert_eq!(
+                    differ,
+                    0,
+                    "{pixels:?} step {step} (offset {at}): {:?} against {:?}",
+                    terminal
+                        .snapshot(&Theme::default())
+                        .images
+                        .iter()
+                        .map(|t| (t.row, t.column, t.rows, t.columns))
+                        .collect::<Vec<_>>(),
+                    expected
+                        .snapshot(&Theme::default())
+                        .images
+                        .iter()
+                        .map(|t| (t.row, t.column, t.rows, t.columns))
+                        .collect::<Vec<_>>(),
+                );
             }
         }
     }
