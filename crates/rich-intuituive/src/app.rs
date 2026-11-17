@@ -3019,6 +3019,10 @@ impl App {
     fn push_toast(&mut self, note: Note, until: Duration) {
         let text = note.spoken();
         self.toasts.push((note, until));
+        // The toasts shown move a box away from their corner: what was
+        // under them draws again, as when one goes, or a wider one moved
+        // stays drawn beside the new one.
+        self.restack |= self.toasts.len() > 1;
         self.poke = true;
         self.announce(
             crate::a11y::Announcement {

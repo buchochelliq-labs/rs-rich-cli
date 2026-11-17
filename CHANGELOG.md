@@ -42,6 +42,9 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   snapped to card columns, one a row (L6); a menu button at the right
   edge crowded by a title keeps its face on the title's row, the title
   wrapping before it (L8).
+- intuiTUIve: a new toast stacked over one already shown redraws what is
+  under them, so the one it moved leaves nothing of itself beside the new
+  one (two toasts read as overlapping boxes).
 
 ## 0.0.26 cohort — published 2026-11-11
 

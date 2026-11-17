@@ -71,6 +71,31 @@ fn a_toast_shows_at_the_bottom_right_and_expires() {
 }
 
 #[test]
+fn a_new_toast_stacks_without_leaving_the_one_it_moved_drawn_under_it() {
+    // A wide toast, then a narrow one: the wide one moves up a box, and
+    // nothing of it stays where it was, beside the narrow one.
+    let app = App::new(|| {
+        label("main")
+            .on_key("w", |cx| {
+                cx.toast_for("a much wider toast message", Duration::from_secs(5))
+            })
+            .on_key("n", |cx| cx.toast_for("ok", Duration::from_secs(5)))
+            .on_key("q", |cx| cx.quit())
+    });
+    let rows = screen(&run_open(app, Script::new().keys("w n"), 40, 10));
+    let wide = row_of(&rows, "wider").expect("the wide toast shows");
+    let narrow = row_of(&rows, "ok").expect("the narrow toast shows");
+    assert_eq!(narrow, wide + 3, "{rows:#?}");
+    for row in &rows[narrow - 1..=narrow + 1] {
+        let marks = row.chars().filter(|c| "│╭╮╰╯─".contains(*c)).count();
+        let box_width = "ok".len() + 4;
+        assert!(marks <= box_width, "{row:?} in {rows:#?}");
+        let first = row.find(|c: char| c != ' ').unwrap_or(0);
+        assert!(first >= 40 - box_width - 2, "{row:?} in {rows:#?}");
+    }
+}
+
+#[test]
 fn an_animation_moves_a_signal_to_its_target_over_time() {
     let seen = std::rc::Rc::new(std::cell::RefCell::new(Vec::new()));
     let log = seen.clone();
