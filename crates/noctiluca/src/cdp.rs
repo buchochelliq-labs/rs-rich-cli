@@ -362,6 +362,10 @@ impl Drop for Wait {
 /// The [`Engine`] over a headless Chrome, sandboxed, through rs-rich-embed.
 pub struct ChromeBackend {
     model_scope: Option<ScreencastScope>,
+    /// The capture scope of the reading out on the reader's thread, by its
+    /// number ([`Engine::begin_read`]), and the last number given.
+    read_scope: Option<(u64, ScreencastScope)>,
+    reads: u64,
     engine: ChromeEngine,
     devtools: DevTools,
     events: Receiver<DevToolsEvent>,
@@ -435,6 +439,8 @@ impl ChromeBackend {
         }
         Ok(ChromeBackend {
             model_scope: None,
+            read_scope: None,
+            reads: 0,
             engine,
             devtools,
             events,
@@ -480,18 +486,7 @@ impl ChromeBackend {
 
     /// A fresh isolated world in the main frame, for one action.
     fn world(&self) -> io::Result<i64> {
-        let tree = self.call("Page.getFrameTree", json!({}))?;
-        let frame = tree["frameTree"]["frame"]["id"]
-            .as_str()
-            .ok_or_else(|| io::Error::other("no main frame"))?
-            .to_string();
-        let world = self.call(
-            "Page.createIsolatedWorld",
-            json!({"frameId": frame, "worldName": format!("{WORLD}-act")}),
-        )?;
-        world["executionContextId"]
-            .as_i64()
-            .ok_or_else(|| io::Error::other("no isolated world"))
+        world_through(&|method, args| self.call(method, args))
     }
 
     /// The node as an object of `context`.
@@ -634,6 +629,68 @@ impl ChromeBackend {
     }
 }
 
+/// A fresh isolated world in the main frame, through `call`.
+fn world_through(call: &dyn Fn(&str, Value) -> io::Result<Value>) -> io::Result<i64> {
+    let tree = call("Page.getFrameTree", json!({}))?;
+    let frame = tree["frameTree"]["frame"]["id"]
+        .as_str()
+        .ok_or_else(|| io::Error::other("no main frame"))?
+        .to_string();
+    let world = call(
+        "Page.createIsolatedWorld",
+        json!({"frameId": frame, "worldName": format!("{WORLD}-act")}),
+    )?;
+    world["executionContextId"]
+        .as_i64()
+        .ok_or_else(|| io::Error::other("no isolated world"))
+}
+
+/// The page's snapshot and accessibility tree, through `call`: on the
+/// tab's thread or the reader's. The caller checks its capture scope.
+fn snapshot_through(call: &dyn Fn(&str, Value) -> io::Result<Value>) -> io::Result<PageSnapshot> {
+    let context = world_through(call)
+        .ok()
+        .filter(|&context| source_formatting::begin(&call, context).is_ok());
+    let at = crate::trace::start();
+    let captured = call(
+        "DOMSnapshot.captureSnapshot",
+        json!({"computedStyles": SNAPSHOT_STYLES, "includeDOMRects": true,
+               "includePaintOrder": true}),
+    );
+    let dom_ms = crate::trace::ms(at);
+    let mut dom = match captured {
+        Ok(dom) => dom,
+        Err(error) => {
+            if let Some(context) = context {
+                source_formatting::finish(&call, context, &mut Value::Null);
+            }
+            return Err(error);
+        }
+    };
+    // The page reads without its AX tree when Chrome refuses one.
+    let at = crate::trace::start();
+    let ax = call("Accessibility.getFullAXTree", json!({})).unwrap_or(Value::Null);
+    if crate::trace::on() {
+        trace_snapshot(&dom, &ax, dom_ms, crate::trace::ms(at));
+    }
+    if let Some(context) = context {
+        source_formatting::finish(&call, context, &mut dom);
+    }
+    Ok(PageSnapshot { dom, ax })
+}
+
+/// What reads the page on the tab's reader thread ([`Engine::reader`]):
+/// the page's DevTools, its calls waiting at most [`READING`].
+struct ChromeReader {
+    devtools: DevTools,
+}
+
+impl crate::engine::PageReader for ChromeReader {
+    fn snapshot(&mut self) -> io::Result<PageSnapshot> {
+        snapshot_through(&|method, args| self.devtools.call(method, args, READING))
+    }
+}
+
 /// The trace's line for a snapshot: its two calls' times and its size.
 fn trace_snapshot(dom: &Value, ax: &Value, dom_ms: f64, ax_ms: f64) {
     let documents = dom["documents"].as_array().map_or(&[][..], Vec::as_slice);
@@ -726,40 +783,7 @@ impl Engine for ChromeBackend {
         let scope = self.engine.screencast_scope().ok_or_else(|| {
             io::Error::new(ErrorKind::WouldBlock, "viewport metrics not applied yet")
         })?;
-        let context = self.world().ok().filter(|&context| {
-            source_formatting::begin(&|method, args| self.call(method, args), context).is_ok()
-        });
-        let at = crate::trace::start();
-        let captured = self.call(
-            "DOMSnapshot.captureSnapshot",
-            json!({"computedStyles": SNAPSHOT_STYLES, "includeDOMRects": true,
-                   "includePaintOrder": true}),
-        );
-        let dom_ms = crate::trace::ms(at);
-        let mut dom = match captured {
-            Ok(dom) => dom,
-            Err(error) => {
-                if let Some(context) = context {
-                    source_formatting::finish(
-                        &|method, args| self.call(method, args),
-                        context,
-                        &mut Value::Null,
-                    );
-                }
-                return Err(error);
-            }
-        };
-        // The page reads without its AX tree when Chrome refuses one.
-        let at = crate::trace::start();
-        let ax = self
-            .call("Accessibility.getFullAXTree", json!({}))
-            .unwrap_or(Value::Null);
-        if crate::trace::on() {
-            trace_snapshot(&dom, &ax, dom_ms, crate::trace::ms(at));
-        }
-        if let Some(context) = context {
-            source_formatting::finish(&|method, args| self.call(method, args), context, &mut dom);
-        }
+        let snapshot = snapshot_through(&|method, args| self.call(method, args))?;
         if !self.engine.screencast_scope_is_current(&scope) {
             return Err(io::Error::new(
                 ErrorKind::WouldBlock,
@@ -767,7 +791,33 @@ impl Engine for ChromeBackend {
             ));
         }
         self.model_scope = Some(scope);
-        Ok(PageSnapshot { dom, ax })
+        Ok(snapshot)
+    }
+
+    fn reader(&mut self, _tab: TabId) -> Option<Box<dyn crate::engine::PageReader>> {
+        Some(Box::new(ChromeReader {
+            devtools: self.devtools.clone(),
+        }))
+    }
+
+    fn begin_read(&mut self, _tab: TabId) -> io::Result<u64> {
+        let scope = self.engine.screencast_scope().ok_or_else(|| {
+            io::Error::new(ErrorKind::WouldBlock, "viewport metrics not applied yet")
+        })?;
+        self.reads += 1;
+        self.read_scope = Some((self.reads, scope));
+        Ok(self.reads)
+    }
+
+    fn adopt_read(&mut self, _tab: TabId, read: u64) -> bool {
+        let Some((_, scope)) = self.read_scope.take().filter(|(n, _)| *n == read) else {
+            return false;
+        };
+        if !self.engine.screencast_scope_is_current(&scope) {
+            return false;
+        }
+        self.model_scope = Some(scope);
+        true
     }
 
     fn capture(&mut self, _tab: TabId, region: Rect, format: Format) -> io::Result<Frame> {

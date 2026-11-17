@@ -53,6 +53,14 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   take: a page that hangs holds the video's frames for seconds, not half a
   minute per call. Tested live on a page whose script never returns
   (`tests/fixtures/hang.html`).
+- Readings of the page run on a thread of their own: a reading the page
+  pinged for, or a new document's settling one, takes Chrome's snapshot and
+  builds the model off the tab's thread, which goes on taking video frames;
+  its capture scope is checked and adopted on the tab's thread when it comes
+  back. A reading took 150 to 230 ms of the tab's thread about once a
+  second while a video played, and every gap of 200 ms or more between
+  frames lined up with one. Readings for an action, a navigation or a load
+  are still read at once on the tab's thread.
 
 ## 0.0.26 cohort — published 2026-11-11
 

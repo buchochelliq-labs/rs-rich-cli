@@ -56,7 +56,8 @@ use std::time::{Duration, Instant};
 use rich_embed::PageState;
 
 use crate::engine::{
-    Engine, EngineEvent, Format, HistoryStep, MediaOp, Metrics, NodeId, PageAction, Rect, TabId,
+    Engine, EngineEvent, Format, HistoryStep, MediaOp, Metrics, NodeId, PageAction, PageReader,
+    Rect, TabId,
 };
 use crate::model::{
     Binding, Block, BlockKind, Control, Entry, Media, MediaKind, Page, Revisions, Role, Run,
@@ -99,6 +100,9 @@ pub fn ping_read_gap(cost: Duration, playing: bool) -> Duration {
     }
 }
 
+/// How often the tab looks for the page the reader's thread read, while
+/// one is out.
+const READ_POLL: Duration = Duration::from_millis(5);
 /// How often the tab looks at its engine when nothing happens.
 const TICK: Duration = Duration::from_millis(25);
 /// How long an action waits for a reading the engine refuses for a moment
@@ -560,6 +564,8 @@ struct Worker<'a> {
     /// When the screencast last started, and the viewport-only hold after
     /// a stall.
     cast: CastWatch,
+    /// Readings on the reader's thread.
+    aside: Aside,
 }
 
 /// The screencast's watch for stalls ([`STALL`]).
@@ -584,6 +590,106 @@ struct Watch {
     busy: bool,
     /// It was sent frames since it last stopped.
     moving: bool,
+}
+
+/// The page built from a snapshot: its model, and the source's model too
+/// when `source` (the tab's owner keeps source relationships).
+fn build_read(
+    snapshot: &crate::engine::PageSnapshot,
+    revisions: &mut Revisions,
+    appended: &HashSet<NodeId>,
+    source: bool,
+) -> (Page, Option<SourcePage>) {
+    let source = source.then(|| build_source_with(snapshot, revisions, appended));
+    let page = match &source {
+        Some(source) => source.page().as_ref().clone(),
+        None => build_with(snapshot, revisions, appended),
+    };
+    (page, source)
+}
+
+/// Readings on the reader's thread ([`Worker::read_aside`]): its thread,
+/// whether the engine has none, and the reading out there.
+#[derive(Default)]
+struct Aside {
+    reader: Option<ReaderThread>,
+    none: bool,
+    out: Option<Out>,
+}
+
+/// A reading out on the reader's thread: when it began, and the change
+/// ping it answers (given back if it fails).
+struct Out {
+    began: Instant,
+    dirty: Option<Instant>,
+}
+
+/// What the tab asks of the reader's thread: a reading, its number from
+/// [`Engine::begin_read`], the model's revisions (lent while it builds),
+/// the scroll boxes the page appends to, and whether to build the source's
+/// model too.
+struct Ask {
+    ticket: u64,
+    revisions: Revisions,
+    appended: HashSet<NodeId>,
+    source: bool,
+}
+
+/// What the reader's thread answers: the revisions back, and the page
+/// built, `None` when the snapshot failed.
+struct Answer {
+    ticket: u64,
+    revisions: Revisions,
+    read: Option<Built>,
+}
+
+/// A page the reader's thread built, with what its reading cost.
+struct Built {
+    page: Page,
+    source: Option<SourcePage>,
+    snapshot_ms: f64,
+    build_ms: f64,
+}
+
+/// The reader's thread: it takes each asked snapshot through the engine's
+/// [`PageReader`] and builds its model, one at a time. It ends when the
+/// tab drops its end.
+struct ReaderThread {
+    asks: Sender<Ask>,
+    answers: Receiver<Answer>,
+}
+
+impl ReaderThread {
+    fn spawn(mut reader: Box<dyn PageReader>) -> ReaderThread {
+        let (asks, asked) = mpsc::channel::<Ask>();
+        let (done, answers) = mpsc::channel();
+        thread::spawn(move || {
+            for mut ask in asked {
+                let at = crate::trace::start();
+                let read = reader.snapshot().ok().map(|snapshot| {
+                    let snapshot_ms = crate::trace::ms(at);
+                    let built = crate::trace::start();
+                    let (page, source) =
+                        build_read(&snapshot, &mut ask.revisions, &ask.appended, ask.source);
+                    Built {
+                        page,
+                        source,
+                        snapshot_ms,
+                        build_ms: crate::trace::ms(built),
+                    }
+                });
+                let answer = Answer {
+                    ticket: ask.ticket,
+                    revisions: ask.revisions,
+                    read,
+                };
+                if done.send(answer).is_err() {
+                    return;
+                }
+            }
+        });
+        ReaderThread { asks, answers }
+    }
 }
 
 /// The start of the address Chrome gives its own error page, the page it
@@ -687,6 +793,9 @@ impl Worker<'_> {
     }
 
     fn read(&mut self) -> Option<Arc<Page>> {
+        // A reading still out on the reader's thread is older than this
+        // one: its revisions come back, its page is not used.
+        self.settle_aside();
         if crate::trace::on() {
             crate::trace::media(r#"{"stage":"model_snapshot_attempt"}"#);
         }
@@ -700,14 +809,162 @@ impl Worker<'_> {
             self.appended = boxes.into_iter().collect();
         }
         let built = crate::trace::start();
-        let source = self
-            .source_update
-            .map(|_| build_source_with(&snapshot, &mut self.revisions, &self.appended));
-        let mut page = match &source {
-            Some(source) => source.page().as_ref().clone(),
-            None => build_with(&snapshot, &mut self.revisions, &self.appended),
-        };
+        let (page, source) = build_read(
+            &snapshot,
+            &mut self.revisions,
+            &self.appended,
+            self.source_update.is_some(),
+        );
         let build_ms = crate::trace::ms(built);
+        let page = self.finish_read(page, source, snapshot_ms, build_ms, at, false);
+        self.dirty = None;
+        Some(page)
+    }
+
+    /// Start a reading on the reader's thread, when the engine has one, so
+    /// the tab's thread goes on taking video frames while the browser
+    /// reads and the model is built: [`take_aside`](Self::take_aside)
+    /// adopts it. `false` when the engine has none (read on this thread).
+    /// A reading refused at its start counts as refused.
+    fn read_aside(&mut self) -> bool {
+        if self.aside.out.is_some() {
+            return true;
+        }
+        if self.aside.reader.is_none() {
+            if self.aside.none {
+                return false;
+            }
+            match self.engine.reader(TabId(0)) {
+                Some(reader) => self.aside.reader = Some(ReaderThread::spawn(reader)),
+                None => {
+                    self.aside.none = true;
+                    return false;
+                }
+            }
+        }
+        let now = Instant::now();
+        let Ok(ticket) = self.engine.begin_read(TabId(0)) else {
+            self.last_read = Some((now, Duration::ZERO));
+            self.refused = true;
+            return true;
+        };
+        if let Ok(boxes) = self.engine.appended(TabId(0)) {
+            self.appended = boxes.into_iter().collect();
+        }
+        let ask = Ask {
+            ticket,
+            revisions: std::mem::replace(&mut self.revisions, Revisions::new()),
+            appended: self.appended.clone(),
+            source: self.source_update.is_some(),
+        };
+        let reader = self.aside.reader.as_ref().expect("spawned above");
+        if let Err(mpsc::SendError(ask)) = reader.asks.send(ask) {
+            // Its thread ended: read on this one from now on.
+            self.revisions = ask.revisions;
+            self.aside.reader = None;
+            self.aside.none = true;
+            return false;
+        }
+        // The reading covers what changed until now; a ping from here on
+        // asks for the next.
+        self.aside.out = Some(Out {
+            began: now,
+            dirty: self.dirty.take(),
+        });
+        true
+    }
+
+    /// Adopt the reading the reader's thread finished, if it did: its page
+    /// is checked against the engine's capture scope and published.
+    /// `Some(true)` for a page published, `Some(false)` for a reading
+    /// refused (its scope changed, or its snapshot failed), `None` while
+    /// none came back.
+    fn take_aside(&mut self) -> Option<bool> {
+        self.aside.out.as_ref()?;
+        let answer = self.aside.reader.as_ref()?.answers.try_recv();
+        match answer {
+            Ok(answer) => Some(self.adopt(answer)),
+            Err(TryRecvError::Empty) => None,
+            Err(TryRecvError::Disconnected) => {
+                self.aside.reader = None;
+                self.aside.none = true;
+                let out = self.aside.out.take()?;
+                self.dirty = out.dirty.or(Some(out.began));
+                Some(false)
+            }
+        }
+    }
+
+    /// Wait for the reading out on the reader's thread, if any, and take
+    /// back its revisions without using its page: a reading on this thread
+    /// follows it.
+    fn settle_aside(&mut self) {
+        if self.aside.out.is_none() {
+            return;
+        }
+        let answer = self
+            .aside
+            .reader
+            .as_ref()
+            .and_then(|r| r.answers.recv_timeout(crate::cdp::READING * 3).ok());
+        let out = self.aside.out.take();
+        match answer {
+            Some(answer) => {
+                self.revisions = answer.revisions;
+                // Its pings are this reading's to cover.
+                if let Some(dirty) = out.and_then(|o| o.dirty) {
+                    self.dirty.get_or_insert(dirty);
+                }
+            }
+            None => {
+                self.aside.reader = None;
+                self.aside.none = true;
+            }
+        }
+    }
+
+    /// A reading from the reader's thread: adopted when its scope is still
+    /// current (see [`take_aside`](Self::take_aside)).
+    fn adopt(&mut self, answer: Answer) -> bool {
+        self.revisions = answer.revisions;
+        let Some(out) = self.aside.out.take() else {
+            return false;
+        };
+        self.last_read = Some((Instant::now(), out.began.elapsed()));
+        let adopted = answer
+            .read
+            .filter(|_| self.engine.adopt_read(TabId(0), answer.ticket));
+        let Some(read) = adopted else {
+            self.refused = true;
+            self.dirty = out.dirty.or(Some(out.began));
+            return false;
+        };
+        self.refused = false;
+        self.finish_read(
+            read.page,
+            read.source,
+            read.snapshot_ms,
+            read.build_ms,
+            Some(out.began),
+            true,
+        );
+        true
+    }
+
+    /// What a reading does once its page is built, on the tab's thread:
+    /// the page dressed (Chrome's error page, live logs, pictures, media
+    /// state), its document's state kept or dropped, and the page
+    /// published.
+    fn finish_read(
+        &mut self,
+        mut page: Page,
+        source: Option<SourcePage>,
+        snapshot_ms: f64,
+        build_ms: f64,
+        at: Option<Instant>,
+        aside: bool,
+    ) -> Arc<Page> {
+        let finish = crate::trace::start();
         self.dress_error(&mut page);
         if self.page.as_ref().map(|p| p.document) != Some(page.document) {
             self.live.clear();
@@ -769,12 +1026,12 @@ impl Worker<'_> {
                 "read",
                 serde_json::json!({"snapshot_ms": snapshot_ms, "build_ms": build_ms,
                     "total_ms": crate::trace::ms(at), "blocks": page.blocks.len(),
-                    "media": page.media.len()}),
+                    "media": page.media.len(), "aside": aside,
+                    "finish_ms": crate::trace::ms(finish)}),
             );
         }
-        self.dirty = None;
         self.stills_pending = true;
-        Some(page)
+        page
     }
 
     /// The address to show for `url` when it is Chrome's error page: the
@@ -1734,6 +1991,18 @@ impl Worker<'_> {
     /// taken on their slots, not on the tick after), a moment while a due
     /// frame has not come, else the tick.
     fn wait(&self) -> Duration {
+        // A reading is out on the reader's thread: its page is taken soon
+        // after it comes.
+        let frames = self.wait_for_frames();
+        if self.aside.out.is_some() {
+            frames.min(READ_POLL)
+        } else {
+            frames
+        }
+    }
+
+    /// How long until the frames want the tab again.
+    fn wait_for_frames(&self) -> Duration {
         if self.pixels {
             return SCREEN_EVERY.min(TICK);
         }
@@ -2175,6 +2444,7 @@ fn run_with_source(
         canvases: HashMap::new(),
         asked: None,
         cast: CastWatch::default(),
+        aside: Aside::default(),
     };
     let mut live_due = false;
     // Read once at the start, then whenever something says to.
@@ -2227,7 +2497,15 @@ fn run_with_source(
             || worker
                 .settle
                 .is_some_and(|(next, _, _)| Instant::now() >= next);
-        if read_now || due {
+        // A reading the reader's thread finished: adopted, or refused.
+        if worker.take_aside() == Some(true) {
+            live_due = false;
+        }
+        // A reading the page pinged for, or a new document's settling one,
+        // goes to the reader's thread when the engine has one: the frames go
+        // on meanwhile. One asked for (navigation, an action) is read here.
+        let aside = !read_now && due && worker.aside.out.is_some();
+        if (read_now || due) && !aside {
             if crate::trace::on() {
                 let why = if read_now {
                     "asked"
@@ -2239,17 +2517,21 @@ fn run_with_source(
                 crate::trace::event("read_why", serde_json::json!({ "why": why }));
             }
             // A refused reading stays due, and is tried at the next tick.
-            let began = Instant::now();
-            let read = worker.read();
-            worker.last_read = Some((Instant::now(), began.elapsed()));
-            worker.refused = read.is_none();
-            if read.is_some() {
-                read_now = false;
-                live_due = false;
+            if !read_now && worker.read_aside() {
+                // Out on the reader's thread, or refused at its start.
             } else {
-                worker.dirty.get_or_insert_with(Instant::now);
+                let began = Instant::now();
+                let read = worker.read();
+                worker.last_read = Some((Instant::now(), began.elapsed()));
+                worker.refused = read.is_none();
+                if read.is_some() {
+                    read_now = false;
+                    live_due = false;
+                } else {
+                    worker.dirty.get_or_insert_with(Instant::now);
+                }
             }
-        } else if live_due && worker.dirty.is_none() {
+        } else if live_due && worker.dirty.is_none() && worker.aside.out.is_none() {
             // The isolated world debounced it already: read the logs now.
             live_due = false;
             worker.read_live();
@@ -2363,6 +2645,7 @@ mod tests {
             canvases: HashMap::new(),
             asked: None,
             cast: CastWatch::default(),
+            aside: Aside::default(),
         };
         (worker, jobs, done)
     }
@@ -3290,6 +3573,7 @@ mod tests {
             canvases: HashMap::new(),
             asked: None,
             cast: CastWatch::default(),
+            aside: Aside::default(),
         };
         worker.read().unwrap();
         let first = updates.borrow()[0].clone();
@@ -3546,6 +3830,7 @@ mod tests {
                 canvases: HashMap::new(),
                 asked: None,
                 cast: CastWatch::default(),
+                aside: Aside::default(),
             };
             worker.frames.on = true;
             worker.video();
@@ -3950,6 +4235,7 @@ mod tests {
             canvases: HashMap::new(),
             asked: None,
             cast: CastWatch::default(),
+            aside: Aside::default(),
         };
         worker.read().unwrap();
         worker.capture_stills();
@@ -4049,6 +4335,7 @@ mod tests {
                 canvases: HashMap::new(),
                 asked: None,
                 cast: CastWatch::default(),
+                aside: Aside::default(),
             };
             worker.read().unwrap();
             worker.capture_stills();
@@ -4187,6 +4474,7 @@ mod tests {
             canvases: HashMap::new(),
             asked: None,
             cast: CastWatch::default(),
+            aside: Aside::default(),
         };
         worker.read().unwrap();
         let (old_key, _) = inline_jobs.try_recv().expect("first inline job");
@@ -4438,6 +4726,7 @@ mod tests {
             canvases: HashMap::new(),
             asked: None,
             cast: CastWatch::default(),
+            aside: Aside::default(),
         };
         worker.read().unwrap();
         if !legacy {
@@ -4797,6 +5086,99 @@ mod tests {
         assert_eq!(state.lock().unwrap().screencast_area, None);
         assert!(state.lock().unwrap().screencast);
         assert!(delivered.get() > before, "no frame after the stall");
+    }
+
+    /// The longest gap between frames handed on while the watch fixture's
+    /// video plays for three seconds and the page pings a change ten times
+    /// a second, each reading taking 200 ms; with the engine's reader, or
+    /// without (every reading on the tab's thread).
+    fn longest_frame_gap(with_reader: bool) -> Duration {
+        let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/snapshots");
+        let engine = FakeEngine::from_dir(&dir).unwrap();
+        let state = engine.state.clone();
+        {
+            let mut state = state.lock().unwrap();
+            state.with_reader = with_reader;
+            state.go("file:///noctiluca/fixtures/watch.html");
+        }
+        let page =
+            crate::model::build(&state.lock().unwrap().pages["watch"], &mut Revisions::new());
+        let video = page
+            .media
+            .iter()
+            .find(|m| m.kind == MediaKind::Video)
+            .unwrap()
+            .node;
+        state.lock().unwrap().media.insert(
+            video,
+            crate::engine::Playback {
+                ready: 4,
+                ..crate::engine::Playback::default()
+            },
+        );
+        let (send, frames) = mpsc::channel();
+        let tab = Tab::spawn(Box::new(engine), move |update| {
+            if let Update::Frame(_) = update {
+                let _ = send.send(Instant::now());
+            }
+        });
+        tab.send(Command::Resize(120, 40));
+        tab.send(Command::Regions {
+            on_screen: vec![video],
+            intervals: Vec::new(),
+            scale: 1.0,
+        });
+        // The first reading, at the start, before the clock starts.
+        thread::sleep(Duration::from_millis(300));
+        state.lock().unwrap().read_cost = Duration::from_millis(200);
+        let start = Instant::now();
+        let mut k = 0u32;
+        while start.elapsed() < Duration::from_secs(3) {
+            {
+                let mut state = state.lock().unwrap();
+                let (w, h) = (state.viewport_width as u32, state.viewport_height as u32);
+                let frame = rich_embed::ScreencastFrame {
+                    pixels: rich_embed::Pixels::new(w, h, vec![k as u8; (w * h * 3) as usize])
+                        .unwrap(),
+                    meta: rich_embed::FrameMeta {
+                        page_scale: 1.0,
+                        device_width: f64::from(w),
+                        device_height: f64::from(h),
+                        ..rich_embed::FrameMeta::default()
+                    },
+                };
+                state.frames.push(frame);
+                if k % 3 == 0 {
+                    state.events.push(EngineEvent::Changed);
+                }
+            }
+            k += 1;
+            thread::sleep(Duration::from_millis(33));
+        }
+        drop(tab);
+        let times: Vec<Instant> = frames.try_iter().filter(|t| *t > start).collect();
+        assert!(times.len() > 30, "{} frames", times.len());
+        times
+            .windows(2)
+            .map(|w| w[1] - w[0])
+            .max()
+            .unwrap_or_default()
+    }
+
+    #[test]
+    fn a_slow_reading_does_not_stop_the_frames() {
+        // On the reader's thread, a 200 ms reading holds no frame: the
+        // longest gap is a frame's and a little.
+        let gap = longest_frame_gap(true);
+        assert!(gap < Duration::from_millis(90), "{gap:?}");
+    }
+
+    #[test]
+    fn a_slow_reading_on_the_tabs_thread_stops_the_frames() {
+        // Without a reader the same reading holds the frames for its length:
+        // what the reader's thread is for.
+        let gap = longest_frame_gap(false);
+        assert!(gap >= Duration::from_millis(190), "{gap:?}");
     }
 
     #[test]

@@ -45,6 +45,12 @@ pub struct FakeState {
     pub screencast_area: Option<Rect>,
     /// Every change of the screencast's area, in order.
     pub screencast_areas: Vec<Option<Rect>>,
+    /// How long a snapshot takes, as a large page's does in a browser.
+    pub read_cost: std::time::Duration,
+    /// Whether the engine lends a [reader](crate::engine::Engine::reader)
+    /// for readings off the tab's thread, as Chrome's does (on unless a
+    /// test turns it off).
+    pub with_reader: bool,
     /// The screencast stopped sending frames, as a cast can on a page that
     /// keeps laying itself out: none come until it is turned off and on.
     pub cast_stalled: bool,
@@ -545,6 +551,32 @@ pub struct FakeEngine {
     on_act: Option<OnAct>,
 }
 
+/// The current page's snapshot, after [`FakeState::read_cost`].
+fn read_snapshot(state: &Mutex<FakeState>) -> io::Result<PageSnapshot> {
+    let cost = state.lock().unwrap_or_else(|e| e.into_inner()).read_cost;
+    if !cost.is_zero() {
+        std::thread::sleep(cost);
+    }
+    let state = state.lock().unwrap_or_else(|e| e.into_inner());
+    state
+        .current
+        .as_ref()
+        .and_then(|name| state.pages.get(name))
+        .cloned()
+        .ok_or_else(|| io::Error::other("no page"))
+}
+
+/// The fake engine's reader: snapshots from another thread.
+struct FakeReader {
+    state: Arc<Mutex<FakeState>>,
+}
+
+impl crate::engine::PageReader for FakeReader {
+    fn snapshot(&mut self) -> io::Result<PageSnapshot> {
+        read_snapshot(&self.state)
+    }
+}
+
 /// A saved snapshot (`{"dom": …, "ax": …}`) from a JSON file.
 pub fn snapshot_file(path: &std::path::Path) -> io::Result<PageSnapshot> {
     let all: Value = serde_json::from_str(&std::fs::read_to_string(path)?)
@@ -560,7 +592,10 @@ impl FakeEngine {
     /// none yet. Resources come from the `fixtures` directory beside it,
     /// when there is one.
     pub fn from_dir(dir: &std::path::Path) -> io::Result<FakeEngine> {
-        let mut state = FakeState::default();
+        let mut state = FakeState {
+            with_reader: true,
+            ..FakeState::default()
+        };
         let fixtures = dir.join("..").join("fixtures");
         if fixtures.is_dir() {
             state.resource_root = Some(fixtures);
@@ -815,13 +850,14 @@ impl Engine for FakeEngine {
     }
 
     fn snapshot(&mut self, _tab: TabId) -> io::Result<PageSnapshot> {
-        let state = self.lock();
-        state
-            .current
-            .as_ref()
-            .and_then(|name| state.pages.get(name))
-            .cloned()
-            .ok_or_else(|| io::Error::other("no page"))
+        read_snapshot(&self.state)
+    }
+
+    fn reader(&mut self, _tab: TabId) -> Option<Box<dyn crate::engine::PageReader>> {
+        let state = self.state.clone();
+        self.lock()
+            .with_reader
+            .then(|| Box::new(FakeReader { state }) as Box<dyn crate::engine::PageReader>)
     }
 
     fn capture(&mut self, _tab: TabId, region: Rect, format: Format) -> io::Result<Frame> {
