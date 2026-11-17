@@ -29,6 +29,14 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   falling back to screenshots at 4 to 5 frames a second for seconds. Tested
   on a new watch-page fixture (`tests/fixtures/watch.html`, a 30 fps test
   card in a player whose clock the page updates).
+- A live video on a busy page keeps drawing (#890): when a region playing
+  on screen gets no frame for two seconds, the tab starts the screencast
+  again, of the whole viewport, for a few seconds before it tries the
+  region's area again; and the status line says `STALLED` instead of
+  `PLAYING` over a picture whose frames stopped. rs-rich-embed: a restart
+  of the screencast that Chrome refuses no longer drops every frame after
+  it. Tested on a new busy-stream fixture (`tests/fixtures/busy-stream.html`,
+  a playing video beside a chat that never rests and moves it).
 
 ## 0.0.26 cohort — published 2026-11-11
 

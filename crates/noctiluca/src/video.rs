@@ -48,6 +48,10 @@ pub const MAX_FPS: u32 = 30;
 /// learned from the frames before it, and one can cost more.
 pub const HEADROOM: f64 = 0.1;
 
+/// How long a moving region goes without a frame before its picture is
+/// said to have stalled ([`Pacing::stalled`]).
+pub const STALLED: Duration = Duration::from_secs(3);
+
 /// The shortest time between two frames of one region.
 pub const MIN_INTERVAL: Duration = Duration::from_millis(1000 / MAX_FPS as u64);
 
@@ -159,6 +163,11 @@ impl Frames {
         };
         let slot = (last.slot + every - every / 8).max(last.taken + every / 2);
         slot.saturating_duration_since(now)
+    }
+
+    /// When `node`'s last frame was taken, if it has one.
+    pub fn taken(&self, node: NodeId) -> Option<Instant> {
+        self.last.iter().find(|l| l.node == node).map(|l| l.taken)
     }
 
     /// How long until a moving region's next frame is due, if any moves:
@@ -305,6 +314,8 @@ struct Paced {
     moving: bool,
     /// The newest frame's count, so an older one is not shown after it.
     seq: u64,
+    /// When its last frame came.
+    came: Instant,
 }
 
 /// What counts a picture's bytes: the painter's counter in the app,
@@ -385,12 +396,14 @@ impl Pacing {
                     pending: None,
                     moving: true,
                     seq: 0,
+                    came: now,
                 },
             );
         }
         let share = {
             let region = self.regions.get_mut(&frame.node)?;
             region.moving = true;
+            region.came = now;
             region.pacer.resize(cols, rows);
             if frame.seq <= region.seq {
                 return None;
@@ -421,6 +434,16 @@ impl Pacing {
             region.moving = false;
             region.pending = None;
         }
+    }
+
+    /// Whether `node` moves but its frames stopped coming: none for
+    /// [`STALLED`] by `now`. The tab says when a region stops (paused, off
+    /// screen); a moving one that gets no frames shows a picture that no
+    /// longer follows the video.
+    pub fn stalled(&self, node: NodeId, now: Instant) -> bool {
+        self.regions
+            .get(&node)
+            .is_some_and(|r| r.moving && now.saturating_duration_since(r.came) >= STALLED)
     }
 
     /// Forget every region: a new document.
@@ -761,6 +784,24 @@ mod tests {
             assert_ne!(last, Some(picture.version()));
             last = Some(picture.version());
         }
+    }
+
+    #[test]
+    fn a_moving_region_whose_frames_stop_is_said_to_stall() {
+        let mut pacing = Pacing::new(ByteBudget::new(10_000_000), Pixels::Cells);
+        let start = Instant::now();
+        let frame = VideoFrame {
+            node: 1,
+            seq: 1,
+            pixels: Rgb::new(2, 2, vec![9; 12]).unwrap(),
+        };
+        pacing.offer(&frame, 4, 2, start, |_| 0);
+        assert!(!pacing.stalled(1, start + Duration::from_secs(1)));
+        assert!(pacing.stalled(1, start + STALLED));
+        // Stopped (paused, off screen): a still picture is not a stall.
+        pacing.still(1);
+        assert!(!pacing.stalled(1, start + STALLED));
+        assert!(!pacing.stalled(2, start + STALLED));
     }
 
     #[test]

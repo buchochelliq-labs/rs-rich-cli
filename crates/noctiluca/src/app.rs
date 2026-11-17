@@ -908,6 +908,13 @@ pub fn current_media(b: Browser) -> Option<(NodeId, Playback)> {
     })
 }
 
+/// Whether the video `node`'s picture stopped following it: it moves, and
+/// no frame came for a while ([`Pacing::stalled`]).
+pub(crate) fn picture_stalled(b: Browser, node: NodeId) -> bool {
+    b.pacing
+        .with_untracked(|p| p.borrow().stalled(node, Instant::now()))
+}
+
 /// Do `op` to the media `node` of the page now.
 fn media_op(b: Browser, node: NodeId, op: MediaOp) {
     let Some(document) = b.page.with_untracked(|p| p.as_ref().map(|p| p.document)) else {

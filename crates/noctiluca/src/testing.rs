@@ -45,6 +45,9 @@ pub struct FakeState {
     pub screencast_area: Option<Rect>,
     /// Every change of the screencast's area, in order.
     pub screencast_areas: Vec<Option<Rect>>,
+    /// The screencast stopped sending frames, as a cast can on a page that
+    /// keeps laying itself out: none come until it is turned off and on.
+    pub cast_stalled: bool,
     /// Screencast frames waiting to be taken, oldest first: a test pushes
     /// them.
     pub frames: Vec<ScreencastFrame>,
@@ -952,7 +955,11 @@ impl Engine for FakeEngine {
     }
 
     fn set_screencast(&mut self, _tab: TabId, on: bool) -> io::Result<()> {
-        self.lock().screencast = on;
+        let mut state = self.lock();
+        state.screencast = on;
+        if !on {
+            state.cast_stalled = false;
+        }
         Ok(())
     }
 
@@ -970,6 +977,10 @@ impl Engine for FakeEngine {
 
     fn screencast_frame(&mut self, _tab: TabId) -> Option<ScreencastFrame> {
         let mut state = self.lock();
+        if state.cast_stalled {
+            state.frames.clear();
+            return None;
+        }
         if state.screencast && state.frames.is_empty() && state.recorded.is_some() {
             return state.recorded_frame();
         }

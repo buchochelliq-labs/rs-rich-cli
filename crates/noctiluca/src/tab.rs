@@ -112,6 +112,13 @@ const PLAYBACK: Duration = Duration::from_millis(500);
 /// How long without a screencast frame before playing regions are
 /// captured on their own.
 const QUIET: Duration = Duration::from_millis(400);
+/// How long a region playing on screen goes without a frame before the
+/// screencast is started again, of the whole viewport: a page that keeps
+/// laying itself out can leave a cast with no frames (#890).
+const STALL: Duration = Duration::from_secs(2);
+/// After a stall, the viewport is cast this long before a region's area
+/// is tried again.
+const STALL_HOLD: Duration = Duration::from_secs(5);
 /// How often the tab looks for the browser's next frame while one is due
 /// and has not come.
 const FRAME_POLL: Duration = Duration::from_millis(3);
@@ -550,6 +557,16 @@ struct Worker<'a> {
     /// The address last opened, until a page other than Chrome's error
     /// page is read: what the address bar keeps when it fails.
     asked: Option<String>,
+    /// When the screencast last started, and the viewport-only hold after
+    /// a stall.
+    cast: CastWatch,
+}
+
+/// The screencast's watch for stalls ([`STALL`]).
+#[derive(Clone, Copy, Debug, Default)]
+struct CastWatch {
+    since: Option<Instant>,
+    viewport_until: Option<Instant>,
 }
 
 /// A canvas watched while the view shows it.
@@ -1555,7 +1572,13 @@ impl Worker<'_> {
             self.scale_given = self.scale;
             let _ = self.engine.set_screencast_scale(TabId(0), self.scale);
         }
-        let area = if casting && plan.screencast != Some(false) {
+        if plan.screencast == Some(true) {
+            self.cast.since = Some(now);
+        }
+        // Stalled: frames stopped while it plays. Cast the viewport again.
+        let stalled = self.stalled(&regions, now);
+        let held = self.cast.viewport_until.is_some_and(|until| now < until);
+        let area = if casting && plan.screencast != Some(false) && !stalled && !held {
             crate::video::screencast_area(&regions, self.chrome_view(now))
         } else {
             None
@@ -1564,6 +1587,15 @@ impl Worker<'_> {
         if let Some(on) = plan.screencast {
             let _ = self.engine.set_screencast(TabId(0), on);
             self.last_frame = on.then_some(now);
+        } else if stalled {
+            if crate::trace::on() {
+                crate::trace::event("stall", serde_json::json!({}));
+            }
+            let _ = self.engine.set_screencast(TabId(0), false);
+            let _ = self.engine.set_screencast(TabId(0), true);
+            self.cast.since = Some(now);
+            self.cast.viewport_until = Some(now + STALL_HOLD);
+            self.last_frame = Some(now);
         }
         for node in plan.stopped {
             (self.update)(Update::Still(node));
@@ -1602,6 +1634,31 @@ impl Worker<'_> {
         // adapted view shows. Capture that whole region through the model's
         // guarded path; waiting for a quiet screencast would starve it forever.
         self.capture_regions(&missing, now);
+    }
+
+    /// Whether the frames stopped while a region plays on screen: none of
+    /// them for [`STALL`] (or three of its intervals, when slower) since
+    /// its last frame or since the screencast last started, whichever is
+    /// later. A region whose element waits for data is not stalled.
+    fn stalled(&self, regions: &[Region], now: Instant) -> bool {
+        let Some(since) = self.cast.since.filter(|_| self.frames.on) else {
+            return false;
+        };
+        let waiting = |node: NodeId| {
+            self.page.as_ref().is_some_and(|p| {
+                p.media
+                    .iter()
+                    .any(|m| m.node == node && m.playback.is_some_and(|p| p.ready < 3))
+            })
+        };
+        regions
+            .iter()
+            .filter(|r| r.moving() && !waiting(r.node))
+            .any(|r| {
+                let last = self.frames.taken(r.node).map_or(since, |t| t.max(since));
+                let limit = STALL.max(3 * r.interval.unwrap_or_default());
+                now.duration_since(last) >= limit
+            })
     }
 
     /// Chrome's viewport in the document's CSS pixels, if known. While the
@@ -2117,6 +2174,7 @@ fn run_with_source(
         screen_at: None,
         canvases: HashMap::new(),
         asked: None,
+        cast: CastWatch::default(),
     };
     let mut live_due = false;
     // Read once at the start, then whenever something says to.
@@ -2304,6 +2362,7 @@ mod tests {
             screen_at: None,
             canvases: HashMap::new(),
             asked: None,
+            cast: CastWatch::default(),
         };
         (worker, jobs, done)
     }
@@ -3230,6 +3289,7 @@ mod tests {
             screen_at: None,
             canvases: HashMap::new(),
             asked: None,
+            cast: CastWatch::default(),
         };
         worker.read().unwrap();
         let first = updates.borrow()[0].clone();
@@ -3485,6 +3545,7 @@ mod tests {
                 screen_at: None,
                 canvases: HashMap::new(),
                 asked: None,
+                cast: CastWatch::default(),
             };
             worker.frames.on = true;
             worker.video();
@@ -3888,6 +3949,7 @@ mod tests {
             screen_at: None,
             canvases: HashMap::new(),
             asked: None,
+            cast: CastWatch::default(),
         };
         worker.read().unwrap();
         worker.capture_stills();
@@ -3986,6 +4048,7 @@ mod tests {
                 screen_at: None,
                 canvases: HashMap::new(),
                 asked: None,
+                cast: CastWatch::default(),
             };
             worker.read().unwrap();
             worker.capture_stills();
@@ -4123,6 +4186,7 @@ mod tests {
             screen_at: None,
             canvases: HashMap::new(),
             asked: None,
+            cast: CastWatch::default(),
         };
         worker.read().unwrap();
         let (old_key, _) = inline_jobs.try_recv().expect("first inline job");
@@ -4373,6 +4437,7 @@ mod tests {
             screen_at: None,
             canvases: HashMap::new(),
             asked: None,
+            cast: CastWatch::default(),
         };
         worker.read().unwrap();
         if !legacy {
@@ -4650,6 +4715,88 @@ mod tests {
         let state = state.lock().unwrap();
         assert_eq!(state.screencast_area, Some(rect));
         assert!(state.captures.is_empty(), "{:?}", state.captures);
+    }
+
+    #[test]
+    fn a_stalled_screencast_on_a_busy_page_starts_again_of_the_viewport() {
+        let delivered = std::cell::Cell::new(0usize);
+        let update = |update| {
+            if matches!(update, Update::Frame(_)) {
+                delivered.set(delivered.get() + 1);
+            }
+        };
+        let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/snapshots");
+        let engine = FakeEngine::from_dir(&dir).unwrap();
+        let state = engine.state.clone();
+        let (mut worker, _jobs, _done) = recovery_worker(engine, &update);
+        worker.run_command(Command::Resize(120, 40)).unwrap();
+        state
+            .lock()
+            .unwrap()
+            .go("file:///noctiluca/fixtures/busy-stream.html");
+        let page = crate::model::build(
+            &state.lock().unwrap().pages["busy-stream"],
+            &mut Revisions::new(),
+        );
+        let video = page
+            .media
+            .iter()
+            .find(|m| m.kind == MediaKind::Video)
+            .unwrap();
+        let (node, rect) = (video.node, video.rect);
+        state.lock().unwrap().media.insert(
+            node,
+            crate::engine::Playback {
+                ready: 4,
+                ..crate::engine::Playback::default()
+            },
+        );
+        worker.read().unwrap();
+        worker.on_screen.insert(node);
+        let viewport = |state: &crate::testing::FakeState| {
+            let (w, h) = (state.viewport_width as u32, state.viewport_height as u32);
+            rich_embed::ScreencastFrame {
+                pixels: rich_embed::Pixels::new(w, h, vec![7; (w * h * 3) as usize]).unwrap(),
+                meta: rich_embed::FrameMeta {
+                    scroll_y: state.scroll_y,
+                    page_scale: 1.0,
+                    device_width: f64::from(w),
+                    device_height: f64::from(h),
+                    ..rich_embed::FrameMeta::default()
+                },
+            }
+        };
+        // It plays, its area cast.
+        worker.video();
+        assert_eq!(state.lock().unwrap().screencast_area, Some(rect));
+        state.lock().unwrap().frames.push(area_frame(rect, None));
+        worker.video();
+        assert_eq!(delivered.get(), 1);
+        // The page lays itself out again and again; the cast sends nothing
+        // more, and screenshots of the busy page fail.
+        {
+            let mut state = state.lock().unwrap();
+            state.cast_stalled = true;
+            state.capture_steps = std::iter::repeat_n(None, 1000).collect();
+        }
+        let start = Instant::now();
+        while Instant::now() < start + STALL + Duration::from_millis(300) {
+            let frame = viewport(&state.lock().unwrap());
+            state.lock().unwrap().frames.push(frame);
+            worker.video();
+            thread::sleep(Duration::from_millis(30));
+        }
+        // It was started again, of the whole viewport, and draws again.
+        let before = delivered.get();
+        for _ in 0..5 {
+            let frame = viewport(&state.lock().unwrap());
+            state.lock().unwrap().frames.push(frame);
+            worker.video();
+            thread::sleep(crate::video::MIN_INTERVAL);
+        }
+        assert_eq!(state.lock().unwrap().screencast_area, None);
+        assert!(state.lock().unwrap().screencast);
+        assert!(delivered.get() > before, "no frame after the stall");
     }
 
     #[test]

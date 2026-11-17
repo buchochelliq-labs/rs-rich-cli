@@ -41,13 +41,23 @@ pub fn pixels_name(images: Images, pixels: rich_intuituive::Pixels) -> String {
 /// The media state as the status bar says it: `media PLAYING 0:03 / 0:05`,
 /// with `muted` when it is.
 pub fn media_state(playback: &Playback) -> String {
+    media_state_shown(playback, false)
+}
+
+/// [`media_state`], saying `STALLED` instead of `PLAYING` when the
+/// picture stopped following the video (`stalled`): its frames stopped.
+pub(crate) fn media_state_shown(playback: &Playback, stalled: bool) -> String {
+    let label = match playback.label() {
+        "PLAYING" if stalled => "STALLED",
+        label => label,
+    };
     let time = format!(
         "{} / {}",
         clock(playback.time),
         playback.duration.map_or("live".into(), clock)
     );
     let muted = if playback.muted { " muted" } else { "" };
-    format!("media {} {time}{muted}", playback.label())
+    format!("media {label} {time}{muted}")
 }
 
 /// Seconds as `m:ss`.
@@ -167,8 +177,9 @@ pub fn status(b: Browser) -> Node {
         if b.page.with(|p| p.as_ref().is_some_and(|p| p.truncated)) {
             parts.push("[yellow]page cut: too long to read whole[/]".into());
         }
-        if let Some((_, playback)) = current_media(b) {
-            parts.push(markup(&media_state(&playback)));
+        if let Some((node, playback)) = current_media(b) {
+            let stalled = crate::app::picture_stalled(b, node);
+            parts.push(markup(&media_state_shown(&playback, stalled)));
             if !b.config.with(|c| c.audio) {
                 // Off by default only over SSH, where it would play on the
                 // far machine; else the user muted it.
@@ -286,5 +297,12 @@ mod tests {
         assert_eq!(media_state(&p), "media BUFFERING 0:03 / live");
         p.ended = true;
         assert!(media_state(&p).starts_with("media ENDED"));
+        // Playing, but its picture stopped: not said to play.
+        let p = Playback {
+            ready: 4,
+            ..Playback::default()
+        };
+        assert!(media_state_shown(&p, true).starts_with("media STALLED"));
+        assert!(media_state_shown(&p, false).starts_with("media PLAYING"));
     }
 }
