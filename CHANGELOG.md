@@ -146,8 +146,10 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   gains `Success` and `Warning` (Textual's other two variants), drawn in
   the theme's `button.success` and `button.warning` styles, which the
   dark, light and mono themes and a palette's theme name. The command
-  palette's system commands add *Bell*, which rings the terminal's bell
-  (`SystemCommands::NAMES` has seven names now).
+  palette's system commands add *Bell*, which rings the terminal's bell;
+  it is off unless `SystemCommands::default().with("bell")` turns it on,
+  so the palettes apps show now are unchanged (`SystemCommands::NAMES` has
+  seven names now).
 - **More pseudo-classes in stylesheets.** `:first-of-type` and
   `:last-of-type` count the siblings of a node's own kind; `:ansi` holds
   while the theme's colours are the terminal's own, `:nocolor` while the

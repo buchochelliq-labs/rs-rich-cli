@@ -47,22 +47,23 @@ fn a_palette_theme_puts_them_on_its_success_and_warning_colours() {
 }
 
 #[test]
-fn the_palette_has_a_bell_that_rings() {
-    let app = App::new(|| label("hi")).palette_key("ctrl+p");
-    let mut driver = app.driver(40, 12);
-    driver.press("ctrl+p");
-    driver.type_text("bell");
-    let shown = driver.screen().plain().join("\n");
-    assert!(shown.contains("app Bell  Ring the b"), "{shown}");
+fn the_palettes_bell_is_off_until_turned_on_and_then_rings() {
+    let shown = |commands: SystemCommands| {
+        let app = App::new(|| label("hi"))
+            .system_commands(commands)
+            .palette_key("ctrl+p");
+        let mut driver = app.driver(40, 12);
+        driver.press("ctrl+p");
+        driver.type_text("bell");
+        let shown = driver.screen().plain().join("\n");
+        (driver, shown)
+    };
+    // Off by default, as Textual's (where it is the example of a command of
+    // your own).
+    let (_, plain) = shown(SystemCommands::default());
+    assert!(!plain.contains("Ring the b"), "{plain}");
+    let (mut driver, on) = shown(SystemCommands::default().with("bell"));
+    assert!(on.contains("app Bell  Ring the b"), "{on}");
     driver.press("enter");
     assert_eq!(driver.take_bells(), 1);
-    // Off like the others.
-    let app = App::new(|| label("hi"))
-        .system_commands(SystemCommands::default().without("bell"))
-        .palette_key("ctrl+p");
-    let mut driver = app.driver(40, 12);
-    driver.press("ctrl+p");
-    driver.type_text("bell");
-    let shown = driver.screen().plain().join("\n");
-    assert!(!shown.contains("Ring the b"), "{shown}");
 }

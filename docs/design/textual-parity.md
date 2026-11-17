@@ -109,7 +109,7 @@ Modules are under `crates/rich-intuituive/src/`.
 | **Layout: grid, dock, layers, align, fr** | all | `grid` (tracks, spans), `dock`, `layers`, `Align` and `Justify`, `Size::Flex`/`3fr`, `place` (`Origin`, `Offset`), the `Solver`, `treemap`, draggable `split` | ✓ | |
 | **Screens** | push, pop, switch, `ModalScreen`, a result through `dismiss(value)` and a callback or `push_screen_wait` | `cx.push`, `pop`, `replace`, `modal`, `modal_with` (shadow, backdrop); `cx.push_for::<T>(build, then)` and `cx.dismiss(value)`; dialogs `confirm`, `prompt` and `pick` | ✓ | |
 | **Modes** | `MODES`, `switch_mode`: named screen stacks | `App::mode(name, build)`, `cx.switch_mode(name)`, the stacks kept apart | ✓ | |
-| **Command palette** | `Provider` classes (`startup`, `search`, `discover`), fuzzy matching with highlights, system commands (Theme, Keys, Maximize, Screenshot, Quit, Bell) | `cx.palette` over the described bindings; `Provider` (`discover`, `search` into a `HitSink`, `background` for a search off the app's thread, cancelled by the next query) registered with `App::provider`; hits merged by score with the matched characters highlighted; `SystemCommands` (Theme with a `Themes` picker, Keys, Maximize/Minimize, Screenshot, Bell, Quit), each can be turned off; `cx.palette_of`; `action_overlay`/`cx.action_palette` | ✓ | No `startup` hook (a provider's `new` does its setup) |
+| **Command palette** | `Provider` classes (`startup`, `search`, `discover`), fuzzy matching with highlights, system commands (Theme, Keys, Maximize, Screenshot, Quit; Bell is its docs' example of one of your own) | `cx.palette` over the described bindings; `Provider` (`discover`, `search` into a `HitSink`, `background` for a search off the app's thread, cancelled by the next query) registered with `App::provider`; hits merged by score with the matched characters highlighted; `SystemCommands` (Theme with a `Themes` picker, Keys, Maximize/Minimize, Screenshot, Quit, and Bell, off until turned on), each can be turned off; `cx.palette_of`; `action_overlay`/`cx.action_palette` | ✓ | No `startup` hook (a provider's `new` does its setup) |
 | **Bindings and keymaps** | `Binding(id=…)`, `App.set_keymap` remaps by id, `priority`, `show` | `.bind`, `.bind_in`, `.bind_when`, `.bind_unless`, sequences, which-key, `bind_scaled`, `bind_cycle`; binding ids (`bind_id`, `binding_id`) that `App::keymap` and `App::keymap_file` remap, the help, palette and footer showing the keys remapped (`app/keymap.rs`) | ✓ | |
 | **Focus** | Tab chain, `can_focus`, `focus_next` | Tab, focus scopes, by direction, `autofocus`, `focus_within`, `assert_focused` | ✓ | |
 | **Mouse** | click, double-click, drag, scroll, hover, enter and leave | `on_click`, `on_mouse`, drag-and-drop, hover styles, wheel, text selection with the mouse captured | ✓ | |
@@ -192,7 +192,8 @@ generic:
 - toasts with buttons (`Notification`, `cx.notify_with`), dismissed by a
   click or `cx.dismiss_toasts`, their history (`notifications()`), and
   `Level::Success`;
-- the `Success` and `Warning` button variants and the palette's *Bell*;
+- the `Success` and `Warning` button variants and the palette's *Bell*
+  (off by default, as in Textual);
 - `:first-of-type`, `:last-of-type`, `:ansi`, `:nocolor` and `:inline`;
 - chips over rs-rich-ext's badges (`chip`, `chip_of`, `.on_remove`) and a
   `tag_input`;

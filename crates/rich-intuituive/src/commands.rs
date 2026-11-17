@@ -334,8 +334,10 @@ impl Provider for Themes {
 /// `App.get_system_commands`: *Theme* (a picker of [`Themes`]), *Keys*
 /// (shows or hides the [`key_panel`](crate::key_panel), or opens the help
 /// when there is none), *Maximize* or *Minimize* (the focused pane),
-/// *Screenshot*, *Bell* (rings the terminal's bell, [`Ctx::bell`](crate::Ctx::bell))
-/// and *Quit*. All are on unless turned off:
+/// *Screenshot* and *Quit*, all on unless turned off; and *Bell*, which
+/// rings the terminal's bell ([`Ctx::bell`](crate::Ctx::bell)), off unless
+/// turned on with [`with`](Self::with)`("bell")` (in Textual it is the
+/// example of a command of your own):
 ///
 /// ```
 /// use intuituive::prelude::*;
@@ -357,13 +359,18 @@ pub struct SystemCommands {
 impl Default for SystemCommands {
     fn default() -> Self {
         SystemCommands {
-            on: SystemCommands::NAMES.to_vec(),
+            on: SystemCommands::NAMES
+                .iter()
+                .copied()
+                .filter(|name| *name != "bell")
+                .collect(),
         }
     }
 }
 
 impl SystemCommands {
-    /// Every system command's name, in the order the palette lists them.
+    /// Every system command's name, in the order the palette lists them
+    /// (`bell` off by default).
     pub const NAMES: [&'static str; 7] = [
         "theme",
         "keys",
