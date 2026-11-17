@@ -1,7 +1,7 @@
 //! Drives a real ACP agent through one prompt turn, if one is installed.
 //!
 //! ```sh
-//! RICH_ACP_AGENT="npx @zed-industries/claude-code-acp" \
+//! RICH_ACP_AGENT="npx @agentclientprotocol/claude-agent-acp" \
 //! RICH_ACP_PROMPT="What does this crate do? Answer in two sentences." \
 //!     cargo run -p rs-rich-acp --example agent
 //! ```
@@ -163,7 +163,7 @@ fn main() -> ExitCode {
     let Ok(command_line) = std::env::var("RICH_ACP_AGENT") else {
         println!("RICH_ACP_AGENT is not set: no agent to drive, skipping.");
         println!(
-            "Set it to an ACP agent's command line, e.g. \"npx @zed-industries/claude-code-acp\"."
+            "Set it to an ACP agent's command line, e.g. \"npx @agentclientprotocol/claude-agent-acp\"."
         );
         return ExitCode::SUCCESS;
     };

@@ -729,3 +729,35 @@ fn model_captures_require_current_document_and_applied_viewport_but_standalone_c
     read_model(&mut backend);
     assert!(backend.capture_model(TabId(0), region, Format::Png).is_ok());
 }
+
+#[test]
+fn a_hung_page_holds_the_tabs_periodic_calls_only_for_the_short_wait() {
+    use noctiluca::cdp::PERIODIC;
+    use noctiluca::engine::{Engine, TabId};
+    let Some(binary) = chrome() else { return };
+    let mut backend = ChromeBackend::start(ChromeOptions {
+        binary: Some(binary),
+        columns: 100,
+        rows: 40,
+        ..ChromeOptions::default()
+    })
+    .unwrap();
+    backend.open(TabId(0), &fixture("hang.html")).unwrap();
+    // Read once it loaded, then let its script start its endless loop.
+    let start = Instant::now();
+    while backend.snapshot(TabId(0)).is_err() {
+        assert!(start.elapsed() < Duration::from_secs(30), "never read");
+        std::thread::sleep(Duration::from_millis(50));
+    }
+    std::thread::sleep(Duration::from_secs(1));
+    // Chrome's view, as the tab looks at it while a video plays: it fails
+    // within the short wait, not the thirty seconds a call may take.
+    let asked = Instant::now();
+    let answer = backend.playback(TabId(0), 1);
+    let waited = asked.elapsed();
+    assert!(answer.is_err());
+    assert!(waited <= PERIODIC + Duration::from_secs(1), "{waited:?}");
+    let asked = Instant::now();
+    let _ = backend.metrics(TabId(0));
+    assert!(asked.elapsed() <= PERIODIC + Duration::from_secs(1));
+}

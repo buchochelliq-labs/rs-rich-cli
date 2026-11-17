@@ -56,7 +56,8 @@ use std::time::{Duration, Instant};
 use rich_embed::PageState;
 
 use crate::engine::{
-    Engine, EngineEvent, Format, HistoryStep, MediaOp, Metrics, NodeId, PageAction, Rect, TabId,
+    Engine, EngineEvent, Format, HistoryStep, MediaOp, Metrics, NodeId, PageAction, PageReader,
+    Playback, Rect, TabId,
 };
 use crate::model::{
     Binding, Block, BlockKind, Control, Entry, Media, MediaKind, Page, Revisions, Role, Run,
@@ -99,6 +100,9 @@ pub fn ping_read_gap(cost: Duration, playing: bool) -> Duration {
     }
 }
 
+/// How often the tab looks for the page the reader's thread read, while
+/// one is out.
+const READ_POLL: Duration = Duration::from_millis(5);
 /// How often the tab looks at its engine when nothing happens.
 const TICK: Duration = Duration::from_millis(25);
 /// How long an action waits for a reading the engine refuses for a moment
@@ -112,6 +116,13 @@ const PLAYBACK: Duration = Duration::from_millis(500);
 /// How long without a screencast frame before playing regions are
 /// captured on their own.
 const QUIET: Duration = Duration::from_millis(400);
+/// How long a region playing on screen goes without a frame before the
+/// screencast is started again, of the whole viewport: a page that keeps
+/// laying itself out can leave a cast with no frames (#890).
+const STALL: Duration = Duration::from_secs(2);
+/// After a stall, the viewport is cast this long before a region's area
+/// is tried again.
+const STALL_HOLD: Duration = Duration::from_secs(5);
 /// How often the tab looks for the browser's next frame while one is due
 /// and has not come.
 const FRAME_POLL: Duration = Duration::from_millis(3);
@@ -550,6 +561,18 @@ struct Worker<'a> {
     /// The address last opened, until a page other than Chrome's error
     /// page is read: what the address bar keeps when it fails.
     asked: Option<String>,
+    /// When the screencast last started, and the viewport-only hold after
+    /// a stall.
+    cast: CastWatch,
+    /// Readings on the reader's thread.
+    aside: Aside,
+}
+
+/// The screencast's watch for stalls ([`STALL`]).
+#[derive(Clone, Copy, Debug, Default)]
+struct CastWatch {
+    since: Option<Instant>,
+    viewport_until: Option<Instant>,
 }
 
 /// A canvas watched while the view shows it.
@@ -567,6 +590,174 @@ struct Watch {
     busy: bool,
     /// It was sent frames since it last stopped.
     moving: bool,
+}
+
+/// The page built from a snapshot: its model, and the source's model too
+/// when `source` (the tab's owner keeps source relationships).
+fn build_read(
+    snapshot: &crate::engine::PageSnapshot,
+    revisions: &mut Revisions,
+    appended: &HashSet<NodeId>,
+    source: bool,
+) -> (Page, Option<SourcePage>) {
+    let source = source.then(|| build_source_with(snapshot, revisions, appended));
+    let page = match &source {
+        Some(source) => source.page().as_ref().clone(),
+        None => build_with(snapshot, revisions, appended),
+    };
+    (page, source)
+}
+
+/// Readings on the reader's thread ([`Worker::read_aside`]): its thread,
+/// whether the engine has none, the reading out there, whether a playback
+/// read is out, and whether the reader reads no playback.
+#[derive(Default)]
+struct Aside {
+    reader: Option<ReaderThread>,
+    none: bool,
+    out: Option<Out>,
+    playback_out: bool,
+    no_playback: bool,
+}
+
+/// A reading out on the reader's thread: when it began, and the change
+/// ping it answers (given back if it fails).
+struct Out {
+    began: Instant,
+    dirty: Option<Instant>,
+}
+
+/// What the tab asks of the reader's thread.
+enum Ask {
+    /// A reading: its number from [`Engine::begin_read`], the model's
+    /// revisions (lent while it builds), the scroll boxes the page appends
+    /// to, and whether to build the source's model too.
+    Read {
+        ticket: u64,
+        revisions: Revisions,
+        appended: HashSet<NodeId>,
+        source: bool,
+    },
+    /// The playback of these media elements.
+    Playback(Vec<NodeId>),
+}
+
+/// What the reader's thread answers.
+enum Answer {
+    /// A reading: the revisions back, and the page built, `None` when the
+    /// snapshot failed.
+    Read {
+        ticket: u64,
+        revisions: Revisions,
+        read: Option<Box<Built>>,
+    },
+    /// Each element's playback; `None` when the reader reads none.
+    Playback(Option<Vec<(NodeId, Option<Playback>)>>),
+}
+
+/// A page the reader's thread built, with what its reading cost, and its
+/// media's playback when the reader reads it.
+struct Built {
+    page: Page,
+    source: Option<SourcePage>,
+    snapshot_ms: f64,
+    build_ms: f64,
+    playback: Option<Vec<(NodeId, Option<Playback>)>>,
+}
+
+/// Each of `nodes`' playback through `reader`; `None` when it reads none.
+fn read_playback(
+    reader: &mut dyn PageReader,
+    nodes: &[NodeId],
+) -> Option<Vec<(NodeId, Option<Playback>)>> {
+    let mut all = Vec::new();
+    for &node in nodes {
+        let answer = reader.playback(node);
+        if answer
+            .as_ref()
+            .is_err_and(|e| e.kind() == std::io::ErrorKind::Unsupported)
+        {
+            return None;
+        }
+        all.push((node, answer.ok()));
+    }
+    Some(all)
+}
+
+/// The media elements whose playback a reading reads.
+fn media_nodes(page: &Page) -> Vec<NodeId> {
+    page.media
+        .iter()
+        .filter(|m| matches!(m.kind, MediaKind::Video | MediaKind::Audio))
+        .map(|m| m.node)
+        .collect()
+}
+
+/// Each media element of `page` gets its playback from `read` (`None`
+/// where it was not read), as [`Worker::probe`] reads it.
+fn set_playback(page: &mut Page, read: &[(NodeId, Option<Playback>)]) {
+    for media in &mut page.media {
+        if matches!(media.kind, MediaKind::Video | MediaKind::Audio) {
+            media.playback = read
+                .iter()
+                .find(|(node, _)| *node == media.node)
+                .and_then(|(_, p)| *p);
+        }
+    }
+}
+
+/// The reader's thread: it takes each asked snapshot through the engine's
+/// [`PageReader`] and builds its model, and reads media elements'
+/// playback, one ask at a time. It ends when the tab drops its end.
+struct ReaderThread {
+    asks: Sender<Ask>,
+    answers: Receiver<Answer>,
+}
+
+impl ReaderThread {
+    fn spawn(mut reader: Box<dyn PageReader>) -> ReaderThread {
+        let (asks, asked) = mpsc::channel::<Ask>();
+        let (done, answers) = mpsc::channel();
+        thread::spawn(move || {
+            for ask in asked {
+                let answer = match ask {
+                    Ask::Read {
+                        ticket,
+                        mut revisions,
+                        appended,
+                        source,
+                    } => {
+                        let at = crate::trace::start();
+                        let read = reader.snapshot().ok().map(|snapshot| {
+                            let snapshot_ms = crate::trace::ms(at);
+                            let built = crate::trace::start();
+                            let (page, source) =
+                                build_read(&snapshot, &mut revisions, &appended, source);
+                            let build_ms = crate::trace::ms(built);
+                            let playback = read_playback(&mut *reader, &media_nodes(&page));
+                            Box::new(Built {
+                                page,
+                                source,
+                                snapshot_ms,
+                                build_ms,
+                                playback,
+                            })
+                        });
+                        Answer::Read {
+                            ticket,
+                            revisions,
+                            read,
+                        }
+                    }
+                    Ask::Playback(nodes) => Answer::Playback(read_playback(&mut *reader, &nodes)),
+                };
+                if done.send(answer).is_err() {
+                    return;
+                }
+            }
+        });
+        ReaderThread { asks, answers }
+    }
 }
 
 /// The start of the address Chrome gives its own error page, the page it
@@ -670,6 +861,9 @@ impl Worker<'_> {
     }
 
     fn read(&mut self) -> Option<Arc<Page>> {
+        // A reading still out on the reader's thread is older than this
+        // one: its revisions come back, its page is not used.
+        self.settle_aside();
         if crate::trace::on() {
             crate::trace::media(r#"{"stage":"model_snapshot_attempt"}"#);
         }
@@ -683,14 +877,226 @@ impl Worker<'_> {
             self.appended = boxes.into_iter().collect();
         }
         let built = crate::trace::start();
-        let source = self
-            .source_update
-            .map(|_| build_source_with(&snapshot, &mut self.revisions, &self.appended));
-        let mut page = match &source {
-            Some(source) => source.page().as_ref().clone(),
-            None => build_with(&snapshot, &mut self.revisions, &self.appended),
-        };
+        let (page, source) = build_read(
+            &snapshot,
+            &mut self.revisions,
+            &self.appended,
+            self.source_update.is_some(),
+        );
         let build_ms = crate::trace::ms(built);
+        let page = self.finish_read(page, source, snapshot_ms, build_ms, at, false);
+        self.dirty = None;
+        Some(page)
+    }
+
+    /// Start a reading on the reader's thread, when the engine has one, so
+    /// the tab's thread goes on taking video frames while the browser
+    /// reads and the model is built: [`take_aside`](Self::take_aside)
+    /// adopts it. `false` when the engine has none (read on this thread).
+    /// A reading refused at its start counts as refused.
+    fn read_aside(&mut self) -> bool {
+        if self.aside.out.is_some() {
+            return true;
+        }
+        if !self.has_reader() {
+            return false;
+        }
+        let now = Instant::now();
+        let Ok(ticket) = self.engine.begin_read(TabId(0)) else {
+            self.last_read = Some((now, Duration::ZERO));
+            self.refused = true;
+            return true;
+        };
+        if let Ok(boxes) = self.engine.appended(TabId(0)) {
+            self.appended = boxes.into_iter().collect();
+        }
+        let ask = Ask::Read {
+            ticket,
+            revisions: std::mem::replace(&mut self.revisions, Revisions::new()),
+            appended: self.appended.clone(),
+            source: self.source_update.is_some(),
+        };
+        let reader = self.aside.reader.as_ref().expect("spawned above");
+        if let Err(mpsc::SendError(ask)) = reader.asks.send(ask) {
+            // Its thread ended: read on this one from now on.
+            if let Ask::Read { revisions, .. } = ask {
+                self.revisions = revisions;
+            }
+            self.aside.reader = None;
+            self.aside.none = true;
+            return false;
+        }
+        // The reading covers what changed until now; a ping from here on
+        // asks for the next.
+        self.aside.out = Some(Out {
+            began: now,
+            dirty: self.dirty.take(),
+        });
+        true
+    }
+
+    /// Adopt the reading the reader's thread finished, if it did: its page
+    /// is checked against the engine's capture scope and published.
+    /// `Some(true)` for a page published, `Some(false)` for a reading
+    /// refused (its scope changed, or its snapshot failed), `None` while
+    /// none came back.
+    fn take_aside(&mut self) -> Option<bool> {
+        let mut adopted = None;
+        loop {
+            let answer = self.aside.reader.as_ref()?.answers.try_recv();
+            match answer {
+                Ok(Answer::Read {
+                    ticket,
+                    revisions,
+                    read,
+                }) => adopted = Some(self.adopt(ticket, revisions, read)),
+                Ok(Answer::Playback(read)) => self.playback_read(read),
+                Err(TryRecvError::Empty) => return adopted,
+                Err(TryRecvError::Disconnected) => {
+                    self.aside.reader = None;
+                    self.aside.none = true;
+                    self.aside.playback_out = false;
+                    let out = self.aside.out.take()?;
+                    self.dirty = out.dirty.or(Some(out.began));
+                    return Some(false);
+                }
+            }
+        }
+    }
+
+    /// The reader's thread, started at the first ask: `false` when the
+    /// engine has none (the tab reads on its own thread).
+    fn has_reader(&mut self) -> bool {
+        if self.aside.reader.is_none() && !self.aside.none {
+            match self.engine.reader(TabId(0)) {
+                Some(reader) => self.aside.reader = Some(ReaderThread::spawn(reader)),
+                None => self.aside.none = true,
+            }
+        }
+        self.aside.reader.is_some()
+    }
+
+    /// Ask the reader's thread for `nodes`' playback, as
+    /// [`follow_playback`](Self::follow_playback) reads it on this thread.
+    /// `false` when it cannot.
+    fn probe_aside(&mut self, nodes: Vec<NodeId>) -> bool {
+        if self.aside.no_playback || !self.has_reader() {
+            return false;
+        }
+        if self.aside.playback_out {
+            return true;
+        }
+        let sent = self
+            .aside
+            .reader
+            .as_ref()
+            .is_some_and(|r| r.asks.send(Ask::Playback(nodes)).is_ok());
+        self.aside.playback_out = sent;
+        sent
+    }
+
+    /// The playback the reader's thread read: published when it moved, if
+    /// it is of the page's media as they are now.
+    fn playback_read(&mut self, read: Option<Vec<(NodeId, Option<Playback>)>>) {
+        self.aside.playback_out = false;
+        let Some(read) = read else {
+            // It reads none: this thread does.
+            self.aside.no_playback = true;
+            return;
+        };
+        let Some(page) = self.page.clone() else {
+            return;
+        };
+        if media_nodes(&page) != read.iter().map(|r| r.0).collect::<Vec<_>>() {
+            return;
+        }
+        let mut next = (*page).clone();
+        set_playback(&mut next, &read);
+        if next != *page {
+            self.publish(Arc::new(next), None);
+        }
+    }
+
+    /// Wait for the reading out on the reader's thread, if any, and take
+    /// back its revisions without using its page: a reading on this thread
+    /// follows it.
+    fn settle_aside(&mut self) {
+        if self.aside.out.is_none() {
+            return;
+        }
+        let deadline = Instant::now() + crate::cdp::READING * 3;
+        let out = self.aside.out.take();
+        loop {
+            let left = deadline.saturating_duration_since(Instant::now());
+            let answer = self
+                .aside
+                .reader
+                .as_ref()
+                .and_then(|r| r.answers.recv_timeout(left).ok());
+            match answer {
+                Some(Answer::Read { revisions, .. }) => {
+                    self.revisions = revisions;
+                    // Its pings are this reading's to cover.
+                    if let Some(dirty) = out.and_then(|o| o.dirty) {
+                        self.dirty.get_or_insert(dirty);
+                    }
+                    return;
+                }
+                Some(Answer::Playback(read)) => self.playback_read(read),
+                None => {
+                    self.aside.reader = None;
+                    self.aside.none = true;
+                    self.aside.playback_out = false;
+                    return;
+                }
+            }
+        }
+    }
+
+    /// A reading from the reader's thread: adopted when its scope is still
+    /// current (see [`take_aside`](Self::take_aside)).
+    fn adopt(&mut self, ticket: u64, revisions: Revisions, read: Option<Box<Built>>) -> bool {
+        self.revisions = revisions;
+        let Some(out) = self.aside.out.take() else {
+            return false;
+        };
+        self.last_read = Some((Instant::now(), out.began.elapsed()));
+        let adopted = read.filter(|_| self.engine.adopt_read(TabId(0), ticket));
+        let Some(read) = adopted else {
+            self.refused = true;
+            self.dirty = out.dirty.or(Some(out.began));
+            return false;
+        };
+        self.refused = false;
+        let mut page = read.page;
+        if let Some(playback) = &read.playback {
+            set_playback(&mut page, playback);
+        }
+        self.finish_read(
+            page,
+            read.source,
+            read.snapshot_ms,
+            read.build_ms,
+            Some(out.began),
+            read.playback.is_some(),
+        );
+        true
+    }
+
+    /// What a reading does once its page is built, on the tab's thread:
+    /// the page dressed (Chrome's error page, live logs, pictures, media
+    /// state, unless the reader's thread read it: `aside`), its document's
+    /// state kept or dropped, and the page published.
+    fn finish_read(
+        &mut self,
+        mut page: Page,
+        source: Option<SourcePage>,
+        snapshot_ms: f64,
+        build_ms: f64,
+        at: Option<Instant>,
+        aside: bool,
+    ) -> Arc<Page> {
+        let finish = crate::trace::start();
         self.dress_error(&mut page);
         if self.page.as_ref().map(|p| p.document) != Some(page.document) {
             self.live.clear();
@@ -726,7 +1132,9 @@ impl Worker<'_> {
             media.still = still;
             media.picture = picture;
         }
-        self.probe(&mut page);
+        if !aside {
+            self.probe(&mut page);
+        }
         // A new document is read again until its layout holds still: the
         // first reading can come from a layout still moving, and nothing
         // in the DOM may say when it stops.
@@ -752,12 +1160,12 @@ impl Worker<'_> {
                 "read",
                 serde_json::json!({"snapshot_ms": snapshot_ms, "build_ms": build_ms,
                     "total_ms": crate::trace::ms(at), "blocks": page.blocks.len(),
-                    "media": page.media.len()}),
+                    "media": page.media.len(), "aside": aside,
+                    "finish_ms": crate::trace::ms(finish)}),
             );
         }
-        self.dirty = None;
         self.stills_pending = true;
-        Some(page)
+        page
     }
 
     /// The address to show for `url` when it is Chrome's error page: the
@@ -1027,6 +1435,9 @@ impl Worker<'_> {
         {
             return;
         }
+        if self.probe_aside(media_nodes(&page)) {
+            return;
+        }
         let mut next = (*page).clone();
         self.probe(&mut next);
         if next != *page {
@@ -1276,7 +1687,17 @@ impl Worker<'_> {
     /// one read (a feed that loaded more without a ping yet) is read again
     /// soon.
     fn scroll(&mut self, action: PageAction) -> std::io::Result<()> {
-        self.engine.act(TabId(0), &action)?;
+        let action = match action {
+            PageAction::Wheel(delta) => match self.keep_casting(delta) {
+                Some(held) if held.abs() < 1.0 => None,
+                Some(held) => Some(PageAction::Wheel(held)),
+                None => Some(PageAction::Wheel(delta)),
+            },
+            other => Some(other),
+        };
+        if let Some(action) = action {
+            self.engine.act(TabId(0), &action)?;
+        }
         // Pictures near the new view, loaded already, are captured first.
         self.stills_pending = true;
         if let Ok(metrics) = self.engine.metrics(TabId(0)) {
@@ -1288,6 +1709,44 @@ impl Worker<'_> {
             (self.update)(Update::Metrics(metrics));
         }
         Ok(())
+    }
+
+    /// A wheel of `delta` held so the regions playing on screen stay
+    /// wholly in Chrome's viewport, when they all fit in it: our view
+    /// scrolls in rows, and Chrome's, taller than ours, can follow less
+    /// far. A region only partly in Chrome's viewport is not screencast on
+    /// its own, and its frames fall back to screenshots. `None`: nothing
+    /// plays on screen, or the regions do not fit.
+    fn keep_casting(&mut self, delta: f64) -> Option<f64> {
+        if !self.frames.on || self.pixels {
+            return None;
+        }
+        let moving: Vec<Rect> = self
+            .regions()
+            .iter()
+            .filter(|r| r.moving())
+            .map(|r| r.rect)
+            .collect();
+        if moving.is_empty() {
+            return None;
+        }
+        let metrics = self.engine.metrics(TabId(0)).ok().or(self.metrics)?;
+        let view = metrics.viewport_height;
+        let low = moving
+            .iter()
+            .map(|r| (r.bottom() - view).ceil())
+            .fold(f64::MIN, f64::max)
+            .max(0.0);
+        let high = moving
+            .iter()
+            .map(|r| r.y.floor())
+            .fold(f64::MAX, f64::min)
+            .max(0.0);
+        if view <= 0.0 || low > high {
+            return None;
+        }
+        let to = (metrics.scroll_y + delta).clamp(low, high);
+        Some(to - metrics.scroll_y)
     }
 
     /// The video regions now, with the busy live canvases (cut from the
@@ -1507,7 +1966,13 @@ impl Worker<'_> {
             self.scale_given = self.scale;
             let _ = self.engine.set_screencast_scale(TabId(0), self.scale);
         }
-        let area = if casting && plan.screencast != Some(false) {
+        if plan.screencast == Some(true) {
+            self.cast.since = Some(now);
+        }
+        // Stalled: frames stopped while it plays. Cast the viewport again.
+        let stalled = self.stalled(&regions, now);
+        let held = self.cast.viewport_until.is_some_and(|until| now < until);
+        let area = if casting && plan.screencast != Some(false) && !stalled && !held {
             crate::video::screencast_area(&regions, self.chrome_view(now))
         } else {
             None
@@ -1516,6 +1981,15 @@ impl Worker<'_> {
         if let Some(on) = plan.screencast {
             let _ = self.engine.set_screencast(TabId(0), on);
             self.last_frame = on.then_some(now);
+        } else if stalled {
+            if crate::trace::on() {
+                crate::trace::event("stall", serde_json::json!({}));
+            }
+            let _ = self.engine.set_screencast(TabId(0), false);
+            let _ = self.engine.set_screencast(TabId(0), true);
+            self.cast.since = Some(now);
+            self.cast.viewport_until = Some(now + STALL_HOLD);
+            self.last_frame = Some(now);
         }
         for node in plan.stopped {
             (self.update)(Update::Still(node));
@@ -1554,6 +2028,31 @@ impl Worker<'_> {
         // adapted view shows. Capture that whole region through the model's
         // guarded path; waiting for a quiet screencast would starve it forever.
         self.capture_regions(&missing, now);
+    }
+
+    /// Whether the frames stopped while a region plays on screen: none of
+    /// them for [`STALL`] (or three of its intervals, when slower) since
+    /// its last frame or since the screencast last started, whichever is
+    /// later. A region whose element waits for data is not stalled.
+    fn stalled(&self, regions: &[Region], now: Instant) -> bool {
+        let Some(since) = self.cast.since.filter(|_| self.frames.on) else {
+            return false;
+        };
+        let waiting = |node: NodeId| {
+            self.page.as_ref().is_some_and(|p| {
+                p.media
+                    .iter()
+                    .any(|m| m.node == node && m.playback.is_some_and(|p| p.ready < 3))
+            })
+        };
+        regions
+            .iter()
+            .filter(|r| r.moving() && !waiting(r.node))
+            .any(|r| {
+                let last = self.frames.taken(r.node).map_or(since, |t| t.max(since));
+                let limit = STALL.max(3 * r.interval.unwrap_or_default());
+                now.duration_since(last) >= limit
+            })
     }
 
     /// Chrome's viewport in the document's CSS pixels, if known. While the
@@ -1629,6 +2128,18 @@ impl Worker<'_> {
     /// taken on their slots, not on the tick after), a moment while a due
     /// frame has not come, else the tick.
     fn wait(&self) -> Duration {
+        // A reading is out on the reader's thread: its page is taken soon
+        // after it comes.
+        let frames = self.wait_for_frames();
+        if self.aside.out.is_some() {
+            frames.min(READ_POLL)
+        } else {
+            frames
+        }
+    }
+
+    /// How long until the frames want the tab again.
+    fn wait_for_frames(&self) -> Duration {
         if self.pixels {
             return SCREEN_EVERY.min(TICK);
         }
@@ -1701,8 +2212,28 @@ impl Worker<'_> {
         }
     }
 
+    /// A command that failed because the browser stopped, or its page
+    /// crashed, says so, and what brings it back: not that the page is not
+    /// ready, or what DevTools said.
+    fn explain(&self, refusal: Refusal) -> Refusal {
+        if let Refusal::Conflict { .. } = refusal {
+            return refusal;
+        }
+        let state = self.engine.state(TabId(0));
+        match state.error {
+            Some(error) => Refusal::Failed(format!(
+                "{} Reload restarts it.",
+                crate::clean::stopped(&error)
+            )),
+            None if state.crashed => {
+                Refusal::Failed(format!("{}. Reload brings it back.", crate::clean::CRASHED))
+            }
+            None => refusal,
+        }
+    }
+
     fn run_command(&mut self, command: Command) -> Result<(), Refusal> {
-        let failed = |e: std::io::Error| Refusal::Failed(crate::clean::clean(&e.to_string()));
+        let failed = |e: std::io::Error| Refusal::Failed(crate::clean::engine_error(&e));
         match command {
             Command::Open(url) if url == crate::about::ADDRESS => {
                 // The about page, with the browser's own codec answers.
@@ -2069,6 +2600,8 @@ fn run_with_source(
         screen_at: None,
         canvases: HashMap::new(),
         asked: None,
+        cast: CastWatch::default(),
+        aside: Aside::default(),
     };
     let mut live_due = false;
     // Read once at the start, then whenever something says to.
@@ -2092,7 +2625,7 @@ fn run_with_source(
                         | Command::Type(_)
                         | Command::Resize(_, _)
                 );
-                let result = worker.run_command(command);
+                let result = worker.run_command(command).map_err(|r| worker.explain(r));
                 update(Update::Done(id, result));
                 // An action of ours reads again at once.
                 read_now |= acts;
@@ -2121,7 +2654,15 @@ fn run_with_source(
             || worker
                 .settle
                 .is_some_and(|(next, _, _)| Instant::now() >= next);
-        if read_now || due {
+        // A reading the reader's thread finished: adopted, or refused.
+        if worker.take_aside() == Some(true) {
+            live_due = false;
+        }
+        // A reading the page pinged for, or a new document's settling one,
+        // goes to the reader's thread when the engine has one: the frames go
+        // on meanwhile. One asked for (navigation, an action) is read here.
+        let aside = !read_now && due && worker.aside.out.is_some();
+        if (read_now || due) && !aside {
             if crate::trace::on() {
                 let why = if read_now {
                     "asked"
@@ -2133,17 +2674,21 @@ fn run_with_source(
                 crate::trace::event("read_why", serde_json::json!({ "why": why }));
             }
             // A refused reading stays due, and is tried at the next tick.
-            let began = Instant::now();
-            let read = worker.read();
-            worker.last_read = Some((Instant::now(), began.elapsed()));
-            worker.refused = read.is_none();
-            if read.is_some() {
-                read_now = false;
-                live_due = false;
+            if !read_now && worker.read_aside() {
+                // Out on the reader's thread, or refused at its start.
             } else {
-                worker.dirty.get_or_insert_with(Instant::now);
+                let began = Instant::now();
+                let read = worker.read();
+                worker.last_read = Some((Instant::now(), began.elapsed()));
+                worker.refused = read.is_none();
+                if read.is_some() {
+                    read_now = false;
+                    live_due = false;
+                } else {
+                    worker.dirty.get_or_insert_with(Instant::now);
+                }
             }
-        } else if live_due && worker.dirty.is_none() {
+        } else if live_due && worker.dirty.is_none() && worker.aside.out.is_none() {
             // The isolated world debounced it already: read the logs now.
             live_due = false;
             worker.read_live();
@@ -2256,6 +2801,8 @@ mod tests {
             screen_at: None,
             canvases: HashMap::new(),
             asked: None,
+            cast: CastWatch::default(),
+            aside: Aside::default(),
         };
         (worker, jobs, done)
     }
@@ -3182,6 +3729,8 @@ mod tests {
             screen_at: None,
             canvases: HashMap::new(),
             asked: None,
+            cast: CastWatch::default(),
+            aside: Aside::default(),
         };
         worker.read().unwrap();
         let first = updates.borrow()[0].clone();
@@ -3437,6 +3986,8 @@ mod tests {
                 screen_at: None,
                 canvases: HashMap::new(),
                 asked: None,
+                cast: CastWatch::default(),
+                aside: Aside::default(),
             };
             worker.frames.on = true;
             worker.video();
@@ -3840,6 +4391,8 @@ mod tests {
             screen_at: None,
             canvases: HashMap::new(),
             asked: None,
+            cast: CastWatch::default(),
+            aside: Aside::default(),
         };
         worker.read().unwrap();
         worker.capture_stills();
@@ -3938,6 +4491,8 @@ mod tests {
                 screen_at: None,
                 canvases: HashMap::new(),
                 asked: None,
+                cast: CastWatch::default(),
+                aside: Aside::default(),
             };
             worker.read().unwrap();
             worker.capture_stills();
@@ -4075,6 +4630,8 @@ mod tests {
             screen_at: None,
             canvases: HashMap::new(),
             asked: None,
+            cast: CastWatch::default(),
+            aside: Aside::default(),
         };
         worker.read().unwrap();
         let (old_key, _) = inline_jobs.try_recv().expect("first inline job");
@@ -4325,6 +4882,8 @@ mod tests {
             screen_at: None,
             canvases: HashMap::new(),
             asked: None,
+            cast: CastWatch::default(),
+            aside: Aside::default(),
         };
         worker.read().unwrap();
         if !legacy {
@@ -4514,6 +5073,271 @@ mod tests {
         worker.refused = false;
         worker.pixels = true;
         assert!(!worker.video_may_run(false));
+    }
+
+    /// The watch fixture's snapshot in a fake engine, its video playing,
+    /// read by a worker whose view shows the video.
+    fn watch_worker<'a>(
+        update: &'a dyn Fn(Update),
+    ) -> (Worker<'a>, Arc<Mutex<crate::testing::FakeState>>, NodeId) {
+        let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/snapshots");
+        let engine = FakeEngine::from_dir(&dir).unwrap();
+        let state = engine.state.clone();
+        let (mut worker, _jobs, _done) = recovery_worker(engine, update);
+        worker.run_command(Command::Resize(120, 40)).unwrap();
+        state
+            .lock()
+            .unwrap()
+            .go("file:///noctiluca/fixtures/watch.html");
+        let page =
+            crate::model::build(&state.lock().unwrap().pages["watch"], &mut Revisions::new());
+        let video = page
+            .media
+            .iter()
+            .find(|m| m.kind == MediaKind::Video)
+            .unwrap()
+            .node;
+        state.lock().unwrap().media.insert(
+            video,
+            crate::engine::Playback {
+                ready: 4,
+                ..crate::engine::Playback::default()
+            },
+        );
+        worker.read().unwrap();
+        worker.on_screen.insert(video);
+        (worker, state, video)
+    }
+
+    /// A frame of the screencast's area as Chrome sends it, stamped `at`.
+    fn area_frame(area: Rect, at: Option<f64>) -> rich_embed::ScreencastFrame {
+        let (w, h) = (area.width.ceil() as u32, area.height.ceil() as u32);
+        rich_embed::ScreencastFrame {
+            pixels: rich_embed::Pixels::new(w, h, vec![7; (w * h * 3) as usize]).unwrap(),
+            meta: rich_embed::FrameMeta {
+                scroll_x: area.x.floor(),
+                scroll_y: area.y.floor(),
+                page_scale: 1.0,
+                device_width: f64::from(w),
+                device_height: f64::from(h),
+                timestamp: at,
+                ..rich_embed::FrameMeta::default()
+            },
+        }
+    }
+
+    #[test]
+    fn one_row_of_scrolling_keeps_a_playing_video_in_chromes_viewport() {
+        let update = |_| {};
+        let (mut worker, state, video) = watch_worker(&update);
+        let rect = worker
+            .page
+            .as_ref()
+            .unwrap()
+            .media
+            .iter()
+            .find(|m| m.node == video)
+            .unwrap()
+            .rect;
+        // It plays wholly in Chrome's viewport: only its box is cast.
+        worker.video();
+        let area = state.lock().unwrap().screencast_area;
+        assert_eq!(area, Some(rect));
+        // One row of `j`: Noctiluca follows with a wheel of a few rows'
+        // CSS pixels, past the video's top.
+        let wheel = 5.0 * f64::from(crate::cdp::CELL.1);
+        assert!(wheel > rect.y);
+        worker.run_command(Command::Wheel(wheel)).unwrap();
+        let scroll_y = state.lock().unwrap().scroll_y;
+        assert!(
+            scroll_y <= rect.y && scroll_y > 0.0,
+            "{scroll_y} for {rect:?}"
+        );
+        // The area stays, and its frames are cut: no screenshot.
+        worker.view_at = Some(Instant::now() - PLAYBACK);
+        worker.frames = Frames::default();
+        state.lock().unwrap().frames.push(area_frame(rect, None));
+        worker.video();
+        let state = state.lock().unwrap();
+        assert_eq!(state.screencast_area, Some(rect));
+        assert!(state.captures.is_empty(), "{:?}", state.captures);
+    }
+
+    #[test]
+    fn a_stalled_screencast_on_a_busy_page_starts_again_of_the_viewport() {
+        let delivered = std::cell::Cell::new(0usize);
+        let update = |update| {
+            if matches!(update, Update::Frame(_)) {
+                delivered.set(delivered.get() + 1);
+            }
+        };
+        let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/snapshots");
+        let engine = FakeEngine::from_dir(&dir).unwrap();
+        let state = engine.state.clone();
+        let (mut worker, _jobs, _done) = recovery_worker(engine, &update);
+        worker.run_command(Command::Resize(120, 40)).unwrap();
+        state
+            .lock()
+            .unwrap()
+            .go("file:///noctiluca/fixtures/busy-stream.html");
+        let page = crate::model::build(
+            &state.lock().unwrap().pages["busy-stream"],
+            &mut Revisions::new(),
+        );
+        let video = page
+            .media
+            .iter()
+            .find(|m| m.kind == MediaKind::Video)
+            .unwrap();
+        let (node, rect) = (video.node, video.rect);
+        state.lock().unwrap().media.insert(
+            node,
+            crate::engine::Playback {
+                ready: 4,
+                ..crate::engine::Playback::default()
+            },
+        );
+        worker.read().unwrap();
+        worker.on_screen.insert(node);
+        let viewport = |state: &crate::testing::FakeState| {
+            let (w, h) = (state.viewport_width as u32, state.viewport_height as u32);
+            rich_embed::ScreencastFrame {
+                pixels: rich_embed::Pixels::new(w, h, vec![7; (w * h * 3) as usize]).unwrap(),
+                meta: rich_embed::FrameMeta {
+                    scroll_y: state.scroll_y,
+                    page_scale: 1.0,
+                    device_width: f64::from(w),
+                    device_height: f64::from(h),
+                    ..rich_embed::FrameMeta::default()
+                },
+            }
+        };
+        // It plays, its area cast.
+        worker.video();
+        assert_eq!(state.lock().unwrap().screencast_area, Some(rect));
+        state.lock().unwrap().frames.push(area_frame(rect, None));
+        worker.video();
+        assert_eq!(delivered.get(), 1);
+        // The page lays itself out again and again; the cast sends nothing
+        // more, and screenshots of the busy page fail.
+        {
+            let mut state = state.lock().unwrap();
+            state.cast_stalled = true;
+            state.capture_steps = std::iter::repeat_n(None, 1000).collect();
+        }
+        let start = Instant::now();
+        while Instant::now() < start + STALL + Duration::from_millis(300) {
+            let frame = viewport(&state.lock().unwrap());
+            state.lock().unwrap().frames.push(frame);
+            worker.video();
+            thread::sleep(Duration::from_millis(30));
+        }
+        // It was started again, of the whole viewport, and draws again.
+        let before = delivered.get();
+        for _ in 0..5 {
+            let frame = viewport(&state.lock().unwrap());
+            state.lock().unwrap().frames.push(frame);
+            worker.video();
+            thread::sleep(crate::video::MIN_INTERVAL);
+        }
+        assert_eq!(state.lock().unwrap().screencast_area, None);
+        assert!(state.lock().unwrap().screencast);
+        assert!(delivered.get() > before, "no frame after the stall");
+    }
+
+    /// The longest gap between frames handed on while the watch fixture's
+    /// video plays for three seconds and the page pings a change ten times
+    /// a second, each reading taking 200 ms; with the engine's reader, or
+    /// without (every reading on the tab's thread).
+    fn longest_frame_gap(with_reader: bool) -> Duration {
+        let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/snapshots");
+        let engine = FakeEngine::from_dir(&dir).unwrap();
+        let state = engine.state.clone();
+        {
+            let mut state = state.lock().unwrap();
+            state.with_reader = with_reader;
+            state.go("file:///noctiluca/fixtures/watch.html");
+        }
+        let page =
+            crate::model::build(&state.lock().unwrap().pages["watch"], &mut Revisions::new());
+        let video = page
+            .media
+            .iter()
+            .find(|m| m.kind == MediaKind::Video)
+            .unwrap()
+            .node;
+        state.lock().unwrap().media.insert(
+            video,
+            crate::engine::Playback {
+                ready: 4,
+                ..crate::engine::Playback::default()
+            },
+        );
+        let (send, frames) = mpsc::channel();
+        let tab = Tab::spawn(Box::new(engine), move |update| {
+            if let Update::Frame(_) = update {
+                let _ = send.send(Instant::now());
+            }
+        });
+        tab.send(Command::Resize(120, 40));
+        tab.send(Command::Regions {
+            on_screen: vec![video],
+            intervals: Vec::new(),
+            scale: 1.0,
+        });
+        // The first reading, at the start, before the clock starts.
+        thread::sleep(Duration::from_millis(300));
+        // A reading far longer than a frame, so that what it holds up
+        // shows over a slow machine's scheduling (a loaded CI runner).
+        state.lock().unwrap().read_cost = Duration::from_millis(1000);
+        let start = Instant::now();
+        let mut k = 0u32;
+        while start.elapsed() < Duration::from_secs(3) {
+            {
+                let mut state = state.lock().unwrap();
+                let (w, h) = (state.viewport_width as u32, state.viewport_height as u32);
+                let frame = rich_embed::ScreencastFrame {
+                    pixels: rich_embed::Pixels::new(w, h, vec![k as u8; (w * h * 3) as usize])
+                        .unwrap(),
+                    meta: rich_embed::FrameMeta {
+                        page_scale: 1.0,
+                        device_width: f64::from(w),
+                        device_height: f64::from(h),
+                        ..rich_embed::FrameMeta::default()
+                    },
+                };
+                state.frames.push(frame);
+                if k.is_multiple_of(3) {
+                    state.events.push(EngineEvent::Changed);
+                }
+            }
+            k += 1;
+            thread::sleep(Duration::from_millis(33));
+        }
+        drop(tab);
+        let times: Vec<Instant> = frames.try_iter().filter(|t| *t > start).collect();
+        assert!(times.len() > 10, "{} frames", times.len());
+        times
+            .windows(2)
+            .map(|w| w[1] - w[0])
+            .max()
+            .unwrap_or_default()
+    }
+
+    #[test]
+    fn a_slow_reading_does_not_stop_the_frames() {
+        // On the reader's thread, a 1 s reading holds no frame: the longest
+        // gap is a few frames' at most.
+        let gap = longest_frame_gap(true);
+        assert!(gap < Duration::from_millis(500), "{gap:?}");
+    }
+
+    #[test]
+    fn a_slow_reading_on_the_tabs_thread_stops_the_frames() {
+        // Without a reader the same reading holds the frames for its length:
+        // what the reader's thread is for.
+        let gap = longest_frame_gap(false);
+        assert!(gap >= Duration::from_millis(900), "{gap:?}");
     }
 
     #[test]

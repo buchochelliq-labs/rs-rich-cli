@@ -45,6 +45,15 @@ pub struct FakeState {
     pub screencast_area: Option<Rect>,
     /// Every change of the screencast's area, in order.
     pub screencast_areas: Vec<Option<Rect>>,
+    /// How long a snapshot takes, as a large page's does in a browser.
+    pub read_cost: std::time::Duration,
+    /// Whether the engine lends a [reader](crate::engine::Engine::reader)
+    /// for readings off the tab's thread, as Chrome's does (on unless a
+    /// test turns it off).
+    pub with_reader: bool,
+    /// The screencast stopped sending frames, as a cast can on a page that
+    /// keeps laying itself out: none come until it is turned off and on.
+    pub cast_stalled: bool,
     /// Screencast frames waiting to be taken, oldest first: a test pushes
     /// them.
     pub frames: Vec<ScreencastFrame>,
@@ -81,6 +90,14 @@ pub struct FakeState {
     pub captures: Vec<Rect>,
     /// Scripted capture bytes or failures, consumed before the default paint.
     pub capture_steps: VecDeque<Option<Vec<u8>>>,
+    /// Why the browser stopped, as rs-rich-embed's state says it: while it
+    /// is set, every call fails as one to a browser that has gone, until a
+    /// navigation starts another ([`restarts`](Self::restarts)).
+    pub stopped: Option<String>,
+    /// The times a stopped browser was started again.
+    pub restarts: usize,
+    /// Whether the page's renderer crashed: calls fail until a reload.
+    pub crashed: bool,
 }
 
 impl FakeState {
@@ -107,6 +124,32 @@ impl FakeState {
 }
 
 impl FakeState {
+    /// Whether the page answers: not when the browser stopped or the page
+    /// crashed, as rs-rich-embed's errors say.
+    fn answers(&self) -> io::Result<()> {
+        if self.stopped.is_some() {
+            return Err(io::Error::new(
+                io::ErrorKind::BrokenPipe,
+                "the browser has gone",
+            ));
+        }
+        if self.crashed {
+            return Err(io::Error::new(
+                io::ErrorKind::ConnectionAborted,
+                "the page crashed",
+            ));
+        }
+        Ok(())
+    }
+
+    /// A navigation to a browser that stopped starts another, as
+    /// `ChromeBackend` does.
+    fn revive(&mut self) {
+        if self.stopped.take().is_some() {
+            self.restarts += 1;
+        }
+    }
+
     /// The current page's height in CSS pixels.
     pub fn content_height(&self) -> f64 {
         self.current
@@ -542,6 +585,52 @@ pub struct FakeEngine {
     on_act: Option<OnAct>,
 }
 
+/// The current page's snapshot, after [`FakeState::read_cost`].
+fn read_snapshot(state: &Mutex<FakeState>) -> io::Result<PageSnapshot> {
+    let cost = state.lock().unwrap_or_else(|e| e.into_inner()).read_cost;
+    if !cost.is_zero() {
+        std::thread::sleep(cost);
+    }
+    let state = state.lock().unwrap_or_else(|e| e.into_inner());
+    state.answers()?;
+    state
+        .current
+        .as_ref()
+        .and_then(|name| state.pages.get(name))
+        .cloned()
+        .ok_or_else(|| io::Error::other("no page"))
+}
+
+/// A media element's playback as the fake engine reads it, on either
+/// thread.
+fn fake_playback(state: &FakeState, node: i64) -> io::Result<Playback> {
+    let mut playback = state
+        .media
+        .get(&node)
+        .copied()
+        .ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "no media"))?;
+    // A recorded video's clock runs while it plays, looping.
+    if let Some(time) = state.clock(node).filter(|_| !playback.paused) {
+        playback.time = time;
+    }
+    Ok(playback)
+}
+
+/// The fake engine's reader: snapshots from another thread.
+struct FakeReader {
+    state: Arc<Mutex<FakeState>>,
+}
+
+impl crate::engine::PageReader for FakeReader {
+    fn snapshot(&mut self) -> io::Result<PageSnapshot> {
+        read_snapshot(&self.state)
+    }
+
+    fn playback(&mut self, node: i64) -> io::Result<Playback> {
+        fake_playback(&self.state.lock().unwrap_or_else(|e| e.into_inner()), node)
+    }
+}
+
 /// A saved snapshot (`{"dom": …, "ax": …}`) from a JSON file.
 pub fn snapshot_file(path: &std::path::Path) -> io::Result<PageSnapshot> {
     let all: Value = serde_json::from_str(&std::fs::read_to_string(path)?)
@@ -557,7 +646,10 @@ impl FakeEngine {
     /// none yet. Resources come from the `fixtures` directory beside it,
     /// when there is one.
     pub fn from_dir(dir: &std::path::Path) -> io::Result<FakeEngine> {
-        let mut state = FakeState::default();
+        let mut state = FakeState {
+            with_reader: true,
+            ..FakeState::default()
+        };
         let fixtures = dir.join("..").join("fixtures");
         if fixtures.is_dir() {
             state.resource_root = Some(fixtures);
@@ -770,6 +862,8 @@ impl Engine for FakeEngine {
 
     fn open(&mut self, _tab: TabId, url: &str) -> io::Result<()> {
         let mut state = self.lock();
+        state.revive();
+        state.crashed = false;
         state.opened.push(url.to_string());
         state.go(url);
         Ok(())
@@ -777,6 +871,19 @@ impl Engine for FakeEngine {
 
     fn history(&mut self, _tab: TabId, step: HistoryStep) -> io::Result<()> {
         let mut state = self.lock();
+        if state.stopped.is_some() {
+            // A new browser reopens the page the old one was at, keeping
+            // the history.
+            state.revive();
+            state.crashed = false;
+            let at = state.at;
+            state.current = state.history.get(at).cloned();
+            state.events.push(EngineEvent::Loaded);
+            return Ok(());
+        }
+        if state.crashed && step == HistoryStep::Reload {
+            state.crashed = false;
+        }
         match step {
             HistoryStep::Back if state.at > 0 => state.at -= 1,
             HistoryStep::Forward if state.at + 1 < state.history.len() => state.at += 1,
@@ -807,18 +914,21 @@ impl Engine for FakeEngine {
             url,
             can_go_back: state.at > 0,
             can_go_forward: state.at + 1 < state.history.len(),
+            error: state.stopped.clone(),
+            crashed: state.crashed,
             ..PageState::default()
         }
     }
 
     fn snapshot(&mut self, _tab: TabId) -> io::Result<PageSnapshot> {
-        let state = self.lock();
-        state
-            .current
-            .as_ref()
-            .and_then(|name| state.pages.get(name))
-            .cloned()
-            .ok_or_else(|| io::Error::other("no page"))
+        read_snapshot(&self.state)
+    }
+
+    fn reader(&mut self, _tab: TabId) -> Option<Box<dyn crate::engine::PageReader>> {
+        let state = self.state.clone();
+        self.lock()
+            .with_reader
+            .then(|| Box::new(FakeReader { state }) as Box<dyn crate::engine::PageReader>)
     }
 
     fn capture(&mut self, _tab: TabId, region: Rect, format: Format) -> io::Result<Frame> {
@@ -826,6 +936,7 @@ impl Engine for FakeEngine {
         // PNG.
         let paint = {
             let mut state = self.lock();
+            state.answers()?;
             state.captures.push(region);
             if let Some(bytes) = state.capture_steps.pop_front() {
                 return bytes
@@ -847,6 +958,7 @@ impl Engine for FakeEngine {
     }
 
     fn act(&mut self, _tab: TabId, action: &PageAction) -> io::Result<()> {
+        self.lock().answers()?;
         let mut hook = self.on_act.take();
         {
             let mut state = self.lock();
@@ -900,17 +1012,7 @@ impl Engine for FakeEngine {
     }
 
     fn playback(&mut self, _tab: TabId, node: i64) -> io::Result<Playback> {
-        let state = self.lock();
-        let mut playback = state
-            .media
-            .get(&node)
-            .copied()
-            .ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "no media"))?;
-        // A recorded video's clock runs while it plays, looping.
-        if let Some(time) = state.clock(node).filter(|_| !playback.paused) {
-            playback.time = time;
-        }
-        Ok(playback)
+        fake_playback(&self.lock(), node)
     }
 
     fn image_ready(&mut self, _tab: TabId, node: i64) -> io::Result<bool> {
@@ -944,6 +1046,7 @@ impl Engine for FakeEngine {
 
     fn metrics(&mut self, _tab: TabId) -> io::Result<Metrics> {
         let state = self.lock();
+        state.answers()?;
         Ok(Metrics {
             scroll_y: state.scroll_y,
             content_height: state.content_height(),
@@ -952,7 +1055,11 @@ impl Engine for FakeEngine {
     }
 
     fn set_screencast(&mut self, _tab: TabId, on: bool) -> io::Result<()> {
-        self.lock().screencast = on;
+        let mut state = self.lock();
+        state.screencast = on;
+        if !on {
+            state.cast_stalled = false;
+        }
         Ok(())
     }
 
@@ -970,6 +1077,10 @@ impl Engine for FakeEngine {
 
     fn screencast_frame(&mut self, _tab: TabId) -> Option<ScreencastFrame> {
         let mut state = self.lock();
+        if state.cast_stalled {
+            state.frames.clear();
+            return None;
+        }
         if state.screencast && state.frames.is_empty() && state.recorded.is_some() {
             return state.recorded_frame();
         }

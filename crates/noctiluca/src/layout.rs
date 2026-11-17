@@ -184,6 +184,23 @@ pub fn log_lines(log: &Log, width: usize, rows: usize, page: &Page, marks: &Mark
     if reverse {
         lines.reverse();
     }
+    // Paused near its start of a log longer than its rows, the log holds
+    // still with its rows full: the entries after the paused one fill
+    // what those before it do not. A log shorter than its rows shows to
+    // the paused entry.
+    if reverse && lines.len() < rows {
+        let mut after = Vec::new();
+        for entry in &log.entries[end..] {
+            if lines.len() + after.len() >= rows {
+                break;
+            }
+            after.extend(entry_lines(entry, width, page, marks));
+        }
+        if lines.len() + after.len() >= rows {
+            lines.append(&mut after);
+        }
+    }
+    lines.truncate(rows);
     lines.resize(rows, Line::default());
     lines
 }
@@ -320,11 +337,28 @@ fn spans(runs: &[Run], base: &str, page: &Page, marks: &Marks) -> Vec<Span> {
         }
         last = run.control;
         // A small picture in the line keeps its cells, its alt text
-        // standing in for it, in one piece.
+        // standing in for it, in one piece. One in front of the line's
+        // text too small to show what its alt text says (a chat's badge
+        // before the author: two cells for `moderator`) reads as that
+        // text instead; one among the words (an emote) stays a picture.
         let picture = run
             .picture
             .as_ref()
             .filter(|p| !p.src.is_empty() && marks.adapt.on(Rule::InlinePictures));
+        let leading = out
+            .iter()
+            .all(|s: &Span| s.picture.is_some() || s.text.trim().is_empty());
+        if let Some(alt) = picture.filter(|_| leading).and_then(tiny_alt) {
+            out.push(Span {
+                text: alt,
+                style: format!("{} dim", run_style(run, base, page, marks.adapt))
+                    .trim()
+                    .to_string(),
+                control: run.control,
+                picture: None,
+            });
+            continue;
+        }
         out.push(Span {
             text: match picture {
                 Some(p) => inline_cells(&p.alt, p.width),
@@ -841,6 +875,35 @@ fn cut_line(first: &[Span], spans: &[Span], width: usize) -> Line {
     line
 }
 
+/// At most this many cells wide, a picture in a line whose alt text needs
+/// more reads as its alt text ([`tiny_alt`]).
+const TINY_PICTURE_CELLS: usize = 3;
+/// A tiny picture's alt text is cut to this many cells.
+const TINY_ALT_CELLS: usize = 16;
+
+/// The text a tiny picture in a line reads as: its alt text, in one piece
+/// (no-break spaces), cut with `…` to [`TINY_ALT_CELLS`]; `None` when the
+/// picture has room for what it shows, or no alt text.
+fn tiny_alt(picture: &crate::model::Picture) -> Option<String> {
+    let cells = ((picture.width / 8.0).round() as usize).clamp(1, 12);
+    let alt = picture.alt.trim();
+    if cells > TINY_PICTURE_CELLS || alt.is_empty() || cell_len(alt) <= cells {
+        return None;
+    }
+    let mut out = String::new();
+    let mut used = 0;
+    for c in alt.chars() {
+        let w = cell_len(&c.to_string());
+        if used + w + 1 > TINY_ALT_CELLS && cell_len(alt) > TINY_ALT_CELLS {
+            out.push('…');
+            break;
+        }
+        out.push(if c.is_whitespace() { '\u{a0}' } else { c });
+        used += w;
+    }
+    Some(out)
+}
+
 /// The cells a small picture in a line takes, as text: its alt text (or
 /// `▫`) cut or padded to its width in cells (a cell is 8 CSS pixels, one
 /// to twelve of them), in one piece (no-break spaces), so wrapping never
@@ -1229,6 +1292,10 @@ fn project_pair(
     main
 }
 
+/// A top or bottom bar this tall in rows at most has its one-line items
+/// on one row.
+const MAX_BAR_ROWS: usize = 4;
+
 /// Cells a run of controls at the right edge keeps for each control when
 /// it has to shorten them: `[`, a letter, `…` and `]`.
 const MIN_FACE: usize = 4;
@@ -1425,6 +1492,9 @@ fn project_part(
     let mut one_row: Vec<usize> = Vec::new();
     // The one-row indicators among them (a bar, steps, stars).
     let mut indicator_items: Vec<usize> = Vec::new();
+    // The items of each top or bottom bar's blocks, by the bar's layer,
+    // with the shift its block took: their rows are settled together.
+    let mut bar_items: Vec<(usize, usize, f64)> = Vec::new();
     for (r, region) in page.regions.iter().enumerate() {
         if !collapsed[r] {
             continue;
@@ -1931,6 +2001,15 @@ fn project_part(
             item.top += dy;
             item.bottom += dy;
         }
+        if part != Part::Flow
+            && let Some(layer) = block.stack.layer.filter(|&l| {
+                page.layers
+                    .get(l)
+                    .is_some_and(|l| matches!(l.place, Place::Pinned | Place::Docked))
+            })
+        {
+            bar_items.extend((first_item..items.len()).map(|n| (n, layer, dy)));
+        }
         // A short text (one line, at most a third of the picture's width)
         // over a picture is drawn in its cells, not under it.
         if let Some(m) = over
@@ -2054,6 +2133,47 @@ fn project_part(
             }
         }
     }
+    // A bar's one-line items (a menu button, a logo's text, a search box,
+    // sign-in), each centred in the bar's height and as tall as it is,
+    // round to different rows by their tops. Those that cross the bar's
+    // middle go on the row of the highest of them, so the bar keeps to
+    // one row as Chrome draws it.
+    let mut bars: Vec<usize> = bar_items.iter().map(|&(_, l, _)| l).collect();
+    bars.sort_unstable();
+    bars.dedup();
+    for layer in bars {
+        let bar = &page.layers[layer];
+        if bar.rect.height > MAX_BAR_ROWS as f64 * ch {
+            continue;
+        }
+        let band: Vec<usize> = bar_items
+            .iter()
+            .filter(|&&(n, l, dy)| {
+                let item = &items[n];
+                let middle = bar.rect.y + bar.rect.height / 2.0 + dy;
+                l == layer
+                    && item.media.is_none()
+                    && item.log.is_none()
+                    && (item.one_line || item.wrap.is_some() && item.bottom - item.top <= 1.5 * ch)
+                    && item.top <= middle
+                    && middle <= item.bottom
+            })
+            .map(|&(n, _, _)| n)
+            .collect();
+        let Some(row) = band
+            .iter()
+            .map(|&n| (items[n].top / ch).round())
+            .reduce(f64::min)
+        else {
+            continue;
+        };
+        for n in band {
+            let item = &mut items[n];
+            let height = item.bottom - item.top;
+            item.top = row * ch;
+            item.bottom = item.top + height;
+        }
+    }
     // A control whose face needs more cells than its box pushes the
     // controls after it on its row to the right.
     let mut rows_of: HashMap<i64, Vec<usize>> = HashMap::new();
@@ -2083,6 +2203,50 @@ fn project_part(
             let grown = x1.max(x0 + need_of(item));
             push += grown - x1;
             at.push((x0, grown));
+        }
+        // Past the right edge, the end of the run moves left first, into
+        // the free cells between its boxes (a cell kept between boxes that
+        // had one), as far as the edge needs and no further: the boxes at
+        // the run's start (a bar's menu button and search field) keep
+        // their places. Not when that runs into a box beside the run.
+        if at.last().is_some_and(|&(_, x1)| x1 > columns) {
+            let (top, bottom) = (items[row[0]].top, items[row[0]].bottom);
+            let mut moved = at.clone();
+            let mut limit = columns;
+            for k in (0..moved.len()).rev() {
+                let (x0, x1) = moved[k];
+                if x1 <= limit {
+                    break;
+                }
+                let Some(start) = x0.checked_sub(x1 - limit) else {
+                    limit = usize::MAX;
+                    break;
+                };
+                moved[k] = (start, limit);
+                let gap = k > 0 && items[row[k]].x0 > items[row[k - 1]].x1;
+                limit = match start.checked_sub(usize::from(gap)) {
+                    Some(l) => l,
+                    None if k == 0 => 0,
+                    None => {
+                        limit = usize::MAX;
+                        break;
+                    }
+                };
+            }
+            let clear = limit != usize::MAX
+                && moved.iter().zip(&at).all(|(&(m0, _), &(a0, _))| {
+                    m0 == a0
+                        || !items.iter().enumerate().any(|(o, it)| {
+                            !row.contains(&o)
+                                && it.top < bottom - 0.5
+                                && top < it.bottom - 0.5
+                                && it.x0 < a0
+                                && m0 < it.x1
+                        })
+                });
+            if clear {
+                at = moved;
+            }
         }
         // A run past the right edge (a top bar's icon buttons with long
         // names) moves left into cells nothing beside it claims, its gaps
@@ -2125,12 +2289,34 @@ fn project_part(
                 }
             }
             let mut x = columns.saturating_sub(total(&widths)).max(floor).min(first);
+            let start = x;
             for (k, &n) in row.iter().enumerate() {
                 x += gaps[k];
                 let item = &mut items[n];
                 item.x0 = x.min(columns - 1);
                 item.x1 = (x + widths[k]).clamp(item.x0 + 1, columns);
                 x = item.x1;
+            }
+            // A text box the run now overlaps from the left (a title
+            // running to a menu button at the right edge) ends a cell
+            // before it and wraps there, rather than pushing the run onto
+            // a row of its own; never narrower than its longest word.
+            for (m, item) in items.iter_mut().enumerate() {
+                if row.contains(&m)
+                    || item.one_line
+                    || item.top >= bottom - 0.5
+                    || top >= item.bottom - 0.5
+                {
+                    continue;
+                }
+                let Some((spans, first)) = &item.wrap else {
+                    continue;
+                };
+                let end = start.saturating_sub(1);
+                if item.x0 < start && start < item.x1 && end >= item.x0 + min_content(first, spans)
+                {
+                    item.x1 = end;
+                }
             }
         } else {
             for (&n, &(x0, x1)) in row.iter().zip(&at) {
@@ -2698,7 +2884,13 @@ fn snap_grid<T>(
         }
     }
     let count = chrome_rows.iter().map(Vec::len).max().unwrap_or(0);
-    if count < 2 || width < 2 || columns == 0 {
+    // A row of short one-line pieces (a result's `23M` and `11y ago`,
+    // chips) is not cards: snapped to card columns, each would take a row.
+    let pieces = grid
+        .items
+        .iter()
+        .all(|r| r.height <= 1.5 * ch && r.width / cw < minimum as f64 / 2.0);
+    if count < 2 || width < 2 || columns == 0 || pieces {
         return;
     }
     let fit = rich_intuituive::layout::adaptive_columns(
@@ -2888,6 +3080,26 @@ mod tests {
         assert_eq!(TEST_LOG_ENTRY_WRAPS.with(|n| n.get()), 0);
     }
     #[test]
+    fn a_log_paused_near_its_start_keeps_its_rows_full() {
+        // #892: paused on an early entry, the rows below it are the
+        // entries after it, not blank.
+        let page = log_fixture();
+        let mut log = page.logs[0].clone();
+        log.entries = (0..30)
+            .map(|key| crate::model::Entry {
+                key,
+                runs: vec![Run::plain(format!("message {key}"))],
+            })
+            .collect();
+        let mut marks = Marks::default();
+        marks.logs.insert(log.node, LogScroll::Paused(1));
+        let lines: Vec<String> = log_lines(&log, 20, 4, &page, &marks)
+            .iter()
+            .map(Line::plain)
+            .collect();
+        assert_eq!(lines, ["message 0", "message 1", "message 2", "message 3"]);
+    }
+    #[test]
     fn bounded_log_lines_match_full_wrapping_with_inline_styles_and_unicode() {
         let page = log_fixture();
         let mut log = page.logs[0].clone();
@@ -2959,6 +3171,11 @@ mod tests {
                     Some(n) => starts.get(n + 1).copied().unwrap_or(lines.len()),
                     None => rows.min(lines.len()),
                 },
+            };
+            let end = if lines.len() >= rows {
+                end.max(rows)
+            } else {
+                end
             };
             (end.saturating_sub(rows), end)
         } else {

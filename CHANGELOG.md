@@ -21,6 +21,162 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   tags from before rab. CI and `validate_release.py` run rab's `check` and
   the rab tests instead of `release_cohort.py`'s.
 
+### Cornacai: Claude starts on Windows, and a failed start says why
+
+- **An agent installed with npm starts on Windows.** npm puts a `.cmd`
+  launcher beside a shell script of the same name, which Windows cannot
+  run; Cornacai counted the script as installed and then could not start
+  it. It now finds programs as Windows does (`PATHEXT`), so it runs the
+  `.cmd` and skips the script.
+- **The renamed Claude adapter.** `claude-agent-acp`
+  (`@agentclientprotocol/claude-agent-acp`) is looked for first and is
+  the one `--agents` suggests; `claude-code-acp`, its deprecated old name,
+  still starts.
+- **A start that fails or stalls says why.** When the agent fails to
+  initialise or to open a session, the notice quotes the error it wrote on
+  stderr: from its last `Error:` line, not the stack dump after it. Until
+  now only "Internal error (-32603)" showed. An agent that has not
+  answered within 20 seconds gets a notice too, where the screen used to
+  wait with no word.
+
+### Noctiluca: the browser recovers, and says why once
+
+- **A browser that stops says why, once.** When Chrome exits (killed, out
+  of memory, crashed) or its DevTools connection ends, Noctiluca's status
+  line says so with the cause, "The browser stopped: Chrome exited (…)",
+  and the key that restarts it. The first command after says it once more;
+  later ones no longer toast "the browser has gone" each. A DevTools call's
+  own wording ("Runtime.callFunctionOn: no answer in time", DevTools's
+  JSON errors) reads as a sentence.
+- **Reload starts another browser.** rs-rich-embed's `ChromeEngine` ends
+  what is left of a browser whose connection ended, and the next
+  navigation starts another (`ChromeEngine::ended`,
+  `ChromeEngine::restart`): `DevTools` handles reach the new one, the
+  page's history carries on (back and forward go through the old
+  browser's entries), and Noctiluca's reload key reopens the last address
+  in it, with its isolated world, binding and script set up again.
+- **A crashed page fails at once and offers a reload.** A renderer that
+  crashes (`Inspector.targetCrashed`) marks the page crashed
+  (`PageState::crashed`) and fails the calls waiting on it at once, where
+  each waited 30 seconds and froze the tab; Noctiluca says "The page
+  crashed" with the key that reloads it, and the reload brings it back.
+- **Only the page's own detach ends the engine.** A
+  `Target.detachedFromTarget` for another target (a worker, another page)
+  no longer ends the session of a live browser.
+- **A browser that opens no page in time is ended.** It was left running
+  until the engine was dropped. One that answers DevTools but is slow (a
+  loaded machine) gets a second wait first.
+
+### Noctiluca: steadier video frames
+
+- Following Noctiluca's scroll no longer puts a playing video partly out of
+  Chrome's viewport: the wheel Chrome is given stops where the video still
+  fits, so one row of `j` keeps the video screencast on its own instead of
+  falling back to screenshots at 4 to 5 frames a second for seconds. Tested
+  on a new watch-page fixture (`tests/fixtures/watch.html`, a 30 fps test
+  card in a player whose clock the page updates).
+- A live video on a busy page keeps drawing (#890): when a region playing
+  on screen gets no frame for two seconds, the tab starts the screencast
+  again, of the whole viewport, for a few seconds before it tries the
+  region's area again; and the status line says `STALLED` instead of
+  `PLAYING` over a picture whose frames stopped. rs-rich-embed: a restart
+  of the screencast that Chrome refuses no longer drops every frame after
+  it. Tested on a new busy-stream fixture (`tests/fixtures/busy-stream.html`,
+  a playing video beside a chat that never rests and moves it).
+- Video frames are paced by the video's own clock: Chrome's frame stamps
+  set the slots, the spacing is a whole number of the video's frames (a
+  24 fps video shows at 24 or 12 a second, not on a 30 Hz clock that holds
+  every fourth frame twice), a paint of the page between two of the video's
+  frames is not shown, and frames after a stall (a reading) keep their
+  spacing instead of bunching up. When the encoder takes longer per frame
+  than the pacing allows (iTerm2 and Sixel on a slow terminal), the tab is
+  asked for frames at a rate the encoder keeps up with, so frames are
+  dropped once, evenly, rather than by the pacing and the encoder's queue
+  in turn.
+- The tab's periodic calls to Chrome (a media element's state, Chrome's
+  view, a frame's capture, a live log's entries, a still's bytes) wait at
+  most 3 s, and a reading's at most 10 s, instead of the 30 s any call may
+  take: a page that hangs holds the video's frames for seconds, not half a
+  minute per call. Tested live on a page whose script never returns
+  (`tests/fixtures/hang.html`).
+- Readings of the page run on a thread of their own: a reading the page
+  pinged for, or a new document's settling one, takes Chrome's snapshot and
+  builds the model off the tab's thread, which goes on taking video frames;
+  its capture scope is checked and adopted on the tab's thread when it comes
+  back. A reading took 150 to 230 ms of the tab's thread about once a
+  second while a video played, and every gap of 200 ms or more between
+  frames lined up with one. Readings for an action, a navigation or a load
+  are still read at once on the tab's thread.
+
+### intuiTUIve: pictures without flicker between frames
+
+- **Kitty uploads go before the cells that name them.** A frame used to
+  write a picture's placeholder cells under its new image id, then upload
+  the image, then delete the old id. Without synchronized output (a link
+  too slow to answer the start-up query, a multiplexer without mode 2026,
+  `RICH_SYNC_OUTPUT=0`) the terminal showed the region empty for the
+  whole upload. The upload now comes first, with no cursor move, and the
+  delete still comes after the cells. `Painter::starts_over` (rs-rich-ext)
+  tells whether a paint begins by clearing the screen; the uploads follow
+  such a clear rather than precede it.
+- **An opaque live picture in iTerm2 and Sixel is drawn over its cells as
+  they are.** Each frame of a video used to write the region's half
+  blocks, erase them (`ESC [ n X` on every row), then draw the image: three
+  states of the same cells in one frame, a flash without synchronized
+  output, and the half blocks' bytes every frame. A picture whose fitted
+  pixels have no transparency and fill its cells (rs-rich-art's
+  `Picture::is_opaque` and `Picture::covers_cells`) is no longer erased
+  under, and while it is drawn over cells it covered the frame before,
+  the painter leaves them alone (rs-rich-ext's `Graphic::opaque` and
+  `Painter::set_covered`): one image escape a frame. A picture with alpha
+  is still erased under, so the half blocks do not show through.
+- **The painter no longer moves the cursor by rewriting a picture's
+  cells.** Writing a few unchanged cells again can be shorter than a
+  cursor move; under an iTerm2 or Sixel picture it wiped the picture
+  there without the graphics plan knowing.
+- **Scrolling pictures in iTerm2 and Sixel (#884, the overlay part).** A
+  picture that only moved is drawn again from the escape already made
+  (the terminal does not move overlay images with the text), and a part of
+  one cut by the view's edge is now cut from the picture fitted once, not
+  resampled again at every step (rs-rich-art keeps the last fit of each
+  frame). `rich_art::picture::picture_encodes` counts the escapes made of
+  a picture, as `picture_bytes` counts the bytes sent. Tests scroll a page
+  of pictures down and back under each protocol: no unchanged part is
+  encoded twice, and every step's terminal matches a fresh draw.
+
+### Noctiluca: media keys, live logs and layout (0.0.27)
+
+- The media keys and the status line stay on the video or audio last
+  controlled, and never pick an element with nothing to play (no source):
+  after a pause on a page with a source-less preview player, `p` plays the
+  main video again instead of waiting on the empty one (#889). A length
+  not known yet reads `--:--`, not `live`; `Playback` has `live` and
+  `empty`.
+- A live log whose messages sit in a list beside a greeting or a spacer
+  (as chat frameworks build them) has an entry a message: it keeps taking
+  new lines as the list grows past what one entry reads, and is rendered
+  again (#891); `{` holds the lines that were showing and steps up through
+  messages, instead of blanking the log to its first line (#892). A log
+  paused near its start keeps its rows full.
+- Layout: a top bar's items, each centred in its height, are drawn on
+  one row, and a run of buttons past the right edge moves into the free
+  cells at its end instead of pulling the whole row left (L2); short
+  one-line pieces of a flex-wrap row (`23M` and `11y ago`) are no longer
+  snapped to card columns, one a row (L6); a menu button at the right
+  edge crowded by a title keeps its face on the title's row, the title
+  wrapping before it (L8).
+- A non-modal source dialog that is a top or bottom bar across the view (a
+  shop's cookie banner) no longer turns the page's adaptations off: on the
+  shop fixture the rating reads `★★★★½ 4.5` instead of the stars'
+  picture, and the four blank rows under the pinned header collapse.
+- A tiny picture in front of a line's text whose alt text it cannot show
+  (a chat badge: two cells for `moderator`) reads as that alt text, dim,
+  instead of a two-cell picture or a cut `m…`; emotes among the words stay
+  pictures.
+- intuiTUIve: a new toast stacked over one already shown redraws what is
+  under them, so the one it moved leaves nothing of itself beside the new
+  one (two toasts read as overlapping boxes).
+
 ## 0.0.26 cohort — published 2026-11-11
 
 Published on 2026-11-11 from `e5422bf9` by one `release.yml` run on rab

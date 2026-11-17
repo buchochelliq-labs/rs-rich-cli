@@ -9,6 +9,9 @@ use crate::keymap::Keymap;
 use crate::policy::{LineIo, NotInteractive};
 
 /// What a component wants after handling an event.
+// Windows' `Command` is large (clippy 1.100 flags it there); boxing it
+// would change this public type for one platform.
+#[allow(clippy::large_enum_variant)]
 #[derive(Debug)]
 pub enum Flow<T> {
     /// Keep going. The view is rendered again, and repainted only if it

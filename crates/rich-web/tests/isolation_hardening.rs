@@ -15,15 +15,7 @@ use common::{TOKEN, connect, read_close_reason_within, read_until, running, wait
 use tungstenite::{Message, WebSocket};
 
 fn probe_exe() -> std::path::PathBuf {
-    let exe = std::env::current_exe().unwrap();
-    let p = exe
-        .parent()
-        .and_then(|d| d.parent())
-        .unwrap()
-        .join("examples")
-        .join("session_probe");
-    assert!(p.exists(), "build the example: {p:?}");
-    p
+    common::example("session_probe")
 }
 
 struct Probe {

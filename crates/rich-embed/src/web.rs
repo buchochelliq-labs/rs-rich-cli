@@ -61,6 +61,10 @@ pub struct PageState {
     pub can_go_forward: bool,
     /// Why the page could not be shown, if it could not.
     pub error: Option<String>,
+    /// Whether the page's renderer crashed while the browser lives on: it
+    /// draws and answers nothing until it is reloaded or opens another
+    /// page.
+    pub crashed: bool,
 }
 
 /// A browser behind a [`web_view`]: opens pages, takes input, and hands

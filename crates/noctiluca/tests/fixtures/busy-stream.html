@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<title>Busy stream</title>
+<!-- A live stream page whose chat never rests, built from ordinary HTML
+     for Noctiluca's tests: a playing video (media/card.webm, looping)
+     beside a role=log panel (a scroll box) this page's own script
+     fills many times a second, and a viewer count and a "now" strip above the video whose
+     heights change as it does, so the page is laid out again and the
+     video's box moves while it plays. Local: no network, no third-party
+     assets. ?calm posts once a second instead. -->
+<style>
+  body { margin: 0; font: 16px sans-serif; background: #0e0e10; color: #efeff1 }
+  header { display: flex; align-items: center; gap: 8px; padding: 8px }
+  h1 { font-size: 18px; margin: 0 }
+  #now { margin: 0 8px; color: #adadb8; overflow: hidden }
+  .page { display: flex; gap: 16px; padding: 0 8px }
+  .stage { flex: 1; min-width: 0 }
+  video { width: 100%; max-width: 640px; aspect-ratio: 16 / 9; background: #000; display: block }
+  #chat { width: 296px; flex: none }
+  #chat h2 { font-size: 16px; margin: 0 0 4px }
+  #log { height: 340px; overflow-y: auto }
+  #log > div { padding: 0 }
+  .author { font-weight: bold }
+</style>
+<header>
+  <h1>Night shift</h1>
+  <p id="viewers">1,000 watching</p>
+</header>
+<p id="now"></p>
+<div class="page">
+  <section class="stage" aria-label="Stream">
+    <video src="media/card.webm" autoplay muted loop playsinline
+           aria-label="A moving test card"></video>
+    <p>The stream's description, under the video.</p>
+  </section>
+  <section id="chat" aria-label="Chat">
+    <h2>Chat</h2>
+    <div id="log" role="log" aria-label="Chat messages"></div>
+  </section>
+</div>
+<script>
+  const log = document.getElementById('log');
+  const now = document.getElementById('now');
+  const viewers = document.getElementById('viewers');
+  const names = ['tern', 'gannet', 'skua', 'petrel', 'puffin', 'shag', 'eider', 'auk'];
+  const colors = ['#f66', '#6cf', '#fc6', '#9f9', '#c9f', '#fff'];
+  const words = 'the bay glows tonight look at the waves so bright wow again yes no maybe later'.split(' ');
+  let n = 0;
+  function post() {
+    n += 1;
+    const row = document.createElement('div');
+    const who = document.createElement('span');
+    who.className = 'author';
+    who.style.color = colors[n % colors.length];
+    who.textContent = names[n % names.length] + (n % 97);
+    const text = [];
+    for (let k = 0; k < 2 + (n * 7) % 23; k++) text.push(words[(n * 13 + k * 5) % words.length]);
+    row.append(who, ': ' + text.join(' '));
+    log.append(row);
+    // The log keeps its newest entries, and grows the page until then.
+    while (log.children.length > 400) log.firstElementChild.remove();
+    viewers.textContent = `${1000 + (n * 37) % 900} watching`;
+    // The strip over the video takes one to three lines: the video moves.
+    now.replaceChildren(...Array.from({ length: 1 + n % 3 }, () => {
+      const line = document.createElement('div');
+      line.textContent = 'Now: ' + text.slice(0, 6).join(' ');
+      return line;
+    }));
+  }
+  setInterval(post, location.search.includes('calm') ? 1000 : 60);
+</script>
+</html>

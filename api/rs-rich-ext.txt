@@ -9290,6 +9290,7 @@ pub fn rich_ext::frame::graphics::Graphic::can_reuse_data(&self) -> bool
 pub fn rich_ext::frame::graphics::Graphic::draw(&self, usize) -> alloc::string::String
 pub fn rich_ext::frame::graphics::Graphic::in_cells(&self) -> bool
 pub fn rich_ext::frame::graphics::Graphic::key(&self) -> u64
+pub fn rich_ext::frame::graphics::Graphic::opaque(&self) -> bool
 pub trait rich_ext::frame::graphics::PlacementSource: core::marker::Send + core::marker::Sync
 pub fn rich_ext::frame::graphics::PlacementSource::next_change(&self) -> core::option::Option<core::time::Duration>
 pub fn rich_ext::frame::graphics::PlacementSource::output_written(&self)
@@ -9744,6 +9745,7 @@ pub fn rich_ext::frame::Graphic::can_reuse_data(&self) -> bool
 pub fn rich_ext::frame::Graphic::draw(&self, usize) -> alloc::string::String
 pub fn rich_ext::frame::Graphic::in_cells(&self) -> bool
 pub fn rich_ext::frame::Graphic::key(&self) -> u64
+pub fn rich_ext::frame::Graphic::opaque(&self) -> bool
 pub trait rich_ext::frame::PlacementSource: core::marker::Send + core::marker::Sync
 pub fn rich_ext::frame::PlacementSource::next_change(&self) -> core::option::Option<core::time::Duration>
 pub fn rich_ext::frame::PlacementSource::output_written(&self)
@@ -15606,10 +15608,12 @@ pub fn rich_ext::surface::Painter::paint_into(&mut self, &rich_ext::surface::Scr
 pub fn rich_ext::surface::Painter::remap_styles(&mut self, &rich_ext::frame::StyleRemap)
 pub fn rich_ext::surface::Painter::repaint(&mut self, &rich_ext::surface::Screen, &[rich_ext::surface::Rect]) -> alloc::string::String
 pub fn rich_ext::surface::Painter::set_color_system(&mut self, core::option::Option<rich::color::ColorSystem>)
+pub fn rich_ext::surface::Painter::set_covered(&mut self, &[rich_ext::surface::Rect])
 pub fn rich_ext::surface::Painter::set_erase(&mut self, bool)
 pub fn rich_ext::surface::Painter::set_fixed(&mut self, &[rich_ext::surface::Rect])
 pub fn rich_ext::surface::Painter::set_scroll(&mut self, bool)
 pub fn rich_ext::surface::Painter::set_strategy(&mut self, rich_ext::surface::PaintStrategy)
+pub fn rich_ext::surface::Painter::starts_over(&self, &rich_ext::surface::Screen) -> bool
 pub fn rich_ext::surface::Painter::stats(&self) -> rich_ext::surface::PaintStats
 pub fn rich_ext::surface::Painter::strategy(&self) -> rich_ext::surface::PaintStrategy
 pub fn rich_ext::surface::Painter::try_paint(&mut self, &rich_ext::surface::Screen, &[rich_ext::surface::Rect]) -> std::io::error::Result<alloc::string::String>

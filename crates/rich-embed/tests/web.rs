@@ -124,6 +124,7 @@ impl WebEngine for FakeEngine {
             can_go_back: fake.at > 0,
             can_go_forward: fake.at + 1 < fake.history.len(),
             error: None,
+            crashed: false,
         }
     }
 

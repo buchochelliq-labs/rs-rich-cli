@@ -783,8 +783,8 @@ fn source_native_captured_figure_images_keep_broad_reservations_and_hits() {
             "decoded image must retain its source aspect/reservation: {r:?}"
         );
         let control = source.relations.media_controls[r.media].unwrap();
-        for row in r.row..r.row + r.rows {
-            let covered: usize = p.lines[row]
+        for (row, line) in (r.row..).zip(&p.lines[r.row..r.row + r.rows]) {
+            let covered: usize = line
                 .spans
                 .iter()
                 .filter(|s| s.control == Some(control))

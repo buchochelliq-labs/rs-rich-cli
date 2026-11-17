@@ -379,3 +379,66 @@ fn a_link_added_to_a_log_is_bound_like_any_control() {
     });
     assert!(page.controls.iter().any(|c| c.name == "read later"));
 }
+
+#[test]
+fn a_wrapped_chat_keeps_taking_new_lines_as_it_grows_and_rerenders() {
+    // #891: the messages sit in a list beside a greeting inside the log,
+    // and the list is rendered again with new nodes. Each message is an
+    // entry of its own, and the newest keep coming past the size where
+    // the whole list, read as one entry, was cut short.
+    let Some(binary) = chrome() else { return };
+    let mut live = Live::start(binary);
+    let page = live.open("chat-wrapped.html?quiet");
+    assert_eq!(entries(&page).len(), 12, "{:#?}", entries(&page));
+    assert!(entries(&page)[11].contains("message number 12"));
+    for round in 0..4 {
+        live.page_script(&format!(
+            "for (let i = 0; i < 40; i++) post('round {round} line ' + i + ' of the harbour chat'); \
+             if ({round} % 2) rerender();"
+        ));
+        let words = format!("round {round} line 39 of");
+        let page = live.wait(&words, |p| {
+            entries(p).last().is_some_and(|e| e.contains(&words))
+        });
+        assert!(entries(&page).len() > 40, "{:#?}", entries(&page));
+    }
+}
+
+#[test]
+fn a_paused_log_holds_its_lines_while_it_grows() {
+    // #892: `{` on a followed log holds the lines that were showing and
+    // moves up through earlier entries; new entries do not blank it.
+    use noctiluca::layout::{LogScroll, scroll_log};
+    let Some(binary) = chrome() else { return };
+    let mut live = Live::start(binary);
+    live.open("chat-wrapped.html?quiet");
+    live.page_script("for (let i = 0; i < 30; i++) post('early ' + i)");
+    let page = live.wait("30 more", |p| {
+        entries(p).last().is_some_and(|e| e.contains("early 29"))
+    });
+    let log = &page.logs[0];
+    let rows = 15;
+    let paused = scroll_log(log, LogScroll::Follow, -(rows as isize / 2));
+    let LogScroll::Paused(key) = paused else {
+        panic!("not paused: {paused:?}")
+    };
+    let mut marks = Marks::default();
+    marks.logs.insert(log.node, paused);
+    let shown = |page: &Page, marks: &Marks| -> Vec<String> {
+        noctiluca::layout::log_lines(&page.logs[0], 50, rows, page, marks)
+            .iter()
+            .map(Line::plain)
+            .collect()
+    };
+    let before = shown(&page, &marks);
+    assert!(
+        before.iter().all(|l| !l.trim().is_empty()),
+        "blank rows when paused: {before:#?}"
+    );
+    live.page_script("for (let i = 0; i < 10; i++) post('later ' + i)");
+    let grown = live.wait("10 more", |p| {
+        entries(p).last().is_some_and(|e| e.contains("later 9"))
+    });
+    assert!(grown.logs[0].entries.iter().any(|e| e.key == key));
+    assert_eq!(shown(&grown, &marks), before, "the paused lines moved");
+}

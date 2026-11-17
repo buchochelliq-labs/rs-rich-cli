@@ -3019,6 +3019,10 @@ impl App {
     fn push_toast(&mut self, note: Note, until: Duration) {
         let text = note.spoken();
         self.toasts.push((note, until));
+        // The toasts shown move a box away from their corner: what was
+        // under them draws again, as when one goes, or a wider one moved
+        // stays drawn beside the new one.
+        self.restack |= self.toasts.len() > 1;
         self.poke = true;
         self.announce(
             crate::a11y::Announcement {
@@ -7363,23 +7367,47 @@ impl App {
     }
 }
 
-/// After a frame's cells: the graphics `source` places on `screen` that
-/// moved, went away or had cells written under them, as rs-rich-ext's
-/// `Surface` draws them. `placements` is what the last frame drew.
-fn draw_graphics(
+/// Before a frame's cells: the graphics `source` places on `screen`, and
+/// the uploads of those that live in their cells (Kitty's placeholders)
+/// the terminal does not hold yet. They go ahead of the cells that name
+/// them, with no cursor move (a virtual placement needs none), so a
+/// terminal that shows the frame part-written never finds a cell naming an
+/// image it lacks. `placements` is what the last frame drew.
+fn graphics_ahead(
     source: &dyn rich_ext::frame::PlacementSource,
     cell_pixels: Option<(u16, u16)>,
-    placements: &mut Vec<rich_ext::frame::Placement>,
+    placements: &[rich_ext::frame::Placement],
     screen: &Screen,
-    painter: &mut Painter,
-) -> String {
-    use rich_ext::frame::Change;
+) -> (Vec<rich_ext::frame::Placement>, String) {
     let height = usize::from(screen.area().height);
     let next: Vec<_> = source
         .placements_from_screen(screen, cell_pixels)
         .into_iter()
         .filter(|p| p.row + p.rows <= height)
         .collect();
+    // Whether an in-cell graphic is drawn does not depend on the cells
+    // written: the plan after the cells draws the same ones, and skips them.
+    let mut out = String::new();
+    for placement in rich_ext::frame::plan_graphics(placements, &next, &[]).draw {
+        if placement.graphic.in_cells() {
+            out.push_str(&placement.graphic.draw(placement.frame));
+        }
+    }
+    (next, out)
+}
+
+/// After a frame's cells: the graphics of `next` (from [`graphics_ahead`])
+/// that moved, went away or had cells written under them, as rs-rich-ext's
+/// `Surface` draws them, but for in-cell ones, drawn ahead. `placements`
+/// is what the last frame drew, and becomes `next`.
+fn draw_graphics(
+    source: &dyn rich_ext::frame::PlacementSource,
+    next: Vec<rich_ext::frame::Placement>,
+    placements: &mut Vec<rich_ext::frame::Placement>,
+    screen: &Screen,
+    painter: &mut Painter,
+) -> String {
+    use rich_ext::frame::Change;
     let changes: Vec<Change> = painter
         .written()
         .iter()
@@ -7407,7 +7435,7 @@ fn draw_graphics(
     if !repaint.is_empty() {
         out.push_str(&painter.repaint(screen, &repaint));
     }
-    for placement in &plan.draw {
+    for placement in plan.draw.iter().filter(|p| !p.graphic.in_cells()) {
         out.push_str(&painter.move_to(placement.column as u16, placement.row as u16));
         out.push_str(&placement.graphic.draw(placement.frame));
     }
@@ -9266,7 +9294,41 @@ impl Driver {
         }
         self.damage_log.push_back((frame, damage.clone()));
         let mut out = String::new();
-        self.painter.try_paint_into(screen, &damage, &mut out)?;
+        let mut ahead = String::new();
+        let graphics = app.graphics.clone().map(|source| {
+            let next;
+            (next, ahead) = graphics_ahead(&*source, self.cell_pixels, &app.placements, screen);
+            (source, next)
+        });
+        // The cells an opaque overlay (a video's frame) is drawn over again,
+        // where one was drawn last time too: the terminal shows the picture,
+        // so they are not written under it.
+        let covered: Vec<Rect> = graphics.as_ref().map_or_else(Vec::new, |(_, next)| {
+            let rect = |p: &rich_ext::frame::Placement| {
+                Rect::new(p.column as u16, p.row as u16, p.cols as u16, p.rows as u16)
+            };
+            let before: Vec<Rect> = app
+                .placements
+                .iter()
+                .filter(|p| !p.graphic.in_cells())
+                .map(rect)
+                .collect();
+            next.iter()
+                .filter(|p| !p.graphic.in_cells() && p.graphic.opaque())
+                .flat_map(|p| before.iter().map(move |old| old.intersection(rect(p))))
+                .filter(|r| !r.is_empty())
+                .collect()
+        });
+        self.painter.set_covered(&covered);
+        // Not ahead of a paint that starts by clearing the screen.
+        if self.painter.starts_over(screen) {
+            self.painter.try_paint_into(screen, &damage, &mut out)?;
+            out.push_str(&ahead);
+        } else {
+            out.push_str(&ahead);
+            self.painter.try_paint_into(screen, &damage, &mut out)?;
+        }
+        self.painter.set_covered(&[]);
         screen.forget_scrolls();
         let counts = self.painter.stats();
         // Accessible: the cursor is hidden while the frame is written, so a
@@ -9276,10 +9338,10 @@ impl Driver {
             out.insert_str(0, "\x1b[?25l");
             app.caret_shown = false;
         }
-        if let Some(source) = app.graphics.clone() {
+        if let Some((source, next)) = graphics {
             out.push_str(&draw_graphics(
                 &*source,
-                self.cell_pixels,
+                next,
                 &mut app.placements,
                 screen,
                 &mut self.painter,

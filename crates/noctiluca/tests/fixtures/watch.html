@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<title>Watch fixture</title>
+<!-- A watch page built from ordinary HTML, for Noctiluca's frame pacing
+     tests and measurements: a header, a playing 30 fps test card
+     (media/card.webm, ffmpeg's own pattern, made by media/make_card.py)
+     in a player whose clock and progress bar this page's script updates
+     on `timeupdate` (as a site's player does, so the page changes several
+     times a second while it plays), a title, comments and related videos.
+     Local: no network, no third-party assets. -->
+<style>
+  body { margin: 0; font: 16px sans-serif; background: #fff; color: #111 }
+  header { height: 56px; display: flex; align-items: center; gap: 12px; padding: 0 16px; border-bottom: 1px solid #ddd; margin-bottom: 16px }
+  header h1 { font-size: 20px; margin: 0 }
+  header input { flex: 1; max-width: 360px }
+  .page { display: flex; gap: 24px; padding: 0 16px }
+  .main { flex: 1; min-width: 0 }
+  video { width: 640px; height: 360px; background: #000; display: block }
+  .bar { display: flex; gap: 12px; align-items: center; width: 640px }
+  .track { flex: 1; height: 6px; background: #ccc }
+  #done { height: 6px; width: 0; background: #c00 }
+  #related { width: 280px; flex: none; list-style: none; margin: 0; padding: 0 }
+  #related li { margin-bottom: 8px }
+  #related img { display: block }
+  #comments { list-style: none; padding: 0 }
+</style>
+<header>
+  <h1>Cardtube</h1>
+  <input aria-label="Search" placeholder="Search">
+  <button>Sign in</button>
+</header>
+<div class="page">
+  <section class="main" aria-label="Player">
+    <video id="card" src="media/card.webm" autoplay muted loop playsinline
+           aria-label="A moving test card"></video>
+    <div class="bar">
+      <button id="toggle">Pause</button>
+      <div class="track"><div id="done"></div></div>
+      <span id="clock">0:00 / 0:04</span>
+    </div>
+    <h2>A test card at thirty frames a second</h2>
+    <p>1,234 views. A generated pattern, looping, for measuring how evenly frames arrive.</p>
+    <h3>Comments</h3>
+    <ul id="comments">
+    <li><b>Viewer 1</b><p>Comment number 1: the card keeps its clock steady at thirty frames a second, and this line is here to make the page long enough to scroll.</p></li>
+    <li><b>Viewer 2</b><p>Comment number 2: the card keeps its clock steady at thirty frames a second, and this line is here to make the page long enough to scroll.</p></li>
+    <li><b>Viewer 3</b><p>Comment number 3: the card keeps its clock steady at thirty frames a second, and this line is here to make the page long enough to scroll.</p></li>
+    <li><b>Viewer 4</b><p>Comment number 4: the card keeps its clock steady at thirty frames a second, and this line is here to make the page long enough to scroll.</p></li>
+    <li><b>Viewer 5</b><p>Comment number 5: the card keeps its clock steady at thirty frames a second, and this line is here to make the page long enough to scroll.</p></li>
+    <li><b>Viewer 6</b><p>Comment number 6: the card keeps its clock steady at thirty frames a second, and this line is here to make the page long enough to scroll.</p></li>
+    <li><b>Viewer 7</b><p>Comment number 7: the card keeps its clock steady at thirty frames a second, and this line is here to make the page long enough to scroll.</p></li>
+    <li><b>Viewer 8</b><p>Comment number 8: the card keeps its clock steady at thirty frames a second, and this line is here to make the page long enough to scroll.</p></li>
+    <li><b>Viewer 9</b><p>Comment number 9: the card keeps its clock steady at thirty frames a second, and this line is here to make the page long enough to scroll.</p></li>
+    <li><b>Viewer 10</b><p>Comment number 10: the card keeps its clock steady at thirty frames a second, and this line is here to make the page long enough to scroll.</p></li>
+    <li><b>Viewer 11</b><p>Comment number 11: the card keeps its clock steady at thirty frames a second, and this line is here to make the page long enough to scroll.</p></li>
+    <li><b>Viewer 12</b><p>Comment number 12: the card keeps its clock steady at thirty frames a second, and this line is here to make the page long enough to scroll.</p></li>
+    <li><b>Viewer 13</b><p>Comment number 13: the card keeps its clock steady at thirty frames a second, and this line is here to make the page long enough to scroll.</p></li>
+    <li><b>Viewer 14</b><p>Comment number 14: the card keeps its clock steady at thirty frames a second, and this line is here to make the page long enough to scroll.</p></li>
+    <li><b>Viewer 15</b><p>Comment number 15: the card keeps its clock steady at thirty frames a second, and this line is here to make the page long enough to scroll.</p></li>
+    <li><b>Viewer 16</b><p>Comment number 16: the card keeps its clock steady at thirty frames a second, and this line is here to make the page long enough to scroll.</p></li>
+    <li><b>Viewer 17</b><p>Comment number 17: the card keeps its clock steady at thirty frames a second, and this line is here to make the page long enough to scroll.</p></li>
+    <li><b>Viewer 18</b><p>Comment number 18: the card keeps its clock steady at thirty frames a second, and this line is here to make the page long enough to scroll.</p></li>
+    <li><b>Viewer 19</b><p>Comment number 19: the card keeps its clock steady at thirty frames a second, and this line is here to make the page long enough to scroll.</p></li>
+    <li><b>Viewer 20</b><p>Comment number 20: the card keeps its clock steady at thirty frames a second, and this line is here to make the page long enough to scroll.</p></li>
+    <li><b>Viewer 21</b><p>Comment number 21: the card keeps its clock steady at thirty frames a second, and this line is here to make the page long enough to scroll.</p></li>
+    <li><b>Viewer 22</b><p>Comment number 22: the card keeps its clock steady at thirty frames a second, and this line is here to make the page long enough to scroll.</p></li>
+    <li><b>Viewer 23</b><p>Comment number 23: the card keeps its clock steady at thirty frames a second, and this line is here to make the page long enough to scroll.</p></li>
+    <li><b>Viewer 24</b><p>Comment number 24: the card keeps its clock steady at thirty frames a second, and this line is here to make the page long enough to scroll.</p></li>
+    <li><b>Viewer 25</b><p>Comment number 25: the card keeps its clock steady at thirty frames a second, and this line is here to make the page long enough to scroll.</p></li>
+    <li><b>Viewer 26</b><p>Comment number 26: the card keeps its clock steady at thirty frames a second, and this line is here to make the page long enough to scroll.</p></li>
+    <li><b>Viewer 27</b><p>Comment number 27: the card keeps its clock steady at thirty frames a second, and this line is here to make the page long enough to scroll.</p></li>
+    <li><b>Viewer 28</b><p>Comment number 28: the card keeps its clock steady at thirty frames a second, and this line is here to make the page long enough to scroll.</p></li>
+    <li><b>Viewer 29</b><p>Comment number 29: the card keeps its clock steady at thirty frames a second, and this line is here to make the page long enough to scroll.</p></li>
+    <li><b>Viewer 30</b><p>Comment number 30: the card keeps its clock steady at thirty frames a second, and this line is here to make the page long enough to scroll.</p></li>
+    <li><b>Viewer 31</b><p>Comment number 31: the card keeps its clock steady at thirty frames a second, and this line is here to make the page long enough to scroll.</p></li>
+    <li><b>Viewer 32</b><p>Comment number 32: the card keeps its clock steady at thirty frames a second, and this line is here to make the page long enough to scroll.</p></li>
+    <li><b>Viewer 33</b><p>Comment number 33: the card keeps its clock steady at thirty frames a second, and this line is here to make the page long enough to scroll.</p></li>
+    <li><b>Viewer 34</b><p>Comment number 34: the card keeps its clock steady at thirty frames a second, and this line is here to make the page long enough to scroll.</p></li>
+    <li><b>Viewer 35</b><p>Comment number 35: the card keeps its clock steady at thirty frames a second, and this line is here to make the page long enough to scroll.</p></li>
+    <li><b>Viewer 36</b><p>Comment number 36: the card keeps its clock steady at thirty frames a second, and this line is here to make the page long enough to scroll.</p></li>
+    <li><b>Viewer 37</b><p>Comment number 37: the card keeps its clock steady at thirty frames a second, and this line is here to make the page long enough to scroll.</p></li>
+    <li><b>Viewer 38</b><p>Comment number 38: the card keeps its clock steady at thirty frames a second, and this line is here to make the page long enough to scroll.</p></li>
+    <li><b>Viewer 39</b><p>Comment number 39: the card keeps its clock steady at thirty frames a second, and this line is here to make the page long enough to scroll.</p></li>
+    <li><b>Viewer 40</b><p>Comment number 40: the card keeps its clock steady at thirty frames a second, and this line is here to make the page long enough to scroll.</p></li>
+    </ul>
+  </section>
+  <ul id="related" aria-label="Related videos">
+    <li><a href="#r1"><img src="media/thumb-1.jpg" width="168" height="94" alt=""> Related card 1</a><span>3 minutes</span></li>
+    <li><a href="#r2"><img src="media/thumb-2.jpg" width="168" height="94" alt=""> Related card 2</a><span>6 minutes</span></li>
+    <li><a href="#r3"><img src="media/thumb-3.jpg" width="168" height="94" alt=""> Related card 3</a><span>9 minutes</span></li>
+    <li><a href="#r4"><img src="media/thumb-4.jpg" width="168" height="94" alt=""> Related card 4</a><span>12 minutes</span></li>
+    <li><a href="#r5"><img src="media/thumb-5.jpg" width="168" height="94" alt=""> Related card 5</a><span>15 minutes</span></li>
+    <li><a href="#r6"><img src="media/thumb-6.jpg" width="168" height="94" alt=""> Related card 6</a><span>18 minutes</span></li>
+    <li><a href="#r7"><img src="media/thumb-1.jpg" width="168" height="94" alt=""> Related card 7</a><span>21 minutes</span></li>
+    <li><a href="#r8"><img src="media/thumb-2.jpg" width="168" height="94" alt=""> Related card 8</a><span>24 minutes</span></li>
+    <li><a href="#r9"><img src="media/thumb-3.jpg" width="168" height="94" alt=""> Related card 9</a><span>27 minutes</span></li>
+    <li><a href="#r10"><img src="media/thumb-4.jpg" width="168" height="94" alt=""> Related card 10</a><span>30 minutes</span></li>
+    <li><a href="#r11"><img src="media/thumb-5.jpg" width="168" height="94" alt=""> Related card 11</a><span>33 minutes</span></li>
+    <li><a href="#r12"><img src="media/thumb-6.jpg" width="168" height="94" alt=""> Related card 12</a><span>36 minutes</span></li>
+  </ul>
+</div>
+<script>
+  const video = document.getElementById('card');
+  const clock = document.getElementById('clock');
+  const done = document.getElementById('done');
+  const pad = s => String(Math.floor(s)).padStart(2, '0');
+  video.addEventListener('timeupdate', () => {
+    const d = video.duration || 4;
+    clock.textContent = `0:${pad(video.currentTime)} / 0:${pad(d)}`;
+    done.style.width = `${(100 * video.currentTime / d).toFixed(1)}%`;
+  });
+  document.getElementById('toggle').addEventListener('click', e => {
+    if (video.paused) { video.play(); e.target.textContent = 'Pause'; }
+    else { video.pause(); e.target.textContent = 'Play'; }
+  });
+</script>
+</html>

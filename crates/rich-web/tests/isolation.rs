@@ -25,18 +25,7 @@ impl Server {
     }
 
     fn start_with(extra: &[&str]) -> Server {
-        // Examples are built next to the test binaries, in `examples/`.
-        let exe = std::env::current_exe().unwrap();
-        let example = exe
-            .parent()
-            .and_then(|deps| deps.parent())
-            .unwrap()
-            .join("examples")
-            .join("isolated");
-        assert!(
-            example.exists(),
-            "the isolated example is built: {example:?}"
-        );
+        let example = common::example("isolated");
         let mut child = Command::new(example)
             .args(["127.0.0.1:0", "--token", TOKEN, "--memory"])
             .arg((512u64 << 20).to_string())

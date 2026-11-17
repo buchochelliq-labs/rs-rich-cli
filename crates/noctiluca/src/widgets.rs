@@ -204,7 +204,7 @@ fn act(browser: Browser, web: &Rc<WebControl>, node: NodeId, intent: Intent, cx:
     browser.act(control.binding(&page), intent, move |result, cx| {
         web.pending.set(false);
         if let Err(refusal) = result {
-            cx.toast(format!("[red]{}[/]", markup(&refusal.to_string())));
+            browser.refused(&refusal, cx);
         }
         browser.refresh_controls();
     });
@@ -513,7 +513,7 @@ fn commit(browser: Browser, web: &Rc<WebControl>, node: NodeId, password: bool, 
             Ok(()) => draft.accept(value, revision),
             Err(Refusal::Conflict { remote }) => draft.reject("conflict", Some(remote)),
             Err(other) => {
-                cx.toast(format!("[red]{}[/]", markup(&other.to_string())));
+                browser.refused(&other, cx);
                 draft.reject(other.to_string(), None)
             }
         }

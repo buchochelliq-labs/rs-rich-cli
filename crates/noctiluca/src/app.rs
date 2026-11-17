@@ -37,7 +37,7 @@ use crate::model::{Binding, MediaKind, Page, Role, Shelf};
 use crate::pictures::{self, Live};
 use crate::shelf::page_by;
 use crate::tab::{Command, Intent, Refusal, Tab, Update};
-use crate::video::{Encoder, Job, Pacing, VideoFrame};
+use crate::video::{Encoder, Job, Pacing, VideoFrame, take_every};
 use crate::widgets::{WebControl, web_widget};
 
 mod labels;
@@ -136,6 +136,8 @@ pub struct Browser {
     pub pixels: Memo<Pixels>,
     /// Whether moving pictures are held still (`media.freeze`).
     pub frozen: Signal<bool>,
+    /// The video or audio the media keys last worked on.
+    media_target: Signal<Option<NodeId>>,
     /// The frame each moving picture in view shows now, by node: an
     /// animated GIF's, stepped within the byte budget.
     pub live: Signal<Rc<HashMap<NodeId, Live>>>,
@@ -165,6 +167,9 @@ pub struct Browser {
     pub screen_tiles: Signal<Vec<rich_art::tiles::Tile>>,
     /// What the pixel view has sent.
     pub screen_stats: Signal<crate::pixel_view::ScreenStats>,
+    /// Whether a command has said that the browser stopped, or its page
+    /// crashed: the next ones fail the same way, silently.
+    stop_told: Signal<bool>,
 }
 
 impl Browser {
@@ -285,6 +290,42 @@ impl Browser {
     pub(crate) fn say(&self, markup: impl Into<String>) {
         self.message.set(markup.into());
     }
+
+    /// Toast why a command did not run. A browser that stopped, or a page
+    /// that crashed, fails every command alike until it is reloaded: that
+    /// is said once.
+    pub(crate) fn refused(&self, refusal: &Refusal, cx: &mut Ctx) {
+        let text = refusal.to_string();
+        if text.starts_with(crate::clean::STOPPED) || text.starts_with(crate::clean::CRASHED) {
+            if self.stop_told.get_untracked() {
+                return;
+            }
+            self.stop_told.set(true);
+        }
+        cx.toast(format!("[red]{}[/]", markup(&text)));
+    }
+
+    /// A new page state: when the browser has just stopped, or its page
+    /// has just crashed, the status line says why and what brings it back.
+    fn notice(&self, state: &PageState) {
+        let (error, crashed) = self.state.with_untracked(|s| (s.error.clone(), s.crashed));
+        let reload = markup(&keys_label_of(*self, "reload"));
+        if let Some(now) = state
+            .error
+            .as_ref()
+            .filter(|now| error.as_ref() != Some(*now))
+        {
+            self.stop_told.set(false);
+            let said = markup(&crate::clean::stopped(now));
+            self.say(format!("[red]{said}[/] {reload} restarts it"));
+        } else if state.crashed && !crashed {
+            self.stop_told.set(false);
+            let said = markup(crate::clean::CRASHED);
+            self.say(format!("[red]{said}.[/] {reload} reloads it"));
+        } else if (error.is_some() && state.error.is_none()) || (crashed && !state.crashed) {
+            self.stop_told.set(false);
+        }
+    }
 }
 
 /// The page's lines in the current view at `width`, as find counts rows:
@@ -353,9 +394,24 @@ fn lay_out_pair(
         _ => {
             // Fixed source dialogs use source-positioned underlay while visible;
             // otherwise adaptive gap collapse can move covered content outside
-            // the source rectangle. Restore the configured rules on close.
+            // the source rectangle. Restore the configured rules on close. A
+            // non-modal one that is a top or bottom bar, from the left edge
+            // across most of the view (a cookie banner), covers no content in
+            // place: the page keeps its adaptations.
             let mut underlay = marks.clone();
-            if !page.overlays.is_empty() {
+            let view = page.width.min(f64::from(width) * f64::from(CELL.0));
+            let bar = |l: &crate::model::Layer| {
+                matches!(
+                    l.place,
+                    crate::model::Place::Pinned | crate::model::Place::Docked
+                ) && l.rect.x <= f64::from(CELL.0)
+                    && l.rect.width >= 0.75 * view
+            };
+            let covering = page
+                .overlays
+                .iter()
+                .any(|o| o.modal || !page.layers.get(o.layer).is_some_and(bar));
+            if covering {
                 underlay.adapt = crate::adapt::Adapt::none()
                     .with(
                         crate::adapt::Rule::Shelves,
@@ -894,18 +950,34 @@ fn about(b: Browser, answers: Vec<String>, product: String, cx: &mut Ctx) {
     });
 }
 
-/// The video or audio the media actions work on: the one playing, else
-/// the first that is ready.
+/// The video or audio the media actions work on: the one playing (the
+/// one last controlled first), else the one last controlled, else the
+/// first that is ready. An element with nothing to play (no source) is
+/// never picked: a play would wait on it for ever.
 pub fn current_media(b: Browser) -> Option<(NodeId, Playback)> {
+    let target = b.media_target.get();
     b.page.with(|p| {
         let page = p.as_ref()?;
         let ready = || {
             page.media
                 .iter()
                 .filter_map(|m| Some((m.node, m.playback?)))
+                .filter(|(_, p)| !p.empty)
         };
-        ready().find(|(_, p)| !p.paused).or_else(|| ready().next())
+        let last = || ready().find(|(node, _)| Some(*node) == target);
+        last()
+            .filter(|(_, p)| !p.paused)
+            .or_else(|| ready().find(|(_, p)| !p.paused))
+            .or_else(last)
+            .or_else(|| ready().next())
     })
+}
+
+/// Whether the video `node`'s picture stopped following it: it moves, and
+/// no frame came for a while ([`Pacing::stalled`]).
+pub(crate) fn picture_stalled(b: Browser, node: NodeId) -> bool {
+    b.pacing
+        .with_untracked(|p| p.borrow().stalled(node, Instant::now()))
 }
 
 /// Do `op` to the media `node` of the page now.
@@ -913,10 +985,11 @@ fn media_op(b: Browser, node: NodeId, op: MediaOp) {
     let Some(document) = b.page.with_untracked(|p| p.as_ref().map(|p| p.document)) else {
         return;
     };
+    b.media_target.set(Some(node));
     let id = b.send(Command::Media { document, node, op });
-    b.after(id, |result, cx| {
+    b.after(id, move |result, cx| {
         if let Err(refusal) = result {
-            cx.toast(format!("[red]{}[/]", markup(&refusal.to_string())));
+            b.refused(&refusal, cx);
         }
     });
 }
@@ -1089,12 +1162,19 @@ fn send_regions(b: Browser) {
     } else {
         regions_on_screen(b)
     };
+    // The encoder's cost too: frames it cannot keep up with are not taken.
     let intervals: Vec<(NodeId, Duration)> = b.pacing.with_untracked(|p| {
-        p.borrow()
-            .intervals()
-            .into_iter()
-            .map(|(node, d)| (node, whole_rate(d)))
-            .collect()
+        let pacing = p.borrow();
+        b.encoder.with_untracked(|encoder| {
+            pacing
+                .intervals()
+                .into_iter()
+                .map(|(node, d)| {
+                    let cost = encoder.cost(node, pacing.pixels(node));
+                    (node, whole_rate(take_every(d, cost)))
+                })
+                .collect()
+        })
     });
     let scale = screencast_scale(b, &on_screen);
     let next = (on_screen, intervals, scale);
@@ -1254,7 +1334,7 @@ fn player(b: Browser, node: NodeId) -> Node {
             Some(p) => format!(
                 " {} / {}{}{sound}",
                 clock(p.time),
-                p.duration.map_or("live".into(), clock),
+                p.length(),
                 if p.muted { " [yellow]muted[/]" } else { "" }
             ),
         }
@@ -1287,9 +1367,9 @@ fn run_target(b: Browser, target: &Target, cx: &mut Ctx) {
                 name: name.clone(),
                 nth: nth.saturating_sub(1),
             });
-            b.after(id, |result, cx| {
+            b.after(id, move |result, cx| {
                 if let Err(refusal) = result {
-                    cx.toast(format!("[red]{}[/]", markup(&refusal.to_string())));
+                    b.refused(&refusal, cx);
                 }
             });
         }
@@ -1345,9 +1425,9 @@ fn activate(b: Browser, index: usize, cx: &mut Ctx) {
             | Role::MenuItem
     );
     if clicks {
-        b.act(control.binding(&page), Intent::Click, |result, cx| {
+        b.act(control.binding(&page), Intent::Click, move |result, cx| {
             if let Err(refusal) = result {
-                cx.toast(format!("[red]{}[/]", markup(&refusal.to_string())));
+                b.refused(&refusal, cx);
             }
         });
         return;
@@ -2202,7 +2282,10 @@ fn apply_pair(b: Browser, update: Update, source: Option<crate::model::SourcePag
                 apply_site(b, &url);
             }
         }
-        Update::State(state) => b.state.set(state),
+        Update::State(state) => {
+            b.notice(&state);
+            b.state.set(state);
+        }
         Update::Metrics(metrics) => b.chrome_y.set(metrics.scroll_y),
         Update::Done(id, result) => {
             let mut then = None;
@@ -2211,7 +2294,7 @@ fn apply_pair(b: Browser, update: Update, source: Option<crate::model::SourcePag
                 Some(then) => then(result, cx),
                 None => {
                     if let Err(refusal) = result {
-                        cx.toast(format!("[red]{}[/]", markup(&refusal.to_string())));
+                        b.refused(&refusal, cx);
                     }
                 }
             }
@@ -2709,9 +2792,9 @@ fn click_media_at(
         x,
         y,
     });
-    b.after(id, |result, cx| {
+    b.after(id, move |result, cx| {
         if let Err(refusal) = result {
-            cx.toast(format!("[red]{}[/]", markup(&refusal.to_string())));
+            b.refused(&refusal, cx);
         }
     });
     true
@@ -3548,6 +3631,7 @@ pub fn app_with_presentation(
             logs,
             pixels: memo(move || { let images = images_signal.get(); if images == Images::Auto { media_presentation.pixels() } else { media_presentation.with_pixels(pictures::pixels(images)).pixels() } }),
             frozen: signal(false),
+            media_target: signal(None),
             live: signal(Rc::new(HashMap::new())),
             tab: signal(tab),
             waiting: signal(HashMap::new()),
@@ -3566,6 +3650,7 @@ pub fn app_with_presentation(
             screen: signal(crate::pixel_view::state()),
             screen_tiles: signal(Vec::new()),
             screen_stats: signal(crate::pixel_view::ScreenStats::default()),
+            stop_told: signal(false),
         };
         #[cfg(test)]
         TEST_BROWSER.with(|slot| slot.set(Some(b)));

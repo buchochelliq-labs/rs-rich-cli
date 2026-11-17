@@ -481,6 +481,15 @@ pub(super) fn allocate(
             } else {
                 crate::adapt::MIN_GRID_CELLS
             };
+            // A row of short one-line pieces (a result's `23M` and
+            // `11y ago`, chips) is not cards: snapped to card columns,
+            // each would take a row of its own.
+            if boxes
+                .iter()
+                .all(|r| r.height <= 1.5 * ch && r.width / cw < minimum as f64 / 2.0)
+            {
+                continue;
+            }
             let narrow_track = boxes.iter().any(|r| r.width / cw < minimum as f64);
             // Spanning/unequal groups retain source columns when they fit. At a
             // narrower allocation each actual item is one vertical unit.

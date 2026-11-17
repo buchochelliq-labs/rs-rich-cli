@@ -257,6 +257,12 @@ code.
      `indicators` rule on by default.
    - Cause **not found** in this pass; see `layout.rs:1677`, where an
      indicator with a media region is drawn only under the rule.
+   - **Found and fixed in 0.0.27:** the fixture's cookie banner is a
+     non-modal `role=dialog`, so the page has a source overlay, and
+     `lay_out_pair` (`app.rs`) laid the page out under it with every
+     adaptation off but three: `indicators` (and `collapse-gaps`, which
+     left item 3's blank rows) among them. A non-modal overlay that is a
+     top or bottom bar across the view now keeps them.
 3. **Blank rows under a pinned header:** four empty rows between the
    shop's header and its first content at the top of the page (rows 5
    to 8 at 120×40, both modes). Not traced further.

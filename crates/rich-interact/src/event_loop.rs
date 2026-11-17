@@ -102,6 +102,8 @@ impl Default for LoopOptions {
 }
 
 /// What a mounted component did with an event.
+// As `Flow`: Windows' `Command` is large, and a step is short-lived.
+#[allow(clippy::large_enum_variant)]
 enum Step {
     Continue,
     Finished,

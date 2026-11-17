@@ -49,6 +49,15 @@ pub trait Graphic: Send + Sync + fmt::Debug {
         true
     }
 
+    /// Whether, drawn over its cells (an overlay), it hides every pixel of
+    /// them: no transparency, no margin. Then a cell under it that the cell
+    /// diff did not write is not repainted for an overlay that went away
+    /// while this one is drawn over it, and a painter need not write the
+    /// cells under it at all while it stays drawn there.
+    fn opaque(&self) -> bool {
+        false
+    }
+
     /// Whether the image lives in the cells themselves (Kitty's Unicode
     /// placeholders): repainting the cells repaints it, and [`draw`](Self::draw)
     /// only makes sure the terminal holds the image.
@@ -242,6 +251,35 @@ pub fn plan(previous: &[Placement], next: &[Placement], changes: &[Change]) -> G
             out.draw.push(new.clone());
         }
     }
+    // What an opaque overlay drawn this time covers needs no repaint first.
+    let hides = |row: usize, column: usize| {
+        out.draw.iter().any(|p| {
+            !p.graphic.in_cells()
+                && p.graphic.opaque()
+                && (p.row..p.row + p.rows).contains(&row)
+                && p.columns().contains(&column)
+        })
+    };
+    if out.draw.iter().any(|p| p.graphic.opaque()) {
+        let mut repaint = Vec::new();
+        for (row, columns) in out.repaint.drain(..) {
+            let mut open = None;
+            for column in columns.clone() {
+                match (hides(row, column), open) {
+                    (false, None) => open = Some(column),
+                    (true, Some(start)) => {
+                        repaint.push((row, start..column));
+                        open = None;
+                    }
+                    _ => {}
+                }
+            }
+            if let Some(start) = open {
+                repaint.push((row, start..columns.end));
+            }
+        }
+        out.repaint = repaint;
+    }
     out
 }
 
@@ -369,6 +407,39 @@ mod tests {
         let wiped = plan(&old, &old, &[change(0, 5..9)]);
         assert_eq!(wiped.draw.len(), 1);
         assert!(wiped.repaint.is_empty());
+    }
+
+    #[derive(Debug)]
+    struct Opaque(u64);
+
+    impl Graphic for Opaque {
+        fn key(&self) -> u64 {
+            self.0
+        }
+        fn draw(&self, _frame: usize) -> String {
+            String::new()
+        }
+        fn opaque(&self) -> bool {
+            true
+        }
+    }
+
+    #[test]
+    fn an_opaque_overlay_drawn_over_old_cells_spares_their_repaint() {
+        let opaque = |column, key| Placement {
+            graphic: Arc::new(Opaque(key)),
+            ..at(0, column, key, 0)
+        };
+        // A new frame in place: nothing to repaint under it.
+        let out = plan(&[opaque(4, 1)], &[opaque(4, 2)], &[]);
+        assert!(out.repaint.is_empty(), "{:?}", out.repaint);
+        assert_eq!(out.draw.len(), 1);
+        // Moved one cell: only the cell it left.
+        let out = plan(&[opaque(4, 1)], &[opaque(5, 1)], &[]);
+        assert_eq!(out.repaint, vec![(0, 4..5)]);
+        // An overlay that is not opaque keeps the whole repaint.
+        let out = plan(&[at(0, 4, 1, 0)], &[at(0, 4, 2, 0)], &[]);
+        assert_eq!(out.repaint, vec![(0, 4..6)]);
     }
 
     #[test]

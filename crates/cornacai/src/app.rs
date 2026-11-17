@@ -164,9 +164,57 @@ pub(crate) struct Hub {
     auth_methods: Mutex<Vec<AuthMethod>>,
     /// Whether the agent offers `session/load`.
     can_load: AtomicBool,
+    /// The agent's last lines on stderr, for a start-up that fails.
+    agent_said: Mutex<std::collections::VecDeque<String>>,
+    /// Whether the agent has answered `initialize`.
+    answered: AtomicBool,
 }
 
+/// The most of the agent's stderr lines kept, and quoted by a failure.
+const SAID_LINES: usize = 40;
+const SAID_QUOTED: usize = 4;
+
+/// The lines of the agent's stderr worth quoting: from its last line that
+/// starts with "Error:" (the message, not the stack dump after it), else
+/// its last few.
+fn quoted_lines<'a>(lines: &[&'a str]) -> Vec<&'a str> {
+    let start = lines
+        .iter()
+        .rposition(|l| l.to_ascii_lowercase().starts_with("error:"))
+        .unwrap_or(lines.len().saturating_sub(SAID_QUOTED));
+    lines[start..].iter().take(SAID_QUOTED).copied().collect()
+}
+
+/// How long the agent has to answer `initialize` before the user is told.
+const ANSWER_WAIT: Duration = Duration::from_secs(20);
+
 impl Hub {
+    /// Keeps `line`, from the agent's stderr, among its last few.
+    pub(crate) fn agent_said(&self, line: &str) {
+        let line = line.trim();
+        if line.is_empty() {
+            return;
+        }
+        let mut said = self.agent_said.lock().unwrap_or_else(|e| e.into_inner());
+        if said.len() == SAID_LINES {
+            said.pop_front();
+        }
+        said.push_back(line.to_string());
+    }
+
+    /// `what`, followed by what the agent last said on stderr, if anything.
+    fn with_agent_said(&self, what: String) -> String {
+        let said = self.agent_said.lock().unwrap_or_else(|e| e.into_inner());
+        if said.is_empty() {
+            return what;
+        }
+        let lines: Vec<&str> = said.iter().map(String::as_str).collect();
+        let quoted: Vec<String> = quoted_lines(&lines)
+            .iter()
+            .map(|l| format!("  {}", clean(l)))
+            .collect();
+        format!("{what}\nThe agent said:\n{}", quoted.join("\n"))
+    }
     /// Notes in the store that session `id` was used now; `fallback` is
     /// its title when it has none yet.
     fn touch(&self, id: &SessionId, fallback: Option<&str>) {
@@ -677,6 +725,8 @@ pub fn app(options: Options) -> (App, Handle) {
         store_lock: Mutex::new(()),
         auth_methods: Mutex::new(Vec::new()),
         can_load: AtomicBool::new(false),
+        agent_said: Mutex::new(std::collections::VecDeque::new()),
+        answered: AtomicBool::new(false),
     });
     CWD.with(|cwd| *cwd.borrow_mut() = options.cwd.clone());
     let capabilities = options.capabilities();
@@ -735,6 +785,7 @@ fn connect(hub: Arc<Hub>, start: Start, proxy: Proxy, ui: Ui) {
         resume,
     } = start;
     let fail = |proxy: &Proxy, what: String| {
+        let what = hub.with_agent_said(what);
         proxy.run(move || {
             ui.agent.set("no agent".into());
             ui.current().notice(format!("[red]{}[/]", markup(&what)));
@@ -753,11 +804,10 @@ fn connect(hub: Arc<Hub>, start: Start, proxy: Proxy, ui: Ui) {
     };
     let connection = match launch {
         Launch::Command(argv) => {
-            let Some((program, args)) = argv.split_first() else {
+            let Some(mut command) = crate::config::agent_command(&argv) else {
                 return fail(&proxy, "No agent command.".into());
             };
-            let mut command = std::process::Command::new(program);
-            command.args(args).current_dir(&cwd);
+            command.current_dir(&cwd);
             Connection::spawn(command, bridge)
                 .map_err(|e| format!("Starting `{}` failed: {e}", argv.join(" ")))
         }
@@ -781,13 +831,18 @@ fn connect(hub: Arc<Hub>, start: Start, proxy: Proxy, ui: Ui) {
         Err(e) => return fail(&proxy, e),
     };
     let connection = hub.connection.get_or_init(|| connection);
+    watch_for_an_answer(&hub, &proxy, ui);
     let init = match connection.initialize(InitializeRequest::new(
         capabilities,
         Implementation::new("cornacai", env!("CARGO_PKG_VERSION")),
     )) {
         Ok(init) => init,
-        Err(e) => return fail(&proxy, format!("The agent did not initialise: {e}")),
+        Err(e) => {
+            hub.answered.store(true, Ordering::SeqCst);
+            return fail(&proxy, format!("The agent did not initialise: {e}"));
+        }
     };
+    hub.answered.store(true, Ordering::SeqCst);
     // Self-reported, so shown, never trusted (the design note, rule 7).
     let name = init
         .agent_info
@@ -828,6 +883,34 @@ fn connect(hub: Arc<Hub>, start: Start, proxy: Proxy, ui: Ui) {
         None => Open::New,
     };
     open_session(&hub, &proxy, ui, first, open);
+}
+
+/// Tells the user, once, when the agent has not answered `initialize`
+/// within [`ANSWER_WAIT`], with what it last said on stderr: an agent that
+/// never answers otherwise leaves the screen waiting with no word.
+fn watch_for_an_answer(hub: &Arc<Hub>, proxy: &Proxy, ui: Ui) {
+    let (hub, proxy) = (Arc::downgrade(hub), proxy.clone());
+    let _ = thread::Builder::new()
+        .name("cornacai-answer-wait".into())
+        .spawn(move || {
+            let start = Instant::now();
+            while start.elapsed() < ANSWER_WAIT {
+                thread::sleep(Duration::from_millis(250));
+                match hub.upgrade() {
+                    Some(hub) if !hub.answered.load(Ordering::SeqCst) => {}
+                    _ => return,
+                }
+            }
+            let Some(hub) = hub.upgrade() else {
+                return;
+            };
+            let what = hub.with_agent_said(format!(
+                "The agent has not answered in {} s. It may still be starting; F2 shows \
+                 its log, Ctrl+Q quits.",
+                ANSWER_WAIT.as_secs()
+            ));
+            proxy.run(move || ui.current().notice(format!("[yellow]{}[/]", markup(&what))));
+        });
 }
 
 /// How a session tab is opened.
@@ -903,7 +986,7 @@ fn open_session(hub: &Arc<Hub>, proxy: &Proxy, ui: Ui, session: Session, open: O
                     proxy,
                     format!(
                         "[red]The session did not open:[/] {}",
-                        markup(&e.to_string())
+                        markup(&hub.with_agent_said(e.to_string()))
                     ),
                 ),
             }
@@ -1642,6 +1725,27 @@ pub fn wait_for(driver: &mut Driver, text: &str, timeout: Duration) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_failure_quotes_the_agents_error_not_its_stack_dump() {
+        let said = [
+            "starting",
+            "Error: Claude Code cannot be launched inside another Claude Code session.",
+            "Nested sessions share runtime resources and will crash all active sessions.",
+            "To bypass this check, unset the CLAUDECODE environment variable.",
+            "",
+            "Error handling request {",
+            "  code: -32603,",
+            "}",
+        ];
+        let quoted = quoted_lines(&said);
+        assert!(quoted[0].contains("cannot be launched inside another"));
+        assert_eq!(quoted.len(), SAID_QUOTED);
+        assert_eq!(
+            quoted_lines(&["a", "b", "c", "d", "e"]),
+            ["b", "c", "d", "e"]
+        );
+    }
 
     /// The hub owns the connection, and the connection owns the bridge:
     /// the bridge's reference back to the hub must not keep it (and the

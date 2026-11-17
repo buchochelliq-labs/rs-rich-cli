@@ -30,7 +30,7 @@ command, and the finished turn.
 cargo install cornacai
 cornacai                      # the configured agent, or one found on PATH
 cornacai --agent "gemini --experimental-acp"
-cornacai -- claude-code-acp   # the agent's command after --
+cornacai -- claude-agent-acp  # the agent's command after --
 cornacai --agents             # the agents Cornacai knows, and which are installed
 cornacai --sessions           # the sessions kept to reopen
 cornacai --resume ID          # reopen one (session/load)
@@ -42,7 +42,15 @@ agents it knows, offers the ones it finds, and saves the choice in
 `cornacai/config.toml` in your config directory (`$XDG_CONFIG_HOME`, else
 `~/.config`). An agent given with `--agent` is saved the same way when none
 is configured yet. Cornacai never installs an agent: `--agents` says what to
-install, and you do it.
+install, and you do it. For Claude, that is the ACP adapter,
+`npm install -g @agentclientprotocol/claude-agent-acp` (the command
+`claude-agent-acp`); the older `@zed-industries/claude-code-acp`
+(`claude-code-acp`) is deprecated, though Cornacai still starts it. On
+Windows, npm's `.cmd` launchers are what Cornacai runs.
+
+If the agent does not answer within 20 seconds, Cornacai says so; and when
+it fails to start or to open a session, the notice quotes the error the
+agent wrote, which `F2` shows in full.
 
 ### Agents from the marketplace
 
@@ -201,7 +209,7 @@ again.
 
 ```toml
 # cornacai/config.toml
-agent = ["claude-code-acp"]   # or a string, split on spaces
+agent = ["claude-agent-acp"]  # or a string, split on spaces
 shell = ["bash", "-l"]
 
 [capabilities]

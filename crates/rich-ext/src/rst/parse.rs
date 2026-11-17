@@ -2185,8 +2185,8 @@ impl GridTable {
             let Some((bottom, right)) = tracer.scan_right(top, left) else {
                 continue;
             };
-            for col in left..right {
-                tracer.done[col] = Some(bottom - 1);
+            for done in &mut tracer.done[left..right] {
+                *done = Some(bottom - 1);
             }
             rowseps.insert(bottom);
             colseps.insert(right);

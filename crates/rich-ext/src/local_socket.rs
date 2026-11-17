@@ -302,6 +302,22 @@ mod tests {
         dir
     }
 
+    /// Binds `path`, retrying for up to two seconds while it is in use.
+    fn bind_when_free(path: &Path) -> LocalListener {
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(2);
+        loop {
+            match LocalListener::bind(path) {
+                Err(e)
+                    if e.kind() == io::ErrorKind::AddrInUse
+                        && std::time::Instant::now() < deadline =>
+                {
+                    std::thread::sleep(std::time::Duration::from_millis(20));
+                }
+                result => return result.unwrap(),
+            }
+        }
+    }
+
     #[test]
     fn a_client_connects_and_lines_go_both_ways() {
         let dir = private("lines");
@@ -329,8 +345,11 @@ mod tests {
         );
         drop(client);
         drop(listener);
-        // Its endpoint, left behind, is replaced.
-        let again = LocalListener::bind(&path).unwrap();
+        // Its endpoint, left behind, is replaced. A child that another test
+        // forks before std sets the listener's close-on-exec flag (a separate
+        // call on macOS) can hold the socket open for a moment, so the stale
+        // check may still find it live: wait for that child to exec or exit.
+        let again = bind_when_free(&path);
         drop(again);
         remove_endpoint(&path);
         assert!(!path.exists());

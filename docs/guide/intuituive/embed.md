@@ -269,6 +269,21 @@ its own, so no async runtime comes with it.
   `Input.dispatchMouseEvent` (at the middle of the cell) and
   `Input.insertText`; the address, loading state and history come from
   the page's events and `Page.getNavigationHistory`.
+- **A browser that goes is started again.** When Chrome exits (it crashed,
+  was killed or ran out of memory) or its DevTools connection ends, the
+  state's `error` says why ("Chrome: the browser closed (killed by signal
+  9 (SIGKILL))") and `ChromeEngine::ended` is true. The next navigation
+  (`open`, `reload`, back or forward) starts another browser, or
+  `ChromeEngine::restart` does at once; `reload` then reopens the address
+  the old one was at, and back and forward go on through its history.
+  `DevTools` handles reach the new browser, which has none of the old
+  one's bindings and scripts: set them up again before navigating. A
+  browser that opens no page within 30 seconds is ended, after a second
+  wait if it answers DevTools at all. (Since 0.0.27.)
+- **A crashed page fails at once.** When the page's renderer crashes
+  (`Inspector.targetCrashed`), the state's `crashed` is set, the calls
+  waiting on the page fail with "the page crashed", and so does every call
+  until a `reload` (or another page) brings it back. (Since 0.0.27.)
 
 ### Browsh
 

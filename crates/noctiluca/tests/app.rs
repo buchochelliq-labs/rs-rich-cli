@@ -328,6 +328,7 @@ fn audio_engine() -> FakeEngine {
             ended: false,
             ready: 4,
             failed: false,
+            ..Default::default()
         },
     );
     engine
@@ -372,6 +373,108 @@ fn media_controls_follow_the_element_and_run_from_keys_and_f1() {
         "{}",
         screen(&driver)
     );
+}
+
+#[test]
+fn the_media_keys_and_status_stay_on_the_video_that_has_a_source() {
+    // #889: a source-less preview <video> sits before the main one. After
+    // a pause the keys and the status line stay on the main video: the
+    // status says its length, and a second `p` plays it again.
+    use noctiluca::engine::{MediaOp, Playback};
+    use noctiluca::model::{MediaKind, Revisions, build};
+    let page = build(
+        &noctiluca::testing::snapshot_file(&snapshots().join("two-videos.json")).unwrap(),
+        &mut Revisions::new(),
+    );
+    let videos: Vec<_> = page
+        .media
+        .iter()
+        .filter(|m| m.kind == MediaKind::Video)
+        .map(|m| m.node)
+        .collect();
+    let [preview, main] = videos[..] else {
+        panic!("two videos: {videos:?}")
+    };
+    let engine = engine();
+    let state = engine.state.clone();
+    {
+        let mut state = state.lock().unwrap();
+        state.media.insert(
+            preview,
+            Playback {
+                paused: true,
+                muted: true,
+                volume: 1.0,
+                empty: true,
+                ..Playback::default()
+            },
+        );
+        state.media.insert(
+            main,
+            Playback {
+                paused: false,
+                muted: true,
+                volume: 1.0,
+                time: 1.0,
+                duration: Some(5.0),
+                ready: 4,
+                ..Playback::default()
+            },
+        );
+    }
+    let mut driver = app(
+        Box::new(engine),
+        projection(Config::default(), "two-videos.html"),
+    )
+    .driver(120, 40);
+    wait_for(&mut driver, "media PLAYING 0:01 / 0:05");
+    let ops = || -> Vec<(i64, MediaOp)> {
+        state
+            .lock()
+            .unwrap()
+            .actions
+            .iter()
+            .filter_map(|a| match a {
+                PageAction::Media { node, op } => Some((*node, *op)),
+                _ => None,
+            })
+            .collect()
+    };
+    driver.press("p");
+    wait_for(&mut driver, "media PAUSED 0:01 / 0:05");
+    driver.press("p");
+    wait_for(&mut driver, "media PLAYING");
+    assert_eq!(ops(), [(main, MediaOp::Pause), (main, MediaOp::Play)]);
+    assert!(!screen(&driver).contains("/ live"), "{}", screen(&driver));
+}
+
+#[test]
+fn a_shops_ratings_read_natively_beside_a_cookie_banner() {
+    // product-grid.html at 120x40: its cookie banner is a non-modal
+    // role=dialog in a bar at the bottom. It covers nothing in place, so
+    // the page keeps its adaptations: each card's stars read as the native
+    // rating (no picture over it), and the rows under the pinned header
+    // are not left blank.
+    let mut driver = app(
+        Box::new(engine()),
+        Options {
+            images: Some(noctiluca::config::Images::Ansi),
+            ..projection(Config::default(), "product-grid.html")
+        },
+    )
+    .driver(120, 40);
+    wait_for(&mut driver, "12,408");
+    let rows = driver.screen().plain();
+    let all = rows.join("\n");
+    let rating = rows
+        .iter()
+        .find(|r| r.contains("12,408"))
+        .unwrap_or_else(|| panic!("{all}"));
+    assert!(rating.contains("★★★★½ 4.5 12,408"), "{all}");
+    assert!(!rating.contains('▀'), "a picture over the rating: {all}");
+    // The header's rows, then the page's first content at once.
+    let header = rows.iter().position(|r| r.contains("Cart 3")).unwrap();
+    assert!(rows[header + 1].contains("Brand"), "{all}");
 }
 
 #[test]
@@ -733,4 +836,86 @@ fn hints_in_the_reader_leave_no_old_cells_behind() {
     for stale in ["nSend", "newsews", "dAda", "Small Small"] {
         assert!(!shown.contains(stale), "{stale:?} in\n{shown}");
     }
+}
+
+/// How many times `text` shows on the screen.
+fn count(driver: &Driver, text: &str) -> usize {
+    screen(driver).matches(text).count()
+}
+
+/// Follow the first link through its hint: a command the engine runs.
+fn click_first_link(driver: &mut Driver) {
+    driver.press("f");
+    wait_for(driver, "[a]open sea");
+    driver.press("a");
+    driver.settle();
+}
+
+#[test]
+fn a_stopped_browser_says_why_once_and_reload_starts_another() {
+    let engine = engine();
+    let state = engine.state.clone();
+    let mut driver =
+        app(Box::new(engine), options(Config::default(), "reader.html")).driver(100, 30);
+    wait_for(&mut driver, "Tiny drifters");
+    state.lock().unwrap().stopped = Some("Chrome: the browser closed: Killed".into());
+    // The status line says why, and the key that restarts it.
+    wait_for(
+        &mut driver,
+        "The browser stopped: Chrome exited (Killed). R restarts it",
+    );
+    // The first command after says so once; the next ones add nothing.
+    click_first_link(&mut driver);
+    wait_for(&mut driver, "Reload restarts it.");
+    for _ in 0..2 {
+        click_first_link(&mut driver);
+        std::thread::sleep(Duration::from_millis(100));
+        driver.settle();
+    }
+    assert_eq!(
+        count(&driver, "The browser stopped"),
+        1,
+        "{}",
+        screen(&driver)
+    );
+    assert!(!screen(&driver).contains("has gone"), "{}", screen(&driver));
+    // Reload starts another browser, at the same page.
+    driver.press("R");
+    let start = Instant::now();
+    while state.lock().unwrap().restarts == 0 && start.elapsed() < Duration::from_secs(10) {
+        driver.settle();
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    assert_eq!(state.lock().unwrap().restarts, 1);
+    click_first_link(&mut driver);
+    wait_for(&mut driver, "The second page");
+}
+
+#[test]
+fn a_crashed_page_shows_a_notice_and_reload_brings_it_back() {
+    let engine = engine();
+    let state = engine.state.clone();
+    let mut driver =
+        app(Box::new(engine), options(Config::default(), "reader.html")).driver(100, 30);
+    wait_for(&mut driver, "Tiny drifters");
+    {
+        let mut state = state.lock().unwrap();
+        state.crashed = true;
+        // What the page shows once it is back.
+        let second = state.pages["second"].clone();
+        state.pages.insert("reader".into(), second);
+    }
+    wait_for(&mut driver, "The page crashed. R reloads it");
+    // Nothing reads while it is crashed.
+    std::thread::sleep(Duration::from_millis(200));
+    driver.settle();
+    assert!(
+        screen(&driver).contains("Tiny drifters"),
+        "{}",
+        screen(&driver)
+    );
+    driver.press("R");
+    wait_for(&mut driver, "The second page");
+    assert!(!state.lock().unwrap().crashed);
+    assert_eq!(state.lock().unwrap().restarts, 0, "the browser lived");
 }
