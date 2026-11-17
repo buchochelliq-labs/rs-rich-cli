@@ -159,6 +159,10 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 - **An accordion.** `accordion(open, sections)` is a column of
   collapsible sections of which only one is open at a time; `open`
   (a `Signal<Option<usize>>`) says which, and opens one from the app.
+- **A pager strip and a slider with two handles.** `pager(page, ||
+  pages)` shows `‹ 2 of 5 ›` (or dots, `.pager_dots()`) and moves a page
+  signal with the keys and clicks. `range_slider(low, high, range, step)`
+  holds a span whose handles never cross.
 
 ### intuiTUIve: pictures without flicker between frames
 

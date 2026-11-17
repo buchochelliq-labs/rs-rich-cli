@@ -192,6 +192,14 @@ tag_input(tags)                                   // a Signal<Vec<String>>
   removes the last tag, a click on a `×` removes that one, and a paste
   adds a tag at each comma. One row, cut at its width.
 
+### A pager strip
+
+`pager(page, || pages)` shows which page a `Signal<usize>` is on, from 0,
+as `‹ 2 of 5 ›`, or a dot a page with `.pager_dots()` (`○ ● ○`). With the
+focus, ← and → (PageUp, PageDown) go back and on, Home and End to the
+ends; a click on an arrow or a dot goes there. The app shows the page: a
+list's or a table's rows from `page * per_page`, or a `switch` of pages.
+
 ### Clickable spans of markup
 
 A span of markup in a `text` or `label` can run an action, as Textual's

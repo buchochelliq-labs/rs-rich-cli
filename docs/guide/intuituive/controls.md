@@ -234,6 +234,14 @@ knob takes `control.focus`. It is twenty cells wide unless sized.
 It is read as `Font size, slider: 14`, its value with as many decimals as
 its step has, and a browser gets `aria-valuenow`.
 
+### Two handles
+
+`range_slider(low, high, range, step)` holds a span: two `Signal<f64>`s,
+`low` never above `high`, the track between them filled. The arrows move
+the picked handle (Space or Enter picks the other), a click moves the
+nearer one under the pointer and a drag moves it on. It is read as
+`Price, slider: 20 to 80`.
+
 ## Select fields
 
 ```rust

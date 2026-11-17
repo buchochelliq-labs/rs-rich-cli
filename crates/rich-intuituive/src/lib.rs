@@ -148,6 +148,7 @@ pub mod node;
 mod node_list;
 mod notice;
 mod notify;
+mod pager;
 mod palette;
 mod parity;
 pub mod pixels;
@@ -226,7 +227,7 @@ pub use complete::{
 };
 pub use controls::{
     ButtonVariant, CheckState, button, button_of, checkbox, checkbox_of, checkbox_tri, radio,
-    radio_keyed, slider, switch_of, switch_toggle,
+    radio_keyed, range_slider, slider, switch_of, switch_toggle,
 };
 pub use dial::dial;
 pub use dialog::{ConfirmOptions, PickOptions, PromptOptions};
@@ -269,6 +270,7 @@ pub use node::{described, drawn, drawn_described};
 pub use node_list::{list_of, list_of_virtual};
 pub use notice::notice_bar;
 pub use notify::{Corner, Level, Notification, Notified, notifications};
+pub use pager::pager;
 pub use palette::Palette;
 pub use parity::{
     PlaceholderVariant, header, key_panel, link, masked_input, placeholder, progress_bar,
