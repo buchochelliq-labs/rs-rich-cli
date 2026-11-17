@@ -35,7 +35,10 @@ pub fn read_page(engine: Box<dyn Engine>, url: &str, timeout: Duration) -> io::R
             Ok(Update::State(state)) => {
                 loading = state.loading;
                 if let Some(error) = state.error {
-                    return Err(io::Error::other(crate::clean::clean(&error)));
+                    return Err(io::Error::other(crate::clean::stopped(&error)));
+                }
+                if state.crashed {
+                    return Err(io::Error::other(format!("{}.", crate::clean::CRASHED)));
                 }
             }
             Ok(Update::Done(_, Err(refusal))) => return Err(io::Error::other(refusal.to_string())),

@@ -734,3 +734,85 @@ fn hints_in_the_reader_leave_no_old_cells_behind() {
         assert!(!shown.contains(stale), "{stale:?} in\n{shown}");
     }
 }
+
+/// How many times `text` shows on the screen.
+fn count(driver: &Driver, text: &str) -> usize {
+    screen(driver).matches(text).count()
+}
+
+/// Follow the first link through its hint: a command the engine runs.
+fn click_first_link(driver: &mut Driver) {
+    driver.press("f");
+    wait_for(driver, "[a]open sea");
+    driver.press("a");
+    driver.settle();
+}
+
+#[test]
+fn a_stopped_browser_says_why_once_and_reload_starts_another() {
+    let engine = engine();
+    let state = engine.state.clone();
+    let mut driver =
+        app(Box::new(engine), options(Config::default(), "reader.html")).driver(100, 30);
+    wait_for(&mut driver, "Tiny drifters");
+    state.lock().unwrap().stopped = Some("Chrome: the browser closed: Killed".into());
+    // The status line says why, and the key that restarts it.
+    wait_for(
+        &mut driver,
+        "The browser stopped: Chrome exited (Killed). R restarts it",
+    );
+    // The first command after says so once; the next ones add nothing.
+    click_first_link(&mut driver);
+    wait_for(&mut driver, "Reload restarts it.");
+    for _ in 0..2 {
+        click_first_link(&mut driver);
+        std::thread::sleep(Duration::from_millis(100));
+        driver.settle();
+    }
+    assert_eq!(
+        count(&driver, "The browser stopped"),
+        1,
+        "{}",
+        screen(&driver)
+    );
+    assert!(!screen(&driver).contains("has gone"), "{}", screen(&driver));
+    // Reload starts another browser, at the same page.
+    driver.press("R");
+    let start = Instant::now();
+    while state.lock().unwrap().restarts == 0 && start.elapsed() < Duration::from_secs(10) {
+        driver.settle();
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    assert_eq!(state.lock().unwrap().restarts, 1);
+    click_first_link(&mut driver);
+    wait_for(&mut driver, "The second page");
+}
+
+#[test]
+fn a_crashed_page_shows_a_notice_and_reload_brings_it_back() {
+    let engine = engine();
+    let state = engine.state.clone();
+    let mut driver =
+        app(Box::new(engine), options(Config::default(), "reader.html")).driver(100, 30);
+    wait_for(&mut driver, "Tiny drifters");
+    {
+        let mut state = state.lock().unwrap();
+        state.crashed = true;
+        // What the page shows once it is back.
+        let second = state.pages["second"].clone();
+        state.pages.insert("reader".into(), second);
+    }
+    wait_for(&mut driver, "The page crashed. R reloads it");
+    // Nothing reads while it is crashed.
+    std::thread::sleep(Duration::from_millis(200));
+    driver.settle();
+    assert!(
+        screen(&driver).contains("Tiny drifters"),
+        "{}",
+        screen(&driver)
+    );
+    driver.press("R");
+    wait_for(&mut driver, "The second page");
+    assert!(!state.lock().unwrap().crashed);
+    assert_eq!(state.lock().unwrap().restarts, 0, "the browser lived");
+}

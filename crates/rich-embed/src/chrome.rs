@@ -127,6 +127,9 @@ enum Request {
     /// Acknowledge the screencast frame with this session id: Chrome sends
     /// the next one only after it.
     Ack(i64),
+    /// The history of the browser before a restart: the addresses before
+    /// the page the new one opens, and those after it.
+    Inherit(Vec<String>, Vec<String>),
 }
 
 /// Where a screencast frame was taken: `Page.screencastFrame`'s metadata,
@@ -321,6 +324,12 @@ struct Shared {
     notify: Option<Notify>,
     /// The browser process, so the engine can end it from any thread.
     child: Option<Child>,
+    /// Whether the engine's thread ended with an error: the browser went,
+    /// or its connection did.
+    ended: bool,
+    /// The page's history as addresses, and the current one's index, for
+    /// a restart to carry on.
+    kept: (Vec<String>, usize),
 }
 
 /// An opaque document/viewport capture scope for this engine. Obtain it before
@@ -381,8 +390,16 @@ struct Call {
 /// untrusted.
 #[derive(Clone, Debug)]
 pub struct DevTools {
-    calls: Sender<Call>,
+    calls: Calls,
     listeners: Listeners,
+}
+
+/// Where the app's calls go: the running browser's session, replaced when
+/// the engine starts another ([`ChromeEngine::restart`]).
+type Calls = Arc<Mutex<Option<Sender<Call>>>>;
+
+fn gone() -> io::Error {
+    io::Error::new(ErrorKind::BrokenPipe, "the browser has gone")
 }
 
 impl DevTools {
@@ -396,19 +413,19 @@ impl DevTools {
             params,
             answer,
         };
-        self.calls
-            .send(call)
-            .map_err(|_| io::Error::new(ErrorKind::BrokenPipe, "the browser has gone"))?;
+        let calls = self
+            .calls
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .clone();
+        calls.ok_or_else(gone)?.send(call).map_err(|_| gone())?;
         match wait.recv_timeout(timeout) {
             Ok(result) => result,
             Err(mpsc::RecvTimeoutError::Timeout) => Err(io::Error::new(
                 ErrorKind::TimedOut,
                 format!("{method}: no answer in time"),
             )),
-            Err(mpsc::RecvTimeoutError::Disconnected) => Err(io::Error::new(
-                ErrorKind::BrokenPipe,
-                "the browser has gone",
-            )),
+            Err(mpsc::RecvTimeoutError::Disconnected) => Err(gone()),
         }
     }
 
@@ -478,7 +495,15 @@ pub struct ChromeEngine {
     cell: (u32, u32),
     shared: Arc<Mutex<Shared>>,
     commands: Option<Sender<Request>>,
-    calls: Option<Sender<Call>>,
+    calls: Calls,
+    /// The pane's size in cells, as last asked for: a restart lays the
+    /// new page out at it.
+    size: Option<(u16, u16)>,
+    /// After a restart, the old browser's history, until a navigation
+    /// says where the new one goes ([`ChromeEngine::restart`]).
+    carried: Option<(Vec<String>, usize)>,
+    /// How long a new browser has to open its page.
+    start_timeout: Duration,
     /// The profile the browser runs in, once it started.
     profile: Option<PathBuf>,
     /// A kept profile the app chose: never removed.
@@ -519,7 +544,10 @@ impl ChromeEngine {
             cell: (10, 20),
             shared: Arc::default(),
             commands: None,
-            calls: None,
+            calls: Arc::default(),
+            size: None,
+            carried: None,
+            start_timeout: START_TIMEOUT,
             profile: None,
             kept_profile: None,
             audio: false,
@@ -811,14 +839,79 @@ impl ChromeEngine {
         if self.commands.is_none() {
             self.start()?;
         }
-        let calls = self
-            .calls
-            .clone()
-            .ok_or_else(|| io::Error::new(ErrorKind::BrokenPipe, "the browser has gone"))?;
         Ok(DevTools {
-            calls,
+            calls: Arc::clone(&self.calls),
             listeners: Arc::clone(&self.listeners),
         })
+    }
+
+    /// Whether the browser this engine started has gone: its process
+    /// exited (it crashed, or was killed), or its DevTools connection
+    /// ended. The state's [`error`](PageState::error) says why. The next
+    /// navigation ([`open`](WebEngine::open), [`reload`](WebEngine::reload),
+    /// back or forward) starts another; other requests fail until then.
+    pub fn ended(&self) -> bool {
+        lock(&self.shared).ended
+    }
+
+    /// End what is left of the browser and start another, at a blank page,
+    /// with this engine's settings. The page's history carries on: the
+    /// next [`reload`](WebEngine::reload), back or forward opens the
+    /// address the old browser was at, and back and forward go on from it
+    /// through the old browser's entries; an [`open`](WebEngine::open)
+    /// goes on from that address instead. [`DevTools`] handles made
+    /// before reach the new browser, which has none of the old one's
+    /// bindings, scripts and enabled domains: an app sets those up again
+    /// before it navigates. Listeners stay.
+    pub fn restart(&mut self) -> io::Result<()> {
+        let kept = {
+            let shared = lock(&self.shared);
+            let (urls, at) = &shared.kept;
+            match urls.get(*at) {
+                Some(_) => (urls.clone(), *at),
+                None if !shared.state.url.is_empty() => (vec![shared.state.url.clone()], 0),
+                None => (Vec::new(), 0),
+            }
+        };
+        self.retire();
+        {
+            let mut shared = lock(&self.shared);
+            shared.ended = false;
+            shared.state = PageState::default();
+            shared.kept = (Vec::new(), 0);
+            shared.revision = shared.revision.wrapping_add(1);
+            shared.applied_viewport = None;
+            shared.restarts_answered = shared.restarts_asked;
+            discard_frame(&mut shared);
+        }
+        self.carried = (!kept.0.is_empty()).then_some(kept);
+        self.start()?;
+        if let Some((columns, rows)) = self.size {
+            let revision = lock(&self.shared).viewport_revision;
+            self.send(Request::Resize(columns, rows, revision))?;
+        }
+        Ok(())
+    }
+
+    /// Forget the browser: end its process if it is still there, close the
+    /// channels to its thread and remove its temporary profile.
+    fn retire(&mut self) {
+        RUNNING
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .retain(|running| !std::ptr::eq(running.shared.as_ptr(), Arc::as_ptr(&self.shared)));
+        // Closing the channel ends the thread's loop; the browser goes now.
+        self.commands = None;
+        *self.calls.lock().unwrap_or_else(PoisonError::into_inner) = None;
+        let child = lock(&self.shared).child.take();
+        if let Some(mut child) = child {
+            end_browser(&mut child);
+        }
+        if let Some(profile) = self.profile.take()
+            && self.kept_profile.is_none()
+        {
+            remove_profile(&profile);
+        }
     }
 
     fn fail(&self, message: impl Into<String>) {
@@ -893,7 +986,7 @@ impl ChromeEngine {
         let (sender, receiver) = mpsc::channel();
         self.commands = Some(sender);
         let (calls, called) = mpsc::channel();
-        self.calls = Some(calls);
+        *self.calls.lock().unwrap_or_else(PoisonError::into_inner) = Some(calls);
         let shared = Arc::clone(&self.shared);
         let cell = self.cell;
         let wiring = Wiring {
@@ -903,12 +996,27 @@ impl ChromeEngine {
             on_demand: self.on_demand,
             scale: self.scale,
             area: self.area,
+            start_timeout: self.start_timeout,
         };
         thread::spawn(move || {
             if let Err(error) = run(connect, stderr, receiver, called, &shared, cell, wiring) {
+                // A browser that is still there (it did not open a page,
+                // or its page detached) is no use now: it ends too.
+                let mut child = lock(&shared).child.take();
+                // How the browser went, when it did: killed, or its exit.
+                let mut error = error.to_string();
+                if let Some(rest) = error.strip_prefix("the browser closed")
+                    && let Some(how) = child.as_mut().and_then(exited)
+                {
+                    error = format!("the browser closed ({how}){rest}");
+                }
+                if let Some(child) = &mut child {
+                    end_browser(child);
+                }
                 let mut state = lock(&shared);
                 state.state.error = Some(format!("Chrome: {error}"));
                 state.state.loading = false;
+                state.ended = true;
                 drop(state);
                 notify(&shared);
             }
@@ -917,13 +1025,44 @@ impl ChromeEngine {
     }
 
     fn send(&mut self, command: Request) -> io::Result<()> {
+        let navigates = matches!(
+            command,
+            Request::Open(_) | Request::Reload | Request::Back | Request::Forward
+        );
         if self.commands.is_none() {
             self.start()?;
+        } else if self.ended() {
+            if !navigates {
+                return Err(gone());
+            }
+            self.restart()?;
         }
+        let command = match self.carried.take() {
+            // The first navigation after a restart says where the history
+            // goes on from.
+            Some((urls, at)) if navigates => {
+                let (older, newer) = match &command {
+                    Request::Open(_) => (urls[..=at].to_vec(), Vec::new()),
+                    _ => (urls[..at].to_vec(), urls[at + 1..].to_vec()),
+                };
+                self.post(Request::Inherit(older, newer))?;
+                lock(&self.shared).state.loading = true;
+                match command {
+                    Request::Open(url) => Request::Open(url),
+                    _ => Request::Open(urls[at].clone()),
+                }
+            }
+            carried => {
+                self.carried = carried;
+                command
+            }
+        };
+        self.post(command)
+    }
+
+    fn post(&mut self, command: Request) -> io::Result<()> {
         if let Some(commands) = &self.commands {
-            commands
-                .send(command)
-                .map_err(|_| io::Error::new(ErrorKind::BrokenPipe, "the browser has gone"))?;
+            commands.send(command).map_err(|_| gone())?;
         }
         Ok(())
     }
@@ -942,23 +1081,34 @@ static RUNNING: Mutex<Vec<Running>> = Mutex::new(Vec::new());
 impl Drop for ChromeEngine {
     fn drop(&mut self) {
         // This engine ends its own browser here.
-        RUNNING
-            .lock()
-            .unwrap_or_else(PoisonError::into_inner)
-            .retain(|running| !std::ptr::eq(running.shared.as_ptr(), Arc::as_ptr(&self.shared)));
-        // Closing the channel ends the thread's loop; the browser goes now.
-        self.commands = None;
-        self.calls = None;
-        let child = lock(&self.shared).child.take();
-        if let Some(mut child) = child {
-            end_browser(&mut child);
-        }
-        if let Some(profile) = &self.profile
-            && self.kept_profile.is_none()
-        {
-            remove_profile(profile);
+        self.retire();
+    }
+}
+
+/// How the browser exited, if it has (waiting a moment: its pipe closes
+/// as it goes): the signal that killed it, or its exit status.
+fn exited(child: &mut Child) -> Option<String> {
+    for _ in 0..20 {
+        match child.try_wait() {
+            Ok(Some(status)) => {
+                #[cfg(unix)]
+                if let Some(signal) = std::os::unix::process::ExitStatusExt::signal(&status) {
+                    let name = match signal {
+                        6 => " (SIGABRT)",
+                        9 => " (SIGKILL)",
+                        11 => " (SIGSEGV)",
+                        15 => " (SIGTERM)",
+                        _ => "",
+                    };
+                    return Some(format!("killed by signal {signal}{name}"));
+                }
+                return status.code().map(|code| format!("exit status {code}"));
+            }
+            Ok(None) => thread::sleep(Duration::from_millis(25)),
+            Err(_) => return None,
         }
     }
+    None
 }
 
 /// End the browser and every helper in its process group, then reap it.
@@ -1009,6 +1159,7 @@ impl WebEngine for ChromeEngine {
     }
 
     fn resize(&mut self, columns: u16, rows: u16) -> io::Result<()> {
+        self.size = Some((columns, rows));
         let size = viewport(columns, rows, self.cell);
         let (revision, ack) = {
             let mut shared = lock(&self.shared);
@@ -1574,9 +1725,25 @@ struct Session {
     pending: Vec<(u64, Pending)>,
     session: Option<String>,
     target: Option<String>,
-    /// History entries' ids, and the current one's index.
+    /// History entries' ids and addresses, and the current one's index.
     history: Vec<i64>,
+    urls: Vec<String>,
     current: usize,
+    /// A restarted browser's history from before ([`Request::Inherit`]):
+    /// the addresses before Chrome's first entry, and after its last. Back
+    /// and forward go on into them; a new entry ends `newer`.
+    older: Vec<String>,
+    newer: Vec<String>,
+    /// A navigation of ours into `older` or `newer` is under way, from the
+    /// address Chrome was at: once Chrome's history is at another, it is
+    /// cleared, so it holds that entry only.
+    crossing: Option<String>,
+    /// The id of the last history reset: a history read asked before it
+    /// holds entries Chrome no longer has.
+    reset: u64,
+    /// The page's renderer crashed: calls to it fail at once until it is
+    /// reloaded.
+    crashed: bool,
     /// The page's area in cells, for the viewport and the screencast.
     size: (u16, u16),
     viewport_revision: u64,
@@ -1610,6 +1777,7 @@ struct Wiring {
     on_demand: bool,
     scale: f64,
     area: Option<ScreencastArea>,
+    start_timeout: Duration,
 }
 
 /// The `Browser.setDownloadBehavior` parameters for `downloads`.
@@ -1637,13 +1805,31 @@ impl Session {
         self.send(method, params, Pending::Other, true)
     }
 
-    /// Send an app's call to the page, or keep it until there is one.
+    /// Send an app's call to the page, or keep it until there is one. A
+    /// crashed page answers nothing but a navigation, so anything else
+    /// fails at once.
     fn call(&mut self, call: Call) -> io::Result<()> {
         if self.session.is_none() {
             self.calls.push(call);
             return Ok(());
         }
+        if self.crashed && !NAVIGATIONS.contains(&call.method.as_str()) {
+            let _ = call.answer.send(Err(crashed()));
+            return Ok(());
+        }
         self.send(&call.method, call.params, Pending::Call(call.answer), true)
+    }
+
+    /// Go to `url`, an address of `older` or `newer`: Chrome has no entry
+    /// for it.
+    fn cross(&mut self, url: String, from: String) -> io::Result<()> {
+        self.crossing = Some(from);
+        self.page("Page.navigate", json!({ "url": url }))
+    }
+
+    /// The address of Chrome's current entry, as last read.
+    fn here(&self) -> String {
+        self.urls.get(self.current).cloned().unwrap_or_default()
     }
 
     fn screencast(&mut self) -> io::Result<()> {
@@ -1701,7 +1887,12 @@ impl Session {
             return Ok(());
         }
         match command {
-            Request::Open(url) => self.page("Page.navigate", json!({"url": url})),
+            Request::Open(url) => {
+                if self.crossing.as_deref() == Some(url.as_str()) {
+                    self.crossing = None;
+                }
+                self.page("Page.navigate", json!({"url": url}))
+            }
             Request::Resize(columns, rows, revision) => {
                 self.size = (columns, rows);
                 self.viewport_revision = revision;
@@ -1728,7 +1919,30 @@ impl Session {
                 let entry = self.history[self.current + 1];
                 self.page("Page.navigateToHistoryEntry", json!({"entryId": entry}))
             }
+            Request::Back if !self.older.is_empty() && self.crossing.is_none() => {
+                let from = self.here();
+                let mut newer = std::mem::take(&mut self.urls);
+                newer.append(&mut self.newer);
+                self.newer = newer;
+                let url = self.older.pop().unwrap_or_default();
+                self.cross(url, from)
+            }
+            Request::Forward if !self.newer.is_empty() && self.crossing.is_none() => {
+                let from = self.here();
+                let end = (self.current + 1).min(self.urls.len());
+                self.older.extend(self.urls.drain(..end));
+                let url = self.newer.remove(0);
+                self.cross(url, from)
+            }
             Request::Back | Request::Forward => Ok(()),
+            Request::Inherit(older, newer) => {
+                self.older = older;
+                self.newer = newer;
+                // The navigation that comes next is a crossing too: the new
+                // browser's blank page is no entry of the history.
+                self.crossing = Some("about:blank".into());
+                Ok(())
+            }
             Request::Reload => self.page("Page.reload", json!({})),
             Request::Screencast(on) => {
                 self.screencast = on;
@@ -1811,12 +2025,37 @@ impl Session {
                     let _ = answer.send(Ok(result.clone()));
                 }
                 Pending::History => {
-                    let entries = result["entries"].as_array().cloned().unwrap_or_default();
+                    let mut entries = result["entries"].as_array().cloned().unwrap_or_default();
+                    let mut current = result["currentIndex"].as_u64().unwrap_or(0) as usize;
+                    let url = |entry: &Value| entry["url"].as_str().unwrap_or_default().to_string();
+                    let at = entries.get(current).map(url).unwrap_or_default();
+                    let before = match &self.crossing {
+                        _ if id < self.reset => return Ok(()),
+                        // Still where the crossing set out from: of the
+                        // entries it moved, or before it landed.
+                        Some(from) if *from == at => return Ok(()),
+                        // Landed: Chrome keeps this entry only, as older
+                        // and newer hold the rest.
+                        Some(_) => {
+                            self.crossing = None;
+                            self.page("Page.resetNavigationHistory", json!({}))?;
+                            self.reset = self.next;
+                            entries = entries.get(current).cloned().into_iter().collect();
+                            current = 0;
+                            0
+                        }
+                        None => self.history.len(),
+                    };
                     self.history = entries
                         .iter()
                         .filter_map(|entry| entry["id"].as_i64())
                         .collect();
-                    self.current = result["currentIndex"].as_u64().unwrap_or(0) as usize;
+                    self.urls = entries.iter().map(url).collect();
+                    self.current = current;
+                    // A new entry of the page's own drops what was ahead.
+                    if before > 0 && self.history.len() > before {
+                        self.newer.clear();
+                    }
                     let entry = entries.get(self.current);
                     {
                         let mut shared = lock(shared);
@@ -1827,8 +2066,13 @@ impl Session {
                             shared.state.title =
                                 entry["title"].as_str().unwrap_or_default().to_string();
                         }
-                        shared.state.can_go_back = self.current > 0;
-                        shared.state.can_go_forward = self.current + 1 < self.history.len();
+                        shared.state.can_go_back = self.current > 0 || !self.older.is_empty();
+                        shared.state.can_go_forward =
+                            self.current + 1 < self.history.len() || !self.newer.is_empty();
+                        let mut all = self.older.clone();
+                        all.extend(self.urls.iter().cloned());
+                        all.extend(self.newer.iter().cloned());
+                        shared.kept = (all, self.older.len() + self.current);
                     }
                     notify(shared);
                 }
@@ -1859,6 +2103,17 @@ impl Session {
         };
         if !ours {
             return Ok(());
+        }
+        // The browser's own detach events name the target: only the page's
+        // own ends the engine.
+        if method == "Target.detachedFromTarget" {
+            let session = params["sessionId"].as_str();
+            let target = params["targetId"].as_str();
+            let page = (session.is_some() && session == self.session.as_deref())
+                || (target.is_some() && target == self.target.as_deref());
+            if !page {
+                return Ok(());
+            }
         }
         // Retire the previous document's buffers before a listener can publish
         // the new document. A pending raw frame owns at most one outstanding ACK.
@@ -1945,6 +2200,7 @@ impl Session {
                 }
             }
             "Page.frameNavigated" if params["frame"].get("parentId").is_none() => {
+                self.recovered(shared);
                 self.ensure_viewport(shared)?;
                 if let Some(url) = params["frame"]["url"].as_str() {
                     lock(shared).state.url = url.to_string();
@@ -1952,7 +2208,12 @@ impl Session {
                 }
                 self.history()?;
             }
-            "Page.loadEventFired" => self.ensure_viewport(shared)?,
+            "Page.loadEventFired" => {
+                self.ensure_viewport(shared)?;
+                if self.crossing.is_some() {
+                    self.history()?;
+                }
+            }
             "Page.navigatedWithinDocument" => {
                 if let Some(url) = params["url"].as_str() {
                     lock(shared).state.url = url.to_string();
@@ -1963,10 +2224,49 @@ impl Session {
             "Inspector.detached" | "Target.detachedFromTarget" => {
                 return Err(io::Error::other("the page was closed"));
             }
+            "Inspector.targetCrashed" => {
+                // The browser lives; the page answers nothing until it is
+                // reloaded, so the calls waiting on it fail now.
+                self.crashed = true;
+                for (_, pending) in &mut self.pending {
+                    if let Pending::Call(answer) = std::mem::replace(pending, Pending::Other) {
+                        let _ = answer.send(Err(crashed()));
+                    }
+                }
+                {
+                    let mut state = lock(shared);
+                    state.state.crashed = true;
+                    state.state.loading = false;
+                }
+                notify(shared);
+            }
+            "Inspector.targetReloadedAfterCrash" => self.recovered(shared),
             _ => {}
         }
         Ok(())
     }
+
+    /// The page answers again: reloaded after a crash, or at a new
+    /// document.
+    fn recovered(&mut self, shared: &Mutex<Shared>) {
+        if !self.crashed {
+            return;
+        }
+        self.crashed = false;
+        lock(shared).state.crashed = false;
+        notify(shared);
+    }
+}
+
+/// The calls a crashed page answers: they bring it back.
+const NAVIGATIONS: &[&str] = &[
+    "Page.reload",
+    "Page.navigate",
+    "Page.navigateToHistoryEntry",
+];
+
+fn crashed() -> io::Error {
+    io::Error::new(ErrorKind::ConnectionAborted, "the page crashed")
 }
 
 /// The engine's thread: connect, then pass messages both ways until the
@@ -1992,7 +2292,13 @@ fn run(
         session: None,
         target: None,
         history: Vec::new(),
+        urls: Vec::new(),
         current: 0,
+        older: Vec::new(),
+        newer: Vec::new(),
+        crossing: None,
+        reset: 0,
+        crashed: false,
         size: (80, 24),
         viewport_revision: 0,
         cell,
@@ -2018,7 +2324,11 @@ fn run(
         Pending::CreateTarget,
         false,
     )?;
-    let started = Instant::now();
+    // A browser that answers but is slow (a loaded machine) gets a second
+    // wait; one that has said nothing at all does not.
+    let mut deadline = Instant::now() + wiring.start_timeout;
+    let mut renewed = false;
+    let mut answered = false;
     loop {
         loop {
             match commands.try_recv() {
@@ -2035,9 +2345,15 @@ fn run(
             session.call(call)?;
         }
         if let Some(text) = session.transport.read()? {
+            answered = true;
             session.message(&text, shared)?;
         }
-        if session.session.is_none() && started.elapsed() > START_TIMEOUT {
+        if session.session.is_none() && Instant::now() > deadline {
+            if answered && !renewed {
+                renewed = true;
+                deadline = Instant::now() + wiring.start_timeout;
+                continue;
+            }
             return Err(io::Error::new(
                 ErrorKind::TimedOut,
                 "the browser did not open a page in time",
@@ -2298,7 +2614,13 @@ mod tests {
             session: Some("ours".into()),
             target: Some("main".into()),
             history: Vec::new(),
+            urls: Vec::new(),
             current: 0,
+            older: Vec::new(),
+            newer: Vec::new(),
+            crossing: None,
+            reset: 0,
+            crashed: false,
             size: (80, 24),
             viewport_revision: 0,
             cell: (10, 20),
@@ -3071,7 +3393,7 @@ mod tests {
     fn listeners_get_only_the_methods_they_asked_for() {
         let listeners: Listeners = Arc::default();
         let devtools = DevTools {
-            calls: mpsc::channel().0,
+            calls: Arc::default(),
             listeners: Arc::clone(&listeners),
         };
         let pings = devtools.listen(&["Runtime.bindingCalled"]);
@@ -3175,6 +3497,203 @@ mod tests {
             return;
         }
         assert!(download_with(Downloads::Deny).is_none());
+    }
+
+    /// One message from the browser to `session`, as JSON.
+    #[cfg(unix)]
+    fn receive(session: &mut Session, shared: &Mutex<Shared>, message: Value) -> io::Result<()> {
+        session.message(&message.to_string(), shared)
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn only_the_pages_own_detach_ends_the_engine() {
+        let (engine, mut session, _output, _requests) = pending_session();
+        // Another target's, as the browser sends it: no session id on the
+        // message, the target's in its parameters.
+        for other in [
+            json!({"method": "Target.detachedFromTarget",
+                   "params": {"sessionId": "theirs", "targetId": "worker"}}),
+            json!({"method": "Target.detachedFromTarget", "params": {"targetId": "worker"}}),
+            json!({"sessionId": "theirs", "method": "Inspector.detached",
+                   "params": {"reason": "target_closed"}}),
+        ] {
+            assert!(receive(&mut session, &engine.shared, other).is_ok());
+        }
+        for own in [
+            json!({"method": "Target.detachedFromTarget", "params": {"sessionId": "ours"}}),
+            json!({"method": "Target.detachedFromTarget", "params": {"targetId": "main"}}),
+            json!({"sessionId": "ours", "method": "Inspector.detached",
+                   "params": {"reason": "target_closed"}}),
+        ] {
+            let error = receive(&mut session, &engine.shared, own).unwrap_err();
+            assert_eq!(error.to_string(), "the page was closed");
+        }
+    }
+
+    #[cfg(unix)]
+    fn call(session: &mut Session, method: &str) -> Receiver<io::Result<Value>> {
+        let (answer, wait) = mpsc::channel();
+        session
+            .call(Call {
+                method: method.into(),
+                params: json!({}),
+                answer,
+            })
+            .unwrap();
+        wait
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_crashed_page_fails_its_calls_at_once_until_it_is_reloaded() {
+        let (engine, mut session, _output, _requests) = pending_session();
+        let waiting = call(&mut session, "Runtime.evaluate");
+        assert!(waiting.try_recv().is_err(), "answered before the crash");
+        let crash = json!({"sessionId": "ours", "method": "Inspector.targetCrashed", "params": {}});
+        receive(&mut session, &engine.shared, crash).unwrap();
+        let error = waiting.try_recv().expect("still waiting").unwrap_err();
+        assert_eq!(error.to_string(), "the page crashed");
+        assert!(engine.state().crashed);
+        assert_eq!(engine.state().error, None, "the browser lives");
+        // A call made now fails at once; a reload is sent.
+        let later = call(&mut session, "DOMSnapshot.captureSnapshot");
+        assert!(later.try_recv().unwrap().is_err());
+        let reload = call(&mut session, "Page.reload");
+        assert!(reload.try_recv().is_err(), "a reload goes to the page");
+        let reloaded = json!({"sessionId": "ours",
+                              "method": "Inspector.targetReloadedAfterCrash", "params": {}});
+        receive(&mut session, &engine.shared, reloaded).unwrap();
+        assert!(!engine.state().crashed);
+        let again = call(&mut session, "Runtime.evaluate");
+        assert!(again.try_recv().is_err(), "sent to the page again");
+    }
+
+    /// What `session` wrote to the browser so far, as messages.
+    #[cfg(unix)]
+    fn sent(session: Session, mut output: io::PipeReader) -> Vec<Value> {
+        use std::io::Read;
+        drop(session);
+        let mut wire = String::new();
+        output.read_to_string(&mut wire).unwrap();
+        wire.split('\0')
+            .filter_map(|m| serde_json::from_str(m).ok())
+            .collect()
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_restarted_browser_goes_back_and_forward_through_the_old_history() {
+        let (engine, mut session, output, _requests) = pending_session();
+        let shared = &engine.shared;
+        let older = vec!["https://a.test/".to_string(), "https://b.test/".to_string()];
+        session
+            .apply(Request::Inherit(older, vec!["https://d.test/".into()]))
+            .unwrap();
+        session
+            .apply(Request::Open("https://c.test/".into()))
+            .unwrap();
+        let history = |session: &mut Session, url: &str| {
+            session.history().unwrap();
+            let id = session.next;
+            let answer = json!({"id": id, "result": {"currentIndex": 0,
+                                "entries": [{"id": 7, "url": url, "title": ""}]}});
+            receive(session, shared, answer).unwrap();
+        };
+        let navigated = |session: &mut Session, url: &str| {
+            let event = json!({"sessionId": "ours", "method": "Page.frameNavigated",
+                               "params": {"frame": {"id": "main", "url": url}}});
+            receive(session, shared, event).unwrap();
+        };
+        navigated(&mut session, "https://c.test/");
+        history(&mut session, "https://c.test/");
+        let state = engine.state();
+        assert!(state.can_go_back && state.can_go_forward, "{state:?}");
+        assert_eq!(
+            lock(shared).kept,
+            (
+                ["a", "b", "c", "d"]
+                    .map(|h| format!("https://{h}.test/"))
+                    .to_vec(),
+                2
+            )
+        );
+        // Back, past Chrome's first entry: to b, and Chrome forgets c once
+        // b lands.
+        session.apply(Request::Back).unwrap();
+        navigated(&mut session, "https://b.test/");
+        history(&mut session, "https://b.test/");
+        assert_eq!(
+            lock(shared).kept,
+            (
+                ["a", "b", "c", "d"]
+                    .map(|h| format!("https://{h}.test/"))
+                    .to_vec(),
+                1
+            )
+        );
+        // Forward, to c again.
+        session.apply(Request::Forward).unwrap();
+        let wire = sent(session, output);
+        let navigations: Vec<_> = wire
+            .iter()
+            .filter(|m| m["method"] == "Page.navigate")
+            .map(|m| m["params"]["url"].as_str().unwrap().to_string())
+            .collect();
+        assert_eq!(
+            navigations,
+            ["https://c.test/", "https://b.test/", "https://c.test/"]
+        );
+        // Once the reopened page landed, and once b did.
+        let resets = wire
+            .iter()
+            .filter(|m| m["method"] == "Page.resetNavigationHistory")
+            .count();
+        assert_eq!(resets, 2);
+    }
+
+    /// A stand-in browser that never says a word on DevTools.
+    #[cfg(unix)]
+    fn silent_browser() -> PathBuf {
+        use std::os::unix::fs::PermissionsExt;
+        let path = std::env::temp_dir().join(format!("rich-embed-silent-{}", std::process::id()));
+        std::fs::write(&path, "#!/bin/sh\nexec sleep 600\n").unwrap();
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755)).unwrap();
+        path
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn a_browser_that_opens_no_page_in_time_is_ended() {
+        let _starts = STARTS.lock().unwrap_or_else(|e| e.into_inner());
+        let binary = silent_browser();
+        let mut engine = ChromeEngine::new().binary(&binary);
+        engine.start_timeout = Duration::from_millis(300);
+        engine.resize(20, 10).unwrap();
+        let pid = lock(&engine.shared).child.as_ref().map(Child::id).unwrap();
+        let start = Instant::now();
+        while !engine.ended() && start.elapsed() < Duration::from_secs(10) {
+            thread::sleep(Duration::from_millis(20));
+        }
+        assert!(engine.ended(), "the engine is still waiting");
+        let error = engine.state().error.unwrap();
+        assert!(error.contains("did not open a page in time"), "{error}");
+        // Ended and reaped: no process of that id is left, not even a
+        // zombie.
+        assert!(
+            !Path::new(&format!("/proc/{pid}")).exists(),
+            "the browser {pid} is still running"
+        );
+        // A request other than a navigation fails; a navigation starts
+        // another browser.
+        assert!(engine.input(WebInput::Paste("x".into())).is_err());
+        engine.open("about:blank").unwrap();
+        assert!(!engine.ended());
+        let again = lock(&engine.shared).child.as_ref().map(Child::id).unwrap();
+        assert_ne!(again, pid);
+        drop(engine);
+        assert!(!Path::new(&format!("/proc/{again}")).exists());
+        std::fs::remove_file(binary).ok();
     }
 
     #[test]

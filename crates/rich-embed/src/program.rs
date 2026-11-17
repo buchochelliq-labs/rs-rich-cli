@@ -260,6 +260,7 @@ impl WebEngine for ProgramEngine {
             can_go_back: self.at > 0,
             can_go_forward: self.at + 1 < self.history.len(),
             error: self.error.clone(),
+            crashed: false,
         }
     }
 

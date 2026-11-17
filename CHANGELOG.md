@@ -21,6 +21,34 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   tags from before rab. CI and `validate_release.py` run rab's `check` and
   the rab tests instead of `release_cohort.py`'s.
 
+### Noctiluca: the browser recovers, and says why once
+
+- **A browser that stops says why, once.** When Chrome exits (killed, out
+  of memory, crashed) or its DevTools connection ends, Noctiluca's status
+  line says so with the cause, "The browser stopped: Chrome exited (…)",
+  and the key that restarts it. The first command after says it once more;
+  later ones no longer toast "the browser has gone" each. A DevTools call's
+  own wording ("Runtime.callFunctionOn: no answer in time", DevTools's
+  JSON errors) reads as a sentence.
+- **Reload starts another browser.** rs-rich-embed's `ChromeEngine` ends
+  what is left of a browser whose connection ended, and the next
+  navigation starts another (`ChromeEngine::ended`,
+  `ChromeEngine::restart`): `DevTools` handles reach the new one, the
+  page's history carries on (back and forward go through the old
+  browser's entries), and Noctiluca's reload key reopens the last address
+  in it, with its isolated world, binding and script set up again.
+- **A crashed page fails at once and offers a reload.** A renderer that
+  crashes (`Inspector.targetCrashed`) marks the page crashed
+  (`PageState::crashed`) and fails the calls waiting on it at once, where
+  each waited 30 seconds and froze the tab; Noctiluca says "The page
+  crashed" with the key that reloads it, and the reload brings it back.
+- **Only the page's own detach ends the engine.** A
+  `Target.detachedFromTarget` for another target (a worker, another page)
+  no longer ends the session of a live browser.
+- **A browser that opens no page in time is ended.** It was left running
+  until the engine was dropped. One that answers DevTools but is slow (a
+  loaded machine) gets a second wait first.
+
 ## 0.0.26 cohort — published 2026-11-11
 
 Published on 2026-11-11 from `e5422bf9` by one `release.yml` run on rab

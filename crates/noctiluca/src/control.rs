@@ -357,12 +357,9 @@ pub fn handle(
                 Intent::Focus
             };
             say(format!("click {}", crate::tab::describe(&control)));
-            b.act(control.binding(&page), intent, |result, cx| {
+            b.act(control.binding(&page), intent, move |result, cx| {
                 if let Err(refusal) = result {
-                    cx.toast(format!(
-                        "[red]{}[/]",
-                        crate::clean::markup(&refusal.to_string())
-                    ));
+                    b.refused(&refusal, cx);
                 }
             });
             sent()
@@ -385,12 +382,9 @@ pub fn handle(
                         value: text,
                         base: control.value.clone(),
                     };
-                    b.act(control.binding(&page), intent, |result, cx| {
+                    b.act(control.binding(&page), intent, move |result, cx| {
                         if let Err(refusal) = result {
-                            cx.toast(format!(
-                                "[red]{}[/]",
-                                crate::clean::markup(&refusal.to_string())
-                            ));
+                            b.refused(&refusal, cx);
                         }
                     });
                 }

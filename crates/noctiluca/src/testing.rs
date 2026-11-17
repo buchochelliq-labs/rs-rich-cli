@@ -81,6 +81,14 @@ pub struct FakeState {
     pub captures: Vec<Rect>,
     /// Scripted capture bytes or failures, consumed before the default paint.
     pub capture_steps: VecDeque<Option<Vec<u8>>>,
+    /// Why the browser stopped, as rs-rich-embed's state says it: while it
+    /// is set, every call fails as one to a browser that has gone, until a
+    /// navigation starts another ([`restarts`](Self::restarts)).
+    pub stopped: Option<String>,
+    /// The times a stopped browser was started again.
+    pub restarts: usize,
+    /// Whether the page's renderer crashed: calls fail until a reload.
+    pub crashed: bool,
 }
 
 impl FakeState {
@@ -107,6 +115,32 @@ impl FakeState {
 }
 
 impl FakeState {
+    /// Whether the page answers: not when the browser stopped or the page
+    /// crashed, as rs-rich-embed's errors say.
+    fn answers(&self) -> io::Result<()> {
+        if self.stopped.is_some() {
+            return Err(io::Error::new(
+                io::ErrorKind::BrokenPipe,
+                "the browser has gone",
+            ));
+        }
+        if self.crashed {
+            return Err(io::Error::new(
+                io::ErrorKind::ConnectionAborted,
+                "the page crashed",
+            ));
+        }
+        Ok(())
+    }
+
+    /// A navigation to a browser that stopped starts another, as
+    /// `ChromeBackend` does.
+    fn revive(&mut self) {
+        if self.stopped.take().is_some() {
+            self.restarts += 1;
+        }
+    }
+
     /// The current page's height in CSS pixels.
     pub fn content_height(&self) -> f64 {
         self.current
@@ -770,6 +804,8 @@ impl Engine for FakeEngine {
 
     fn open(&mut self, _tab: TabId, url: &str) -> io::Result<()> {
         let mut state = self.lock();
+        state.revive();
+        state.crashed = false;
         state.opened.push(url.to_string());
         state.go(url);
         Ok(())
@@ -777,6 +813,19 @@ impl Engine for FakeEngine {
 
     fn history(&mut self, _tab: TabId, step: HistoryStep) -> io::Result<()> {
         let mut state = self.lock();
+        if state.stopped.is_some() {
+            // A new browser reopens the page the old one was at, keeping
+            // the history.
+            state.revive();
+            state.crashed = false;
+            let at = state.at;
+            state.current = state.history.get(at).cloned();
+            state.events.push(EngineEvent::Loaded);
+            return Ok(());
+        }
+        if state.crashed && step == HistoryStep::Reload {
+            state.crashed = false;
+        }
         match step {
             HistoryStep::Back if state.at > 0 => state.at -= 1,
             HistoryStep::Forward if state.at + 1 < state.history.len() => state.at += 1,
@@ -807,12 +856,15 @@ impl Engine for FakeEngine {
             url,
             can_go_back: state.at > 0,
             can_go_forward: state.at + 1 < state.history.len(),
+            error: state.stopped.clone(),
+            crashed: state.crashed,
             ..PageState::default()
         }
     }
 
     fn snapshot(&mut self, _tab: TabId) -> io::Result<PageSnapshot> {
         let state = self.lock();
+        state.answers()?;
         state
             .current
             .as_ref()
@@ -826,6 +878,7 @@ impl Engine for FakeEngine {
         // PNG.
         let paint = {
             let mut state = self.lock();
+            state.answers()?;
             state.captures.push(region);
             if let Some(bytes) = state.capture_steps.pop_front() {
                 return bytes
@@ -847,6 +900,7 @@ impl Engine for FakeEngine {
     }
 
     fn act(&mut self, _tab: TabId, action: &PageAction) -> io::Result<()> {
+        self.lock().answers()?;
         let mut hook = self.on_act.take();
         {
             let mut state = self.lock();
@@ -944,6 +998,7 @@ impl Engine for FakeEngine {
 
     fn metrics(&mut self, _tab: TabId) -> io::Result<Metrics> {
         let state = self.lock();
+        state.answers()?;
         Ok(Metrics {
             scroll_y: state.scroll_y,
             content_height: state.content_height(),

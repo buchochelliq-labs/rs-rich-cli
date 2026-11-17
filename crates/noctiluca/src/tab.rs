@@ -1701,8 +1701,28 @@ impl Worker<'_> {
         }
     }
 
+    /// A command that failed because the browser stopped, or its page
+    /// crashed, says so, and what brings it back: not that the page is not
+    /// ready, or what DevTools said.
+    fn explain(&self, refusal: Refusal) -> Refusal {
+        if let Refusal::Conflict { .. } = refusal {
+            return refusal;
+        }
+        let state = self.engine.state(TabId(0));
+        match state.error {
+            Some(error) => Refusal::Failed(format!(
+                "{} Reload restarts it.",
+                crate::clean::stopped(&error)
+            )),
+            None if state.crashed => {
+                Refusal::Failed(format!("{}. Reload brings it back.", crate::clean::CRASHED))
+            }
+            None => refusal,
+        }
+    }
+
     fn run_command(&mut self, command: Command) -> Result<(), Refusal> {
-        let failed = |e: std::io::Error| Refusal::Failed(crate::clean::clean(&e.to_string()));
+        let failed = |e: std::io::Error| Refusal::Failed(crate::clean::engine_error(&e));
         match command {
             Command::Open(url) if url == crate::about::ADDRESS => {
                 // The about page, with the browser's own codec answers.
@@ -2092,7 +2112,7 @@ fn run_with_source(
                         | Command::Type(_)
                         | Command::Resize(_, _)
                 );
-                let result = worker.run_command(command);
+                let result = worker.run_command(command).map_err(|r| worker.explain(r));
                 update(Update::Done(id, result));
                 // An action of ours reads again at once.
                 read_now |= acts;
