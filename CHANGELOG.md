@@ -21,6 +21,18 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   tags from before rab. CI and `validate_release.py` run rab's `check` and
   the rab tests instead of `release_cohort.py`'s.
 
+### intuiTUIve: pictures without flicker between frames
+
+- **Kitty uploads go before the cells that name them.** A frame used to
+  write a picture's placeholder cells under its new image id, then upload
+  the image, then delete the old id. Without synchronized output (a link
+  too slow to answer the start-up query, a multiplexer without mode 2026,
+  `RICH_SYNC_OUTPUT=0`) the terminal showed the region empty for the
+  whole upload. The upload now comes first, with no cursor move, and the
+  delete still comes after the cells. `Painter::starts_over` (rs-rich-ext)
+  tells whether a paint begins by clearing the screen; the uploads follow
+  such a clear rather than precede it.
+
 ## 0.0.26 cohort — published 2026-11-11
 
 Published on 2026-11-11 from `e5422bf9` by one `release.yml` run on rab

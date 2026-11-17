@@ -2174,6 +2174,13 @@ impl Painter {
         out
     }
 
+    /// Whether the next paint of `screen` writes everything from a cleared
+    /// screen (or a freshly reserved inline region): nothing was sent yet,
+    /// the size changed, or [`invalidate`](Self::invalidate) was called.
+    pub fn starts_over(&self, screen: &Screen) -> bool {
+        !matches!(&self.previous, Some(p) if p.width == screen.width && p.height == screen.height)
+    }
+
     /// Forget what was sent: the next paint writes everything.
     pub fn invalidate(&mut self) {
         self.previous = None;

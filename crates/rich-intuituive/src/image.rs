@@ -1832,6 +1832,61 @@ mod tests {
     }
 
     #[test]
+    fn kitty_uploads_go_before_the_cells_that_name_them() {
+        // A bound live picture: each frame is a new Kitty id, and the old
+        // one is deleted. The driver's bytes carry no synchronized output.
+        let first = Picture::from_rgba(8, 8, vec![255; 256])
+            .unwrap()
+            .bound(false);
+        let shown = std::rc::Rc::new(std::cell::Cell::new(None));
+        let seen = shown.clone();
+        let start = first.clone();
+        let app = App::new(move || {
+            let frame = signal(Some(start.clone()));
+            seen.set(Some(frame));
+            picture_of(move || frame.get(), ImageView::new().pixels(Pixels::Kitty)).fixed(2)
+        })
+        .graphics(image_graphics());
+        let mut driver = app.driver(4, 2);
+        driver.set_cell_pixels(Some((8, 16)));
+        let out = written(&mut driver, "a=T", 20);
+        // The id an upload names, and where the first cell coloured with it is.
+        let uploaded = |out: &str| -> u32 {
+            let rest = &out[out.find("a=T").expect("an upload")..];
+            let i = rest.find(",i=").unwrap() + 3;
+            let end = rest[i..].find(',').unwrap() + i;
+            rest[i..end].parse().unwrap()
+        };
+        let cell = |out: &str, id: u32| -> Option<usize> {
+            let rich::color::Color { triplet, .. } = rich_art::kitty::id_color(id, true).unwrap();
+            let rich::color::ColorTriplet { red, green, blue } = triplet.unwrap();
+            let code = format!("38;2;{red};{green};{blue}");
+            out.match_indices(&code)
+                .find(|(at, _)| matches!(out.as_bytes().get(at + code.len()), Some(b'm' | b';')))
+                .map(|(at, _)| at)
+        };
+        let mut old = uploaded(&out);
+        let frame = shown.get().unwrap();
+        let mut last = first;
+        for k in 0..4u8 {
+            last = last.next_rgba(8, 8, vec![k * 40; 256]).unwrap();
+            frame.set(Some(last.clone()));
+            let out = written(&mut driver, "a=T", 5);
+            assert!(!out.contains("\x1b[?2026"), "{out:?}");
+            let id = uploaded(&out);
+            assert_ne!(id, old, "{k}: a new id each frame");
+            let upload = out.find("a=T").unwrap();
+            let named = cell(&out, id).unwrap_or_else(|| panic!("{k}: no cell names {id}"));
+            assert!(upload < named, "{k}: cells name {id} before its upload");
+            let delete = out
+                .find(&rich_art::kitty::delete(old))
+                .unwrap_or_else(|| panic!("{k}: {old} not deleted"));
+            assert!(named < delete, "{k}: {old} deleted before the cells leave it");
+            old = id;
+        }
+    }
+
+    #[test]
     fn tile_cache_rebuilds_when_cell_geometry_changes() {
         let mut tiler = rich_art::tiles::Tiler::new(2, 1);
         tiler.update(&RgbaImage::from_pixel(16, 16, Rgba([255, 0, 0, 255])), 2, 1);
