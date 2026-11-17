@@ -28,3 +28,10 @@ version = "0.0.6"
 lint = "enum_variant_added"
 items = ["variant Rule:BadgeText"]
 why = "Chat badges as text are made a rule of their own (`badge-text`, on by default), so they can be drawn as pictures again. An exhaustive match over Rule handles the new variant"
+
+[[break]]
+crate = "rs-rich-intuituive"
+version = "0.0.12"
+lint = "enum_marked_non_exhaustive"
+items = ["enum Level"]
+why = "Toasts gain a Success level (`Level::Success`, in the theme's `notify.success` style), and Level is marked non-exhaustive so another level is not a break again. A match over Level outside the crate adds a `_` arm"

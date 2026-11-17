@@ -6,6 +6,9 @@ use std::rc::Rc;
 use intuituive::prelude::*;
 use intuituive::{Driver, pager, range_slider};
 
+/// A range slider's two ends.
+type Span = (Signal<f64>, Signal<f64>);
+
 fn row(driver: &Driver, at: usize) -> String {
     driver.screen().plain()[at].trim_end().to_string()
 }
@@ -50,7 +53,7 @@ fn a_pager_moves_with_keys_and_clicks_and_stops_at_the_ends() {
 
 #[test]
 fn a_range_sliders_handles_never_cross() {
-    let out: Rc<Cell<Option<(Signal<f64>, Signal<f64>)>>> = Rc::default();
+    let out: Rc<Cell<Option<Span>>> = Rc::default();
     let set = out.clone();
     let app = App::new(move || {
         let (low, high) = (signal(30.0), signal(60.0));

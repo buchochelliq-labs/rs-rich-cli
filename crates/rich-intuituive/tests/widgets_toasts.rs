@@ -19,10 +19,9 @@ fn rows(driver: &Driver) -> Vec<String> {
 /// An app whose `n` shows a notification with two buttons, `t` a plain
 /// toast, `s` a success and `x` dismisses them; the count of each
 /// button's runs, and the history.
-fn app() -> (
-    Driver,
-    Rc<Cell<Option<(Signal<u32>, Signal<u32>, Signal<Vec<Notified>>)>>>,
-) {
+type Shared = Rc<Cell<Option<(Signal<u32>, Signal<u32>, Signal<Vec<Notified>>)>>>;
+
+fn app() -> (Driver, Shared) {
     let out = Rc::new(Cell::new(None));
     let set = out.clone();
     let app = App::new(move || {
