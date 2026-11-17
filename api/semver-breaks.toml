@@ -28,3 +28,10 @@ version = "0.0.6"
 lint = "enum_variant_added"
 items = ["variant Rule:BadgeText", "variant Rule:OneRowBars", "variant Rule:FoldLabels"]
 why = "New adaptations after #899, each on by default and each one that can be switched off: chat badges as text (`badge-text`), one-row bars such as a cookie banner (`one-row-bars`) and a short label folded into the title under it (`fold-labels`). An exhaustive match over Rule handles the new variants"
+
+[[break]]
+crate = "rs-rich-intuituive"
+version = "0.0.12"
+lint = "enum_marked_non_exhaustive"
+items = ["enum Level"]
+why = "Toasts gain a Success level (`Level::Success`, in the theme's `notify.success` style), and Level is marked non-exhaustive so another level is not a break again. A match over Level outside the crate adds a `_` arm"

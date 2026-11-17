@@ -132,6 +132,9 @@ pub(crate) struct Runtime {
     pub(crate) heading: Cell<Option<Signal<(String, String)>>>,
     /// Whether [`key_panel`](crate::key_panel)s show, once one is made.
     pub(crate) key_panel: Cell<Option<Signal<bool>>>,
+    /// The notification history, once something asked for it or a toast
+    /// was shown ([`notifications`](crate::notifications)).
+    pub(crate) notifications: Cell<Option<Signal<Vec<crate::notify::Notified>>>>,
     /// The keys held down, as [`held_keys`](crate::held_keys) reads them.
     pub(crate) held_keys: Cell<Option<Signal<Vec<rich_interact::Key>>>>,
     /// [`spawn_then`](crate::spawn_then)'s continuations, by number, kept
@@ -202,6 +205,7 @@ impl Runtime {
                 hints: Cell::new(None),
                 heading: Cell::new(None),
                 key_panel: Cell::new(None),
+                notifications: Cell::new(None),
                 held_keys: Cell::new(None),
                 layers: Cell::new(1),
                 focus: Cell::new(None),

@@ -108,6 +108,64 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   frames lined up with one. Readings for an action, a navigation or a load
   are still read at once on the tab's thread.
 
+### intuiTUIve: widgets for clicks, notices, steps and toasts
+
+- **Clickable spans of markup.** A `[@click=name]…[/]` span in a `text` or
+  `label` runs the action `name` when it is clicked, as Textual's does:
+  the focused path's binding with that id or description, else the app's
+  own `quit`, `bell`, `help` or `palette` (also as `app.quit`, …).
+  `Ctx::run_action(name)` runs one from a handler. `Node::on_span` takes
+  the clicks instead, with a `SpanTarget` (an action and its arguments, or
+  a link), and makes `[link=url]` spans clickable too; `Node::focus_spans`
+  lets the text take the focus, ← and → pick a span and Enter runs it.
+  `Ctx::bell` rings the terminal's bell, counted by `Driver::take_bells`.
+- **Status-bar segments and breadcrumb parts take clicks.**
+  `seg(..).on_click(action)` runs an action when its segment is clicked;
+  `breadcrumb(..).on_select(|i, cx| ..)` is told the part clicked, also
+  when the trail is cut from its start.
+- **A notice bar.** `notice_bar(shown, title, text)` is a bar that folds
+  to one row (the text cut with `…`), opens on Enter or a click to show
+  all of it, has action buttons (`.notice_action(label, run)`) and a `×`
+  that dismisses it (Esc too). `.notice_level(Level)` puts the level's
+  mark before the title; `.notice_open(signal)` opens it from the app.
+- **Steps.** `steps(items, status)` is a checklist or a stepper, each
+  step done `✓`, current `▸`, pending `○` or failed `✗` in its own theme
+  style; `StepState::at(i, current)` gives a wizard's states,
+  `.steps_across(sep)` lays them in a row and `.step_nav(page)` moves the
+  current step with the keys and clicks.
+- **Toasts with buttons, dismissed by a click or a key, and their
+  history.** `cx.notify_with(Notification::new(level, title, body)
+  .action(label, run))` shows buttons under a notification's body; a
+  click on one runs it and dismisses the notification, and a click
+  anywhere on a toast dismisses it. `cx.dismiss_toasts()` dismisses them
+  all, for a key to call. `notifications()` is a signal of every toast
+  and notification shown (the last 100). `Level::Success` is a new level
+  in the theme's `notify.success` style (else `good`); `Level` is now
+  `#[non_exhaustive]`.
+- **Success and Warning buttons, and a Bell command.** `ButtonVariant`
+  gains `Success` and `Warning` (Textual's other two variants), drawn in
+  the theme's `button.success` and `button.warning` styles, which the
+  dark, light and mono themes and a palette's theme name. The command
+  palette's system commands add *Bell*, which rings the terminal's bell;
+  it is off unless `SystemCommands::default().with("bell")` turns it on,
+  so the palettes apps show now are unchanged (`SystemCommands::NAMES` has
+  seven names now).
+- **More pseudo-classes in stylesheets.** `:first-of-type` and
+  `:last-of-type` count the siblings of a node's own kind; `:ansi` holds
+  while the theme's colours are the terminal's own, `:nocolor` while the
+  console shows no colour, and `:inline` in an inline app.
+- **Chips and a tag input.** `chip(text)` and `chip_of(|| badge)` show
+  rs-rich-ext's `Badge` as a node; `.on_remove(run)` adds a `×` (and
+  Delete) that removes it. `tag_input(tags)` types tags into a row of
+  removable chips.
+- **An accordion.** `accordion(open, sections)` is a column of
+  collapsible sections of which only one is open at a time; `open`
+  (a `Signal<Option<usize>>`) says which, and opens one from the app.
+- **A pager strip and a slider with two handles.** `pager(page, ||
+  pages)` shows `‹ 2 of 5 ›` (or dots, `.pager_dots()`) and moves a page
+  signal with the keys and clicks. `range_slider(low, high, range, step)`
+  holds a span whose handles never cross.
+
 ### intuiTUIve: pictures without flicker between frames
 
 - **Kitty uploads go before the cells that name them.** A frame used to

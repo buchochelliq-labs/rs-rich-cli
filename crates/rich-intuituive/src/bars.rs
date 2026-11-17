@@ -11,7 +11,8 @@ use crate::help::KeyHintsOptions;
 use crate::layout::Size;
 use crate::node::{Axis, Node, leaf, row};
 use crate::reactive::{Runtime, Signal};
-use crate::widget::{Canvas, DrawCx, MeasureCx, Widget, theme_style};
+use crate::widget::{Canvas, DrawCx, EventCx, MeasureCx, Used, Widget, WidgetEvent, theme_style};
+use rich_interact::{Button as MouseButton, MouseKind};
 
 /// The glyphs between a [`status_bar`]'s segments.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
@@ -49,6 +50,8 @@ pub struct StatusSegment {
     gauge: Option<(Box<dyn Fn() -> f64>, u16)>,
     /// Shown only while this holds ([`when`](StatusSegment::when)).
     when: Option<Box<dyn Fn() -> bool>>,
+    /// Run when it is clicked ([`on_click`](StatusSegment::on_click)).
+    click: Option<OnClick>,
 }
 
 /// A [`status_bar`] segment showing console `markup`, which may read
@@ -60,6 +63,7 @@ pub fn seg(markup: impl Fn() -> String + 'static) -> StatusSegment {
         style: Box::new(String::new),
         gauge: None,
         when: None,
+        click: None,
     }
 }
 
@@ -98,6 +102,7 @@ pub fn seg_gauge(
         style: Box::new(|| "status_bar.gauge".into()),
         gauge: Some((Box::new(fraction), 10)),
         when: None,
+        click: None,
     }
 }
 
@@ -143,6 +148,30 @@ impl StatusSegment {
         self
     }
 
+    /// Run `action` when the segment is clicked, as Textual's header and
+    /// footer run theirs: a mode that cycles, a count that opens its list.
+    /// A click between segments, or on a cap, does nothing.
+    ///
+    /// ```
+    /// use intuituive::prelude::*;
+    /// use intuituive::widgets::{seg, status_bar};
+    ///
+    /// let app = App::new(|| {
+    ///     let mode = signal("NOR");
+    ///     status_bar(
+    ///         [seg(move || format!(" {} ", mode.get())).on_click(move |_| mode.set("INS"))],
+    ///         [seg(|| "1/12".into())],
+    ///     )
+    /// });
+    /// let mut driver = app.driver(16, 1);
+    /// assert!(driver.click_text("NOR"));
+    /// assert_eq!(driver.screen().plain()[0], " INS        1/12");
+    /// ```
+    pub fn on_click(mut self, action: impl FnMut(&mut crate::app::Ctx) + 'static) -> StatusSegment {
+        self.click = Some(Box::new(action));
+        self
+    }
+
     /// For a [`seg_gauge`]: the cells it takes (10 by default). Ignored on
     /// other segments.
     pub fn width(mut self, cells: u16) -> StatusSegment {
@@ -158,6 +187,10 @@ struct StatusBar {
     left: Vec<StatusSegment>,
     right: Vec<StatusSegment>,
     caps: Caps,
+    /// Where the clickable segments were last drawn: their first column,
+    /// the column after them, which group (the left one, `true`) and their
+    /// place in it.
+    hits: Vec<(usize, usize, bool, usize)>,
 }
 
 /// A one-row status line of segments, `left` from the left edge and
@@ -199,6 +232,7 @@ pub fn status_bar(
         left: left.into_iter().collect(),
         right: right.into_iter().collect(),
         caps: Caps::None,
+        hits: Vec::new(),
     });
     node.size = Size::Fixed(1);
     node
@@ -216,6 +250,8 @@ impl Node {
 /// A segment's markup and style, read for one draw; a gauge's cells
 /// made.
 struct Shown {
+    /// Its place among its group's segments.
+    at: usize,
     markup: String,
     style: Style,
     cells: Option<Vec<Segment>>,
@@ -259,8 +295,9 @@ impl StatusBar {
     fn read(console: &Console, segments: &[StatusSegment]) -> Vec<Shown> {
         segments
             .iter()
-            .filter(|segment| segment.when.as_ref().is_none_or(|shown| shown()))
-            .filter_map(|segment| {
+            .enumerate()
+            .filter(|(_, segment)| segment.when.as_ref().is_none_or(|shown| shown()))
+            .filter_map(|(at, segment)| {
                 let markup = (segment.markup)();
                 let name = (segment.style)();
                 if let Some((fraction, width)) = &segment.gauge {
@@ -272,6 +309,7 @@ impl StatusBar {
                         theme_style(console, "status_bar.gauge.rest", "white on bright_black");
                     let cells = gauge_cells(&markup, fraction(), *width, &fill, &rest);
                     return Some(Shown {
+                        at,
                         markup,
                         style: fill,
                         cells: Some(cells),
@@ -282,6 +320,7 @@ impl StatusBar {
                 }
                 let style = theme_style(console, &name, &name);
                 Some(Shown {
+                    at,
                     markup,
                     style,
                     cells: None,
@@ -293,6 +332,19 @@ impl StatusBar {
     /// A group's cells: each segment on its style, with the caps. The left
     /// group closes each segment; the right one opens each.
     fn group(&self, console: &Console, shown: &[Shown], left: bool) -> Vec<Segment> {
+        self.group_at(console, shown, left).0
+    }
+
+    /// [`group`](Self::group), with where each segment's own cells are in
+    /// it (caps left out): its place in the group, its first column and
+    /// the column after it.
+    fn group_at(
+        &self,
+        console: &Console,
+        shown: &[Shown],
+        left: bool,
+    ) -> (Vec<Segment>, Vec<(usize, usize, usize)>) {
+        let mut spans = Vec::new();
         let glyphs = self.caps.glyphs();
         let rounded = self.caps == Caps::Rounded;
         let bg = |i: usize| shown.get(i).and_then(|s| s.style.bgcolor().cloned());
@@ -312,6 +364,7 @@ impl StatusBar {
                     out.push(cap(open, Some(own), before));
                 }
             }
+            let start = cells_of(&out);
             if let Some(cells) = &segment.cells {
                 out.extend(cells.iter().cloned());
             } else {
@@ -325,6 +378,7 @@ impl StatusBar {
                     Segment::new(piece.text, Some(style))
                 }));
             }
+            spans.push((segment.at, start, cells_of(&out)));
             if let (Some((_, close)), Some(own)) = (glyphs, own) {
                 // After each segment of the left group, on the next; after
                 // the right group (rounded).
@@ -336,8 +390,19 @@ impl StatusBar {
                 }
             }
         }
-        out
+        (out, spans)
     }
+}
+
+/// Where cells `start..end` of a line went once [`cut_start`] cut it to
+/// `width` cells (the line was `used` cells): its first `used - (width -
+/// 1)` cells dropped for a `…`. `None` when they were dropped.
+fn shifted_start(start: usize, end: usize, used: usize, width: usize) -> Option<(usize, usize)> {
+    if used <= width {
+        return Some((start, end));
+    }
+    let dropped = used - width.saturating_sub(1);
+    (end > dropped).then(|| (start.saturating_sub(dropped) + 1, end - dropped + 1))
 }
 
 /// `line` cut to `width` cells, with `…` where it was cut.
@@ -426,10 +491,25 @@ impl Widget for StatusBar {
     fn draw(&mut self, cx: &mut DrawCx, canvas: &mut Canvas) {
         let console = cx.console();
         let width = canvas.width() as usize;
-        let left = self.group(console, &StatusBar::read(console, &self.left), true);
-        let right = self.group(console, &StatusBar::read(console, &self.right), false);
+        let (left, left_at) = self.group_at(console, &StatusBar::read(console, &self.left), true);
+        let (right, right_at) =
+            self.group_at(console, &StatusBar::read(console, &self.right), false);
+        let right_used = cells_of(&right);
         let right = cut_start(right, width);
         let room = width - cells_of(&right);
+        self.hits.clear();
+        for (at, start, end) in left_at {
+            if self.left[at].click.is_some() && start < room {
+                self.hits.push((start, end.min(room), true, at));
+            }
+        }
+        for (at, start, end) in right_at {
+            if self.right[at].click.is_some()
+                && let Some((start, end)) = shifted_start(start, end, right_used, width)
+            {
+                self.hits.push((room + start, room + end, false, at));
+            }
+        }
         let mut line = cut_end(left, room);
         let gap = room - cells_of(&line);
         if gap > 0 {
@@ -438,6 +518,56 @@ impl Widget for StatusBar {
         line.extend(right);
         canvas.lines(&[line]);
     }
+
+    fn event(&mut self, cx: &mut EventCx, event: &WidgetEvent) -> Used {
+        let hit = click_hit(event, |column| {
+            self.hits
+                .iter()
+                .find(|&&(start, end, _, _)| (start..end).contains(&(column as usize)))
+                .map(|&(_, _, left, at)| (left, at))
+        });
+        let Some(((left, at), up)) = hit else {
+            return Used::No;
+        };
+        if up {
+            let group = if left {
+                &mut self.left
+            } else {
+                &mut self.right
+            };
+            if let Some(click) = group.get_mut(at).and_then(|s| s.click.as_mut()) {
+                click(cx.app());
+            }
+        }
+        Used::Yes
+    }
+}
+
+/// For a left press or release: what `find` finds under it, from the
+/// column, with whether it was the release.
+fn click_hit<T>(event: &WidgetEvent, find: impl FnOnce(u16) -> Option<T>) -> Option<(T, bool)> {
+    let WidgetEvent::Mouse(mouse) = event else {
+        return None;
+    };
+    let up = match mouse.kind {
+        MouseKind::Down(MouseButton::Left) => false,
+        MouseKind::Up(MouseButton::Left) => true,
+        _ => return None,
+    };
+    find(mouse.column).map(|found| (found, up))
+}
+
+type Select = Box<dyn FnMut(usize, &mut crate::app::Ctx)>;
+
+/// What a [`StatusSegment`] runs when it is clicked.
+type OnClick = Box<dyn FnMut(&mut crate::app::Ctx)>;
+
+/// Give a [`breadcrumb`] `select`, run with a part's index when it is
+/// clicked ([`Node::on_select`]); on another node, `select` back.
+pub(crate) fn crumb_select(node: &Node, select: Select) -> Option<Select> {
+    let mut select = Some(select);
+    node.widget_mut(|crumb: &mut Breadcrumb| crumb.select = select.take());
+    select
 }
 
 /// A [`breadcrumb`]'s widget.
@@ -445,6 +575,11 @@ struct Breadcrumb {
     parts: Box<dyn Fn() -> Vec<String>>,
     separator: String,
     after: Option<Box<dyn Fn() -> String>>,
+    /// Run with a part's index when it is clicked ([`Node::on_select`]).
+    select: Option<Select>,
+    /// Where each part was last drawn: its index, its first column and the
+    /// column after it.
+    hits: Vec<(usize, usize, usize)>,
 }
 
 /// A trail of parts as a one-row header: the parts (where you are last)
@@ -452,7 +587,9 @@ struct Breadcrumb {
 /// the last part in the theme's `breadcrumb.last` style (bold by
 /// default), the others in `breadcrumb` and the separators in
 /// `breadcrumb.separator`. When it does not fit, it loses its start, with
-/// `…` where it was cut, so where you are stays in view. `parts` may read
+/// `…` where it was cut, so where you are stays in view. A click on a part
+/// runs [`on_select`](Node::on_select) with its index (0 the first), to go
+/// back up a path or a wizard's steps. `parts` may read
 /// signals; an empty part shows nothing, so a leading empty part puts a
 /// separator first (a path's root). [`Node::crumb_suffix`] adds markup
 /// after the trail that is never cut (a filter, a count). It knows
@@ -481,6 +618,8 @@ pub fn breadcrumb(parts: impl Fn() -> Vec<String> + 'static) -> Node {
         parts: Box::new(parts),
         separator: " › ".into(),
         after: None,
+        select: None,
+        hits: Vec::new(),
     });
     node.size = Size::Fixed(1);
     node
@@ -505,6 +644,18 @@ impl Node {
 
 impl Breadcrumb {
     fn line(&self, console: &Console) -> (Vec<Segment>, Vec<Segment>) {
+        let (line, after, _) = self.line_at(console);
+        (line, after)
+    }
+
+    /// [`line`](Self::line), with where each part is in the trail: its
+    /// index, its first column and the column after it.
+    #[allow(clippy::type_complexity)]
+    fn line_at(
+        &self,
+        console: &Console,
+    ) -> (Vec<Segment>, Vec<Segment>, Vec<(usize, usize, usize)>) {
+        let mut spans = Vec::new();
         let parts = (self.parts)();
         let base = theme_style(console, "breadcrumb", "");
         let last = theme_style(console, "breadcrumb.last", "bold");
@@ -519,7 +670,9 @@ impl Breadcrumb {
                 continue;
             }
             let style = if i + 1 == count { &last } else { &base };
+            let start = cells_of(&line);
             line.push(Segment::new(part, Some(style.clone())));
+            spans.push((i, start, cells_of(&line)));
         }
         let after = match &self.after {
             Some(after) => {
@@ -529,7 +682,7 @@ impl Breadcrumb {
             }
             None => Vec::new(),
         };
-        (line, after)
+        (line, after, spans)
     }
 }
 
@@ -555,11 +708,38 @@ impl Widget for Breadcrumb {
 
     fn draw(&mut self, cx: &mut DrawCx, canvas: &mut Canvas) {
         let width = canvas.width() as usize;
-        let (line, after) = self.line(cx.console());
+        let (line, after, spans) = self.line_at(cx.console());
         let after = cut_end(after, width);
-        let mut line = cut_start(line, width - cells_of(&after));
+        let (used, room) = (cells_of(&line), width - cells_of(&after));
+        let mut line = cut_start(line, room);
+        self.hits = spans
+            .into_iter()
+            .filter_map(|(i, start, end)| {
+                shifted_start(start, end, used, room).map(|(start, end)| (i, start, end))
+            })
+            .collect();
         line.extend(after);
         canvas.lines(&[line]);
+    }
+
+    fn event(&mut self, cx: &mut EventCx, event: &WidgetEvent) -> Used {
+        if self.select.is_none() {
+            return Used::No;
+        }
+        let hit = click_hit(event, |column| {
+            let column = column as usize;
+            self.hits
+                .iter()
+                .find(|&&(_, start, end)| (start..end).contains(&column))
+                .map(|&(i, _, _)| i)
+        });
+        let Some((i, up)) = hit else {
+            return Used::No;
+        };
+        if up && let Some(select) = &mut self.select {
+            select(i, cx.app());
+        }
+        Used::Yes
     }
 }
 

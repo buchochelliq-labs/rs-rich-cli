@@ -31,7 +31,7 @@
 //!
 //! | Style | What it styles |
 //! |---|---|
-//! | `button`, `button.primary`, `button.danger` | a button's face, by [variant](ButtonVariant) |
+//! | `button`, `button.primary`, `button.danger`, `button.success`, `button.warning` | a button's face, by [variant](ButtonVariant) |
 //! | `<face>.focus` (else `button.focus`) | over the face, with the focus or the pointer on it, or held (`bold reverse`) |
 //! | `<face>.disabled` (else `button.disabled`) | over the face, while it is disabled (`dim`) |
 //! | `<face>.light`, `<face>.shade` (and `<face>.focus.light`, …) | a button three rows tall: its top and bottom edges' colours |
@@ -107,6 +107,12 @@ pub enum ButtonVariant {
     Primary,
     /// `button.danger`: an action that destroys something.
     Danger,
+    /// `button.success`: an action that confirms or completes (Textual's
+    /// `success` variant).
+    Success,
+    /// `button.warning`: an action to take with care (Textual's
+    /// `warning` variant).
+    Warning,
 }
 
 impl ButtonVariant {
@@ -116,6 +122,8 @@ impl ButtonVariant {
             ButtonVariant::Default => "button",
             ButtonVariant::Primary => "button.primary",
             ButtonVariant::Danger => "button.danger",
+            ButtonVariant::Success => "button.success",
+            ButtonVariant::Warning => "button.warning",
         }
     }
 }
@@ -225,8 +233,9 @@ impl Node {
         self
     }
 
-    /// For a [`button`]: its look, the theme's `button.primary` or
-    /// `button.danger` rather than `button`. Ignored on other nodes.
+    /// For a [`button`]: its look, the theme's `button.primary`,
+    /// `button.danger`, `button.success` or `button.warning` rather than
+    /// `button`. Ignored on other nodes.
     ///
     /// ```
     /// use intuituive::prelude::*;
@@ -1143,6 +1152,195 @@ impl Widget for Slider {
         if to != now {
             self.value.set(to);
         }
+        Used::Yes
+    }
+
+    fn focusable(&self) -> bool {
+        true
+    }
+}
+
+/// What [`range_slider`] makes.
+struct RangeSlider {
+    low: Signal<f64>,
+    high: Signal<f64>,
+    /// The range and step, as a [`slider`]'s (its value is unused).
+    scale: Slider,
+    /// The handle the keys move: the high one when `true`.
+    upper: bool,
+    width: u16,
+}
+
+/// A slider with two handles over `range`, holding `low` and `high`
+/// (`low` never above `high`), moved in steps of `step` (none when 0): a
+/// price filter, a span of dates, a window of a waveform. The track
+/// between the handles is filled. ← and → (↓ and ↑) move the handle
+/// picked a step, PageDown and PageUp a tenth of the range, Home and End
+/// to as far as it goes; Space or Enter picks the other handle. A click
+/// moves the nearer handle under the pointer, and a drag moves it on. The
+/// styles are a [`slider`]'s, the picked handle taking `control.focus`
+/// while the slider has the focus. Its role is
+/// [`Slider`](crate::a11y::Role::Slider), its value `low to high`.
+/// Twenty cells wide unless sized.
+///
+/// ```
+/// use intuituive::prelude::*;
+/// use intuituive::range_slider;
+///
+/// let app = App::new(|| {
+///     let (low, high) = (signal(20.0), signal(80.0));
+///     column([
+///         range_slider(low, high, 0.0..=100.0, 10.0).label("Price").fixed(1),
+///         text!("{low}-{high}"),
+///     ])
+/// });
+/// let mut driver = app.driver(11, 2);
+/// driver.press("left space right right");
+/// assert_eq!(driver.screen().plain()[1].trim_end(), "10-100");
+/// assert_eq!(driver.screen().plain()[0], "─●━━━━━━━━●");
+/// assert_eq!(driver.accessibility()[0].describe(), "Price, slider: 10 to 100");
+/// ```
+pub fn range_slider(
+    low: Signal<f64>,
+    high: Signal<f64>,
+    range: RangeInclusive<f64>,
+    step: f64,
+) -> Node {
+    let (min, max) = (*range.start(), *range.end());
+    let (min, max) = if min <= max { (min, max) } else { (max, min) };
+    widget(RangeSlider {
+        low,
+        high,
+        scale: Slider {
+            value: low,
+            min,
+            max,
+            step: step.abs(),
+            width: 0,
+        },
+        upper: false,
+        width: 0,
+    })
+    .auto()
+}
+
+impl RangeSlider {
+    /// Set the picked handle to `to`, kept on its side of the other.
+    fn move_to(&self, to: f64) {
+        let to = self.scale.snap(to);
+        if self.upper {
+            let to = to.max(self.low.get_untracked());
+            self.high.set(to);
+        } else {
+            let to = to.min(self.high.get_untracked());
+            self.low.set(to);
+        }
+    }
+}
+
+impl Widget for RangeSlider {
+    fn name(&self) -> &'static str {
+        "range_slider"
+    }
+
+    fn role(&self) -> Role {
+        Role::Slider
+    }
+
+    fn access_value(&self) -> Option<String> {
+        let (low, high) = (self.low.get_untracked(), self.high.get_untracked());
+        Some(format!(
+            "{} to {}",
+            self.scale.spoken(low),
+            self.scale.spoken(high)
+        ))
+    }
+
+    fn measure(&mut self, _cx: &MeasureCx, axis: Axis, _width: u16, _height: u16) -> u16 {
+        match axis {
+            Axis::Horizontal => 20,
+            Axis::Vertical => 1,
+        }
+    }
+
+    fn draw(&mut self, cx: &mut DrawCx, canvas: &mut Canvas) {
+        let width = canvas.width();
+        self.width = width;
+        if width == 0 {
+            return;
+        }
+        let place = |value: f64| (self.scale.fraction(value) * (width - 1) as f64).round() as u16;
+        let (low, high) = (place(self.low.get()), place(self.high.get()));
+        let (filled, track, knob) = match crate::a11y::text_mode() {
+            true => ("=", "-", "|"),
+            false => ("━", "─", "●"),
+        };
+        let filled_style = look(cx, &["slider.filled", "accent"], "bold");
+        let track_style = look(cx, &["slider.track", "muted"], "dim");
+        let knob_style = look(cx, &["slider.knob", "slider.filled", "accent"], "bold");
+        canvas.print(0, 0, &track.repeat(width as usize), Some(&track_style));
+        if high > low + 1 {
+            let between = filled.repeat((high - low - 1) as usize);
+            canvas.print(low + 1, 0, &between, Some(&filled_style));
+        }
+        canvas.print(low, 0, knob, Some(&knob_style));
+        canvas.print(high, 0, knob, Some(&knob_style));
+        if cx.disabled() {
+            canvas.restyle(0, 0, width, 1, &cx.style("control.disabled", "dim"));
+        } else if cx.focused() {
+            let at = if self.upper { high } else { low };
+            canvas.restyle(at, 0, 1, 1, &cx.style("control.focus", "reverse"));
+        }
+    }
+
+    fn event(&mut self, cx: &mut EventCx, event: &WidgetEvent) -> Used {
+        let now = if self.upper {
+            self.high.get_untracked()
+        } else {
+            self.low.get_untracked()
+        };
+        let step = if self.scale.step > 0.0 {
+            self.scale.step
+        } else {
+            (self.scale.max - self.scale.min) / 100.0
+        };
+        let to = match event {
+            WidgetEvent::Key(key) => match key.code {
+                KeyCode::Left | KeyCode::Down => now - step,
+                KeyCode::Right | KeyCode::Up => now + step,
+                KeyCode::PageDown => now - self.scale.page(),
+                KeyCode::PageUp => now + self.scale.page(),
+                KeyCode::Home => self.scale.min,
+                KeyCode::End => self.scale.max,
+                KeyCode::Char(' ') | KeyCode::Enter => {
+                    self.upper = !self.upper;
+                    cx.redraw();
+                    return Used::Yes;
+                }
+                _ => return Used::No,
+            },
+            WidgetEvent::Mouse(mouse) => match mouse.kind {
+                MouseKind::Down(MouseButton::Left) => {
+                    cx.capture_mouse();
+                    let to = self.scale.at(mouse.column, self.width.max(cx.size().0));
+                    let (low, high) = (self.low.get_untracked(), self.high.get_untracked());
+                    // The nearer handle; past both on one side, that side's.
+                    self.upper = (to - high).abs() < (to - low).abs() || to > high;
+                    cx.redraw();
+                    to
+                }
+                MouseKind::Drag(MouseButton::Left) => {
+                    self.scale.at(mouse.column, self.width.max(cx.size().0))
+                }
+                MouseKind::Up(_) => {
+                    cx.release_mouse();
+                    return Used::Yes;
+                }
+                _ => return Used::No,
+            },
+            _ => return Used::No,
+        };
+        self.move_to(to);
         Used::Yes
     }
 

@@ -103,6 +103,7 @@ pub mod border;
 mod builtin;
 mod calendar;
 mod carousel;
+mod chips;
 mod clock;
 mod collapsible;
 pub mod command_line;
@@ -145,7 +146,9 @@ pub mod micro_sprite;
 pub mod miller;
 pub mod node;
 mod node_list;
+mod notice;
 mod notify;
+mod pager;
 mod palette;
 mod parity;
 pub mod pixels;
@@ -166,12 +169,14 @@ mod sheet;
 mod signals;
 mod solver;
 pub mod source;
+mod spans;
 mod spinner;
 mod split;
 pub mod sprite;
 #[cfg(feature = "art")]
 pub mod sprite_sheet;
 pub mod state;
+mod steps;
 pub mod tab_set;
 mod table_scroll;
 pub mod task;
@@ -212,7 +217,8 @@ pub use big_text::big_text;
 pub use bindings::{ModePage, Scaled, Stepped};
 pub use border::{Border, BorderSet, Edge, Shadow, Sides};
 pub use carousel::carousel;
-pub use collapsible::{Status, collapsible, collapsible_with};
+pub use chips::{chip, chip_of, tag_input};
+pub use collapsible::{Status, accordion, collapsible, collapsible_with};
 pub use command_line::{CommandLine, CommandLineOptions, command_line, command_line_with};
 pub use commands::{Hit, HitSink, Provider, SystemCommands, Themes};
 pub use complete::{
@@ -221,7 +227,7 @@ pub use complete::{
 };
 pub use controls::{
     ButtonVariant, CheckState, button, button_of, checkbox, checkbox_of, checkbox_tri, radio,
-    radio_keyed, slider, switch_of, switch_toggle,
+    radio_keyed, range_slider, slider, switch_of, switch_toggle,
 };
 pub use dial::dial;
 pub use dialog::{ConfirmOptions, PickOptions, PromptOptions};
@@ -262,7 +268,9 @@ pub use node::{
 };
 pub use node::{described, drawn, drawn_described};
 pub use node_list::{list_of, list_of_virtual};
-pub use notify::{Corner, Level};
+pub use notice::notice_bar;
+pub use notify::{Corner, Level, Notification, Notified, notifications};
+pub use pager::pager;
 pub use palette::Palette;
 pub use parity::{
     PlaceholderVariant, header, key_panel, link, masked_input, placeholder, progress_bar,
@@ -283,11 +291,13 @@ pub use select_field::{SelectOption, select_field, select_field_keyed};
 pub use sheet::{SheetError, Stylesheet};
 pub use signals::{Count, History, falling, history, recent, recent_of, recent_timed, smoothed};
 pub use solver::Solver;
+pub use spans::SpanTarget;
 pub use spinner::spinner;
 pub use state::{
     FrecencyStore, frecency_in, frecency_session, frecency_store, read_state, state_dir,
     state_file, update_file, update_state, write_atomic, write_state,
 };
+pub use steps::{StepState, steps};
 pub use tab_set::{Scoped, TabSet, tab_set, tabs_for, tabs_for_indexed};
 pub use task::{
     Latest, Load, Notifier, Resource, Stream, Task, latest, latest_every, resource, resource_for,

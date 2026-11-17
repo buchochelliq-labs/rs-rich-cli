@@ -292,9 +292,21 @@ the room and the answers at the bottom) and styles its title.
 - **`cx.notify(level, title, body)`** (`notify_for` with a duration; five
   seconds by default) is a notification: a box with the title on its top
   edge and the body wrapped inside, its border and title in the level's
-  style (`Level::Info`, `Warn` or `Error`: the theme's `notify.info`,
-  `notify.warn` or `notify.error`, else `accent`, `warn` or `bad`). It is
-  announced with its level (`Error: Copy failed: …`).
+  style (`Level::Info`, `Success`, `Warn` or `Error`: the theme's
+  `notify.info`, `notify.success`, `notify.warn` or `notify.error`, else
+  `accent`, `good`, `warn` or `bad`). It is announced with its level
+  (`Error: Copy failed: …`).
+- **`cx.notify_with(Notification::new(level, title, body).action("Undo",
+  |cx| ..))`** adds buttons on a row under the body, in the theme's
+  `button` style; `.timeout(duration)` sets how long it shows. A click on
+  a button runs its action and dismisses the notification.
+- **A click on any toast dismisses it**, and `cx.dismiss_toasts()`
+  dismisses all of them: bind it to a key (`.on_key("ctrl+x", |cx|
+  cx.dismiss_toasts())`).
+- **`notifications()`** is the history: every toast and notification
+  shown, oldest first, the last 100, as a `Signal<Vec<Notified>>` (level,
+  title, body, and when, on the app's clock). A panel of past
+  notifications is a node that reads it.
 - **`App::toasts_at(corner)`** stacks toasts and notifications in another
   corner, newest nearest it: `Corner::TopRight` is Yazi's.
 - **`App::notify_width(size)`**: a notification is as wide as its body's

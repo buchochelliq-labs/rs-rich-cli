@@ -34,12 +34,14 @@ from an off-by-default feature name it: `art`, `micro`, `viz`, `files` and
 |---|---|---|---|
 | ![](../../assets/intuituive/widgets/text.svg){ .tui-icon width="20" } | [text](layout.md#nodes) | `text`, `text!` | Console markup that redraws when a signal it reads changes |
 | ![](../../assets/intuituive/widgets/label.svg){ .tui-icon width="20" } | [label](layout.md#nodes) | `label` | Fixed console markup |
+| ![](../../assets/intuituive/widgets/label.svg){ .tui-icon width="20" } | [chip](widgets.md#chips-and-a-tag-input) | `chip`, `chip_of` | A badge as a node, removable with a `×` |
 | ![](../../assets/intuituive/widgets/fit_text.svg){ .tui-icon width="20" } | [fit_text](layout.md#text-alignment-wrapping-and-overflow) | `fit_text` | The longest of several forms of a text that fits |
 | ![](../../assets/intuituive/widgets/digits.svg){ .tui-icon width="20" } | [digits](plugins.md#levels-sparklines-and-big-text) | `digits` | Large seven-segment digits |
 | ![](../../assets/intuituive/widgets/big_text.svg){ .tui-icon width="20" } | [big_text](plugins.md#levels-sparklines-and-big-text) | `big_text` | FIGlet lettering (`art` feature) |
 | ![](../../assets/intuituive/widgets/facts.svg){ .tui-icon width="20" } | [facts](widgets.md#bars-for-an-apps-chrome) | `facts`, `facts_of` | A description list of keys and values |
 | ![](../../assets/intuituive/widgets/input.svg){ .tui-icon width="20" } | [input](components.md#inputs-bound-to-signals) | `input` | A one-line input bound to a String signal |
 | ![](../../assets/intuituive/widgets/number_input.svg){ .tui-icon width="20" } | [number_input](components.md#inputs-bound-to-signals) | `number_input` | A number in a range, stepped with keys |
+| ![](../../assets/intuituive/widgets/input.svg){ .tui-icon width="20" } | [tag_input](widgets.md#chips-and-a-tag-input) | `tag_input` | Tags typed into a row of removable chips |
 | ![](../../assets/intuituive/widgets/text_area.svg){ .tui-icon width="20" } | [text_area](components.md#text-areas) | `text_area` | Multi-line text editing; a prompt editor (`grow`, `submit_on`, `complete_at`, `history`) |
 | ![](../../assets/intuituive/widgets/search_bar.svg){ .tui-icon width="20" } | [search_bar](text-editing.md#search-and-the-find-bar) | `search_bar` | A find bar over a text area's search: the pattern, where it is, regex and case flags |
 | ![](../../assets/intuituive/widgets/command_line.svg){ .tui-icon width="20" } | [command_line](components.md#completion-history-and-a-command-line) | `command_line` | A vim-style command line, with completion and history |
@@ -60,9 +62,11 @@ from an off-by-default feature name it: `art`, `micro`, `viz`, `files` and
 | ![](../../assets/intuituive/widgets/switch_toggle.svg){ .tui-icon width="20" } | [switch toggle](controls.md#check-boxes-and-switches) | `switch_toggle`, `switch_of` | An on/off switch, bound to a `Signal<bool>` |
 | ![](../../assets/intuituive/widgets/radio.svg){ .tui-icon width="20" } | [radio group](controls.md#radio-groups) | `radio`, `radio_keyed` | One choice of several, shown at once; by index or by key |
 | ![](../../assets/intuituive/widgets/slider.svg){ .tui-icon width="20" } | [slider](controls.md#sliders) | `slider` | A number in a range, by keys, click, drag or wheel |
+| ![](../../assets/intuituive/widgets/slider.svg){ .tui-icon width="20" } | [range_slider](controls.md#two-handles) | `range_slider` | A span of a range, two handles that never cross |
 | ![](../../assets/intuituive/widgets/rating.svg){ .tui-icon width="20" } | [rating input](widgets.md#ratings) | `rating_input` | A score in stars the user sets, by keys, digits, clicks or wheel |
 | ![](../../assets/intuituive/widgets/select_field.svg){ .tui-icon width="20" } | [select field](controls.md#select-fields) | `select_field`, `select_field_keyed` | One choice of several, from a menu that opens under it; by index or by key |
 | ![](../../assets/intuituive/widgets/collapsible.svg){ .tui-icon width="20" } | [collapsible](controls.md#collapsible-sections) | `collapsible`, `collapsible_with` | A titled section that opens and closes; a status beside the title and a summary while closed |
+| ![](../../assets/intuituive/widgets/collapsible.svg){ .tui-icon width="20" } | [accordion](controls.md#one-open-at-a-time-an-accordion) | `accordion` | Collapsible sections, one open at a time |
 | ![](../../assets/intuituive/widgets/spinner.svg){ .tui-icon width="20" } | [spinner](controls.md#spinners-and-loading) | `spinner`, `.loading_when` | An animated busy sign; a node dimmed while it loads |
 
 ## Lists and data
@@ -96,6 +100,10 @@ from an off-by-default feature name it: `art`, `micro`, `viz`, `files` and
 | ![](../../assets/intuituive/widgets/status_bar.svg){ .tui-icon width="20" } | [status_bar](widgets.md#bars-for-an-apps-chrome) | `status_bar`, `seg` | Segments along the bottom line |
 | ![](../../assets/intuituive/widgets/gauge.svg){ .tui-icon width="20" } | [gauge](widgets.md#bars-for-an-apps-chrome) | `seg_gauge` | A status-bar segment drawn as a gauge |
 | ![](../../assets/intuituive/widgets/breadcrumb.svg){ .tui-icon width="20" } | [breadcrumb](widgets.md#bars-for-an-apps-chrome) | `breadcrumb` | A path of parts with separators |
+| ![](../../assets/intuituive/widgets/label.svg){ .tui-icon width="20" } | [notice_bar](widgets.md#notice-bars) | `notice_bar` | A bar that folds to one row, opens, has actions and is dismissed |
+| ![](../../assets/intuituive/widgets/list.svg){ .tui-icon width="20" } | [steps](widgets.md#steps) | `steps` | A checklist or a wizard's stepper: done, current, pending, failed |
+| ![](../../assets/intuituive/widgets/tabs.svg){ .tui-icon width="20" } | [pager](widgets.md#a-pager-strip) | `pager` | `‹ 2 of 5 ›` or dots, moving a page signal |
+| ![](../../assets/intuituive/widgets/text.svg){ .tui-icon width="20" } | [clickable spans](widgets.md#clickable-spans-of-markup) | `[@click=…]`, `.on_span`, `.focus_spans` | Markup spans that run an action or follow a link |
 | ![](../../assets/intuituive/widgets/key_hints.svg){ .tui-icon width="20" } | [key_hints](widgets.md#bars-for-an-apps-chrome) | `key_hints`, `key_hints_with` | The keys that work here, from the bindings |
 | ![](../../assets/intuituive/widgets/menu_bar.svg){ .tui-icon width="20" } | [menu_bar](screens.md#menus) | `menu_bar` | A bar of menus that drop down |
 | ![](../../assets/intuituive/widgets/miller.svg){ .tui-icon width="20" } | [miller](browsing.md#miller-columns) | `miller_of`, `miller_in` | Miller columns over any tree |
@@ -118,6 +126,7 @@ from an off-by-default feature name it: `art`, `micro`, `viz`, `files` and
 | ![](../../assets/intuituive/widgets/help.svg){ .tui-icon width="20" } | [help](input.md#the-command-palette-and-help) | `cx.help` | The bindings, listed by section |
 | ![](../../assets/intuituive/widgets/toast.svg){ .tui-icon width="20" } | [toast](screens.md#toasts-and-animations) | `cx.toast` | A short message that goes away on its own |
 | ![](../../assets/intuituive/widgets/notify.svg){ .tui-icon width="20" } | [notify](screens.md#toasts-and-animations) | `cx.notify` | A notification with a level and a title |
+| ![](../../assets/intuituive/widgets/toast.svg){ .tui-icon width="20" } | [notify_with](screens.md#toasts-and-animations) | `cx.notify_with`, `Notification`, `notifications` | A notification with buttons; the history of what was shown |
 | ![](../../assets/intuituive/widgets/tooltip.svg){ .tui-icon width="20" } | [tooltip](input.md#tooltips) | `.tooltip(markup)` | Text shown while the pointer rests on a node |
 
 ## Charts and media

@@ -173,9 +173,10 @@ these: a modal's or pop-up's panel title (the palette's, the help's, a
 confirm's) is drawn in `popup.title`, else `title`; the which-key keys in
 `which_key.key`, else `accent`, its separators in `which_key.sep` and its
 descriptions in `which_key.desc`; notifications in `notify.info`,
-`notify.warn` and `notify.error`, else `accent`, `warn` and `bad`. The
-presets also name the [stock buttons](controls.md#buttons)' faces,
-`button`, `button.primary` and `button.danger`; the other
+`notify.warn`, `notify.error` and `notify.success`, else `accent`, `warn`,
+`bad` and `good`. The presets also name the [stock buttons](controls.md#buttons)' faces,
+`button`, `button.primary`, `button.danger`, `button.success` and
+`button.warning`; the other
 [form controls](controls.md#the-theme-styles) fall back to `accent`,
 `good` and `muted`.
 
@@ -332,9 +333,14 @@ panel table:hover { text-style: underline; }
 - `:first-child`, `:last-child`, `:odd`, `:even` (counted from the first,
   as CSS's `:nth-child(odd)` is) and `:empty` (no children): where the
   node is among its parent's children, which follows rows an `each` adds
-  or moves;
+  or moves; `:first-of-type` and `:last-of-type` count only the siblings
+  of the node's own kind (the first `label` after a `rule`);
 - `:dark` and `:light`, by the theme: `:dark #logo` holds while the theme
-  is dark, at the top of the app too.
+  is dark, at the top of the app too;
+- `:ansi` while the theme's colours are all the terminal's own (the
+  built-in presets; not a palette's truecolour theme), `:nocolor` while
+  the console shows no colour (`NO_COLOR`), and `:inline` in an
+  `App::inline` app, as Textual's are.
 
 States, structural and theme ones among them, change colours and text
 styles, not layout.

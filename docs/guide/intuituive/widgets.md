@@ -41,7 +41,10 @@ column([
   style (`status_bar.gauge`, black on green), the rest in
   `status_bar.gauge.rest`, the label centred over both: a task's
   progress. `.when(|| cond)` on any segment leaves it and its caps out
-  while `cond` is false: a gauge only while tasks run.
+  while `cond` is false: a gauge only while tasks run. `.on_click(|cx|
+  ..)` runs an action when the segment is clicked (a mode that cycles, a
+  count that opens its list); a click on a cap or between segments does
+  nothing.
 - **`facts([("Name", value), ..])`** is a description list: the keys in a
   column as wide as the widest (at most half), in the theme's `facts.key`
   style (bold) or `.key_style(..)`'s, each value beside its key, wrapped
@@ -57,7 +60,9 @@ column([
   the separators in `breadcrumb.separator`; an empty part shows nothing,
   so a leading one puts a separator first. Too long, it loses its start,
   `…` where it was cut. `.crumb_suffix(|| markup)` adds markup after it
-  that is never cut. A file path, with the home directory as `~`, is the
+  that is never cut. `.on_select(|i, cx| ..)` is run with a part's index
+  (0 the first) when it is clicked, cut or not, to go back up the trail.
+  A file path, with the home directory as `~`, is the
   `files` plugin's `path_crumb(|| path)`, built on it.
 - **`key_hints()`** is a footer of the keys that work now: the described
   bindings of the focused node and its ancestors (a pop-up's while one is
@@ -117,6 +122,108 @@ placeholder("sidebar")                            // a coloured block for a prot
 - **`placeholder(label)`** fills its area with the next of twelve colours
   and its label; `.placeholder_variant(PlaceholderVariant::Size)` shows its
   size, `Text` a paragraph, and a click cycles them.
+
+### Notice bars
+
+```rust
+use intuituive::{notice_bar, Level};
+
+notice_bar(shown, || "Changed".into(), move || format!("{name} changed on disk"))
+    .notice_level(Level::Warn)
+    .notice_action("Reload", move |cx| reload(cx))
+    .notice_action("Keep mine", |_| {})
+    .notice_closes(true)
+```
+
+- **`notice_bar(shown, title, text)`** shows while `shown` holds: one row,
+  `▸`, the level's mark (`ℹ ✓ ⚠ ✗`), the title in bold and the text cut
+  with `…`, its actions and a `×` at the right. Enter or a click on the
+  text opens it: the title on the first row, the whole text wrapped
+  under it. `×`, or Esc while it has the focus, sets `shown` false.
+- ← and → pick the text, an action or `×`; Enter or Space runs it.
+  `.notice_closes(true)` dismisses the bar after an action runs, and
+  `.notice_open(signal)` opens it from the app and says whether it is.
+- It is drawn on the theme's `notice` style (reversed by default), the
+  picked part in `notice.picked`, the mark in the level's `notify.*`
+  style. A screen reader hears it as a status: `Warning: Changed: …`.
+
+### Steps
+
+```rust
+use intuituive::{steps, StepState};
+
+// A plan's checklist: the states from the app's data.
+steps(move || plan.get().titles(), move |i| plan.get().state(i))
+// A wizard's stepper over its pages, moved with the keys and clicks.
+steps(move || pages(), move |i| StepState::at(i, page.get())).steps_across(" ─ ").step_nav(page)
+```
+
+- **`steps(items, status)`** lists `items` (markup) one a row, each after
+  the mark of `status(i)`: `✓` done, `▸` current, `○` pending, `✗` failed
+  (`[x]`, `[>]`, `[ ]`, `[!]` in text mode), in the theme's `steps.done`,
+  `steps.current`, `steps.pending` and `steps.failed` styles. Both
+  closures may read signals.
+- **`StepState::at(i, current)`** is a wizard's states: those before the
+  current page done, those after it pending.
+- **`.steps_across(separator)`** lays them in one row; **`.step_nav(page)`**
+  lets the list take the focus and move `page`: → or ↓ on, ← or ↑ back,
+  Home and End, or a click on a step. A wizard's Next and Back buttons
+  set the same signal.
+
+### Chips and a tag input
+
+```rust
+use intuituive::{chip, chip_of, tag_input};
+use rich_ext::{a11y::Status, badge::Badge};
+
+row([chip("beta"), chip_of(|| Badge::status(Status::Ok, "build"))])
+chip(name.clone()).on_remove(move |_| tags.update(|t| t.retain(|x| *x != name)))
+tag_input(tags)                                   // a Signal<Vec<String>>
+```
+
+- **`chip(text)`** is rs-rich-ext's `Badge::label` as a node: the text
+  padded on the theme's `badge.label` style, or `[text]` where the
+  console shows no colour. **`chip_of(|| badge)`** shows any badge: a
+  status, a key and value, a label in another style.
+- **`.on_remove(|cx| ..)`** puts a `×` in the chip that runs it when
+  clicked; the chip takes the focus, and Delete or Backspace runs it too.
+- **`tag_input(tags)`** types tags into a row of removable chips: Enter,
+  Tab or a comma adds what was typed (once), Backspace with nothing typed
+  removes the last tag, a click on a `×` removes that one, and a paste
+  adds a tag at each comma. One row, cut at its width.
+
+### A pager strip
+
+`pager(page, || pages)` shows which page a `Signal<usize>` is on, from 0,
+as `‹ 2 of 5 ›`, or a dot a page with `.pager_dots()` (`○ ● ○`). With the
+focus, ← and → (PageUp, PageDown) go back and on, Home and End to the
+ends; a click on an arrow or a dot goes there. The app shows the page: a
+list's or a table's rows from `page * per_page`, or a `switch` of pages.
+
+### Clickable spans of markup
+
+A span of markup in a `text` or `label` can run an action, as Textual's
+`[@click=…]` does:
+
+```rust
+label("[@click=save]Save[/] · [@click=app.quit]Quit[/] · [link=https://example.com]Docs[/]")
+    .focus_spans()
+```
+
+- **`[@click=name]…[/]`** runs the action `name` when it is clicked:
+  the binding of the focused node or one above it whose id
+  (`.binding_id(..)`) or description is `name`, else one of the app's
+  own, `quit`, `bell`, `help` or `palette` (also as `app.quit`, …).
+  `cx.run_action(name)` does the same from a handler. Arguments in the
+  tag (`[@click=open('a.txt')]`) are rich's handler syntax.
+- **`.on_span(|cx, target| ..)`** takes the clicks instead, with a
+  `SpanTarget`: `Action { name, args }` or `Link(url)`. With it,
+  `[link=url]` spans are clickable too.
+- **`.focus_spans()`** lets the text take the focus: ← and → pick a span
+  (in the theme's `link.focus` style, reversed by default), and Enter or
+  Space runs it. Its links open with the system's opener unless
+  `on_span` takes them. Without either, a link is left to the terminal
+  (an OSC 8 hyperlink), and a click on it may start a selection.
 
 ## Dials, ratings and carousels
 
