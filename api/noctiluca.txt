@@ -1131,8 +1131,10 @@ impl core::panic::unwind_safe::RefUnwindSafe for noctiluca::engine::PageSnapshot
 impl core::panic::unwind_safe::UnwindSafe for noctiluca::engine::PageSnapshot
 pub struct noctiluca::engine::Playback
 pub noctiluca::engine::Playback::duration: core::option::Option<f64>
+pub noctiluca::engine::Playback::empty: bool
 pub noctiluca::engine::Playback::ended: bool
 pub noctiluca::engine::Playback::failed: bool
+pub noctiluca::engine::Playback::live: bool
 pub noctiluca::engine::Playback::muted: bool
 pub noctiluca::engine::Playback::paused: bool
 pub noctiluca::engine::Playback::ready: u8
@@ -1140,6 +1142,7 @@ pub noctiluca::engine::Playback::time: f64
 pub noctiluca::engine::Playback::volume: f64
 impl noctiluca::engine::Playback
 pub fn noctiluca::engine::Playback::label(&self) -> &'static str
+pub fn noctiluca::engine::Playback::length(&self) -> alloc::string::String
 pub fn noctiluca::engine::Playback::playing(&self) -> bool
 impl core::clone::Clone for noctiluca::engine::Playback
 pub fn noctiluca::engine::Playback::clone(&self) -> noctiluca::engine::Playback
