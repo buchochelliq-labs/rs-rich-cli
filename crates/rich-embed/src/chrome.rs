@@ -1979,6 +1979,15 @@ impl Session {
                 .map(|at| self.pending.remove(at).1)
                 .unwrap_or(Pending::Other);
             if let Some(error) = message.get("error") {
+                // A restart Chrome refused is answered all the same: else
+                // every frame after it is dropped as painted before it.
+                if let Pending::Restarted(restart) = kind {
+                    if self.restarting == Some(restart) {
+                        self.restarting = None;
+                    }
+                    let mut state = lock(shared);
+                    state.restarts_answered = state.restarts_answered.max(restart);
+                }
                 return match kind {
                     // The history is asked for again at the next
                     // navigation event. A request sent while a navigation
@@ -2874,6 +2883,42 @@ mod tests {
         );
         let taken = engine.take_screencast().unwrap();
         assert_eq!((taken.meta.scroll_x, taken.meta.scroll_y), (8.0, 113.0));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_refused_restart_does_not_drop_every_later_frame() {
+        // Chrome refuses the restart's `Page.startScreencast` (a page busy
+        // swapping its renderer): its frames after that still come through.
+        let (mut engine, mut session, _output, _requests) = pending_session();
+        let area = ScreencastArea {
+            x: 8,
+            y: 113,
+            width: 320,
+            height: 181,
+        };
+        engine.set_screencast_area(Some(area)).unwrap();
+        session.apply(Request::ScreencastArea(Some(area))).unwrap();
+        let restart = session.next;
+        session
+            .message(
+                &json!({"id": restart, "error": {"code": -32000, "message": "busy"}}).to_string(),
+                &engine.shared,
+            )
+            .unwrap();
+        let sized = json!({"deviceWidth": 320, "deviceHeight": 181, "pageScaleFactor": 1});
+        send_test_frame_sized(
+            &mut session,
+            &engine.shared,
+            1,
+            [0, 0, 255],
+            sized,
+            (320, 181),
+        );
+        assert!(
+            engine.take_screencast().is_some(),
+            "frames dropped after a refused restart"
+        );
     }
 
     #[cfg(unix)]

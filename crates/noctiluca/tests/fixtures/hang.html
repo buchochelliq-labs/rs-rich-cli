@@ -1,0 +1,13 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<title>Hang</title>
+<!-- A page that stops answering: a moment after it loads, its script
+     loops for ever, so its renderer answers nothing more. For the tab's
+     short waits on its periodic calls. -->
+<h1>About to hang</h1>
+<p>This page's script never returns.</p>
+<script>
+  setTimeout(() => { for (;;) {} }, 500);
+</script>
+</html>

@@ -446,7 +446,9 @@ pub fn noctiluca::cdp::ChromeBackend::devtools(&self) -> &rich_embed::chrome::De
 pub fn noctiluca::cdp::ChromeBackend::start(noctiluca::cdp::ChromeOptions) -> std::io::error::Result<noctiluca::cdp::ChromeBackend>
 impl noctiluca::engine::Engine for noctiluca::cdp::ChromeBackend
 pub fn noctiluca::cdp::ChromeBackend::act(&mut self, noctiluca::engine::TabId, &noctiluca::engine::PageAction) -> std::io::error::Result<()>
+pub fn noctiluca::cdp::ChromeBackend::adopt_read(&mut self, noctiluca::engine::TabId, u64) -> bool
 pub fn noctiluca::cdp::ChromeBackend::appended(&mut self, noctiluca::engine::TabId) -> std::io::error::Result<alloc::vec::Vec<i64>>
+pub fn noctiluca::cdp::ChromeBackend::begin_read(&mut self, noctiluca::engine::TabId) -> std::io::error::Result<u64>
 pub fn noctiluca::cdp::ChromeBackend::can_play(&mut self, noctiluca::engine::TabId, &[&str]) -> std::io::error::Result<alloc::vec::Vec<alloc::string::String>>
 pub fn noctiluca::cdp::ChromeBackend::capture(&mut self, noctiluca::engine::TabId, noctiluca::engine::Rect, noctiluca::engine::Format) -> std::io::error::Result<noctiluca::engine::Frame>
 pub fn noctiluca::cdp::ChromeBackend::capture_model(&mut self, noctiluca::engine::TabId, noctiluca::engine::Rect, noctiluca::engine::Format) -> std::io::error::Result<noctiluca::engine::Frame>
@@ -461,6 +463,7 @@ pub fn noctiluca::cdp::ChromeBackend::optional_resources(&mut self) -> core::opt
 pub fn noctiluca::cdp::ChromeBackend::playback(&mut self, noctiluca::engine::TabId, i64) -> std::io::error::Result<noctiluca::engine::Playback>
 pub fn noctiluca::cdp::ChromeBackend::product(&mut self, noctiluca::engine::TabId) -> alloc::string::String
 pub fn noctiluca::cdp::ChromeBackend::read_live(&mut self, noctiluca::engine::TabId, i64, bool) -> std::io::error::Result<noctiluca::engine::LiveRead>
+pub fn noctiluca::cdp::ChromeBackend::reader(&mut self, noctiluca::engine::TabId) -> core::option::Option<alloc::boxed::Box<dyn noctiluca::engine::PageReader>>
 pub fn noctiluca::cdp::ChromeBackend::resize(&mut self, u16, u16) -> std::io::error::Result<()>
 pub fn noctiluca::cdp::ChromeBackend::resource(&mut self, noctiluca::engine::TabId, &str) -> std::io::error::Result<alloc::vec::Vec<u8>>
 pub fn noctiluca::cdp::ChromeBackend::screencast_frame(&mut self, noctiluca::engine::TabId) -> core::option::Option<rich_embed::chrome::ScreencastFrame>
@@ -503,7 +506,9 @@ pub const noctiluca::cdp::BINDING: &str
 pub const noctiluca::cdp::CAN_PLAY_SCRIPT: &str
 pub const noctiluca::cdp::CELL: (u32, u32)
 pub const noctiluca::cdp::LIVE_READ: &str
+pub const noctiluca::cdp::PERIODIC: core::time::Duration
 pub const noctiluca::cdp::PING_SCRIPT: &str
+pub const noctiluca::cdp::READING: core::time::Duration
 pub const noctiluca::cdp::SEEK_SCRIPT: &str
 pub const noctiluca::cdp::SNAPSHOT_STYLES: &[&str]
 pub const noctiluca::cdp::WORLD: &str
@@ -1212,7 +1217,9 @@ impl core::panic::unwind_safe::RefUnwindSafe for noctiluca::engine::TabId
 impl core::panic::unwind_safe::UnwindSafe for noctiluca::engine::TabId
 pub trait noctiluca::engine::Engine: core::marker::Send
 pub fn noctiluca::engine::Engine::act(&mut self, noctiluca::engine::TabId, &noctiluca::engine::PageAction) -> std::io::error::Result<()>
+pub fn noctiluca::engine::Engine::adopt_read(&mut self, noctiluca::engine::TabId, u64) -> bool
 pub fn noctiluca::engine::Engine::appended(&mut self, noctiluca::engine::TabId) -> std::io::error::Result<alloc::vec::Vec<noctiluca::engine::NodeId>>
+pub fn noctiluca::engine::Engine::begin_read(&mut self, noctiluca::engine::TabId) -> std::io::error::Result<u64>
 pub fn noctiluca::engine::Engine::can_play(&mut self, noctiluca::engine::TabId, &[&str]) -> std::io::error::Result<alloc::vec::Vec<alloc::string::String>>
 pub fn noctiluca::engine::Engine::capture(&mut self, noctiluca::engine::TabId, noctiluca::engine::Rect, noctiluca::engine::Format) -> std::io::error::Result<noctiluca::engine::Frame>
 pub fn noctiluca::engine::Engine::capture_model(&mut self, noctiluca::engine::TabId, noctiluca::engine::Rect, noctiluca::engine::Format) -> std::io::error::Result<noctiluca::engine::Frame>
@@ -1227,6 +1234,7 @@ pub fn noctiluca::engine::Engine::optional_resources(&mut self) -> core::option:
 pub fn noctiluca::engine::Engine::playback(&mut self, noctiluca::engine::TabId, noctiluca::engine::NodeId) -> std::io::error::Result<noctiluca::engine::Playback>
 pub fn noctiluca::engine::Engine::product(&mut self, noctiluca::engine::TabId) -> alloc::string::String
 pub fn noctiluca::engine::Engine::read_live(&mut self, noctiluca::engine::TabId, noctiluca::engine::NodeId, bool) -> std::io::error::Result<noctiluca::engine::LiveRead>
+pub fn noctiluca::engine::Engine::reader(&mut self, noctiluca::engine::TabId) -> core::option::Option<alloc::boxed::Box<dyn noctiluca::engine::PageReader>>
 pub fn noctiluca::engine::Engine::resize(&mut self, u16, u16) -> std::io::error::Result<()>
 pub fn noctiluca::engine::Engine::resource(&mut self, noctiluca::engine::TabId, &str) -> std::io::error::Result<alloc::vec::Vec<u8>>
 pub fn noctiluca::engine::Engine::screencast_frame(&mut self, noctiluca::engine::TabId) -> core::option::Option<rich_embed::chrome::ScreencastFrame>
@@ -1237,7 +1245,9 @@ pub fn noctiluca::engine::Engine::snapshot(&mut self, noctiluca::engine::TabId) 
 pub fn noctiluca::engine::Engine::state(&self, noctiluca::engine::TabId) -> rich_embed::web::PageState
 impl noctiluca::engine::Engine for noctiluca::cdp::ChromeBackend
 pub fn noctiluca::cdp::ChromeBackend::act(&mut self, noctiluca::engine::TabId, &noctiluca::engine::PageAction) -> std::io::error::Result<()>
+pub fn noctiluca::cdp::ChromeBackend::adopt_read(&mut self, noctiluca::engine::TabId, u64) -> bool
 pub fn noctiluca::cdp::ChromeBackend::appended(&mut self, noctiluca::engine::TabId) -> std::io::error::Result<alloc::vec::Vec<i64>>
+pub fn noctiluca::cdp::ChromeBackend::begin_read(&mut self, noctiluca::engine::TabId) -> std::io::error::Result<u64>
 pub fn noctiluca::cdp::ChromeBackend::can_play(&mut self, noctiluca::engine::TabId, &[&str]) -> std::io::error::Result<alloc::vec::Vec<alloc::string::String>>
 pub fn noctiluca::cdp::ChromeBackend::capture(&mut self, noctiluca::engine::TabId, noctiluca::engine::Rect, noctiluca::engine::Format) -> std::io::error::Result<noctiluca::engine::Frame>
 pub fn noctiluca::cdp::ChromeBackend::capture_model(&mut self, noctiluca::engine::TabId, noctiluca::engine::Rect, noctiluca::engine::Format) -> std::io::error::Result<noctiluca::engine::Frame>
@@ -1252,6 +1262,7 @@ pub fn noctiluca::cdp::ChromeBackend::optional_resources(&mut self) -> core::opt
 pub fn noctiluca::cdp::ChromeBackend::playback(&mut self, noctiluca::engine::TabId, i64) -> std::io::error::Result<noctiluca::engine::Playback>
 pub fn noctiluca::cdp::ChromeBackend::product(&mut self, noctiluca::engine::TabId) -> alloc::string::String
 pub fn noctiluca::cdp::ChromeBackend::read_live(&mut self, noctiluca::engine::TabId, i64, bool) -> std::io::error::Result<noctiluca::engine::LiveRead>
+pub fn noctiluca::cdp::ChromeBackend::reader(&mut self, noctiluca::engine::TabId) -> core::option::Option<alloc::boxed::Box<dyn noctiluca::engine::PageReader>>
 pub fn noctiluca::cdp::ChromeBackend::resize(&mut self, u16, u16) -> std::io::error::Result<()>
 pub fn noctiluca::cdp::ChromeBackend::resource(&mut self, noctiluca::engine::TabId, &str) -> std::io::error::Result<alloc::vec::Vec<u8>>
 pub fn noctiluca::cdp::ChromeBackend::screencast_frame(&mut self, noctiluca::engine::TabId) -> core::option::Option<rich_embed::chrome::ScreencastFrame>
@@ -1262,7 +1273,9 @@ pub fn noctiluca::cdp::ChromeBackend::snapshot(&mut self, noctiluca::engine::Tab
 pub fn noctiluca::cdp::ChromeBackend::state(&self, noctiluca::engine::TabId) -> rich_embed::web::PageState
 impl noctiluca::engine::Engine for noctiluca::testing::FakeEngine
 pub fn noctiluca::testing::FakeEngine::act(&mut self, noctiluca::engine::TabId, &noctiluca::engine::PageAction) -> std::io::error::Result<()>
+pub fn noctiluca::testing::FakeEngine::adopt_read(&mut self, noctiluca::engine::TabId, u64) -> bool
 pub fn noctiluca::testing::FakeEngine::appended(&mut self, noctiluca::engine::TabId) -> std::io::error::Result<alloc::vec::Vec<noctiluca::engine::NodeId>>
+pub fn noctiluca::testing::FakeEngine::begin_read(&mut self, noctiluca::engine::TabId) -> std::io::error::Result<u64>
 pub fn noctiluca::testing::FakeEngine::can_play(&mut self, noctiluca::engine::TabId, &[&str]) -> std::io::error::Result<alloc::vec::Vec<alloc::string::String>>
 pub fn noctiluca::testing::FakeEngine::capture(&mut self, noctiluca::engine::TabId, noctiluca::engine::Rect, noctiluca::engine::Format) -> std::io::error::Result<noctiluca::engine::Frame>
 pub fn noctiluca::testing::FakeEngine::capture_model(&mut self, noctiluca::engine::TabId, noctiluca::engine::Rect, noctiluca::engine::Format) -> std::io::error::Result<noctiluca::engine::Frame>
@@ -1277,6 +1290,7 @@ pub fn noctiluca::testing::FakeEngine::optional_resources(&mut self) -> core::op
 pub fn noctiluca::testing::FakeEngine::playback(&mut self, noctiluca::engine::TabId, i64) -> std::io::error::Result<noctiluca::engine::Playback>
 pub fn noctiluca::testing::FakeEngine::product(&mut self, noctiluca::engine::TabId) -> alloc::string::String
 pub fn noctiluca::testing::FakeEngine::read_live(&mut self, noctiluca::engine::TabId, noctiluca::engine::NodeId, bool) -> std::io::error::Result<noctiluca::engine::LiveRead>
+pub fn noctiluca::testing::FakeEngine::reader(&mut self, noctiluca::engine::TabId) -> core::option::Option<alloc::boxed::Box<dyn noctiluca::engine::PageReader>>
 pub fn noctiluca::testing::FakeEngine::resize(&mut self, u16, u16) -> std::io::error::Result<()>
 pub fn noctiluca::testing::FakeEngine::resource(&mut self, noctiluca::engine::TabId, &str) -> std::io::error::Result<alloc::vec::Vec<u8>>
 pub fn noctiluca::testing::FakeEngine::screencast_frame(&mut self, noctiluca::engine::TabId) -> core::option::Option<rich_embed::chrome::ScreencastFrame>
@@ -1285,6 +1299,9 @@ pub fn noctiluca::testing::FakeEngine::set_screencast_area(&mut self, noctiluca:
 pub fn noctiluca::testing::FakeEngine::set_screencast_scale(&mut self, noctiluca::engine::TabId, f64) -> std::io::error::Result<()>
 pub fn noctiluca::testing::FakeEngine::snapshot(&mut self, noctiluca::engine::TabId) -> std::io::error::Result<noctiluca::engine::PageSnapshot>
 pub fn noctiluca::testing::FakeEngine::state(&self, noctiluca::engine::TabId) -> rich_embed::web::PageState
+pub trait noctiluca::engine::PageReader: core::marker::Send
+pub fn noctiluca::engine::PageReader::playback(&mut self, noctiluca::engine::NodeId) -> std::io::error::Result<noctiluca::engine::Playback>
+pub fn noctiluca::engine::PageReader::snapshot(&mut self) -> std::io::error::Result<noctiluca::engine::PageSnapshot>
 pub type noctiluca::engine::NodeId = i64
 pub type noctiluca::engine::ResourceReader = alloc::boxed::Box<(dyn core::ops::function::FnMut(&str) -> std::io::error::Result<alloc::vec::Vec<u8>> + core::marker::Send)>
 pub mod noctiluca::indicator
@@ -2659,7 +2676,9 @@ pub fn noctiluca::testing::FakeEngine::on_act(self, impl core::ops::function::Fn
 pub fn noctiluca::testing::FakeEngine::replaying(self, &std::path::Path) -> noctiluca::testing::FakeEngine
 impl noctiluca::engine::Engine for noctiluca::testing::FakeEngine
 pub fn noctiluca::testing::FakeEngine::act(&mut self, noctiluca::engine::TabId, &noctiluca::engine::PageAction) -> std::io::error::Result<()>
+pub fn noctiluca::testing::FakeEngine::adopt_read(&mut self, noctiluca::engine::TabId, u64) -> bool
 pub fn noctiluca::testing::FakeEngine::appended(&mut self, noctiluca::engine::TabId) -> std::io::error::Result<alloc::vec::Vec<noctiluca::engine::NodeId>>
+pub fn noctiluca::testing::FakeEngine::begin_read(&mut self, noctiluca::engine::TabId) -> std::io::error::Result<u64>
 pub fn noctiluca::testing::FakeEngine::can_play(&mut self, noctiluca::engine::TabId, &[&str]) -> std::io::error::Result<alloc::vec::Vec<alloc::string::String>>
 pub fn noctiluca::testing::FakeEngine::capture(&mut self, noctiluca::engine::TabId, noctiluca::engine::Rect, noctiluca::engine::Format) -> std::io::error::Result<noctiluca::engine::Frame>
 pub fn noctiluca::testing::FakeEngine::capture_model(&mut self, noctiluca::engine::TabId, noctiluca::engine::Rect, noctiluca::engine::Format) -> std::io::error::Result<noctiluca::engine::Frame>
@@ -2674,6 +2693,7 @@ pub fn noctiluca::testing::FakeEngine::optional_resources(&mut self) -> core::op
 pub fn noctiluca::testing::FakeEngine::playback(&mut self, noctiluca::engine::TabId, i64) -> std::io::error::Result<noctiluca::engine::Playback>
 pub fn noctiluca::testing::FakeEngine::product(&mut self, noctiluca::engine::TabId) -> alloc::string::String
 pub fn noctiluca::testing::FakeEngine::read_live(&mut self, noctiluca::engine::TabId, noctiluca::engine::NodeId, bool) -> std::io::error::Result<noctiluca::engine::LiveRead>
+pub fn noctiluca::testing::FakeEngine::reader(&mut self, noctiluca::engine::TabId) -> core::option::Option<alloc::boxed::Box<dyn noctiluca::engine::PageReader>>
 pub fn noctiluca::testing::FakeEngine::resize(&mut self, u16, u16) -> std::io::error::Result<()>
 pub fn noctiluca::testing::FakeEngine::resource(&mut self, noctiluca::engine::TabId, &str) -> std::io::error::Result<alloc::vec::Vec<u8>>
 pub fn noctiluca::testing::FakeEngine::screencast_frame(&mut self, noctiluca::engine::TabId) -> core::option::Option<rich_embed::chrome::ScreencastFrame>
@@ -2694,6 +2714,7 @@ pub noctiluca::testing::FakeState::actions: alloc::vec::Vec<noctiluca::engine::P
 pub noctiluca::testing::FakeState::at: usize
 pub noctiluca::testing::FakeState::capture_steps: alloc::collections::vec_deque::VecDeque<core::option::Option<alloc::vec::Vec<u8>>>
 pub noctiluca::testing::FakeState::captures: alloc::vec::Vec<noctiluca::engine::Rect>
+pub noctiluca::testing::FakeState::cast_stalled: bool
 pub noctiluca::testing::FakeState::codecs: std::collections::hash::map::HashMap<alloc::string::String, alloc::string::String>
 pub noctiluca::testing::FakeState::crashed: bool
 pub noctiluca::testing::FakeState::current: core::option::Option<alloc::string::String>
@@ -2705,6 +2726,7 @@ pub noctiluca::testing::FakeState::not_loaded: std::collections::hash::set::Hash
 pub noctiluca::testing::FakeState::opened: alloc::vec::Vec<alloc::string::String>
 pub noctiluca::testing::FakeState::pages: std::collections::hash::map::HashMap<alloc::string::String, noctiluca::engine::PageSnapshot>
 pub noctiluca::testing::FakeState::paint: core::option::Option<[u8; 3]>
+pub noctiluca::testing::FakeState::read_cost: core::time::Duration
 pub noctiluca::testing::FakeState::recorded: core::option::Option<std::path::PathBuf>
 pub noctiluca::testing::FakeState::resource_reads: alloc::vec::Vec<alloc::string::String>
 pub noctiluca::testing::FakeState::resource_root: core::option::Option<std::path::PathBuf>
@@ -2719,6 +2741,7 @@ pub noctiluca::testing::FakeState::scroll_y: f64
 pub noctiluca::testing::FakeState::stopped: core::option::Option<alloc::string::String>
 pub noctiluca::testing::FakeState::viewport_height: f64
 pub noctiluca::testing::FakeState::viewport_width: f64
+pub noctiluca::testing::FakeState::with_reader: bool
 impl noctiluca::testing::FakeState
 pub fn noctiluca::testing::FakeState::content_height(&self) -> f64
 impl noctiluca::testing::FakeState
@@ -2771,6 +2794,7 @@ pub mod noctiluca::video
 pub struct noctiluca::video::Encoder
 impl noctiluca::video::Encoder
 pub fn noctiluca::video::Encoder::clear_waiting(&self)
+pub fn noctiluca::video::Encoder::cost(&self, noctiluca::engine::NodeId, rich_art::picture::Pixels) -> core::option::Option<core::time::Duration>
 pub fn noctiluca::video::Encoder::encode(&self, noctiluca::video::Job)
 pub fn noctiluca::video::Encoder::encode_with_metrics(&self, noctiluca::video::Job, core::option::Option<(u16, u16)>)
 pub fn noctiluca::video::Encoder::retain_waiting(&self, &std::collections::hash::set::HashSet<noctiluca::engine::NodeId>)
@@ -2796,6 +2820,7 @@ pub fn noctiluca::video::Frames::next_due(&self, &[noctiluca::video::Region], st
 pub fn noctiluca::video::Frames::number(&mut self) -> u64
 pub fn noctiluca::video::Frames::plan(&mut self, &[noctiluca::video::Region], std::time::Instant) -> noctiluca::video::Plan
 pub fn noctiluca::video::Frames::stamp(&mut self, noctiluca::engine::NodeId, rich_embed::pixels::Pixels, std::time::Instant) -> noctiluca::video::VideoFrame
+pub fn noctiluca::video::Frames::taken(&self, noctiluca::engine::NodeId) -> core::option::Option<std::time::Instant>
 impl core::default::Default for noctiluca::video::Frames
 pub fn noctiluca::video::Frames::default() -> noctiluca::video::Frames
 impl core::fmt::Debug for noctiluca::video::Frames
@@ -2840,6 +2865,7 @@ pub fn noctiluca::video::Pacing::offer(&mut self, &noctiluca::video::VideoFrame,
 pub fn noctiluca::video::Pacing::pixels(&self, noctiluca::engine::NodeId) -> rich_art::picture::Pixels
 pub fn noctiluca::video::Pacing::recent_bytes(&self, noctiluca::engine::NodeId) -> u64
 pub fn noctiluca::video::Pacing::set_cell_pixels(&mut self, rich_art::graphics::CellPixels)
+pub fn noctiluca::video::Pacing::stalled(&self, noctiluca::engine::NodeId, std::time::Instant) -> bool
 pub fn noctiluca::video::Pacing::start_for(core::option::Option<rich_art::picture::Pixels>, rich_art::picture::Pixels) -> rich_art::picture::Pixels
 pub fn noctiluca::video::Pacing::still(&mut self, noctiluca::engine::NodeId)
 pub fn noctiluca::video::Pacing::with_formats(rich_art::picture::ByteBudget, rich_art::picture::Pixels, rich_art::picture::PixelFormats) -> noctiluca::video::Pacing
@@ -2914,7 +2940,9 @@ impl core::panic::unwind_safe::UnwindSafe for noctiluca::video::VideoFrame
 pub const noctiluca::video::HEADROOM: f64
 pub const noctiluca::video::MAX_FPS: u32
 pub const noctiluca::video::MIN_INTERVAL: core::time::Duration
+pub const noctiluca::video::STALLED: core::time::Duration
 pub fn noctiluca::video::screencast_area(&[noctiluca::video::Region], core::option::Option<noctiluca::engine::Rect>) -> core::option::Option<noctiluca::engine::Rect>
+pub fn noctiluca::video::take_every(core::time::Duration, core::option::Option<core::time::Duration>) -> core::time::Duration
 pub type noctiluca::video::ByteCounter = fn(u32) -> u64
 pub mod noctiluca::widgets
 pub struct noctiluca::widgets::WebControl

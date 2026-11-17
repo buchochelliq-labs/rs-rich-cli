@@ -21,6 +21,14 @@
 //!   [`Pacing`] runs per region on the app's side; a fast terminal on
 //!   this machine gets the full rate, an SSH link fewer frames, or a
 //!   cheaper protocol.
+//! - **On the source's clock.** Chrome stamps each screencast frame; a
+//!   region's frames are shown on slots of the video's own frames, the
+//!   pacing's spacing rounded up to a whole number of them (30, 15 or 10 a
+//!   second of a 30 fps video, 24 or 12 of a 24 fps one), and a frame the
+//!   page painted between two of the video's is not shown. After a stall
+//!   the next frames keep their spacing rather than catch up. Frames the
+//!   encoder cannot keep up with are not taken ([`take_every`]): frames
+//!   are dropped at the tab, evenly, not later in turn.
 //!
 //! - **Encoded off the thread that draws.** A frame the pacing lets
 //!   through in Kitty, iTerm2 or Sixel is encoded on [`Encoder`]'s thread
@@ -47,6 +55,10 @@ pub const MAX_FPS: u32 = 30;
 /// How far under its share a region is paced: what a frame costs is
 /// learned from the frames before it, and one can cost more.
 pub const HEADROOM: f64 = 0.1;
+
+/// How long a moving region goes without a frame before its picture is
+/// said to have stalled ([`Pacing::stalled`]).
+pub const STALLED: Duration = Duration::from_secs(3);
 
 /// The shortest time between two frames of one region.
 pub const MIN_INTERVAL: Duration = Duration::from_millis(1000 / MAX_FPS as u64);
@@ -98,13 +110,117 @@ pub struct Frames {
 
 /// A moving region's last frame: the slot it was taken for (frames keep
 /// to slots a frame's time apart), when it was taken, and the spacing it
-/// was due at.
-#[derive(Clone, Copy, Debug)]
+/// was due at; and, when the browser stamps its frames, the source's
+/// clock ([`Source`]).
+#[derive(Clone, Debug)]
 struct Last {
     node: NodeId,
     slot: Instant,
     taken: Instant,
     every: Duration,
+    source: Source,
+}
+
+/// What the frames' own timestamps say of a region's source: the stamp of
+/// the last frame shown, the newest stamp seen, and the gaps between
+/// stamps seen that are shorter than the spacing, which give its frame
+/// rate.
+///
+/// A frame is shown when it is at least the spacing on from the last one
+/// on the source's clock, the spacing rounded up to a whole number of the
+/// source's frames once their rate is known (give or take a quarter of a
+/// frame): every one
+/// of a 24 fps video at 30 a second (not every fourth twice), every other
+/// one of a 30 fps video at 20 a second (15 evenly, not a mix of one and
+/// two). A frame the page painted before the source's next (its player's
+/// clock moved) still shows the last one, and is not shown.
+///
+/// The browser sends a frame only once the last is taken, so the gaps seen
+/// are no shorter than the tab's own spacing unless frames came faster
+/// than it took them (it takes one a little before the spacing is up, and
+/// finds it early): only those say what the source's rate is. A tab slow
+/// to take frames never learns a rate slower than the source's from them.
+#[derive(Clone, Debug, Default)]
+struct Source {
+    shown: Option<f64>,
+    seen: Option<f64>,
+    gaps: Vec<f64>,
+}
+
+/// How many gaps between stamps the source's rate is learned from.
+const GAPS: usize = 15;
+
+/// Frame rates a source commonly has: a learned period near one of them
+/// is taken as it.
+const RATES: [f64; 9] = [60.0, 50.0, 30.0, 25.0, 24.0, 20.0, 15.0, 12.0, 10.0];
+
+impl Source {
+    /// Note a frame stamped `ts` taken from the browser for a region shown
+    /// every `every`.
+    fn see(&mut self, ts: f64, every: Duration) {
+        if let Some(seen) = self.seen {
+            let gap = ts - seen;
+            if gap > 0.004 && gap < every.as_secs_f64() * 1.05 {
+                if self.gaps.len() == GAPS {
+                    self.gaps.remove(0);
+                }
+                self.gaps.push(gap);
+            }
+        }
+        self.seen = Some(ts);
+    }
+
+    /// The source's frame period in seconds, once learned: the median of
+    /// the gaps, when most of them are within a tenth of it (a page's own
+    /// paints between the source's frames make odd gaps), snapped to a
+    /// common rate within 5%.
+    fn period(&self) -> Option<f64> {
+        if self.gaps.len() < 5 {
+            return None;
+        }
+        let mut gaps = self.gaps.clone();
+        gaps.sort_by(f64::total_cmp);
+        let median = gaps[gaps.len() / 2];
+        let near = gaps
+            .iter()
+            .filter(|g| (*g - median).abs() <= median * 0.1)
+            .count();
+        if near * 3 < gaps.len() * 2 {
+            return None;
+        }
+        let snapped = RATES
+            .iter()
+            .map(|rate| 1.0 / rate)
+            .find(|p| (median - p).abs() <= p * 0.05);
+        Some(snapped.unwrap_or(median))
+    }
+
+    /// The spacing frames are shown at: `every` rounded up to a whole
+    /// number of the source's frames once their rate is known.
+    fn target(&self, every: Duration) -> Duration {
+        match self.period() {
+            Some(period) => {
+                let frames = (every.as_secs_f64() / period - 0.02).ceil().max(1.0);
+                Duration::from_secs_f64(period * frames)
+            }
+            None => every,
+        }
+    }
+
+    /// Whether a frame stamped `ts` comes too soon after the last shown one
+    /// on the source's clock: less than the spacing on, give or take a
+    /// quarter of a source frame (of the spacing while their rate is not
+    /// known), as the browser's stamps of one source's frames vary.
+    fn early(&self, ts: f64, every: Duration) -> bool {
+        let Some(shown) = self.shown else {
+            return false;
+        };
+        let target = self.target(every).as_secs_f64();
+        let slack = self.period().unwrap_or(every.as_secs_f64().min(target)) / 4.0;
+        let gap = ts - shown;
+        // A clock that went back far (a restarted stream): start again.
+        gap > -0.5 && gap < target - slack
+    }
 }
 
 /// The spacing `region`'s frames keep to.
@@ -144,21 +260,39 @@ impl Frames {
         plan
     }
 
-    /// Whether `region`'s next slot has come (an eighth of a frame early
-    /// is on time: the tab wakes for it, give or take its clock), and half
-    /// a frame has gone since the last was taken.
+    /// Whether `region`'s next frame is due at `now` ([`wait`](Self::wait)).
     fn due(&self, region: &Region, now: Instant) -> bool {
         self.wait(region, now).is_zero()
     }
 
     /// How long until `region`'s next frame is due: zero when it is.
+    ///
+    /// - Stamped frames are shown by the source's clock, so the tab takes
+    ///   one no sooner than a sixteenth of a slot before the slot after
+    ///   the last was taken: after a stall, frames do not bunch up to
+    ///   catch up, and each shown frame is checked against the source's
+    ///   slots ([`Source::early`]).
+    /// - Frames with no stamp keep to slots a frame's time apart: the next
+    ///   slot has come (an eighth of a frame early is on time: the tab
+    ///   wakes for it, give or take its clock), and half a frame has gone
+    ///   since the last was taken.
     fn wait(&self, region: &Region, now: Instant) -> Duration {
         let every = every(region);
         let Some(last) = self.last.iter().find(|l| l.node == region.node) else {
             return Duration::ZERO;
         };
-        let slot = (last.slot + every - every / 8).max(last.taken + every / 2);
-        slot.saturating_duration_since(now)
+        let due = if last.source.shown.is_some() {
+            let target = last.source.target(every);
+            last.taken + target - target / 16
+        } else {
+            (last.slot + every - every / 8).max(last.taken + every / 2)
+        };
+        due.saturating_duration_since(now)
+    }
+
+    /// When `node`'s last frame was taken, if it has one.
+    pub fn taken(&self, node: NodeId) -> Option<Instant> {
+        self.last.iter().find(|l| l.node == node).map(|l| l.taken)
     }
 
     /// How long until a moving region's next frame is due, if any moves:
@@ -172,7 +306,9 @@ impl Frames {
     }
 
     /// Cut the due regions out of `frame`. Regions the frame does not hold
-    /// come back in the second list, to capture on their own.
+    /// come back in the second list, to capture on their own. A stamped
+    /// frame that comes before its region's next slot on the source's
+    /// clock is not cut for it: the region waits for the next.
     pub fn cut(
         &mut self,
         regions: &[Region],
@@ -181,16 +317,25 @@ impl Frames {
     ) -> (Vec<VideoFrame>, Vec<Region>) {
         let mut cut = Vec::new();
         let mut missing = Vec::new();
+        let ts = frame.and_then(|f| f.meta.timestamp);
         for region in regions.iter().filter(|r| r.moving()) {
             if !self.due(region, now) {
                 continue;
+            }
+            if let Some(ts) = ts
+                && let Some(last) = self.last.iter_mut().find(|l| l.node == region.node)
+            {
+                last.source.see(ts, every(region));
+                if last.source.early(ts, every(region)) {
+                    continue;
+                }
             }
             let r = region.rect;
             match frame.and_then(|f| f.crop(r.x, r.y, r.width, r.height)) {
                 // Wholly in the frame: cut. Partly in: the rest is not
                 // painted there, so it is captured as missing ones are.
                 Some(pixels) if whole(&pixels, frame, r) => {
-                    cut.push(self.stamp_every(region.node, every(region), pixels, now));
+                    cut.push(self.stamp_every(region.node, every(region), pixels, now, ts));
                 }
                 _ => missing.push(*region),
             }
@@ -213,18 +358,21 @@ impl Frames {
             .iter()
             .find(|l| l.node == node)
             .map_or(MIN_INTERVAL, |l| l.every);
-        self.stamp_every(node, every, pixels, now)
+        self.stamp_every(node, every, pixels, now, None)
     }
 
     /// A frame of `node`, due every `every`, taken at `now`: on the next
     /// slot when it is near, else (a first frame, a pause) on a new run of
-    /// slots from now.
+    /// slots from now; with the browser's stamp `ts`, if it has one. A
+    /// frame with no stamp (a capture) leaves the source's clock: the
+    /// next stamped frame starts its slots again.
     fn stamp_every(
         &mut self,
         node: NodeId,
         every: Duration,
         pixels: rich_embed::Pixels,
         now: Instant,
+        ts: Option<f64>,
     ) -> VideoFrame {
         self.seq += 1;
         let seq = self.seq;
@@ -232,15 +380,26 @@ impl Frames {
             Some(next) if now + every / 4 >= next && now < next + every => next,
             _ => now,
         };
-        let entry = |slot| Last {
-            node,
-            slot,
-            taken: now,
-            every,
-        };
         match self.last.iter_mut().find(|l| l.node == node) {
-            Some(last) => *last = entry(at(Some(last.slot))),
-            None => self.last.push(entry(at(None))),
+            Some(last) => {
+                last.slot = at(Some(last.slot));
+                last.taken = now;
+                last.every = every;
+                last.source.shown = ts;
+            }
+            None => {
+                self.last.push(Last {
+                    node,
+                    slot: at(None),
+                    taken: now,
+                    every,
+                    source: Source {
+                        shown: ts,
+                        seen: ts,
+                        gaps: Vec::new(),
+                    },
+                });
+            }
         }
         VideoFrame { node, pixels, seq }
     }
@@ -305,6 +464,8 @@ struct Paced {
     moving: bool,
     /// The newest frame's count, so an older one is not shown after it.
     seq: u64,
+    /// When its last frame came.
+    came: Instant,
 }
 
 /// What counts a picture's bytes: the painter's counter in the app,
@@ -385,12 +546,14 @@ impl Pacing {
                     pending: None,
                     moving: true,
                     seq: 0,
+                    came: now,
                 },
             );
         }
         let share = {
             let region = self.regions.get_mut(&frame.node)?;
             region.moving = true;
+            region.came = now;
             region.pacer.resize(cols, rows);
             if frame.seq <= region.seq {
                 return None;
@@ -421,6 +584,16 @@ impl Pacing {
             region.moving = false;
             region.pending = None;
         }
+    }
+
+    /// Whether `node` moves but its frames stopped coming: none for
+    /// [`STALLED`] by `now`. The tab says when a region stops (paused, off
+    /// screen); a moving one that gets no frames shows a picture that no
+    /// longer follows the video.
+    pub fn stalled(&self, node: NodeId, now: Instant) -> bool {
+        self.regions
+            .get(&node)
+            .is_some_and(|r| r.moving && now.saturating_duration_since(r.came) >= STALLED)
     }
 
     /// Forget every region: a new document.
@@ -488,6 +661,17 @@ impl Pacing {
     }
 }
 
+/// How long the tab should wait between two frames of a region: what the
+/// pacing asks (`paced`), or what a frame costs the encoder (`encode`)
+/// with [`HEADROOM`], whichever is longer. Frames are then dropped in one
+/// place, the tab, at an even rate ([`Frames`] rounds it to the source's
+/// frames), not in turn by the pacing and the encoder's queue, which keeps
+/// the newest of the frames that wait.
+pub fn take_every(paced: Duration, encode: Option<Duration>) -> Duration {
+    let encode = encode.map_or(Duration::ZERO, |e| e.mul_f64(1.0 + HEADROOM));
+    paced.max(encode).max(MIN_INTERVAL)
+}
+
 /// A frame to encode: its region's picture, the protocol and the cells it
 /// is drawn in.
 #[derive(Clone, Debug)]
@@ -510,6 +694,9 @@ pub struct Job {
 /// of the screen wait, every frame.
 pub struct Encoder {
     queue: std::sync::Arc<(std::sync::Mutex<Queue>, std::sync::Condvar)>,
+    /// What a frame of each region costs to encode lately, in the protocol
+    /// it was last encoded in.
+    costs: std::sync::Arc<std::sync::Mutex<HashMap<NodeId, (Pixels, Duration)>>>,
 }
 
 #[derive(Default)]
@@ -556,6 +743,8 @@ impl Encoder {
             std::sync::Condvar::new(),
         ));
         let shared = queue.clone();
+        let costs = std::sync::Arc::new(std::sync::Mutex::new(HashMap::new()));
+        let measured = costs.clone();
         std::thread::spawn(move || {
             loop {
                 let (mut job, metrics) = {
@@ -580,6 +769,7 @@ impl Encoder {
                     ));
                 }
                 let at = crate::trace::start();
+                let began = Instant::now();
                 let cell = metrics
                     .filter(|&(w, h)| w > 0 && h > 0)
                     .map(|(w, h)| rich_art::graphics::CellPixels::new(w.into(), h.into()))
@@ -593,6 +783,18 @@ impl Encoder {
                         ..context
                     },
                 );
+                {
+                    // A moving average: one slow frame does not halve the rate.
+                    let took = began.elapsed();
+                    let mut costs = measured.lock().unwrap_or_else(|e| e.into_inner());
+                    let cost = costs.entry(job.node).or_insert((job.pixels, took));
+                    cost.1 = if cost.0 == job.pixels {
+                        (cost.1 * 3 + took) / 4
+                    } else {
+                        took
+                    };
+                    cost.0 = job.pixels;
+                }
                 if tracing {
                     crate::trace::media(r#"{"stage":"encoder_done"}"#);
                 }
@@ -607,7 +809,18 @@ impl Encoder {
                 done(job);
             }
         });
-        Encoder { queue }
+        Encoder { queue, costs }
+    }
+
+    /// What a frame of `node` costs to encode in `pixels` lately, once one
+    /// was.
+    pub fn cost(&self, node: NodeId, pixels: Pixels) -> Option<Duration> {
+        self.costs
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .get(&node)
+            .filter(|(was, _)| *was == pixels)
+            .map(|(_, cost)| *cost)
     }
 
     /// Discard frames still waiting after the owning document or view changes.
@@ -717,6 +930,172 @@ mod tests {
         }
     }
 
+    /// A tab's frame loop over a browser that paints `paints` (each when
+    /// it comes, in seconds from the start, and its stamp), looking every
+    /// millisecond until `until` except while `busy` (a reading holding
+    /// the tab's thread), and only every 66 ms before `coarse`: when a frame is due, it takes the newest paint
+    /// not yet taken and cuts it. Each frame cut: when, and its stamp.
+    fn run_source(
+        paints: &[(f64, f64)],
+        interval: Option<Duration>,
+        busy: Option<(f64, f64)>,
+        coarse: f64,
+        until: f64,
+    ) -> Vec<(f64, f64)> {
+        let start = Instant::now();
+        let playing = [Region {
+            interval,
+            ..region(1, 10.0, true, true)
+        }];
+        let mut frames = Frames::default();
+        let mut taken = 0;
+        let mut shown = Vec::new();
+        let mut t = 0.0;
+        while t < until {
+            t += 0.001;
+            if busy.is_some_and(|(from, to)| (from..to).contains(&t)) {
+                continue;
+            }
+            // A slow tab looks only every 66 ms until `coarse`.
+            if t < coarse && !((t * 1000.0).round() as u64).is_multiple_of(66) {
+                continue;
+            }
+            let now = start + Duration::from_secs_f64(t);
+            if !frames.plan(&playing, now).due {
+                continue;
+            }
+            let ready = paints.iter().take_while(|(at, _)| *at <= t).count();
+            if ready <= taken {
+                continue;
+            }
+            taken = ready;
+            let mut paint = frame(0.0);
+            paint.meta.timestamp = Some(1000.0 + paints[ready - 1].1);
+            let (cut, _) = frames.cut(&playing, Some(&paint), now);
+            if !cut.is_empty() {
+                shown.push((t, paints[ready - 1].1));
+            }
+        }
+        shown
+    }
+
+    /// The gaps between the frames cut after `after` seconds, in
+    /// milliseconds.
+    fn gaps(shown: &[(f64, f64)], after: f64) -> Vec<f64> {
+        let times: Vec<f64> = shown
+            .iter()
+            .filter(|(t, _)| *t >= after)
+            .map(|(t, _)| *t)
+            .collect();
+        times.windows(2).map(|w| (w[1] - w[0]) * 1000.0).collect()
+    }
+
+    fn stdev(xs: &[f64]) -> f64 {
+        let mean = xs.iter().sum::<f64>() / xs.len() as f64;
+        (xs.iter().map(|x| (x - mean).powi(2)).sum::<f64>() / xs.len() as f64).sqrt()
+    }
+
+    /// A source of `fps` frames a second for `seconds`, each painted a
+    /// millisecond or few after its time, and the page's own paints (its
+    /// player's clock) about four times a second, half way between two of
+    /// the source's frames.
+    fn source(fps: f64, seconds: f64) -> Vec<(f64, f64)> {
+        let mut paints: Vec<(f64, f64)> = (0..(fps * seconds) as usize)
+            .map(|k| {
+                let ts = k as f64 / fps;
+                (ts + 0.001 * ((k * 7) % 4) as f64, ts)
+            })
+            .collect();
+        let every = (fps / 4.0).round() as usize;
+        paints.extend((0..(seconds * 4.0) as usize).map(|j| {
+            let ts = ((j * every) as f64 + 0.5) / fps;
+            (ts + 0.001, ts)
+        }));
+        paints.sort_by(|a, b| a.0.total_cmp(&b.0));
+        paints
+    }
+
+    #[test]
+    fn a_24_fps_source_is_shown_at_even_intervals() {
+        let shown = run_source(&source(24.0, 4.0), None, None, 0.0, 4.0);
+        let gaps = gaps(&shown, 0.5);
+        let mean = gaps.iter().sum::<f64>() / gaps.len() as f64;
+        assert!((mean - 1000.0 / 24.0).abs() < 1.0, "{mean}: {gaps:?}");
+        assert!(stdev(&gaps) < 2.0, "{}: {gaps:?}", stdev(&gaps));
+    }
+
+    #[test]
+    fn frames_do_not_bunch_after_a_stall() {
+        let shown = run_source(&source(30.0, 3.0), None, Some((1.010, 1.210)), 0.0, 3.0);
+        let after: Vec<f64> = gaps(&shown, 1.0);
+        assert!(after.iter().any(|g| *g >= 190.0), "no stall: {after:?}");
+        assert!(after.iter().all(|g| *g >= 30.0), "{after:?}");
+        assert!(shown.iter().filter(|(t, _)| *t > 1.3).count() > 40);
+    }
+
+    #[test]
+    fn a_tab_slow_to_take_frames_does_not_learn_a_slower_source() {
+        // Busy for two seconds, the tab takes a 30 fps source's frames 66 ms
+        // apart; once it is free, it takes all thirty again.
+        let shown = run_source(&source(30.0, 4.0), None, None, 2.0, 4.0);
+        let after: Vec<f64> = gaps(&shown, 2.5);
+        let mean = after.iter().sum::<f64>() / after.len() as f64;
+        assert!((mean - 1000.0 / 30.0).abs() < 2.0, "{mean}: {after:?}");
+    }
+
+    #[test]
+    fn a_slower_pace_shows_every_other_source_frame_evenly() {
+        // The pacing takes twenty a second of a 30 fps source: fifteen are
+        // shown, two source frames apart each, not a mix of one and two.
+        // A paint of the page shows the source's frame of its time.
+        let paced = Some(Duration::from_millis(50));
+        let shown = run_source(&source(30.0, 4.0), paced, None, 0.0, 4.0);
+        let steps: Vec<i64> = shown
+            .iter()
+            .filter(|(t, _)| *t >= 0.5)
+            .map(|(_, ts)| (ts * 30.0 + 1e-6).floor() as i64)
+            .collect::<Vec<_>>()
+            .windows(2)
+            .map(|w| w[1] - w[0])
+            .collect();
+        assert!(steps.len() > 40, "{steps:?}");
+        assert!(steps.iter().all(|s| *s == 2), "{steps:?}");
+    }
+
+    #[test]
+    fn frames_go_on_at_one_even_rate_when_the_encoder_is_slower_than_the_source() {
+        // A frame costs the encoder 45 ms; the source is 30 fps. The tab
+        // takes them at a rate the encoder keeps up with: each is encoded,
+        // none waits to be replaced, and each is two source frames on.
+        let cost = Duration::from_millis(45);
+        let every = take_every(MIN_INTERVAL, Some(cost));
+        let shown = run_source(&source(30.0, 4.0), Some(every), None, 0.0, 4.0);
+        // The encoder's queue: a frame that comes while one encodes waits,
+        // and a newer one takes its place.
+        let (mut busy, mut waiting, mut dropped, mut encoded) = (0.0, None, 0, Vec::new());
+        for &(t, ts) in shown.iter().filter(|(t, _)| *t >= 0.5) {
+            while let Some(w) = waiting.filter(|_| busy <= t) {
+                encoded.push(w);
+                busy = busy.max(t - 0.001) + cost.as_secs_f64();
+                waiting = None;
+            }
+            if busy <= t {
+                encoded.push(ts);
+                busy = t + cost.as_secs_f64();
+            } else {
+                dropped += usize::from(waiting.is_some());
+                waiting = Some(ts);
+            }
+        }
+        assert_eq!(dropped, 0);
+        let steps: Vec<i64> = encoded
+            .windows(2)
+            .map(|w| ((w[1] * 30.0 + 1e-6).floor() - (w[0] * 30.0 + 1e-6).floor()) as i64)
+            .collect();
+        assert!(steps.len() > 30, "{steps:?}");
+        assert!(steps.iter().all(|s| *s == 2), "{steps:?}");
+    }
+
     #[test]
     fn the_screencast_shows_only_the_region_when_one_plays_wholly_in_view() {
         let view = Some(Rect::new(0.0, 0.0, 960.0, 648.0));
@@ -761,6 +1140,24 @@ mod tests {
             assert_ne!(last, Some(picture.version()));
             last = Some(picture.version());
         }
+    }
+
+    #[test]
+    fn a_moving_region_whose_frames_stop_is_said_to_stall() {
+        let mut pacing = Pacing::new(ByteBudget::new(10_000_000), Pixels::Cells);
+        let start = Instant::now();
+        let frame = VideoFrame {
+            node: 1,
+            seq: 1,
+            pixels: Rgb::new(2, 2, vec![9; 12]).unwrap(),
+        };
+        pacing.offer(&frame, 4, 2, start, |_| 0);
+        assert!(!pacing.stalled(1, start + Duration::from_secs(1)));
+        assert!(pacing.stalled(1, start + STALLED));
+        // Stopped (paused, off screen): a still picture is not a stall.
+        pacing.still(1);
+        assert!(!pacing.stalled(1, start + STALLED));
+        assert!(!pacing.stalled(2, start + STALLED));
     }
 
     #[test]

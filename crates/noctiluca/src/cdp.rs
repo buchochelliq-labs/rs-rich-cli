@@ -15,6 +15,8 @@
 
 use std::io::{self, ErrorKind};
 use std::path::PathBuf;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::mpsc::Receiver;
 use std::time::Duration;
 
@@ -29,10 +31,17 @@ use crate::engine::{
     PageSnapshot, Playback, Rect, TabId,
 };
 
-/// How long one DevTools call may take.
 mod source_formatting;
 
+/// How long one DevTools call may take.
 const CALL: Duration = Duration::from_secs(30);
+/// How long a call of the tab's periodic work may take (a media element's
+/// state, Chrome's view, a frame's capture, a live log's entries): a page
+/// that hangs or whose renderer crashed holds the tab's frames no longer.
+pub const PERIODIC: Duration = Duration::from_secs(3);
+/// How long each of a reading's calls may take: a large page's snapshot
+/// takes hundreds of milliseconds.
+pub const READING: Duration = Duration::from_secs(10);
 
 /// The isolated world Noctiluca's script runs in.
 pub const WORLD: &str = "noctiluca";
@@ -337,9 +346,26 @@ pub fn find_chrome() -> Option<PathBuf> {
         .or_else(ChromeEngine::find)
 }
 
+/// A shorter wait for a backend's calls, until it is dropped
+/// ([`ChromeBackend::waiting`]).
+struct Wait {
+    wait: Arc<AtomicU64>,
+    before: u64,
+}
+
+impl Drop for Wait {
+    fn drop(&mut self) {
+        self.wait.store(self.before, Ordering::Relaxed);
+    }
+}
+
 /// The [`Engine`] over a headless Chrome, sandboxed, through rs-rich-embed.
 pub struct ChromeBackend {
     model_scope: Option<ScreencastScope>,
+    /// The capture scope of the reading out on the reader's thread, by its
+    /// number ([`Engine::begin_read`]), and the last number given.
+    read_scope: Option<(u64, ScreencastScope)>,
+    reads: u64,
     engine: ChromeEngine,
     devtools: DevTools,
     events: Receiver<DevToolsEvent>,
@@ -349,6 +375,9 @@ pub struct ChromeBackend {
     /// What a new browser is set up with: `--no-js`, `--transparent`.
     no_js: bool,
     transparent: bool,
+    /// How long a call waits now, in milliseconds: [`CALL`], or less
+    /// while the tab's periodic work runs ([`Wait`]).
+    wait: Arc<AtomicU64>,
 }
 
 impl ChromeBackend {
@@ -386,10 +415,13 @@ impl ChromeBackend {
         ]);
         let backend = ChromeBackend {
             model_scope: None,
+            read_scope: None,
+            reads: 0,
             engine,
             devtools,
             events,
             world: None,
+            wait: Arc::new(AtomicU64::new(CALL.as_millis() as u64)),
             no_js: options.no_js,
             transparent: options.transparent,
         };
@@ -442,6 +474,7 @@ impl ChromeBackend {
         self.engine.restart()?;
         self.world = None;
         self.model_scope = None;
+        self.read_scope = None;
         self.set_up()
     }
 
@@ -468,23 +501,21 @@ impl ChromeBackend {
     }
 
     fn call(&self, method: &str, params: Value) -> io::Result<Value> {
-        self.devtools.call(method, params, CALL)
+        let wait = Duration::from_millis(self.wait.load(Ordering::Relaxed));
+        self.devtools.call(method, params, wait)
+    }
+
+    /// Each call waits at most `timeout` until the [`Wait`] is dropped.
+    fn waiting(&self, timeout: Duration) -> Wait {
+        let wait = self.wait.clone();
+        let before = wait.load(Ordering::Relaxed);
+        wait.store(before.min(timeout.as_millis() as u64), Ordering::Relaxed);
+        Wait { wait, before }
     }
 
     /// A fresh isolated world in the main frame, for one action.
     fn world(&self) -> io::Result<i64> {
-        let tree = self.call("Page.getFrameTree", json!({}))?;
-        let frame = tree["frameTree"]["frame"]["id"]
-            .as_str()
-            .ok_or_else(|| io::Error::other("no main frame"))?
-            .to_string();
-        let world = self.call(
-            "Page.createIsolatedWorld",
-            json!({"frameId": frame, "worldName": format!("{WORLD}-act")}),
-        )?;
-        world["executionContextId"]
-            .as_i64()
-            .ok_or_else(|| io::Error::other("no isolated world"))
+        world_through(&|method, args| self.call(method, args))
     }
 
     /// The node as an object of `context`.
@@ -627,6 +658,142 @@ impl ChromeBackend {
     }
 }
 
+/// A fresh isolated world in the main frame, through `call`.
+fn world_through(call: &dyn Fn(&str, Value) -> io::Result<Value>) -> io::Result<i64> {
+    let tree = call("Page.getFrameTree", json!({}))?;
+    let frame = tree["frameTree"]["frame"]["id"]
+        .as_str()
+        .ok_or_else(|| io::Error::other("no main frame"))?
+        .to_string();
+    let world = call(
+        "Page.createIsolatedWorld",
+        json!({"frameId": frame, "worldName": format!("{WORLD}-act")}),
+    )?;
+    world["executionContextId"]
+        .as_i64()
+        .ok_or_else(|| io::Error::other("no isolated world"))
+}
+
+/// The page's snapshot and accessibility tree, through `call`: on the
+/// tab's thread or the reader's. The caller checks its capture scope.
+fn snapshot_through(call: &dyn Fn(&str, Value) -> io::Result<Value>) -> io::Result<PageSnapshot> {
+    let context = world_through(call)
+        .ok()
+        .filter(|&context| source_formatting::begin(&call, context).is_ok());
+    let at = crate::trace::start();
+    let captured = call(
+        "DOMSnapshot.captureSnapshot",
+        json!({"computedStyles": SNAPSHOT_STYLES, "includeDOMRects": true,
+               "includePaintOrder": true}),
+    );
+    let dom_ms = crate::trace::ms(at);
+    let mut dom = match captured {
+        Ok(dom) => dom,
+        Err(error) => {
+            if let Some(context) = context {
+                source_formatting::finish(&call, context, &mut Value::Null);
+            }
+            return Err(error);
+        }
+    };
+    // The page reads without its AX tree when Chrome refuses one.
+    let at = crate::trace::start();
+    let ax = call("Accessibility.getFullAXTree", json!({})).unwrap_or(Value::Null);
+    if crate::trace::on() {
+        trace_snapshot(&dom, &ax, dom_ms, crate::trace::ms(at));
+    }
+    if let Some(context) = context {
+        source_formatting::finish(&call, context, &mut dom);
+    }
+    Ok(PageSnapshot { dom, ax })
+}
+
+/// A media element's playback, as [`playback_of`] reads it.
+const PLAYBACK_READ: &str = "function() { return [this.paused, this.muted, this.volume, \
+    this.currentTime, isFinite(this.duration) ? this.duration : -1, this.ended, \
+    this.readyState, this.error !== null]; }";
+
+/// The playback [`PLAYBACK_READ`] returned.
+fn playback_of(value: &Value) -> Playback {
+    let at = |i: usize| value.get(i).cloned().unwrap_or(Value::Null);
+    Playback {
+        paused: at(0).as_bool().unwrap_or(true),
+        muted: at(1).as_bool().unwrap_or(false),
+        volume: at(2).as_f64().unwrap_or(1.0),
+        time: at(3).as_f64().unwrap_or(0.0),
+        duration: at(4).as_f64().filter(|d| *d >= 0.0),
+        ended: at(5).as_bool().unwrap_or(false),
+        ready: at(6).as_u64().unwrap_or(0).min(4) as u8,
+        failed: at(7).as_bool().unwrap_or(false),
+    }
+}
+
+/// The objects the reader's thread makes, released after each read.
+const READER_GROUP: &str = "noctiluca-reader";
+
+/// What reads the page on the tab's reader thread ([`Engine::reader`]):
+/// the page's DevTools, a snapshot's calls waiting at most [`READING`] and
+/// a media element's [`PERIODIC`]; and the isolated world it reads media
+/// in, made once and again when the page's document changes.
+struct ChromeReader {
+    devtools: DevTools,
+    world: Option<i64>,
+}
+
+impl ChromeReader {
+    /// `node`'s playback in the reader's isolated world.
+    fn playback_in(&mut self, node: i64) -> io::Result<Playback> {
+        let call = |method: &str, args| self.devtools.call(method, args, PERIODIC);
+        let context = match self.world {
+            Some(context) => context,
+            None => world_through(&call)?,
+        };
+        let result = (|| {
+            let object = call(
+                "DOM.resolveNode",
+                json!({"backendNodeId": node, "executionContextId": context,
+                       "objectGroup": READER_GROUP}),
+            )?;
+            let object = object["object"]["objectId"]
+                .as_str()
+                .ok_or_else(|| io::Error::new(ErrorKind::NotFound, "the node is gone"))?;
+            call(
+                "Runtime.callFunctionOn",
+                json!({"objectId": object, "functionDeclaration": PLAYBACK_READ,
+                       "returnByValue": true}),
+            )
+        })();
+        let _ = call(
+            "Runtime.releaseObjectGroup",
+            json!({"objectGroup": READER_GROUP}),
+        );
+        let value = match result {
+            Ok(value) if value.get("exceptionDetails").is_none() => value,
+            Ok(_) => return Err(io::Error::other("the playback read failed")),
+            Err(error) => {
+                // Its world may have gone with a document: made again next.
+                self.world = None;
+                return Err(error);
+            }
+        };
+        self.world = Some(context);
+        Ok(playback_of(&value["result"]["value"]))
+    }
+}
+
+impl crate::engine::PageReader for ChromeReader {
+    fn snapshot(&mut self) -> io::Result<PageSnapshot> {
+        snapshot_through(&|method, args| self.devtools.call(method, args, READING))
+    }
+
+    fn playback(&mut self, node: i64) -> io::Result<Playback> {
+        match self.playback_in(node) {
+            Err(_) if self.world.is_none() => self.playback_in(node),
+            answer => answer,
+        }
+    }
+}
+
 /// The trace's line for a snapshot: its two calls' times and its size.
 fn trace_snapshot(dom: &Value, ax: &Value, dom_ms: f64, ax_ms: f64) {
     let documents = dom["documents"].as_array().map_or(&[][..], Vec::as_slice);
@@ -717,43 +884,11 @@ impl Engine for ChromeBackend {
     }
 
     fn snapshot(&mut self, _tab: TabId) -> io::Result<PageSnapshot> {
+        let _wait = self.waiting(READING);
         let scope = self.engine.screencast_scope().ok_or_else(|| {
             io::Error::new(ErrorKind::WouldBlock, "viewport metrics not applied yet")
         })?;
-        let context = self.world().ok().filter(|&context| {
-            source_formatting::begin(&|method, args| self.call(method, args), context).is_ok()
-        });
-        let at = crate::trace::start();
-        let captured = self.call(
-            "DOMSnapshot.captureSnapshot",
-            json!({"computedStyles": SNAPSHOT_STYLES, "includeDOMRects": true,
-                   "includePaintOrder": true}),
-        );
-        let dom_ms = crate::trace::ms(at);
-        let mut dom = match captured {
-            Ok(dom) => dom,
-            Err(error) => {
-                if let Some(context) = context {
-                    source_formatting::finish(
-                        &|method, args| self.call(method, args),
-                        context,
-                        &mut Value::Null,
-                    );
-                }
-                return Err(error);
-            }
-        };
-        // The page reads without its AX tree when Chrome refuses one.
-        let at = crate::trace::start();
-        let ax = self
-            .call("Accessibility.getFullAXTree", json!({}))
-            .unwrap_or(Value::Null);
-        if crate::trace::on() {
-            trace_snapshot(&dom, &ax, dom_ms, crate::trace::ms(at));
-        }
-        if let Some(context) = context {
-            source_formatting::finish(&|method, args| self.call(method, args), context, &mut dom);
-        }
+        let snapshot = snapshot_through(&|method, args| self.call(method, args))?;
         if !self.engine.screencast_scope_is_current(&scope) {
             return Err(io::Error::new(
                 ErrorKind::WouldBlock,
@@ -761,14 +896,43 @@ impl Engine for ChromeBackend {
             ));
         }
         self.model_scope = Some(scope);
-        Ok(PageSnapshot { dom, ax })
+        Ok(snapshot)
+    }
+
+    fn reader(&mut self, _tab: TabId) -> Option<Box<dyn crate::engine::PageReader>> {
+        Some(Box::new(ChromeReader {
+            devtools: self.devtools.clone(),
+            world: None,
+        }))
+    }
+
+    fn begin_read(&mut self, _tab: TabId) -> io::Result<u64> {
+        let scope = self.engine.screencast_scope().ok_or_else(|| {
+            io::Error::new(ErrorKind::WouldBlock, "viewport metrics not applied yet")
+        })?;
+        self.reads += 1;
+        self.read_scope = Some((self.reads, scope));
+        Ok(self.reads)
+    }
+
+    fn adopt_read(&mut self, _tab: TabId, read: u64) -> bool {
+        let Some((_, scope)) = self.read_scope.take().filter(|(n, _)| *n == read) else {
+            return false;
+        };
+        if !self.engine.screencast_scope_is_current(&scope) {
+            return false;
+        }
+        self.model_scope = Some(scope);
+        true
     }
 
     fn capture(&mut self, _tab: TabId, region: Rect, format: Format) -> io::Result<Frame> {
+        let _wait = self.waiting(PERIODIC);
         self.capture_region(region, format)
     }
 
     fn capture_model(&mut self, _tab: TabId, region: Rect, format: Format) -> io::Result<Frame> {
+        let _wait = self.waiting(PERIODIC);
         capture_when_current(
             || {
                 self.model_scope
@@ -861,27 +1025,13 @@ impl Engine for ChromeBackend {
     }
 
     fn playback(&mut self, _tab: TabId, node: i64) -> io::Result<Playback> {
-        let value = self.call_on(
-            node,
-            "function() { return [this.paused, this.muted, this.volume, this.currentTime, \
-               isFinite(this.duration) ? this.duration : -1, this.ended, this.readyState, \
-               this.error !== null]; }",
-            vec![],
-        )?;
-        let at = |i: usize| value.get(i).cloned().unwrap_or(Value::Null);
-        Ok(Playback {
-            paused: at(0).as_bool().unwrap_or(true),
-            muted: at(1).as_bool().unwrap_or(false),
-            volume: at(2).as_f64().unwrap_or(1.0),
-            time: at(3).as_f64().unwrap_or(0.0),
-            duration: at(4).as_f64().filter(|d| *d >= 0.0),
-            ended: at(5).as_bool().unwrap_or(false),
-            ready: at(6).as_u64().unwrap_or(0).min(4) as u8,
-            failed: at(7).as_bool().unwrap_or(false),
-        })
+        let _wait = self.waiting(PERIODIC);
+        let value = self.call_on(node, PLAYBACK_READ, vec![])?;
+        Ok(playback_of(&value))
     }
 
     fn resource(&mut self, _tab: TabId, url: &str) -> io::Result<Vec<u8>> {
+        let _wait = self.waiting(PERIODIC);
         let tree = self.call("Page.getFrameTree", json!({}))?;
         let frame = tree["frameTree"]["frame"]["id"]
             .as_str()
@@ -931,6 +1081,7 @@ impl Engine for ChromeBackend {
     }
 
     fn image_ready(&mut self, _tab: TabId, node: i64) -> io::Result<bool> {
+        let _wait = self.waiting(PERIODIC);
         let value = self.call_on(
             node,
             "function() { return !(this instanceof HTMLImageElement) || \
@@ -941,6 +1092,7 @@ impl Engine for ChromeBackend {
     }
 
     fn read_live(&mut self, _tab: TabId, node: i64, full: bool) -> io::Result<LiveRead> {
+        let _wait = self.waiting(PERIODIC);
         let context = self
             .world
             .ok_or_else(|| io::Error::new(ErrorKind::NotFound, "no live world yet"))?;
@@ -989,6 +1141,7 @@ impl Engine for ChromeBackend {
     }
 
     fn appended(&mut self, _tab: TabId) -> io::Result<Vec<i64>> {
+        let _wait = self.waiting(PERIODIC);
         let Some(context) = self.world else {
             return Ok(Vec::new());
         };
@@ -1042,6 +1195,7 @@ impl Engine for ChromeBackend {
     }
 
     fn metrics(&mut self, _tab: TabId) -> io::Result<Metrics> {
+        let _wait = self.waiting(PERIODIC);
         let metrics = self.call("Page.getLayoutMetrics", json!({}))?;
         // The `css…` sizes are CSS pixels; the older names are device
         // pixels, the same at our scale factor of one.

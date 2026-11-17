@@ -49,6 +49,47 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   until the engine was dropped. One that answers DevTools but is slow (a
   loaded machine) gets a second wait first.
 
+### Noctiluca: steadier video frames
+
+- Following Noctiluca's scroll no longer puts a playing video partly out of
+  Chrome's viewport: the wheel Chrome is given stops where the video still
+  fits, so one row of `j` keeps the video screencast on its own instead of
+  falling back to screenshots at 4 to 5 frames a second for seconds. Tested
+  on a new watch-page fixture (`tests/fixtures/watch.html`, a 30 fps test
+  card in a player whose clock the page updates).
+- A live video on a busy page keeps drawing (#890): when a region playing
+  on screen gets no frame for two seconds, the tab starts the screencast
+  again, of the whole viewport, for a few seconds before it tries the
+  region's area again; and the status line says `STALLED` instead of
+  `PLAYING` over a picture whose frames stopped. rs-rich-embed: a restart
+  of the screencast that Chrome refuses no longer drops every frame after
+  it. Tested on a new busy-stream fixture (`tests/fixtures/busy-stream.html`,
+  a playing video beside a chat that never rests and moves it).
+- Video frames are paced by the video's own clock: Chrome's frame stamps
+  set the slots, the spacing is a whole number of the video's frames (a
+  24 fps video shows at 24 or 12 a second, not on a 30 Hz clock that holds
+  every fourth frame twice), a paint of the page between two of the video's
+  frames is not shown, and frames after a stall (a reading) keep their
+  spacing instead of bunching up. When the encoder takes longer per frame
+  than the pacing allows (iTerm2 and Sixel on a slow terminal), the tab is
+  asked for frames at a rate the encoder keeps up with, so frames are
+  dropped once, evenly, rather than by the pacing and the encoder's queue
+  in turn.
+- The tab's periodic calls to Chrome (a media element's state, Chrome's
+  view, a frame's capture, a live log's entries, a still's bytes) wait at
+  most 3 s, and a reading's at most 10 s, instead of the 30 s any call may
+  take: a page that hangs holds the video's frames for seconds, not half a
+  minute per call. Tested live on a page whose script never returns
+  (`tests/fixtures/hang.html`).
+- Readings of the page run on a thread of their own: a reading the page
+  pinged for, or a new document's settling one, takes Chrome's snapshot and
+  builds the model off the tab's thread, which goes on taking video frames;
+  its capture scope is checked and adopted on the tab's thread when it comes
+  back. A reading took 150 to 230 ms of the tab's thread about once a
+  second while a video played, and every gap of 200 ms or more between
+  frames lined up with one. Readings for an action, a navigation or a load
+  are still read at once on the tab's thread.
+
 ## 0.0.26 cohort — published 2026-11-11
 
 Published on 2026-11-11 from `e5422bf9` by one `release.yml` run on rab

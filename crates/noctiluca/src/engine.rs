@@ -237,6 +237,21 @@ pub enum EngineEvent {
 /// session. It must preserve `resource`'s access/cache semantics.
 pub type ResourceReader = Box<dyn FnMut(&str) -> io::Result<Vec<u8>> + Send>;
 
+/// What reads a tab's page on a thread of its own ([`Engine::reader`]):
+/// its snapshot, as [`Engine::snapshot`] takes it, without checking or
+/// adopting its capture scope, which the tab does on its own thread
+/// ([`Engine::begin_read`], [`Engine::adopt_read`]).
+pub trait PageReader: Send {
+    /// The page as laid out, with its accessibility tree.
+    fn snapshot(&mut self) -> io::Result<PageSnapshot>;
+    /// A video or audio element's playback, as [`Engine::playback`] reads
+    /// it. [`io::ErrorKind::Unsupported`]: the tab reads it on its own
+    /// thread.
+    fn playback(&mut self, _node: NodeId) -> io::Result<Playback> {
+        Err(io::Error::new(io::ErrorKind::Unsupported, "no media here"))
+    }
+}
+
 /// A browser engine behind Noctiluca.
 pub trait Engine: Send {
     /// Lay pages out at `columns` x `rows` cells.
@@ -260,6 +275,26 @@ pub trait Engine: Send {
     fn state(&self, tab: TabId) -> PageState;
     /// The page as laid out, with its accessibility tree.
     fn snapshot(&mut self, tab: TabId) -> io::Result<PageSnapshot>;
+    /// What reads `tab`'s page from another thread, so a reading (a large
+    /// page's snapshot takes hundreds of milliseconds) never holds up the
+    /// tab's own, which takes video frames meanwhile. `None`: the tab
+    /// reads on its own thread.
+    fn reader(&mut self, _tab: TabId) -> Option<Box<dyn PageReader>> {
+        None
+    }
+    /// Begin a reading on the [reader](Self::reader): the capture scope it
+    /// is taken in, kept by the number this returns. Refused (as
+    /// [`snapshot`](Self::snapshot) is) while the viewport is not applied.
+    fn begin_read(&mut self, _tab: TabId) -> io::Result<u64> {
+        Ok(0)
+    }
+    /// The reading `read` ([`begin_read`](Self::begin_read)) came back:
+    /// whether its scope is still current, and then the model's, as a
+    /// [`snapshot`](Self::snapshot) leaves it. `false`: the document or
+    /// the viewport changed while it was read, and it is not used.
+    fn adopt_read(&mut self, _tab: TabId, _read: u64) -> bool {
+        true
+    }
     /// Pixels of `region`, in CSS pixels of the document.
     fn capture(&mut self, tab: TabId, region: Rect, format: Format) -> io::Result<Frame>;
     /// Capture for the most recently published model. Scope-aware backends reject
