@@ -21,6 +21,15 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   tags from before rab. CI and `validate_release.py` run rab's `check` and
   the rab tests instead of `release_cohort.py`'s.
 
+### Noctiluca: media keys, live logs and layout (0.0.27)
+
+- The media keys and the status line stay on the video or audio last
+  controlled, and never pick an element with nothing to play (no source):
+  after a pause on a page with a source-less preview player, `p` plays the
+  main video again instead of waiting on the empty one (#889). A length
+  not known yet reads `--:--`, not `live`; `Playback` has `live` and
+  `empty`.
+
 ## 0.0.26 cohort — published 2026-11-11
 
 Published on 2026-11-11 from `e5422bf9` by one `release.yml` run on rab

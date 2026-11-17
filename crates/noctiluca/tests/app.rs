@@ -328,6 +328,7 @@ fn audio_engine() -> FakeEngine {
             ended: false,
             ready: 4,
             failed: false,
+            ..Default::default()
         },
     );
     engine
@@ -372,6 +373,79 @@ fn media_controls_follow_the_element_and_run_from_keys_and_f1() {
         "{}",
         screen(&driver)
     );
+}
+
+#[test]
+fn the_media_keys_and_status_stay_on_the_video_that_has_a_source() {
+    // #889: a source-less preview <video> sits before the main one. After
+    // a pause the keys and the status line stay on the main video: the
+    // status says its length, and a second `p` plays it again.
+    use noctiluca::engine::{MediaOp, Playback};
+    use noctiluca::model::{MediaKind, Revisions, build};
+    let page = build(
+        &noctiluca::testing::snapshot_file(&snapshots().join("two-videos.json")).unwrap(),
+        &mut Revisions::new(),
+    );
+    let videos: Vec<_> = page
+        .media
+        .iter()
+        .filter(|m| m.kind == MediaKind::Video)
+        .map(|m| m.node)
+        .collect();
+    let [preview, main] = videos[..] else {
+        panic!("two videos: {videos:?}")
+    };
+    let engine = engine();
+    let state = engine.state.clone();
+    {
+        let mut state = state.lock().unwrap();
+        state.media.insert(
+            preview,
+            Playback {
+                paused: true,
+                muted: true,
+                volume: 1.0,
+                empty: true,
+                ..Playback::default()
+            },
+        );
+        state.media.insert(
+            main,
+            Playback {
+                paused: false,
+                muted: true,
+                volume: 1.0,
+                time: 1.0,
+                duration: Some(5.0),
+                ready: 4,
+                ..Playback::default()
+            },
+        );
+    }
+    let mut driver = app(
+        Box::new(engine),
+        projection(Config::default(), "two-videos.html"),
+    )
+    .driver(120, 40);
+    wait_for(&mut driver, "media PLAYING 0:01 / 0:05");
+    let ops = || -> Vec<(i64, MediaOp)> {
+        state
+            .lock()
+            .unwrap()
+            .actions
+            .iter()
+            .filter_map(|a| match a {
+                PageAction::Media { node, op } => Some((*node, *op)),
+                _ => None,
+            })
+            .collect()
+    };
+    driver.press("p");
+    wait_for(&mut driver, "media PAUSED 0:01 / 0:05");
+    driver.press("p");
+    wait_for(&mut driver, "media PLAYING");
+    assert_eq!(ops(), [(main, MediaOp::Pause), (main, MediaOp::Play)]);
+    assert!(!screen(&driver).contains("/ live"), "{}", screen(&driver));
 }
 
 #[test]

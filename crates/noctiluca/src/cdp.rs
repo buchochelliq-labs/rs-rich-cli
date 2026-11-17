@@ -835,7 +835,8 @@ impl Engine for ChromeBackend {
             node,
             "function() { return [this.paused, this.muted, this.volume, this.currentTime, \
                isFinite(this.duration) ? this.duration : -1, this.ended, this.readyState, \
-               this.error !== null]; }",
+               this.error !== null, this.duration === Infinity, \
+               this.networkState === 0 && !this.currentSrc]; }",
             vec![],
         )?;
         let at = |i: usize| value.get(i).cloned().unwrap_or(Value::Null);
@@ -848,6 +849,8 @@ impl Engine for ChromeBackend {
             ended: at(5).as_bool().unwrap_or(false),
             ready: at(6).as_u64().unwrap_or(0).min(4) as u8,
             failed: at(7).as_bool().unwrap_or(false),
+            live: at(8).as_bool().unwrap_or(false),
+            empty: at(9).as_bool().unwrap_or(false),
         })
     }
 

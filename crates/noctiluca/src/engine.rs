@@ -90,6 +90,12 @@ pub struct Playback {
     pub time: f64,
     /// Seconds; `None` while unknown, or for a live stream.
     pub duration: Option<f64>,
+    /// Whether the duration is infinite: a live stream. A `None` duration
+    /// that is not live is not known yet.
+    pub live: bool,
+    /// Whether the element has nothing to play: no source chosen
+    /// (`networkState` is `NETWORK_EMPTY` and there is no `currentSrc`).
+    pub empty: bool,
     pub ended: bool,
     /// The element's `readyState`, 0 to 4: below 3 a playing element
     /// waits for data.
@@ -112,6 +118,16 @@ impl Playback {
             "BUFFERING"
         } else {
             "PLAYING"
+        }
+    }
+
+    /// The length as the status line says it: `m:ss`, `live` for a live
+    /// stream, `--:--` while not known.
+    pub fn length(&self) -> String {
+        match self.duration {
+            Some(d) => crate::bars::clock(d),
+            None if self.live => "live".into(),
+            None => "--:--".into(),
         }
     }
 

@@ -136,6 +136,8 @@ pub struct Browser {
     pub pixels: Memo<Pixels>,
     /// Whether moving pictures are held still (`media.freeze`).
     pub frozen: Signal<bool>,
+    /// The video or audio the media keys last worked on.
+    media_target: Signal<Option<NodeId>>,
     /// The frame each moving picture in view shows now, by node: an
     /// animated GIF's, stepped within the byte budget.
     pub live: Signal<Rc<HashMap<NodeId, Live>>>,
@@ -894,17 +896,26 @@ fn about(b: Browser, answers: Vec<String>, product: String, cx: &mut Ctx) {
     });
 }
 
-/// The video or audio the media actions work on: the one playing, else
-/// the first that is ready.
+/// The video or audio the media actions work on: the one playing (the
+/// one last controlled first), else the one last controlled, else the
+/// first that is ready. An element with nothing to play (no source) is
+/// never picked: a play would wait on it for ever.
 pub fn current_media(b: Browser) -> Option<(NodeId, Playback)> {
+    let target = b.media_target.get();
     b.page.with(|p| {
         let page = p.as_ref()?;
         let ready = || {
             page.media
                 .iter()
                 .filter_map(|m| Some((m.node, m.playback?)))
+                .filter(|(_, p)| !p.empty)
         };
-        ready().find(|(_, p)| !p.paused).or_else(|| ready().next())
+        let last = || ready().find(|(node, _)| Some(*node) == target);
+        last()
+            .filter(|(_, p)| !p.paused)
+            .or_else(|| ready().find(|(_, p)| !p.paused))
+            .or_else(last)
+            .or_else(|| ready().next())
     })
 }
 
@@ -913,6 +924,7 @@ fn media_op(b: Browser, node: NodeId, op: MediaOp) {
     let Some(document) = b.page.with_untracked(|p| p.as_ref().map(|p| p.document)) else {
         return;
     };
+    b.media_target.set(Some(node));
     let id = b.send(Command::Media { document, node, op });
     b.after(id, |result, cx| {
         if let Err(refusal) = result {
@@ -1254,7 +1266,7 @@ fn player(b: Browser, node: NodeId) -> Node {
             Some(p) => format!(
                 " {} / {}{}{sound}",
                 clock(p.time),
-                p.duration.map_or("live".into(), clock),
+                p.length(),
                 if p.muted { " [yellow]muted[/]" } else { "" }
             ),
         }
@@ -3548,6 +3560,7 @@ pub fn app_with_presentation(
             logs,
             pixels: memo(move || { let images = images_signal.get(); if images == Images::Auto { media_presentation.pixels() } else { media_presentation.with_pixels(pictures::pixels(images)).pixels() } }),
             frozen: signal(false),
+            media_target: signal(None),
             live: signal(Rc::new(HashMap::new())),
             tab: signal(tab),
             waiting: signal(HashMap::new()),
