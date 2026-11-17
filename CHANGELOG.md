@@ -29,6 +29,12 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   main video again instead of waiting on the empty one (#889). A length
   not known yet reads `--:--`, not `live`; `Playback` has `live` and
   `empty`.
+- A live log whose messages sit in a list beside a greeting or a spacer
+  (as chat frameworks build them) has an entry a message: it keeps taking
+  new lines as the list grows past what one entry reads, and is rendered
+  again (#891); `{` holds the lines that were showing and steps up through
+  messages, instead of blanking the log to its first line (#892). A log
+  paused near its start keeps its rows full.
 
 ## 0.0.26 cohort — published 2026-11-11
 

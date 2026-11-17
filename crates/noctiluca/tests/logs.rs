@@ -168,3 +168,26 @@ fn without_the_live_tail_the_log_shows_what_chrome_shows() {
     let lines = plain(&log_lines(&log, 40, 3, &page, &marks));
     assert_eq!(lines, ["message #1", "message #2", "message #3"]);
 }
+
+#[test]
+fn a_chat_whose_messages_sit_beside_a_greeting_has_an_entry_a_message() {
+    // #891, #892: the log holds a greeting and a list of the messages;
+    // the list's children are the entries, so `{` steps through messages
+    // and a long list is not one entry read as a whole.
+    let page = page("chat-wrapped");
+    let texts: Vec<String> = page.logs[0].entries.iter().map(Entry::text).collect();
+    // Twelve at load, and those its timer added before the capture.
+    assert!(texts.len() >= 12, "{texts:#?}");
+    assert_eq!(
+        texts[0],
+        "subscriber bea: message number 1 from the harbour"
+    );
+    let log = &page.logs[0];
+    let paused = scroll_log(log, LogScroll::Follow, -4);
+    let mut marks = Marks::default();
+    marks.logs.insert(log.node, paused);
+    let shown = plain(&log_lines(log, 60, 6, &page, &marks));
+    assert!(shown.iter().all(|l| !l.trim().is_empty()), "{shown:#?}");
+    let number = format!("number {} ", texts.len() - 4);
+    assert!(shown[5].contains(&number), "{number}: {shown:#?}");
+}

@@ -184,6 +184,15 @@ pub fn log_lines(log: &Log, width: usize, rows: usize, page: &Page, marks: &Mark
     if reverse {
         lines.reverse();
     }
+    // Paused near its start, the log holds still with its rows full: the
+    // entries after the paused one fill what those before it do not.
+    for entry in &log.entries[end..] {
+        if lines.len() >= rows || !reverse {
+            break;
+        }
+        lines.extend(entry_lines(entry, width, page, marks));
+    }
+    lines.truncate(rows);
     lines.resize(rows, Line::default());
     lines
 }
@@ -2888,6 +2897,26 @@ mod tests {
         assert_eq!(TEST_LOG_ENTRY_WRAPS.with(|n| n.get()), 0);
     }
     #[test]
+    fn a_log_paused_near_its_start_keeps_its_rows_full() {
+        // #892: paused on an early entry, the rows below it are the
+        // entries after it, not blank.
+        let page = log_fixture();
+        let mut log = page.logs[0].clone();
+        log.entries = (0..30)
+            .map(|key| crate::model::Entry {
+                key,
+                runs: vec![Run::plain(format!("message {key}"))],
+            })
+            .collect();
+        let mut marks = Marks::default();
+        marks.logs.insert(log.node, LogScroll::Paused(1));
+        let lines: Vec<String> = log_lines(&log, 20, 4, &page, &marks)
+            .iter()
+            .map(Line::plain)
+            .collect();
+        assert_eq!(lines, ["message 0", "message 1", "message 2", "message 3"]);
+    }
+    #[test]
     fn bounded_log_lines_match_full_wrapping_with_inline_styles_and_unicode() {
         let page = log_fixture();
         let mut log = page.logs[0].clone();
@@ -2960,7 +2989,7 @@ mod tests {
                     None => rows.min(lines.len()),
                 },
             };
-            (end.saturating_sub(rows), end)
+            (end.saturating_sub(rows), end.max(rows.min(lines.len())))
         } else {
             let start = log.first_shown.and_then(line_of).map_or(0, |n| starts[n]);
             (start, (start + rows).min(lines.len()))

@@ -1225,8 +1225,9 @@ impl Dom {
     }
 
     /// Where a live log's entries are: the box itself, or the one box it
-    /// wraps them in (a scroller inside a panel), however deep. A box
-    /// whose only child holds inline content holds one entry: that child.
+    /// wraps them in (a scroller inside a panel), however deep, alone or
+    /// beside a few boxes that hold little ([`holder`]). A box whose only
+    /// child holds inline content holds one entry: that child.
     fn entry_root(&self, mut i: usize) -> usize {
         let elements = |n: usize| -> Vec<usize> {
             self.children[n]
@@ -1247,10 +1248,12 @@ impl Dom {
         };
         for _ in 0..32 {
             let mine = elements(i);
-            if mine.len() != 1 || texty(i) {
+            if texty(i) {
                 break;
             }
-            let only = mine[0];
+            let Some(only) = holder(&mine, &|n| elements(n).len()) else {
+                break;
+            };
             let theirs = elements(only);
             if theirs.is_empty()
                 || texty(only)
@@ -4108,6 +4111,24 @@ fn build_parts(
     }
     let relations = walker.source.map(|s| s.finish(&dom, &page));
     (page, relations)
+}
+
+/// Of a log's boxes `mine`, the one its entries are in: the only one, or
+/// the one with many children (eight or more, three for each box beside
+/// it) where each other has a quarter as many or fewer, as a chat's
+/// greeting or spacer sits beside the list of its messages. Else none:
+/// `mine` are the entries. The isolated world's `live.root` decides the
+/// same way.
+fn holder(mine: &[usize], children: &dyn Fn(usize) -> usize) -> Option<usize> {
+    if let [only] = mine {
+        return Some(*only);
+    }
+    let counts: Vec<usize> = mine.iter().map(|&c| children(c)).collect();
+    let most = counts.iter().copied().max()?;
+    let unique = counts.iter().filter(|&&n| n == most).count() == 1;
+    let small = counts.iter().all(|&n| n == most || n * 4 <= most);
+    (most >= 8 && unique && small && most >= 3 * mine.len())
+        .then(|| mine[counts.iter().position(|&n| n == most).unwrap()])
 }
 
 #[cfg(test)]

@@ -116,15 +116,26 @@ pub const PING_SCRIPT: &str = r#"(function start(tries) {
   const skipped = /^(SCRIPT|STYLE|TEMPLATE|NOSCRIPT|HEAD|TITLE|META|LINK)$/;
   const elements = el => [...el.children].filter(c => !skipped.test(c.tagName) && shows(c));
   const texty = el => [...el.childNodes].some(n => n.nodeType === 3 && n.nodeValue.trim() !== '');
-  // The box the entries are in: the log, or the one box it wraps them in.
+  // The box the entries are in: the log, or the one box it wraps them in,
+  // alone or beside a few that hold little (a greeting, a spacer): the one
+  // with many children where the others have few (see `holder` in the model).
   live.root = box => {
     let at = box;
     for (let depth = 0; depth < 32; depth++) {
       const mine = elements(at);
-      if (mine.length !== 1 || texty(at)) break;
-      const theirs = elements(mine[0]);
-      if (!theirs.length || texty(mine[0]) || theirs.some(g => style(g).display.startsWith('inline'))) break;
-      at = mine[0];
+      if (texty(at)) break;
+      let only = mine.length === 1 ? mine[0] : null;
+      if (!only && mine.length > 1) {
+        const counts = mine.map(c => elements(c).length);
+        const most = Math.max(...counts);
+        if (most >= 8 && counts.filter(n => n === most).length === 1 &&
+            counts.every(n => n === most || n * 4 <= most) && most >= 3 * mine.length)
+          only = mine[counts.indexOf(most)];
+      }
+      if (!only) break;
+      const theirs = elements(only);
+      if (!theirs.length || texty(only) || theirs.some(g => style(g).display.startsWith('inline'))) break;
+      at = only;
     }
     return at;
   };

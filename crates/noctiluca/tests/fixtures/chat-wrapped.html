@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<title>Wrapped chat</title>
+<!-- Written for Noctiluca's corpus: a chat as frameworks build one. The
+     role=log box holds a greeting and the list of messages beside it, not
+     the messages themselves; each message has a badge picture, the
+     author and the words in several elements. The list is rendered
+     again now and then (a new list element with the same messages, as a
+     framework recycling its nodes), and the oldest messages are dropped.
+     ?quiet stops the timer; window.post(words) adds one message. -->
+<style>
+  body { margin: 0; font: 16px sans-serif }
+  #chat { width: 420px; margin: 8px }
+  #log { height: 270px; overflow-y: auto }
+  .greeting { color: #666 }
+  .badge { width: 16px; height: 16px; vertical-align: middle }
+  .author { font-weight: bold }
+</style>
+<h1>Harbour chat</h1>
+<section id="chat" aria-label="Chat">
+  <div id="log" role="log" aria-label="Chat messages">
+    <div class="greeting">Welcome to the chat room!</div>
+    <div class="list"></div>
+  </div>
+</section>
+<p>Under the chat.</p>
+<script>
+  const log = document.getElementById('log');
+  const words = [];
+  let n = 0;
+  function row(text, i) {
+    const line = document.createElement('div');
+    line.className = 'message';
+    const meta = document.createElement('span');
+    const badge = document.createElement('img');
+    badge.className = 'badge'; badge.alt = 'subscriber'; badge.src = 'media/badge.png';
+    const who = document.createElement('span');
+    who.className = 'author'; who.textContent = ['ada', 'bea', 'cy'][i % 3];
+    meta.append(badge, ' ', who);
+    const body = document.createElement('span');
+    body.className = 'body';
+    for (const word of text.split(' ')) {
+      const w = document.createElement('span');
+      w.textContent = word + ' ';
+      body.append(w);
+    }
+    line.append(meta, ': ', body);
+    return line;
+  }
+  function list() { return log.querySelector('.list'); }
+  function post(text) {
+    words.push([text, n++]);
+    list().append(row(text, n));
+    while (words.length > 150) { words.shift(); list().firstElementChild.remove(); }
+    log.scrollTop = log.scrollHeight;
+  }
+  // The framework renders the list again: new nodes, the same messages.
+  function rerender() {
+    const fresh = document.createElement('div');
+    fresh.className = 'list';
+    for (const [text, i] of words) fresh.append(row(text, i));
+    list().replaceWith(fresh);
+    log.scrollTop = log.scrollHeight;
+  }
+  window.post = post;
+  window.rerender = rerender;
+  for (let i = 0; i < 12; i++) post('message number ' + (i + 1) + ' from the harbour');
+  if (!location.search.includes('quiet')) {
+    setInterval(() => post('message number ' + (n + 1) + ' from the harbour'), 300);
+    setInterval(rerender, 4000);
+  }
+</script>
+</html>
