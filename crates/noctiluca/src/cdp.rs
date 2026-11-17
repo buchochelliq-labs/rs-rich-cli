@@ -346,6 +346,9 @@ pub struct ChromeBackend {
     /// The execution context of the isolated world that pings, from its
     /// last ping: live logs are read in it, where their state is.
     world: Option<i64>,
+    /// What a new browser is set up with: `--no-js`, `--transparent`.
+    no_js: bool,
+    transparent: bool,
 }
 
 impl ChromeBackend {
@@ -381,6 +384,23 @@ impl ChromeBackend {
             "Browser.downloadWillBegin",
             "Browser.downloadProgress",
         ]);
+        let backend = ChromeBackend {
+            model_scope: None,
+            engine,
+            devtools,
+            events,
+            world: None,
+            no_js: options.no_js,
+            transparent: options.transparent,
+        };
+        backend.set_up()?;
+        Ok(backend)
+    }
+
+    /// The browser's side of the isolated world: the binding, the script
+    /// and the switches. A restarted browser has none of them.
+    fn set_up(&self) -> io::Result<()> {
+        let devtools = &self.devtools;
         // A binding's calls are reported only while the Runtime domain is
         // on (measured: without it, no ping ever arrives).
         devtools.call("Runtime.enable", json!({}), CALL)?;
@@ -394,27 +414,35 @@ impl ChromeBackend {
             json!({"source": PING_SCRIPT, "worldName": WORLD, "runImmediately": true}),
             CALL,
         )?;
-        if options.no_js {
+        if self.no_js {
             devtools.call(
                 "Emulation.setScriptExecutionDisabled",
                 json!({"value": true}),
                 CALL,
             )?;
         }
-        if options.transparent {
+        if self.transparent {
             devtools.call(
                 "Emulation.setDefaultBackgroundColorOverride",
                 json!({"color": {"r": 0, "g": 0, "b": 0, "a": 0}}),
                 CALL,
             )?;
         }
-        Ok(ChromeBackend {
-            model_scope: None,
-            engine,
-            devtools,
-            events,
-            world: None,
-        })
+        Ok(())
+    }
+
+    /// Start a new browser if the last one has gone, set up as
+    /// [`start`](Self::start) set the first one up, before a navigation
+    /// goes to it. Its history carries on (rs-rich-embed's
+    /// `ChromeEngine::restart`).
+    fn revive(&mut self) -> io::Result<()> {
+        if !self.engine.ended() {
+            return Ok(());
+        }
+        self.engine.restart()?;
+        self.world = None;
+        self.model_scope = None;
+        self.set_up()
     }
 
     /// The page's DevTools, for calls of one's own.
@@ -671,10 +699,12 @@ impl Engine for ChromeBackend {
     }
 
     fn open(&mut self, _tab: TabId, url: &str) -> io::Result<()> {
+        self.revive()?;
         self.engine.open(url)
     }
 
     fn history(&mut self, _tab: TabId, step: HistoryStep) -> io::Result<()> {
+        self.revive()?;
         match step {
             HistoryStep::Back => self.engine.back(),
             HistoryStep::Forward => self.engine.forward(),

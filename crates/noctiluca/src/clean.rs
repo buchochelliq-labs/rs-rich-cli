@@ -88,9 +88,101 @@ pub fn truncate(text: &str, max: usize) -> String {
     out
 }
 
+/// How a refusal for a browser that stopped begins: such refusals are said
+/// once ([`stopped`]).
+pub const STOPPED: &str = "The browser stopped";
+/// How a refusal for a page whose renderer crashed begins.
+pub const CRASHED: &str = "The page crashed";
+
+/// Why the browser stopped, from rs-rich-embed's `PageState::error`
+/// (`Chrome: …`), as the user reads it: "The browser stopped: Chrome
+/// exited (its last words)."
+pub fn stopped(error: &str) -> String {
+    let error = clean(error);
+    let cause = error.strip_prefix("Chrome: ").unwrap_or(&error);
+    let said = if let Some(last) = cause.strip_prefix("the browser closed: ") {
+        format!("Chrome exited ({last})")
+    } else {
+        match cause {
+            "the browser closed" => "Chrome exited".to_string(),
+            "the page was closed" => "Chrome closed the page".to_string(),
+            "the browser did not open a page in time" => {
+                "Chrome did not open a page in time".to_string()
+            }
+            other => other.to_string(),
+        }
+    };
+    format!("{STOPPED}: {}.", said.trim_end_matches('.'))
+}
+
+/// A DevTools call's error as the user reads it, not as the protocol says
+/// it: a call with no answer, a crashed page, a browser that has gone, and
+/// DevTools's own `{"code":…,"message":…}`.
+pub fn engine_error(error: &std::io::Error) -> String {
+    let text = error.to_string();
+    if error.kind() == std::io::ErrorKind::TimedOut && text.ends_with(": no answer in time") {
+        return "The page did not answer in time.".into();
+    }
+    match text.as_str() {
+        "the page crashed" => return format!("{CRASHED}."),
+        "the browser has gone" => return format!("{STOPPED}."),
+        _ => {}
+    }
+    let said = serde_json::from_str::<serde_json::Value>(&text)
+        .ok()
+        .and_then(|v| v["message"].as_str().map(str::to_string))
+        .unwrap_or(text);
+    let said = clean(&said);
+    let mut chars = said.chars();
+    match chars.next() {
+        Some(first) => {
+            let mut out: String = first.to_uppercase().chain(chars).collect();
+            if !out.ends_with(['.', '!', '?']) {
+                out.push('.');
+            }
+            out
+        }
+        None => said,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn engine_errors_read_as_sentences() {
+        use std::io::{Error, ErrorKind};
+        let timed_out = Error::new(
+            ErrorKind::TimedOut,
+            "Runtime.callFunctionOn: no answer in time",
+        );
+        assert_eq!(engine_error(&timed_out), "The page did not answer in time.");
+        let devtools =
+            Error::other(r#"{"code":-32000,"message":"Cannot find context with specified id"}"#);
+        assert_eq!(
+            engine_error(&devtools),
+            "Cannot find context with specified id."
+        );
+        let gone = Error::new(ErrorKind::BrokenPipe, "the browser has gone");
+        assert_eq!(engine_error(&gone), "The browser stopped.");
+        assert_eq!(
+            engine_error(&Error::other("the page crashed")),
+            "The page crashed."
+        );
+        assert_eq!(
+            engine_error(&Error::other("the page refused")),
+            "The page refused."
+        );
+        assert_eq!(
+            stopped("Chrome: the browser closed: [123:FATAL] out of memory\x1b[2J"),
+            "The browser stopped: Chrome exited ([123:FATAL] out of memory[2J)."
+        );
+        assert_eq!(
+            stopped("Chrome: the browser did not open a page in time"),
+            "The browser stopped: Chrome did not open a page in time."
+        );
+    }
 
     #[test]
     fn no_control_character_survives() {
