@@ -15,6 +15,8 @@
 
 use std::io::{self, ErrorKind};
 use std::path::PathBuf;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::mpsc::Receiver;
 use std::time::Duration;
 
@@ -29,10 +31,17 @@ use crate::engine::{
     PageSnapshot, Playback, Rect, TabId,
 };
 
-/// How long one DevTools call may take.
 mod source_formatting;
 
+/// How long one DevTools call may take.
 const CALL: Duration = Duration::from_secs(30);
+/// How long a call of the tab's periodic work may take (a media element's
+/// state, Chrome's view, a frame's capture, a live log's entries): a page
+/// that hangs or whose renderer crashed holds the tab's frames no longer.
+pub const PERIODIC: Duration = Duration::from_secs(3);
+/// How long each of a reading's calls may take: a large page's snapshot
+/// takes hundreds of milliseconds.
+pub const READING: Duration = Duration::from_secs(10);
 
 /// The isolated world Noctiluca's script runs in.
 pub const WORLD: &str = "noctiluca";
@@ -337,6 +346,19 @@ pub fn find_chrome() -> Option<PathBuf> {
         .or_else(ChromeEngine::find)
 }
 
+/// A shorter wait for a backend's calls, until it is dropped
+/// ([`ChromeBackend::waiting`]).
+struct Wait {
+    wait: Arc<AtomicU64>,
+    before: u64,
+}
+
+impl Drop for Wait {
+    fn drop(&mut self) {
+        self.wait.store(self.before, Ordering::Relaxed);
+    }
+}
+
 /// The [`Engine`] over a headless Chrome, sandboxed, through rs-rich-embed.
 pub struct ChromeBackend {
     model_scope: Option<ScreencastScope>,
@@ -346,6 +368,9 @@ pub struct ChromeBackend {
     /// The execution context of the isolated world that pings, from its
     /// last ping: live logs are read in it, where their state is.
     world: Option<i64>,
+    /// How long a call waits now, in milliseconds: [`CALL`], or less
+    /// while the tab's periodic work runs ([`Wait`]).
+    wait: Arc<AtomicU64>,
 }
 
 impl ChromeBackend {
@@ -414,6 +439,7 @@ impl ChromeBackend {
             devtools,
             events,
             world: None,
+            wait: Arc::new(AtomicU64::new(CALL.as_millis() as u64)),
         })
     }
 
@@ -440,7 +466,16 @@ impl ChromeBackend {
     }
 
     fn call(&self, method: &str, params: Value) -> io::Result<Value> {
-        self.devtools.call(method, params, CALL)
+        let wait = Duration::from_millis(self.wait.load(Ordering::Relaxed));
+        self.devtools.call(method, params, wait)
+    }
+
+    /// Each call waits at most `timeout` until the [`Wait`] is dropped.
+    fn waiting(&self, timeout: Duration) -> Wait {
+        let wait = self.wait.clone();
+        let before = wait.load(Ordering::Relaxed);
+        wait.store(before.min(timeout.as_millis() as u64), Ordering::Relaxed);
+        Wait { wait, before }
     }
 
     /// A fresh isolated world in the main frame, for one action.
@@ -687,6 +722,7 @@ impl Engine for ChromeBackend {
     }
 
     fn snapshot(&mut self, _tab: TabId) -> io::Result<PageSnapshot> {
+        let _wait = self.waiting(READING);
         let scope = self.engine.screencast_scope().ok_or_else(|| {
             io::Error::new(ErrorKind::WouldBlock, "viewport metrics not applied yet")
         })?;
@@ -735,10 +771,12 @@ impl Engine for ChromeBackend {
     }
 
     fn capture(&mut self, _tab: TabId, region: Rect, format: Format) -> io::Result<Frame> {
+        let _wait = self.waiting(PERIODIC);
         self.capture_region(region, format)
     }
 
     fn capture_model(&mut self, _tab: TabId, region: Rect, format: Format) -> io::Result<Frame> {
+        let _wait = self.waiting(PERIODIC);
         capture_when_current(
             || {
                 self.model_scope
@@ -831,6 +869,7 @@ impl Engine for ChromeBackend {
     }
 
     fn playback(&mut self, _tab: TabId, node: i64) -> io::Result<Playback> {
+        let _wait = self.waiting(PERIODIC);
         let value = self.call_on(
             node,
             "function() { return [this.paused, this.muted, this.volume, this.currentTime, \
@@ -852,6 +891,7 @@ impl Engine for ChromeBackend {
     }
 
     fn resource(&mut self, _tab: TabId, url: &str) -> io::Result<Vec<u8>> {
+        let _wait = self.waiting(PERIODIC);
         let tree = self.call("Page.getFrameTree", json!({}))?;
         let frame = tree["frameTree"]["frame"]["id"]
             .as_str()
@@ -901,6 +941,7 @@ impl Engine for ChromeBackend {
     }
 
     fn image_ready(&mut self, _tab: TabId, node: i64) -> io::Result<bool> {
+        let _wait = self.waiting(PERIODIC);
         let value = self.call_on(
             node,
             "function() { return !(this instanceof HTMLImageElement) || \
@@ -911,6 +952,7 @@ impl Engine for ChromeBackend {
     }
 
     fn read_live(&mut self, _tab: TabId, node: i64, full: bool) -> io::Result<LiveRead> {
+        let _wait = self.waiting(PERIODIC);
         let context = self
             .world
             .ok_or_else(|| io::Error::new(ErrorKind::NotFound, "no live world yet"))?;
@@ -959,6 +1001,7 @@ impl Engine for ChromeBackend {
     }
 
     fn appended(&mut self, _tab: TabId) -> io::Result<Vec<i64>> {
+        let _wait = self.waiting(PERIODIC);
         let Some(context) = self.world else {
             return Ok(Vec::new());
         };
@@ -1012,6 +1055,7 @@ impl Engine for ChromeBackend {
     }
 
     fn metrics(&mut self, _tab: TabId) -> io::Result<Metrics> {
+        let _wait = self.waiting(PERIODIC);
         let metrics = self.call("Page.getLayoutMetrics", json!({}))?;
         // The `css…` sizes are CSS pixels; the older names are device
         // pixels, the same at our scale factor of one.

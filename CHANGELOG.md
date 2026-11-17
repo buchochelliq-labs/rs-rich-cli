@@ -47,6 +47,12 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   asked for frames at a rate the encoder keeps up with, so frames are
   dropped once, evenly, rather than by the pacing and the encoder's queue
   in turn.
+- The tab's periodic calls to Chrome (a media element's state, Chrome's
+  view, a frame's capture, a live log's entries, a still's bytes) wait at
+  most 3 s, and a reading's at most 10 s, instead of the 30 s any call may
+  take: a page that hangs holds the video's frames for seconds, not half a
+  minute per call. Tested live on a page whose script never returns
+  (`tests/fixtures/hang.html`).
 
 ## 0.0.26 cohort — published 2026-11-11
 
