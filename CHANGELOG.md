@@ -172,7 +172,9 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 - A tiny picture in front of a line's text whose alt text it cannot show
   (a chat badge: two cells for `moderator`) reads as that alt text, dim,
   instead of a two-cell picture or a cut `m…`; emotes among the words stay
-  pictures.
+  pictures. It is the new `badge-text` adaptation, on by default:
+  `--adapt=-badge-text`, or `badge-text = false` under `[adapt]`, draws
+  badges as their pictures again.
 - intuiTUIve: a new toast stacked over one already shown redraws what is
   under them, so the one it moved leaves nothing of itself beside the new
   one (two toasts read as overlapping boxes).

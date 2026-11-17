@@ -219,3 +219,4 @@ model literals and reader behavior remain available. A manually constructed
 enum variant (`figure-flow`, default on); exhaustive matches over `Rule` must
 handle it. It only changes ordinary source-aware flow and is disabled by
 faithful mode and source-preserving popup underlays.
+`Rule::BadgeText` (`badge-text`, default on) is appended the same way.

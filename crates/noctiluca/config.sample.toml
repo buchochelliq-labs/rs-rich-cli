@@ -79,6 +79,8 @@ snap-grids = true
 figure-flow = true
 # Complete action names; false keeps compact controls (Shift+F1 reads full names).
 wrap-action-labels = true
+# A chat badge in front of the author as its alt text; false draws its picture.
+badge-text = true
 collapse-nav = true
 collapse-gaps = true
 text-over-pictures = false

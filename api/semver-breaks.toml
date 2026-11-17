@@ -21,3 +21,10 @@ version = "0.0.6"
 lint = "constructible_struct_adds_field"
 items = ["field Playback.live", "field Playback.empty"]
 why = "#889: the media keys never pick an element with nothing to play (`empty`), and a length not known yet is told from a live stream's (`live`). A struct literal adds them or uses ..Default::default()"
+
+[[break]]
+crate = "noctiluca"
+version = "0.0.6"
+lint = "enum_variant_added"
+items = ["variant Rule:BadgeText"]
+why = "Chat badges as text are made a rule of their own (`badge-text`, on by default), so they can be drawn as pictures again. An exhaustive match over Rule handles the new variant"

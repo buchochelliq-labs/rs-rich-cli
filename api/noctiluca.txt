@@ -57,6 +57,7 @@ impl core::marker::UnsafeUnpin for noctiluca::adapt::Background
 impl core::panic::unwind_safe::RefUnwindSafe for noctiluca::adapt::Background
 impl core::panic::unwind_safe::UnwindSafe for noctiluca::adapt::Background
 pub enum noctiluca::adapt::Rule
+pub noctiluca::adapt::Rule::BadgeText
 pub noctiluca::adapt::Rule::Bandwidth
 pub noctiluca::adapt::Rule::CapPictures
 pub noctiluca::adapt::Rule::Captions

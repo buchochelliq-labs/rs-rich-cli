@@ -340,7 +340,8 @@ fn spans(runs: &[Run], base: &str, page: &Page, marks: &Marks) -> Vec<Span> {
         // standing in for it, in one piece. One in front of the line's
         // text too small to show what its alt text says (a chat's badge
         // before the author: two cells for `moderator`) reads as that
-        // text instead; one among the words (an emote) stays a picture.
+        // text instead (the `badge-text` rule); one among the words (an
+        // emote) stays a picture.
         let picture = run
             .picture
             .as_ref()
@@ -348,7 +349,10 @@ fn spans(runs: &[Run], base: &str, page: &Page, marks: &Marks) -> Vec<Span> {
         let leading = out
             .iter()
             .all(|s: &Span| s.picture.is_some() || s.text.trim().is_empty());
-        if let Some(alt) = picture.filter(|_| leading).and_then(tiny_alt) {
+        if let Some(alt) = picture
+            .filter(|_| leading && marks.adapt.on(Rule::BadgeText))
+            .and_then(tiny_alt)
+        {
             out.push(Span {
                 text: alt,
                 style: format!("{} dim", run_style(run, base, page, marks.adapt))

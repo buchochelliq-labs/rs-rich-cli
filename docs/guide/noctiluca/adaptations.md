@@ -29,6 +29,7 @@ site, and each can be switched off.
 |---|---|---|
 | `decorative-images` | Drops spacers, tracking pixels, and icon-sized pictures marked decorative (`alt=""`, `aria-hidden`) | on |
 | `inline-pictures` | Keeps small pictures (emotes, badges) in their line | on |
+| `badge-text` | A picture of three cells or fewer in front of a line's text, whose alt text needs more room (a chat badge before the author's name), reads as its alt text, dimmed and cut to 16 cells: `moderator ada`. Off, it is drawn as its picture, as emotes among the words are | on |
 | `cap-pictures` | Caps a picture's height; what is under it moves up | on |
 | `captions` | An `Image: …` line under a picture with alt text and no caption | on |
 | `icon-buttons` | Shows every button, icon-only ones too, as `[ label ]` from its name; an icon-only one with a known icon's name as its glyph, `[⋯]`, `[✕]`, `[🔍]` | on |
