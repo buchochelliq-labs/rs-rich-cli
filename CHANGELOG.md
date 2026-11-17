@@ -47,6 +47,15 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   cells.** Writing a few unchanged cells again can be shorter than a
   cursor move; under an iTerm2 or Sixel picture it wiped the picture
   there without the graphics plan knowing.
+- **Scrolling pictures in iTerm2 and Sixel (#884, the overlay part).** A
+  picture that only moved is drawn again from the escape already made
+  (the terminal does not move overlay images with the text), and a part of
+  one cut by the view's edge is now cut from the picture fitted once, not
+  resampled again at every step (rs-rich-art keeps the last fit of each
+  frame). `rich_art::picture::picture_encodes` counts the escapes made of
+  a picture, as `picture_bytes` counts the bytes sent. Tests scroll a page
+  of pictures down and back under each protocol: no unchanged part is
+  encoded twice, and every step's terminal matches a fresh draw.
 
 ## 0.0.26 cohort — published 2026-11-11
 

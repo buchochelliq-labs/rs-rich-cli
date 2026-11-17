@@ -524,7 +524,7 @@ mod scroll {
                     let part = |at: u16| {
                         let top = TOPS[k].max(at);
                         let bottom = (TOPS[k] + 3).min(at + HEIGHT);
-                        (top < bottom).then_some((top - TOPS[k], bottom - top))
+                        (top < bottom).then(|| (top - TOPS[k], bottom - top))
                     };
                     let (was, now) = (part(last), part(at));
                     if was == now || now.is_none() || seen.contains(&(k, now)) {
