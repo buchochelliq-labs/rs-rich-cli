@@ -170,6 +170,28 @@ steps(move || pages(), move |i| StepState::at(i, page.get())).steps_across(" ─
   Home and End, or a click on a step. A wizard's Next and Back buttons
   set the same signal.
 
+### Chips and a tag input
+
+```rust
+use intuituive::{chip, chip_of, tag_input};
+use rich_ext::{a11y::Status, badge::Badge};
+
+row([chip("beta"), chip_of(|| Badge::status(Status::Ok, "build"))])
+chip(name.clone()).on_remove(move |_| tags.update(|t| t.retain(|x| *x != name)))
+tag_input(tags)                                   // a Signal<Vec<String>>
+```
+
+- **`chip(text)`** is rs-rich-ext's `Badge::label` as a node: the text
+  padded on the theme's `badge.label` style, or `[text]` where the
+  console shows no colour. **`chip_of(|| badge)`** shows any badge: a
+  status, a key and value, a label in another style.
+- **`.on_remove(|cx| ..)`** puts a `×` in the chip that runs it when
+  clicked; the chip takes the focus, and Delete or Backspace runs it too.
+- **`tag_input(tags)`** types tags into a row of removable chips: Enter,
+  Tab or a comma adds what was typed (once), Backspace with nothing typed
+  removes the last tag, a click on a `×` removes that one, and a paste
+  adds a tag at each comma. One row, cut at its width.
+
 ### Clickable spans of markup
 
 A span of markup in a `text` or `label` can run an action, as Textual's

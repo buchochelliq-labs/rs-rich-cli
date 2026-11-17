@@ -152,6 +152,10 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   `:last-of-type` count the siblings of a node's own kind; `:ansi` holds
   while the theme's colours are the terminal's own, `:nocolor` while the
   console shows no colour, and `:inline` in an inline app.
+- **Chips and a tag input.** `chip(text)` and `chip_of(|| badge)` show
+  rs-rich-ext's `Badge` as a node; `.on_remove(run)` adds a `×` (and
+  Delete) that removes it. `tag_input(tags)` types tags into a row of
+  removable chips.
 
 ### intuiTUIve: pictures without flicker between frames
 
