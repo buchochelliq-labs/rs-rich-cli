@@ -38,9 +38,8 @@ fn a_frame(engine: &mut ChromeEngine, within: Duration) -> bool {
     false
 }
 
-/// This process's children: the browsers it started.
-fn children() -> Vec<i32> {
-    let me = std::process::id().to_string();
+/// Every process with its parent, from `/proc`.
+fn processes() -> Vec<(i32, i32)> {
     std::fs::read_dir("/proc")
         .into_iter()
         .flatten()
@@ -50,8 +49,44 @@ fn children() -> Vec<i32> {
             let stat = std::fs::read_to_string(entry.path().join("stat")).ok()?;
             // pid (comm) state ppid …: the name can hold spaces.
             let after = &stat[stat.rfind(')')? + 2..];
-            let parent = after.split(' ').nth(1)?;
-            (parent == me).then_some(pid)
+            let parent = after.split(' ').nth(1)?.parse().ok()?;
+            Some((pid, parent))
+        })
+        .collect()
+}
+
+/// This process's children: the browsers it started.
+fn children() -> Vec<i32> {
+    let me = std::process::id() as i32;
+    processes()
+        .into_iter()
+        .filter_map(|(pid, parent)| (parent == me).then_some(pid))
+        .collect()
+}
+
+/// The renderer processes under the browsers this process started: its
+/// descendants run with `--type=renderer` (they sit under a zygote, so
+/// they are not its children).
+fn renderers() -> Vec<i32> {
+    let all = processes();
+    let mut under: Vec<i32> = children();
+    let mut i = 0;
+    while i < under.len() {
+        let parent = under[i];
+        under.extend(
+            all.iter()
+                .filter(|(_, p)| *p == parent)
+                .map(|(pid, _)| *pid),
+        );
+        i += 1;
+    }
+    under
+        .into_iter()
+        .filter(|pid| {
+            // Chrome rewrites its processes' titles: the flags may come as
+            // one string.
+            std::fs::read(format!("/proc/{pid}/cmdline"))
+                .is_ok_and(|line| String::from_utf8_lossy(&line).contains("--type=renderer"))
         })
         .collect()
 }
@@ -83,15 +118,26 @@ fn a_crashed_page_fails_at_once_and_a_reload_brings_it_back() {
         "Inspector.detached",
         "Target.detachedFromTarget",
     ]);
-    // Chrome does not answer Page.crash: the renderer is gone first.
-    let crash = devtools.call("Page.crash", json!({}), Duration::from_secs(2));
+    // The renderers go as an out-of-memory kill would take them.
+    // (`Page.crash` does it in Chrome for Testing, but Google Chrome
+    // answers it with nothing and keeps the page.)
+    let killed = renderers();
+    assert!(!killed.is_empty(), "no renderer found");
+    for pid in &killed {
+        // SAFETY: plain integers; the pid is a renderer this test's
+        // browser started.
+        #[allow(unsafe_code)]
+        unsafe {
+            libc::kill(*pid, libc::SIGKILL);
+        }
+    }
     let start = Instant::now();
     while !engine.state().crashed && start.elapsed() < Duration::from_secs(10) {
         std::thread::sleep(Duration::from_millis(20));
     }
     assert!(
         engine.state().crashed,
-        "{:?}; Page.crash answered {crash:?}; events: {:?}",
+        "{:?}; renderers killed {killed:?}; events: {:?}",
         engine.state(),
         said.try_iter().map(|e| e.method).collect::<Vec<_>>()
     );
