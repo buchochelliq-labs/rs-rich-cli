@@ -32,6 +32,21 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   delete still comes after the cells. `Painter::starts_over` (rs-rich-ext)
   tells whether a paint begins by clearing the screen; the uploads follow
   such a clear rather than precede it.
+- **An opaque live picture in iTerm2 and Sixel is drawn over its cells as
+  they are.** Each frame of a video used to write the region's half
+  blocks, erase them (`ESC [ n X` on every row), then draw the image: three
+  states of the same cells in one frame, a flash without synchronized
+  output, and the half blocks' bytes every frame. A picture whose fitted
+  pixels have no transparency and fill its cells (rs-rich-art's
+  `Picture::is_opaque` and `Picture::covers_cells`) is no longer erased
+  under, and while it is drawn over cells it covered the frame before,
+  the painter leaves them alone (rs-rich-ext's `Graphic::opaque` and
+  `Painter::set_covered`): one image escape a frame. A picture with alpha
+  is still erased under, so the half blocks do not show through.
+- **The painter no longer moves the cursor by rewriting a picture's
+  cells.** Writing a few unchanged cells again can be shorter than a
+  cursor move; under an iTerm2 or Sixel picture it wiped the picture
+  there without the graphics plan knowing.
 
 ## 0.0.26 cohort — published 2026-11-11
 

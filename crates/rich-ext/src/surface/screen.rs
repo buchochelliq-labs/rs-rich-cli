@@ -1799,6 +1799,11 @@ pub struct Painter {
     /// Where nothing may be scrolled through (a picture the terminal does
     /// not move with its text).
     fixed: Vec<Rect>,
+    /// Cells a picture is drawn over (see [`set_covered`](Painter::set_covered)).
+    covered: Vec<Rect>,
+    /// Whether this paint passes over `covered`: not on one that starts over,
+    /// nor on a repaint.
+    covering: bool,
     /// The move [`PaintStrategy::Best`] found for this frame.
     found: Option<Shift>,
 }
@@ -1991,6 +1996,8 @@ impl Painter {
             // Windows consoles have been seen to scroll the wrong rows.
             scroll: !cfg!(windows),
             fixed: Vec::new(),
+            covered: Vec::new(),
+            covering: false,
             found: None,
         }
     }
@@ -2008,6 +2015,16 @@ impl Painter {
     pub fn set_fixed(&mut self, rects: &[Rect]) {
         self.fixed.clear();
         self.fixed.extend_from_slice(rects);
+    }
+
+    /// Rectangles whose cells an opaque picture is drawn over after the
+    /// paint, until the next call: their changes are taken as sent without
+    /// being written (the terminal shows the picture, not them), and they
+    /// are not among [`written`](Self::written). A paint that starts over
+    /// and a [`repaint`](Self::repaint) write them as any others.
+    pub fn set_covered(&mut self, rects: &[Rect]) {
+        self.covered.clear();
+        self.covered.extend_from_slice(rects);
     }
 
     /// Whether runs of blank cells may be erased with ECH or EL rather
@@ -2310,6 +2327,7 @@ impl Painter {
         self.stats = PaintStats::default();
         let base = out.len();
         let first = !matches!(&self.previous, Some(p) if p.width == screen.width && p.height == screen.height);
+        self.covering = !first && !self.covered.is_empty();
         let mut rects: Vec<Rect> = if first {
             if self.inline {
                 out.push_str(&self.reserve(screen.height));
@@ -2741,7 +2759,9 @@ impl Painter {
         self.preflight(screen)?;
         let forced = self.force;
         self.force = true;
+        let covered = std::mem::take(&mut self.covered);
         let out = self.try_paint(screen, rects);
+        self.covered = covered;
         self.force = forced;
         out
     }
@@ -2779,6 +2799,13 @@ impl Painter {
                 }
             }
             let mut x0 = atom_bounds(screen.row(y), x).0;
+            // Under a picture drawn over it: taken as sent.
+            if let Some(to) = self.covered_until(x0, y) {
+                let to = to.min(end);
+                self.stats.compared += usize::from(to.saturating_sub(x));
+                x = to.max(x + 1);
+                continue;
+            }
             // A run of blanks on the terminal's own background: erased
             // (EL to the end of the row, ECH within it) when that is
             // shorter than writing it.
@@ -2788,14 +2815,19 @@ impl Painter {
                 if let Some((fx, fy)) = pen.at
                     && fy == y
                     && fx < x0
-                    && (fx..x0).all(|gx| self.plain_blank(screen, gx, y))
+                    && (fx..x0).all(|gx| {
+                        self.plain_blank(screen, gx, y) && self.covered_until(gx, y).is_none()
+                    })
                 {
                     self.stats.compared += usize::from(x0 - fx);
                     x = fx;
                     x0 = fx;
                 }
                 let mut run = 1;
-                while x0 + run < end && self.plain_blank(screen, x0 + run, y) {
+                while x0 + run < end
+                    && self.plain_blank(screen, x0 + run, y)
+                    && self.covered_until(x0 + run, y).is_none()
+                {
                     run += 1;
                 }
                 let to_edge = x0 + run == screen.width;
@@ -2853,6 +2885,27 @@ impl Painter {
         }
     }
 
+    /// Whether any of cells `columns` of row `y` has a picture over it: a
+    /// [fixed](Self::set_fixed) or [covered](Self::set_covered) rectangle.
+    fn pictured(&self, columns: std::ops::Range<u16>, y: u16) -> bool {
+        self.fixed
+            .iter()
+            .chain(self.covered.iter().filter(|_| self.covering))
+            .any(|r| r.y <= y && y < r.bottom() && r.x < columns.end && columns.start < r.right())
+    }
+
+    /// When cell `x`, `y` is covered this paint, the column its cover ends.
+    fn covered_until(&self, x: u16, y: u16) -> Option<u16> {
+        if !self.covering {
+            return None;
+        }
+        self.covered
+            .iter()
+            .filter(|r| r.y <= y && y < r.bottom() && r.x <= x && x < r.right())
+            .map(|r| r.right())
+            .max()
+    }
+
     /// Note cells `x`..`next` of row `y` as written this paint.
     fn note_written(&mut self, x: u16, y: u16, next: u16) {
         match self.written.last_mut() {
@@ -2873,9 +2926,15 @@ impl Painter {
         let jump = out.len() - before;
         // Writing the unchanged cells between again (what the terminal
         // shows already) can be shorter than the move, as Mosh does: a few
-        // narrow cells, counting the style changes they need.
+        // narrow cells, counting the style changes they need. Not through a
+        // picture's cells: writing them would wipe it.
         if let Some((fx, fy)) = pen.at.filter(|&(fx, fy)| {
-            !self.inline && fy == y && fx < x && x - fx <= 8 && jump > usize::from(x - fx)
+            !self.inline
+                && fy == y
+                && fx < x
+                && x - fx <= 8
+                && jump > usize::from(x - fx)
+                && !self.pictured(fx..x, y)
         }) {
             let mut cost = 0;
             let mut style = pen.style;
@@ -3657,6 +3716,52 @@ mod tests {
         screen.write_lines(Rect::new(0, 1, 10, 1), &[line("xYz")]);
         painter.paint(&screen, &[Rect::new(0, 0, 10, 2)]);
         assert_eq!(painter.written(), [Rect::new(1, 1, 1, 1)]);
+    }
+
+    #[test]
+    fn covered_cells_are_taken_as_sent_until_a_repaint() {
+        let mut screen = Screen::new(10, 1);
+        let mut painter = Painter::new(None);
+        screen.write_lines(screen.area(), &[line("abcdefgh")]);
+        // A paint that starts over writes covered cells too.
+        painter.set_covered(&[Rect::new(2, 0, 3, 1)]);
+        assert!(painter.paint(&screen, &[]).contains("abcdefgh"));
+        screen.write_lines(screen.area(), &[line("aBCDEFgh")]);
+        let out = painter.paint(&screen, &[screen.area()]);
+        // B and F are written; C, D and E (under the picture) are not, nor
+        // reported as written.
+        assert_eq!(out, "\x1b[1;2H\x1b[0mB\x1b[3CF");
+        assert_eq!(
+            painter.written(),
+            [Rect::new(1, 0, 1, 1), Rect::new(5, 0, 1, 1)]
+        );
+        // They count as sent: nothing more to write.
+        assert_eq!(painter.paint(&screen, &[screen.area()]), "");
+        // A repaint writes them.
+        assert!(
+            painter
+                .repaint(&screen, &[Rect::new(2, 0, 3, 1)])
+                .contains("CDE")
+        );
+    }
+
+    #[test]
+    fn the_pen_never_moves_by_rewriting_a_pictures_cells() {
+        let mut screen = Screen::new(10, 1);
+        let mut painter = Painter::new(None);
+        screen.write_lines(screen.area(), &[line("abcdefgh")]);
+        painter.paint(&screen, &[]);
+        screen.write_lines(screen.area(), &[line("aBcdeFgh")]);
+        // Rewriting "cde" is shorter than a move, but a picture lies there.
+        assert_eq!(
+            painter.clone().paint(&screen, &[screen.area()]),
+            "\x1b[1;2H\x1b[0mBcdeF"
+        );
+        painter.set_fixed(&[Rect::new(3, 0, 1, 1)]);
+        assert_eq!(
+            painter.paint(&screen, &[screen.area()]),
+            "\x1b[1;2H\x1b[0mB\x1b[3CF"
+        );
     }
 
     #[test]

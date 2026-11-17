@@ -68,14 +68,22 @@ pub fn fit_to_cells(image: &DynamicImage, cols: usize, rows: usize, cell: CellPi
     fit_to_pixels(image, width, height)
 }
 
+/// The size [`fit_to_pixels`] scales an `iw × ih` image to inside
+/// `width × height` pixels: the largest of the same shape that fits.
+pub(crate) fn contained_size(iw: u32, ih: u32, width: u32, height: u32) -> (u32, u32) {
+    let (iw, ih) = (iw.max(1), ih.max(1));
+    let scale = f64::min(width as f64 / iw as f64, height as f64 / ih as f64);
+    let fw = ((iw as f64 * scale).round() as u32).clamp(1, width);
+    let fh = ((ih as f64 * scale).round() as u32).clamp(1, height);
+    (fw, fh)
+}
+
 /// `image` scaled to fit `width × height` pixels, keeping its aspect ratio,
 /// centred on a transparent canvas of exactly that size.
 pub fn fit_to_pixels(image: &DynamicImage, width: u32, height: u32) -> RgbaImage {
     let (iw, ih) = (image.width().max(1), image.height().max(1));
-    // The largest size of the same shape that fits.
     let scale = f64::min(width as f64 / iw as f64, height as f64 / ih as f64);
-    let fw = ((iw as f64 * scale).round() as u32).clamp(1, width);
-    let fh = ((ih as f64 * scale).round() as u32).clamp(1, height);
+    let (fw, fh) = contained_size(iw, ih, width, height);
     let filter = if scale < 1.0 {
         FilterType::Lanczos3
     } else {

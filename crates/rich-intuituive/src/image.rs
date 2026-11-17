@@ -992,7 +992,11 @@ impl ImageGraphics {
             first..first + shown,
             PictureEncoding::new(cell).native_kitty_animation(self.native_animation),
         )?;
-        if tag.pixels != Pixels::Kitty {
+        // An opaque picture hides its cells whole: nothing shows through,
+        // so they need no clearing, and the painter leaves them alone while
+        // it stays (a video's frames).
+        let opaque = tag.pixels != Pixels::Kitty && picture.covers_cells(tag, cell);
+        if tag.pixels != Pixels::Kitty && !opaque {
             // Only accepted, encoded rectangles lose their fallback. Clearing
             // before native alpha blending prevents sampled half-block colors
             // showing through transparent PNG/Sixel pixels. Restore cursor and
@@ -1028,6 +1032,7 @@ impl ImageGraphics {
             escape,
             resource,
             in_cells: tag.pixels == Pixels::Kitty,
+            opaque,
             id: tag.id,
             reusable: std::sync::atomic::AtomicBool::new(true),
         });
@@ -1068,6 +1073,8 @@ struct PixelGraphic {
     key: u64,
     escape: String,
     in_cells: bool,
+    /// Drawn over its cells, it hides every pixel of them.
+    opaque: bool,
     /// The picture it draws, whose bytes it counts.
     id: u32,
     reusable: std::sync::atomic::AtomicBool,
@@ -1085,6 +1092,10 @@ impl Graphic for PixelGraphic {
 
     fn in_cells(&self) -> bool {
         self.in_cells
+    }
+
+    fn opaque(&self) -> bool {
+        self.opaque
     }
 
     fn can_reuse_data(&self) -> bool {
@@ -1881,7 +1892,10 @@ mod tests {
             let delete = out
                 .find(&rich_art::kitty::delete(old))
                 .unwrap_or_else(|| panic!("{k}: {old} not deleted"));
-            assert!(named < delete, "{k}: {old} deleted before the cells leave it");
+            assert!(
+                named < delete,
+                "{k}: {old} deleted before the cells leave it"
+            );
             old = id;
         }
     }
@@ -1954,6 +1968,81 @@ mod tests {
         shown.get().unwrap().set(tiler.tiles().to_vec());
         let out = written(&mut driver, "\u{0}", 5);
         assert_eq!(out.matches("a=T").count(), 0, "{out:?}");
+    }
+
+    /// The bytes of a live picture's first frame and of `frames` more,
+    /// each `next(k)`, in 4 x 2 cells of 8 x 16 pixels through `pixels`.
+    fn live_frames(
+        pixels: Pixels,
+        first: Picture,
+        frames: usize,
+        next: impl Fn(&Picture, usize) -> Picture,
+    ) -> Vec<String> {
+        let shown = std::rc::Rc::new(std::cell::Cell::new(None));
+        let seen = shown.clone();
+        let start = first.clone();
+        let app = App::new(move || {
+            let frame = signal(Some(start.clone()));
+            seen.set(Some(frame));
+            picture_of(move || frame.get(), ImageView::new().pixels(pixels)).fixed(2)
+        })
+        .graphics(image_graphics());
+        let mut driver = app.driver(4, 2);
+        driver.set_cell_pixels(Some((8, 16)));
+        let marker = if pixels == Pixels::Iterm {
+            "]1337;"
+        } else {
+            "\x1bP"
+        };
+        let mut out = vec![written(&mut driver, marker, 20)];
+        let frame = shown.get().unwrap();
+        let mut last = first;
+        for k in 0..frames {
+            last = next(&last, k);
+            frame.set(Some(last.clone()));
+            out.push(written(&mut driver, marker, 5));
+        }
+        out
+    }
+
+    /// Whether `out` erases cells (`ESC [ n X`).
+    fn erases(out: &str) -> bool {
+        out.match_indices("\x1b[").any(|(at, _)| {
+            let rest = &out[at + 2..];
+            let digits = rest.bytes().take_while(u8::is_ascii_digit).count();
+            digits > 0 && rest.as_bytes().get(digits) == Some(&b'X')
+        })
+    }
+
+    #[test]
+    fn an_opaque_live_picture_is_drawn_over_cells_left_alone() {
+        for (pixels, marker) in [(Pixels::Iterm, "]1337;"), (Pixels::Sixel, "\x1bP")] {
+            let frames = live_frames(pixels, Picture::new(solid(200, 0, 0)), 4, |last, k| {
+                last.next(solid(0, 40 * k as u8, 200))
+            });
+            assert_eq!(frames[0].matches(marker).count(), 1, "{pixels:?}");
+            for (k, out) in frames.iter().enumerate().skip(1) {
+                assert!(!erases(out), "{pixels:?} {k}: erased: {out:?}");
+                assert!(!out.contains('▀'), "{pixels:?} {k}: half blocks: {out:?}");
+                assert_eq!(out.matches(marker).count(), 1, "{pixels:?} {k}: {out:?}");
+            }
+        }
+    }
+
+    #[test]
+    fn a_live_picture_with_alpha_still_erases_under_it() {
+        let clear = |alpha: u8| {
+            DynamicImage::ImageRgba8(RgbaImage::from_pixel(8, 8, Rgba([200, 0, 0, alpha])))
+        };
+        for (pixels, marker) in [(Pixels::Iterm, "]1337;"), (Pixels::Sixel, "\x1bP")] {
+            let frames = live_frames(pixels, Picture::new(clear(128)), 2, |last, k| {
+                last.next(clear(100 + k as u8))
+            });
+            for (k, out) in frames.iter().enumerate() {
+                assert!(erases(out), "{pixels:?} {k}: not erased: {out:?}");
+                assert!(out.contains(marker), "{pixels:?} {k}: {out:?}");
+            }
+        }
     }
 
     #[test]

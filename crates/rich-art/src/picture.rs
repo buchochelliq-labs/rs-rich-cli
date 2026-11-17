@@ -306,7 +306,16 @@ struct Shown {
     /// for: [`Picture::prepare`] makes it ahead, on a thread of the app's,
     /// so the painter finds it made.
     encoded: Mutex<Option<(Encoding, String)>>,
+    /// Whether no pixel of `image` is transparent, worked out once.
+    opaque: std::sync::OnceLock<bool>,
+    /// The last whole picture fitted to cells for a part of it to be cut
+    /// from (a picture partly in view), and what it was fitted to: a
+    /// picture scrolled through a view is not resampled at every step.
+    fitted: Mutex<Option<(FitKey, Arc<RgbaImage>)>>,
 }
+
+/// What a picture was fitted to: cells, fit, anchor and cell size.
+type FitKey = (usize, usize, Option<ImageFit>, ImageAnchor, CellPixels);
 
 /// What an escape of a whole picture was made for: the protocol, the
 /// cells, and how it was fitted to them.
@@ -346,6 +355,9 @@ impl std::fmt::Debug for Picture {
 static PICTURES: Mutex<BTreeMap<(u32, u32), Weak<Shown>>> = Mutex::new(BTreeMap::new());
 /// The bytes of escapes drawn for each logical picture id so far.
 static DRAWN: Mutex<BTreeMap<u32, u64>> = Mutex::new(BTreeMap::new());
+
+/// The escapes made of each picture id: [`picture_encodes`].
+static ENCODED: Mutex<BTreeMap<u32, u64>> = Mutex::new(BTreeMap::new());
 
 #[derive(Default)]
 struct Namespace {
@@ -506,6 +518,8 @@ impl Picture {
             animation,
             raw,
             encoded: Mutex::new(None),
+            opaque: std::sync::OnceLock::new(),
+            fitted: Mutex::new(None),
         });
         let mut pictures = PICTURES.lock().unwrap_or_else(|e| e.into_inner());
         pictures.retain(|_, weak| weak.strong_count() > 0);
@@ -651,6 +665,41 @@ impl Picture {
     /// Its pixels (an animation's first frame).
     pub fn image(&self) -> &Arc<DynamicImage> {
         &self.shown.image
+    }
+
+    /// Whether no pixel of it is transparent (a video's frame, a JPEG):
+    /// worked out once a frame.
+    pub fn is_opaque(&self) -> bool {
+        *self.shown.opaque.get_or_init(|| {
+            let image = &self.shown.image;
+            if !image.color().has_alpha() {
+                return true;
+            }
+            match image.as_ref() {
+                DynamicImage::ImageRgba8(rgba) => rgba.pixels().all(|p| p[3] == u8::MAX),
+                other => other.to_rgba16().pixels().all(|p| p[3] == u16::MAX),
+            }
+        })
+    }
+
+    /// Whether, fitted to the cells `tag` was read from, the picture
+    /// covers every pixel of them with none transparent: drawn over them in
+    /// a protocol, it hides whatever the cells hold. A contained picture
+    /// of another shape leaves transparent margins; an animation is not.
+    pub fn covers_cells(&self, tag: &PictureTag, cell: CellPixels) -> bool {
+        if self.is_animated() || !self.is_opaque() {
+            return false;
+        }
+        match tag.fit {
+            Some(ImageFit::Cover | ImageFit::Stretch) => true,
+            None | Some(ImageFit::Contain | ImageFit::Native) => {
+                let cell = CellPixels::new(cell.width, cell.height);
+                let (width, height) = cell.span(tag.cols, tag.rows);
+                let image = &self.shown.image;
+                crate::graphics::contained_size(image.width(), image.height(), width, height)
+                    == (width, height)
+            }
+        }
     }
 
     /// Whether it carries an animation for Kitty to play.
@@ -904,14 +953,7 @@ impl Picture {
         if tag.pixels == Pixels::Cells {
             return None;
         }
-        let whole = self.fitted(
-            &self.shown.image,
-            tag.cols,
-            tag.rows,
-            tag.fit,
-            tag.anchor,
-            cell,
-        );
+        let whole = self.fitted_whole(tag.cols, tag.rows, tag.fit, tag.anchor, cell);
         self.encode_rect(
             &whole,
             tag.pixels,
@@ -919,6 +961,28 @@ impl Picture {
             rows.start..bottom,
             cell,
         )
+    }
+
+    /// The whole picture in `cols` x `rows` cells as `fit` says, made once
+    /// for the last such fit asked.
+    fn fitted_whole(
+        &self,
+        cols: usize,
+        rows: usize,
+        fit: Option<ImageFit>,
+        anchor: ImageAnchor,
+        cell: CellPixels,
+    ) -> Arc<RgbaImage> {
+        let key = (cols, rows, fit, anchor, cell);
+        let mut kept = self.shown.fitted.lock().unwrap_or_else(|e| e.into_inner());
+        if let Some((made, whole)) = &*kept
+            && *made == key
+        {
+            return whole.clone();
+        }
+        let whole = Arc::new(self.fitted(&self.shown.image, cols, rows, fit, anchor, cell));
+        *kept = Some((key, whole.clone()));
+        whole
     }
 
     /// `image` in `cols` x `rows` cells as `fit` says (`None`: contained).
@@ -1085,6 +1149,9 @@ impl Picture {
         anchor: ImageAnchor,
         context: PictureEncoding,
     ) -> Option<String> {
+        if pixels != Pixels::Cells {
+            count_encode(self.id());
+        }
         let cell = context.cell_pixels;
         let resource = if pixels == Pixels::Kitty {
             Some(self.kitty_resource(
@@ -1210,7 +1277,7 @@ impl Picture {
                 PictureEncoding::new(cell),
             );
         }
-        let whole = fit_to_cells(&self.shown.image, cols, rows, cell);
+        let whole = self.fitted_whole(cols, rows, None, ImageAnchor::Center, cell);
         self.encode_part(&whole, pixels, cols, first, shown, cell)
     }
 
@@ -1238,6 +1305,9 @@ impl Picture {
     ) -> Option<String> {
         let cols = columns.end - columns.start;
         let shown = rows.end - rows.start;
+        if pixels != Pixels::Cells {
+            count_encode(self.id());
+        }
         let part = image::imageops::crop_imm(
             whole,
             columns.start as u32 * cell.width,
@@ -1799,6 +1869,27 @@ pub fn picture_bytes(id: u32) -> u64 {
         .get(&id)
         .copied()
         .unwrap_or(0)
+}
+
+/// How many escapes have been made of picture `id` (every frame of it,
+/// whole or a part in view, in any protocol) so far: what drawing it cost
+/// in encoding, as [`picture_bytes`] counts what it cost in bytes. An
+/// escape made once and drawn again counts once.
+pub fn picture_encodes(id: u32) -> u64 {
+    ENCODED
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .get(&id)
+        .copied()
+        .unwrap_or(0)
+}
+
+fn count_encode(id: u32) {
+    *ENCODED
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .entry(id)
+        .or_default() += 1;
 }
 
 /// Count `bytes` more sent to the terminal for picture `id`: called by

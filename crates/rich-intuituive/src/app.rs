@@ -9296,6 +9296,26 @@ impl Driver {
             (next, ahead) = graphics_ahead(&*source, self.cell_pixels, &app.placements, screen);
             (source, next)
         });
+        // The cells an opaque overlay (a video's frame) is drawn over again,
+        // where one was drawn last time too: the terminal shows the picture,
+        // so they are not written under it.
+        let covered: Vec<Rect> = graphics.as_ref().map_or_else(Vec::new, |(_, next)| {
+            let rect = |p: &rich_ext::frame::Placement| {
+                Rect::new(p.column as u16, p.row as u16, p.cols as u16, p.rows as u16)
+            };
+            let before: Vec<Rect> = app
+                .placements
+                .iter()
+                .filter(|p| !p.graphic.in_cells())
+                .map(rect)
+                .collect();
+            next.iter()
+                .filter(|p| !p.graphic.in_cells() && p.graphic.opaque())
+                .flat_map(|p| before.iter().map(move |old| old.intersection(rect(p))))
+                .filter(|r| !r.is_empty())
+                .collect()
+        });
+        self.painter.set_covered(&covered);
         // Not ahead of a paint that starts by clearing the screen.
         if self.painter.starts_over(screen) {
             self.painter.try_paint_into(screen, &damage, &mut out)?;
@@ -9304,6 +9324,7 @@ impl Driver {
             out.push_str(&ahead);
             self.painter.try_paint_into(screen, &damage, &mut out)?;
         }
+        self.painter.set_covered(&[]);
         screen.forget_scrolls();
         let counts = self.painter.stats();
         // Accessible: the cursor is hidden while the frame is written, so a
