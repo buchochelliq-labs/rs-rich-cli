@@ -324,6 +324,11 @@ struct Shared {
     notify: Option<Notify>,
     /// The browser process, so the engine can end it from any thread.
     child: Option<Child>,
+    /// Which start of the browser is current: each start and each retire
+    /// moves it on, so an engine thread that ends late (a retired browser
+    /// whose read failed after it was killed) leaves the next browser and
+    /// the state alone.
+    generation: u64,
     /// Whether the engine's thread ended with an error: the browser went,
     /// or its connection did.
     ended: bool,
@@ -901,6 +906,9 @@ impl ChromeEngine {
             .unwrap_or_else(PoisonError::into_inner)
             .retain(|running| !std::ptr::eq(running.shared.as_ptr(), Arc::as_ptr(&self.shared)));
         // Closing the channel ends the thread's loop; the browser goes now.
+        // Its thread may still be reading: it no longer speaks for the
+        // engine.
+        lock(&self.shared).generation += 1;
         self.commands = None;
         *self.calls.lock().unwrap_or_else(PoisonError::into_inner) = None;
         let child = lock(&self.shared).child.take();
@@ -982,7 +990,12 @@ impl ChromeEngine {
                 profile: self.kept_profile.is_none().then(|| profile.clone()),
             });
         let stderr = child.stderr.take().expect("piped stderr");
-        lock(&self.shared).child = Some(child);
+        let generation = {
+            let mut shared = lock(&self.shared);
+            shared.generation += 1;
+            shared.child = Some(child);
+            shared.generation
+        };
         let (sender, receiver) = mpsc::channel();
         self.commands = Some(sender);
         let (calls, called) = mpsc::channel();
@@ -1000,25 +1013,7 @@ impl ChromeEngine {
         };
         thread::spawn(move || {
             if let Err(error) = run(connect, stderr, receiver, called, &shared, cell, wiring) {
-                // A browser that is still there (it did not open a page,
-                // or its page detached) is no use now: it ends too.
-                let mut child = lock(&shared).child.take();
-                // How the browser went, when it did: killed, or its exit.
-                let mut error = error.to_string();
-                if let Some(rest) = error.strip_prefix("the browser closed")
-                    && let Some(how) = child.as_mut().and_then(exited)
-                {
-                    error = format!("the browser closed ({how}){rest}");
-                }
-                if let Some(child) = &mut child {
-                    end_browser(child);
-                }
-                let mut state = lock(&shared);
-                state.state.error = Some(format!("Chrome: {error}"));
-                state.state.loading = false;
-                state.ended = true;
-                drop(state);
-                notify(&shared);
+                thread_ended(&shared, generation, &error.to_string());
             }
         });
         Ok(())
@@ -2276,6 +2271,39 @@ const NAVIGATIONS: &[&str] = &[
 
 fn crashed() -> io::Error {
     io::Error::new(ErrorKind::ConnectionAborted, "the page crashed")
+}
+
+/// The engine's thread of browser `generation` ended with `error`: a
+/// browser still there (it did not open a page, or its page detached) is
+/// no use now and ends too, and the state says why. A thread of a browser
+/// since retired or replaced changes nothing.
+fn thread_ended(shared: &Arc<Mutex<Shared>>, generation: u64, error: &str) {
+    let mut child = {
+        let mut state = lock(shared);
+        if state.generation != generation {
+            return;
+        }
+        state.child.take()
+    };
+    // How the browser went, when it did: killed, or its exit.
+    let mut error = error.to_string();
+    if let Some(rest) = error.strip_prefix("the browser closed")
+        && let Some(how) = child.as_mut().and_then(exited)
+    {
+        error = format!("the browser closed ({how}){rest}");
+    }
+    if let Some(child) = &mut child {
+        end_browser(child);
+    }
+    let mut state = lock(shared);
+    if state.generation != generation {
+        return;
+    }
+    state.state.error = Some(format!("Chrome: {error}"));
+    state.state.loading = false;
+    state.ended = true;
+    drop(state);
+    notify(shared);
 }
 
 /// The engine's thread: connect, then pass messages both ways until the
@@ -3551,6 +3579,31 @@ mod tests {
     }
 
     #[cfg(unix)]
+    #[test]
+    fn a_retired_browsers_thread_ending_late_leaves_the_next_one_alone() {
+        let shared = Arc::new(Mutex::new(Shared::default()));
+        lock(&shared).generation = 2;
+        // The thread of the browser started as generation 1, retired since.
+        thread_ended(&shared, 1, "the browser closed: killed");
+        {
+            let state = lock(&shared);
+            assert!(!state.ended);
+            assert_eq!(state.state.error, None);
+        }
+        // The current browser's thread ending does end the engine.
+        thread_ended(&shared, 2, "the browser closed: killed");
+        let state = lock(&shared);
+        assert!(state.ended);
+        assert!(
+            state
+                .state
+                .error
+                .as_deref()
+                .unwrap()
+                .starts_with("Chrome: ")
+        );
+    }
+
     #[test]
     fn only_the_pages_own_detach_ends_the_engine() {
         let (engine, mut session, _output, _requests) = pending_session();

@@ -290,13 +290,21 @@ pub fn on_path(program: &str) -> bool {
 pub fn find_program(program: &str) -> Option<PathBuf> {
     let paths = std::env::var_os("PATH").unwrap_or_default();
     let pathext = std::env::var_os("PATHEXT");
-    find_in(
-        program,
-        &paths,
-        pathext.as_deref(),
-        cfg!(windows),
-        |path: &Path| path.is_file(),
-    )
+    find_in(program, &paths, pathext.as_deref(), cfg!(windows), runnable)
+}
+
+/// Whether `path` is a file the system would run: on Unix, one with an
+/// execute bit, as the shell's own search skips the others.
+fn runnable(path: &Path) -> bool {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::metadata(path).is_ok_and(|m| m.is_file() && m.permissions().mode() & 0o111 != 0)
+    }
+    #[cfg(not(unix))]
+    {
+        path.is_file()
+    }
 }
 
 /// [`find_program`] over the given `PATH` and `PATHEXT`, as on Windows
@@ -412,6 +420,24 @@ mod tests {
             find("gemini.exe", &["/bin"], true, &["/bin/gemini.exe"]).as_deref(),
             Some("/bin/gemini.exe")
         );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn on_unix_a_file_that_cannot_run_is_passed_over_for_a_later_one() {
+        use std::os::unix::fs::PermissionsExt;
+        let base = std::env::temp_dir().join(format!("cornacai-path-{}", std::process::id()));
+        let (first, second) = (base.join("a"), base.join("b"));
+        for (dir, mode) in [(&first, 0o644), (&second, 0o755)] {
+            std::fs::create_dir_all(dir).unwrap();
+            let file = dir.join("some-agent-acp");
+            std::fs::write(&file, "#!/bin/sh\n").unwrap();
+            std::fs::set_permissions(&file, std::fs::Permissions::from_mode(mode)).unwrap();
+        }
+        let path = std::env::join_paths([&first, &second]).unwrap();
+        let found = find_in("some-agent-acp", &path, None, false, runnable);
+        let _ = std::fs::remove_dir_all(&base);
+        assert_eq!(found, Some(second.join("some-agent-acp")));
     }
 
     #[test]

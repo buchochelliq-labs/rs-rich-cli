@@ -179,8 +179,8 @@ pub fn play_mark(image: &DynamicImage) -> DynamicImage {
         for x in x0..(x0 + side).min(w) {
             // The square, darkening what is under it.
             let pixel = out.get_pixel_mut(x, y);
-            for c in 0..3 {
-                pixel.0[c] = (u16::from(pixel.0[c]) * 2 / 10) as u8;
+            for channel in &mut pixel.0[..3] {
+                *channel = (u16::from(*channel) * 2 / 10) as u8;
             }
             pixel.0[3] = 255;
             // The triangle, pointing right, in its middle half.

@@ -353,7 +353,9 @@ mod wasm {
             });
             let without = scope.spawn(|| {
                 for i in 0..100 {
-                    run(&format!("without-{i}.html"), &["-p", "hi"]);
+                    // Only the other thread's runs are checked; these load
+                    // no plugin, beside them.
+                    let _ = run(&format!("without-{i}.html"), &["-p", "hi"]);
                 }
             });
             without.join().unwrap();

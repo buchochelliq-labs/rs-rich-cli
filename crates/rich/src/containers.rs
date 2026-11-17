@@ -169,8 +169,7 @@ impl Lines {
             }
             Justify::Full => {
                 let last = self.lines.len().saturating_sub(1);
-                for line_index in 0..last {
-                    let line = &self.lines[line_index];
+                for line in self.lines.iter_mut().take(last) {
                     let words = line.split(" ", false, false);
                     let words_size: usize = words.iter().map(cells).sum();
                     let mut num_spaces = words.len().saturating_sub(1);
@@ -198,7 +197,7 @@ impl Lines {
                             tokens.push(Text::styled(" ".repeat(spaces[index]), space_style));
                         }
                     }
-                    self.lines[line_index] = Text::new("").join(&tokens);
+                    *line = Text::new("").join(&tokens);
                 }
             }
             Justify::Default => {}

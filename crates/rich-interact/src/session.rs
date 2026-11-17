@@ -262,11 +262,11 @@ impl BackendKind {
     /// call of its own, keeping track of it (termwiz), rather than having
     /// the session write it with the other modes.
     fn owns_alternate_screen(self) -> bool {
-        #[cfg(feature = "termwiz")]
-        if self == BackendKind::Termwiz {
-            return true;
+        match self {
+            #[cfg(feature = "termwiz")]
+            BackendKind::Termwiz => true,
+            _ => false,
         }
-        false
     }
 
     /// Enter or leave the alternate screen through a library that
