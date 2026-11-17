@@ -212,9 +212,9 @@ fn kitty_plays_the_gif_itself_and_a_freeze_sends_its_still() {
 
 #[test]
 fn small_pictures_in_a_logs_lines_are_drawn_in_their_cells() {
-    // The stream page's log: each message's badge and emotes are small
-    // pictures in its line, drawn in half blocks in place of their alt
-    // text.
+    // The stream page's log: each message's emotes are small pictures in
+    // its line, drawn in half blocks in place of their alt text; its
+    // badge, two cells in front of the author, reads as its alt text.
     let mut driver = driver("stream-with-log.html", Images::Ansi, 120, 40);
     let (_, drawn) = run_until(&mut driver, Duration::from_secs(20), |_, screen| {
         screen
@@ -223,10 +223,14 @@ fn small_pictures_in_a_logs_lines_are_drawn_in_their_cells() {
     });
     let text = screen(&driver);
     assert!(drawn, "no small picture drawn:\n{text}");
-    // A badge in front of its author, also a picture.
+    // A badge in front of its author, as its alt text, not a picture.
     assert!(
-        text.lines().any(|l| l.contains("▀ ada")),
-        "no badge drawn:\n{text}"
+        text.lines().any(|l| l.contains("moderator ada")),
+        "no badge as text:\n{text}"
+    );
+    assert!(
+        !text.contains("▀ ada"),
+        "a badge drawn as a picture:\n{text}"
     );
     assert!(!text.contains(":glow:"), "an emote left as text:\n{text}");
 }

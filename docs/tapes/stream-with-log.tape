@@ -1,6 +1,6 @@
 # Noctiluca on a live stream page (0.0.23): the stream playing in its
 # region, a role=log chat beside it with its authors in their colours and
-# its badges and emotes as small pictures, scrolled up and back, the about
+# its badges by name and its emotes as small pictures, scrolled up and back, the about
 # page's terminal adaptations and codecs, and the faithful projection one
 # key away. All of it is drawn by Noctiluca and intuiTUIve, the pictures by
 # rs-rich-art. The tape job has no browser it may run with its sandbox on,

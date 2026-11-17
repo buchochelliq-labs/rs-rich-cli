@@ -144,6 +144,39 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   of pictures down and back under each protocol: no unchanged part is
   encoded twice, and every step's terminal matches a fresh draw.
 
+### Noctiluca: media keys, live logs and layout (0.0.27)
+
+- The media keys and the status line stay on the video or audio last
+  controlled, and never pick an element with nothing to play (no source):
+  after a pause on a page with a source-less preview player, `p` plays the
+  main video again instead of waiting on the empty one (#889). A length
+  not known yet reads `--:--`, not `live`; `Playback` has `live` and
+  `empty`.
+- A live log whose messages sit in a list beside a greeting or a spacer
+  (as chat frameworks build them) has an entry a message: it keeps taking
+  new lines as the list grows past what one entry reads, and is rendered
+  again (#891); `{` holds the lines that were showing and steps up through
+  messages, instead of blanking the log to its first line (#892). A log
+  paused near its start keeps its rows full.
+- Layout: a top bar's items, each centred in its height, are drawn on
+  one row, and a run of buttons past the right edge moves into the free
+  cells at its end instead of pulling the whole row left (L2); short
+  one-line pieces of a flex-wrap row (`23M` and `11y ago`) are no longer
+  snapped to card columns, one a row (L6); a menu button at the right
+  edge crowded by a title keeps its face on the title's row, the title
+  wrapping before it (L8).
+- A non-modal source dialog that is a top or bottom bar across the view (a
+  shop's cookie banner) no longer turns the page's adaptations off: on the
+  shop fixture the rating reads `★★★★½ 4.5` instead of the stars'
+  picture, and the four blank rows under the pinned header collapse.
+- A tiny picture in front of a line's text whose alt text it cannot show
+  (a chat badge: two cells for `moderator`) reads as that alt text, dim,
+  instead of a two-cell picture or a cut `m…`; emotes among the words stay
+  pictures.
+- intuiTUIve: a new toast stacked over one already shown redraws what is
+  under them, so the one it moved leaves nothing of itself beside the new
+  one (two toasts read as overlapping boxes).
+
 ## 0.0.26 cohort — published 2026-11-11
 
 Published on 2026-11-11 from `e5422bf9` by one `release.yml` run on rab

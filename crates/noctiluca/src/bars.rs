@@ -51,11 +51,7 @@ pub(crate) fn media_state_shown(playback: &Playback, stalled: bool) -> String {
         "PLAYING" if stalled => "STALLED",
         label => label,
     };
-    let time = format!(
-        "{} / {}",
-        clock(playback.time),
-        playback.duration.map_or("live".into(), clock)
-    );
+    let time = format!("{} / {}", clock(playback.time), playback.length());
     let muted = if playback.muted { " muted" } else { "" };
     format!("media {label} {time}{muted}")
 }
@@ -294,6 +290,8 @@ mod tests {
         p.muted = false;
         p.ready = 2;
         p.duration = None;
+        assert_eq!(media_state(&p), "media BUFFERING 0:03 / --:--");
+        p.live = true;
         assert_eq!(media_state(&p), "media BUFFERING 0:03 / live");
         p.ended = true;
         assert!(media_state(&p).starts_with("media ENDED"));

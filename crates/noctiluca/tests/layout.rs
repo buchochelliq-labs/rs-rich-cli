@@ -2037,3 +2037,65 @@ fn wrapping_action_labels_keep_their_row_and_source_order() {
         grid.join("\n")
     );
 }
+
+#[test]
+fn a_bars_centred_items_share_one_row_and_the_search_field_keeps_its_place() {
+    // L2, masthead.html: the bar's menu button, logo text, search field
+    // and buttons are each centred in its 56 px, as tall as they are, so
+    // their tops round to rows 0 and 1. They are drawn on one row, and the
+    // search field stays where Chrome put it (the sign-in run at the
+    // right edge moves into its own free cells, not the whole row left).
+    let page = page("masthead");
+    let projected = noctiluca::layout::project(&page, 120, (8.0, 18.0), &Marks::default());
+    let bar: Vec<String> = projected
+        .pinned
+        .as_ref()
+        .expect("the bar is pinned")
+        .lines
+        .iter()
+        .map(Line::plain)
+        .collect();
+    assert_eq!(bar.len(), 1, "{bar:#?}");
+    let row = &bar[0];
+    for kept in [
+        "[Guide]",
+        "ClipTube",
+        "Search [_]",
+        "[Voice]",
+        "[Settings]",
+        "[Sign in]",
+    ] {
+        assert!(row.contains(kept), "{kept} missing from {row:?}");
+    }
+    // Chrome's search field starts at 352 px: column 44, give or take.
+    let at = row.find("Search [_]").unwrap();
+    assert!(
+        (30..=46).contains(&at),
+        "search field moved to {at}: {row:?}"
+    );
+    assert!(row.trim_end().ends_with("[Settings][Sign in]"), "{row:?}");
+}
+
+#[test]
+fn a_results_metadata_stays_on_one_row_and_a_crowded_menu_keeps_its_face() {
+    // result-rows.html. L6: `23M` and `11y ago`, two short pieces Chrome
+    // puts on one line of a flex-wrap row, are not snapped to card columns
+    // (one a row). L8: a menu button at the page's right edge, crowded by
+    // the title beside it, keeps its whole face on the title's row; the
+    // title wraps before it.
+    let lines: Vec<String> = projection(&page("result-rows"), 120, (8.0, 18.0), &Marks::default())
+        .iter()
+        .map(Line::plain)
+        .collect();
+    let text = lines.join("\n");
+    for pair in ["23M 11y ago", "9M 18y ago", "28K 2d ago", "4K 3w ago"] {
+        assert!(lines.iter().any(|l| l.contains(pair)), "{pair}: {text}");
+    }
+    let crowded = lines
+        .iter()
+        .find(|l| l.contains("A long title"))
+        .unwrap_or_else(|| panic!("{text}"));
+    assert!(crowded.trim_end().ends_with("[Action menu]"), "{text}");
+    assert!(!lines.iter().any(|l| l.trim() == "[Action menu]"), "{text}");
+    assert!(lines.iter().any(|l| l.contains("right edge")), "{text}");
+}

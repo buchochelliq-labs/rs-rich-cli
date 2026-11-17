@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<title>Two videos</title>
+<!-- Written for Noctiluca's corpus: a watch page whose header holds an
+     inline preview player with nothing to play yet (preload=none, no
+     source; a page script would give it one on hover), before the main
+     video, which has a source. The media keys and the status line work
+     on the main video, never the empty one. -->
+<style>
+  body { margin: 0; font: 16px sans-serif }
+  header { display: flex; align-items: center; gap: 12px; padding: 8px }
+  header video { width: 96px; height: 54px; background: #222 }
+  main { padding: 8px }
+  main video { width: 480px; height: 270px; background: #000; display: block }
+</style>
+<header>
+  <video class="preview" preload="none" muted playsinline aria-label="Preview"></video>
+  <strong>Harbour videos</strong>
+</header>
+<main>
+  <h1>The bloom from the air</h1>
+  <video src="media/motion.webm" preload="auto" muted loop aria-label="Glowing waves"></video>
+  <p>Under the video.</p>
+</main>
+</html>

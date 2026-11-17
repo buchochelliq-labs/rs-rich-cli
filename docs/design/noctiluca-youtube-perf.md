@@ -258,10 +258,10 @@ first audit's eleven defects:
 | # | Defect | Now |
 |---|---|---|
 | L1 | A skip link parked above a fixed bar drawn as `[Skip navigation]` | **Fixed**: a control wholly above a pinned or docked strip is not drawn (fixture `masthead.html`) |
-| L2 | A bar's items, centred in its 56 px, spread over two or three rows | Still on main. Putting one-line items on the row their middles share moved the search field out of its row in today's run fitting: not ported |
+| L2 | A bar's items, centred in its 56 px, spread over two or three rows | **Fixed in 0.0.27**: the one-line items crossing the bar's middle share the highest one's row; a run past the right edge moves into the free cells at its end, so the search field keeps its place (`masthead.html`) |
 | L5, L10 | A word or a number split across lines in a narrow column (`Subscriptio` / `ns`, `28` / `K`) | Not reproduced on today's projection of the reduced fixture: the label overflows its column instead |
-| L6 | `23M` / `11y ago` on two rows | Still on main for the first result row of the fixture |
-| L8 | A crowded right-edge menu button wrapped (`[Action` / `menu]`) | Still on main: the button is a wrapped item, outside the run fitting the old branch's `fit_run` extended; not ported |
+| L6 | `23M` / `11y ago` on two rows | **Fixed in 0.0.27**: a flex-wrap row of short one-line pieces is not snapped to card columns (`result-rows.html`) |
+| L8 | A crowded right-edge menu button wrapped (`[Action` / `menu]`) | **Fixed in 0.0.27** on the fixture's crowded row (the button had gone to a row of its own): a text box the right-edge run overlaps ends before it and wraps (`result-rows.html`). The `[Action` / `menu]` wrap itself was not reproduced on a fixture |
 | L3, L4, L7, L9, L11 | Combobox as select, icon glyphs, avatar over text, button faces, thumbnail size | Not looked at again |
 
 ## What is left

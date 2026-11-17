@@ -4,14 +4,14 @@
 
        Live: the bay glows tonight
                                                               Chat
-                                                                 ada: the water is glowing    #1
+                                                              moderator ada: the water is glowing
+                                                                 #1
                                                               bea: that blue is unreal #2
                                                               cy: how deep is the camera? #3
-                                                                 ada: hello from the harbour #4
+                                                              moderator ada: hello from the harbour
+                                                              #4
                                                               bea:       #5
                                                               cy: the tide is coming in #6
-
-
 
 
 
