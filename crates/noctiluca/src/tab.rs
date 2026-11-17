@@ -1276,7 +1276,17 @@ impl Worker<'_> {
     /// one read (a feed that loaded more without a ping yet) is read again
     /// soon.
     fn scroll(&mut self, action: PageAction) -> std::io::Result<()> {
-        self.engine.act(TabId(0), &action)?;
+        let action = match action {
+            PageAction::Wheel(delta) => match self.keep_casting(delta) {
+                Some(held) if held.abs() < 1.0 => None,
+                Some(held) => Some(PageAction::Wheel(held)),
+                None => Some(PageAction::Wheel(delta)),
+            },
+            other => Some(other),
+        };
+        if let Some(action) = action {
+            self.engine.act(TabId(0), &action)?;
+        }
         // Pictures near the new view, loaded already, are captured first.
         self.stills_pending = true;
         if let Ok(metrics) = self.engine.metrics(TabId(0)) {
@@ -1288,6 +1298,44 @@ impl Worker<'_> {
             (self.update)(Update::Metrics(metrics));
         }
         Ok(())
+    }
+
+    /// A wheel of `delta` held so the regions playing on screen stay
+    /// wholly in Chrome's viewport, when they all fit in it: our view
+    /// scrolls in rows, and Chrome's, taller than ours, can follow less
+    /// far. A region only partly in Chrome's viewport is not screencast on
+    /// its own, and its frames fall back to screenshots. `None`: nothing
+    /// plays on screen, or the regions do not fit.
+    fn keep_casting(&mut self, delta: f64) -> Option<f64> {
+        if !self.frames.on || self.pixels {
+            return None;
+        }
+        let moving: Vec<Rect> = self
+            .regions()
+            .iter()
+            .filter(|r| r.moving())
+            .map(|r| r.rect)
+            .collect();
+        if moving.is_empty() {
+            return None;
+        }
+        let metrics = self.engine.metrics(TabId(0)).ok().or(self.metrics)?;
+        let view = metrics.viewport_height;
+        let low = moving
+            .iter()
+            .map(|r| (r.bottom() - view).ceil())
+            .fold(f64::MIN, f64::max)
+            .max(0.0);
+        let high = moving
+            .iter()
+            .map(|r| r.y.floor())
+            .fold(f64::MAX, f64::min)
+            .max(0.0);
+        if view <= 0.0 || low > high {
+            return None;
+        }
+        let to = (metrics.scroll_y + delta).clamp(low, high);
+        Some(to - metrics.scroll_y)
     }
 
     /// The video regions now, with the busy live canvases (cut from the
@@ -4514,6 +4562,94 @@ mod tests {
         worker.refused = false;
         worker.pixels = true;
         assert!(!worker.video_may_run(false));
+    }
+
+    /// The watch fixture's snapshot in a fake engine, its video playing,
+    /// read by a worker whose view shows the video.
+    fn watch_worker<'a>(
+        update: &'a dyn Fn(Update),
+    ) -> (Worker<'a>, Arc<Mutex<crate::testing::FakeState>>, NodeId) {
+        let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/snapshots");
+        let engine = FakeEngine::from_dir(&dir).unwrap();
+        let state = engine.state.clone();
+        let (mut worker, _jobs, _done) = recovery_worker(engine, update);
+        worker.run_command(Command::Resize(120, 40)).unwrap();
+        state
+            .lock()
+            .unwrap()
+            .go("file:///noctiluca/fixtures/watch.html");
+        let page =
+            crate::model::build(&state.lock().unwrap().pages["watch"], &mut Revisions::new());
+        let video = page
+            .media
+            .iter()
+            .find(|m| m.kind == MediaKind::Video)
+            .unwrap()
+            .node;
+        state.lock().unwrap().media.insert(
+            video,
+            crate::engine::Playback {
+                ready: 4,
+                ..crate::engine::Playback::default()
+            },
+        );
+        worker.read().unwrap();
+        worker.on_screen.insert(video);
+        (worker, state, video)
+    }
+
+    /// A frame of the screencast's area as Chrome sends it, stamped `at`.
+    fn area_frame(area: Rect, at: Option<f64>) -> rich_embed::ScreencastFrame {
+        let (w, h) = (area.width.ceil() as u32, area.height.ceil() as u32);
+        rich_embed::ScreencastFrame {
+            pixels: rich_embed::Pixels::new(w, h, vec![7; (w * h * 3) as usize]).unwrap(),
+            meta: rich_embed::FrameMeta {
+                scroll_x: area.x.floor(),
+                scroll_y: area.y.floor(),
+                page_scale: 1.0,
+                device_width: f64::from(w),
+                device_height: f64::from(h),
+                timestamp: at,
+                ..rich_embed::FrameMeta::default()
+            },
+        }
+    }
+
+    #[test]
+    fn one_row_of_scrolling_keeps_a_playing_video_in_chromes_viewport() {
+        let update = |_| {};
+        let (mut worker, state, video) = watch_worker(&update);
+        let rect = worker
+            .page
+            .as_ref()
+            .unwrap()
+            .media
+            .iter()
+            .find(|m| m.node == video)
+            .unwrap()
+            .rect;
+        // It plays wholly in Chrome's viewport: only its box is cast.
+        worker.video();
+        let area = state.lock().unwrap().screencast_area;
+        assert_eq!(area, Some(rect));
+        // One row of `j`: Noctiluca follows with a wheel of a few rows'
+        // CSS pixels, past the video's top.
+        let wheel = 5.0 * f64::from(crate::cdp::CELL.1);
+        assert!(wheel > rect.y);
+        worker.run_command(Command::Wheel(wheel)).unwrap();
+        let scroll_y = state.lock().unwrap().scroll_y;
+        assert!(
+            scroll_y <= rect.y && scroll_y > 0.0,
+            "{scroll_y} for {rect:?}"
+        );
+        // The area stays, and its frames are cut: no screenshot.
+        worker.view_at = Some(Instant::now() - PLAYBACK);
+        worker.frames = Frames::default();
+        state.lock().unwrap().frames.push(area_frame(rect, None));
+        worker.video();
+        let state = state.lock().unwrap();
+        assert_eq!(state.screencast_area, Some(rect));
+        assert!(state.captures.is_empty(), "{:?}", state.captures);
     }
 
     #[test]

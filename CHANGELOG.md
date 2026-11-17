@@ -21,6 +21,15 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   tags from before rab. CI and `validate_release.py` run rab's `check` and
   the rab tests instead of `release_cohort.py`'s.
 
+### Noctiluca: steadier video frames
+
+- Following Noctiluca's scroll no longer puts a playing video partly out of
+  Chrome's viewport: the wheel Chrome is given stops where the video still
+  fits, so one row of `j` keeps the video screencast on its own instead of
+  falling back to screenshots at 4 to 5 frames a second for seconds. Tested
+  on a new watch-page fixture (`tests/fixtures/watch.html`, a 30 fps test
+  card in a player whose clock the page updates).
+
 ## 0.0.26 cohort — published 2026-11-11
 
 Published on 2026-11-11 from `e5422bf9` by one `release.yml` run on rab
