@@ -1701,9 +1701,13 @@ struct Session {
     /// and forward go on into them; a new entry ends `newer`.
     older: Vec<String>,
     newer: Vec<String>,
-    /// A navigation of ours into `older` or `newer` is under way: once it
-    /// lands, Chrome's own history is cleared, so it holds that entry only.
-    crossing: bool,
+    /// A navigation of ours into `older` or `newer` is under way, from the
+    /// address Chrome was at: once Chrome's history is at another, it is
+    /// cleared, so it holds that entry only.
+    crossing: Option<String>,
+    /// The id of the last history reset: a history read asked before it
+    /// holds entries Chrome no longer has.
+    reset: u64,
     /// The page's renderer crashed: calls to it fail at once until it is
     /// reloaded.
     crashed: bool,
@@ -1785,9 +1789,14 @@ impl Session {
 
     /// Go to `url`, an address of `older` or `newer`: Chrome has no entry
     /// for it.
-    fn cross(&mut self, url: String) -> io::Result<()> {
-        self.crossing = true;
+    fn cross(&mut self, url: String, from: String) -> io::Result<()> {
+        self.crossing = Some(from);
         self.page("Page.navigate", json!({ "url": url }))
+    }
+
+    /// The address of Chrome's current entry, as last read.
+    fn here(&self) -> String {
+        self.urls.get(self.current).cloned().unwrap_or_default()
     }
 
     fn screencast(&mut self) -> io::Result<()> {
@@ -1845,7 +1854,12 @@ impl Session {
             return Ok(());
         }
         match command {
-            Request::Open(url) => self.page("Page.navigate", json!({"url": url})),
+            Request::Open(url) => {
+                if self.crossing.as_deref() == Some(url.as_str()) {
+                    self.crossing = None;
+                }
+                self.page("Page.navigate", json!({"url": url}))
+            }
             Request::Resize(columns, rows, revision) => {
                 self.size = (columns, rows);
                 self.viewport_revision = revision;
@@ -1872,23 +1886,28 @@ impl Session {
                 let entry = self.history[self.current + 1];
                 self.page("Page.navigateToHistoryEntry", json!({"entryId": entry}))
             }
-            Request::Back if !self.older.is_empty() && !self.crossing => {
+            Request::Back if !self.older.is_empty() && self.crossing.is_none() => {
+                let from = self.here();
                 let mut newer = std::mem::take(&mut self.urls);
                 newer.append(&mut self.newer);
                 self.newer = newer;
                 let url = self.older.pop().unwrap_or_default();
-                self.cross(url)
+                self.cross(url, from)
             }
-            Request::Forward if !self.newer.is_empty() && !self.crossing => {
+            Request::Forward if !self.newer.is_empty() && self.crossing.is_none() => {
+                let from = self.here();
                 let end = (self.current + 1).min(self.urls.len());
                 self.older.extend(self.urls.drain(..end));
                 let url = self.newer.remove(0);
-                self.cross(url)
+                self.cross(url, from)
             }
             Request::Back | Request::Forward => Ok(()),
             Request::Inherit(older, newer) => {
                 self.older = older;
                 self.newer = newer;
+                // The navigation that comes next is a crossing too: the new
+                // browser's blank page is no entry of the history.
+                self.crossing = Some("about:blank".into());
                 Ok(())
             }
             Request::Reload => self.page("Page.reload", json!({})),
@@ -1972,22 +1991,36 @@ impl Session {
                 Pending::Call(answer) => {
                     let _ = answer.send(Ok(result.clone()));
                 }
-                // Asked before a crossing landed: of the entries it moved.
-                Pending::History if self.crossing => {}
                 Pending::History => {
-                    let entries = result["entries"].as_array().cloned().unwrap_or_default();
-                    let before = self.history.len();
+                    let mut entries = result["entries"].as_array().cloned().unwrap_or_default();
+                    let mut current = result["currentIndex"].as_u64().unwrap_or(0) as usize;
+                    let url = |entry: &Value| entry["url"].as_str().unwrap_or_default().to_string();
+                    let at = entries.get(current).map(url).unwrap_or_default();
+                    let before = match &self.crossing {
+                        _ if id < self.reset => return Ok(()),
+                        // Still where the crossing set out from: of the
+                        // entries it moved, or before it landed.
+                        Some(from) if *from == at => return Ok(()),
+                        // Landed: Chrome keeps this entry only, as older
+                        // and newer hold the rest.
+                        Some(_) => {
+                            self.crossing = None;
+                            self.page("Page.resetNavigationHistory", json!({}))?;
+                            self.reset = self.next;
+                            entries = entries.get(current).cloned().into_iter().collect();
+                            current = 0;
+                            0
+                        }
+                        None => self.history.len(),
+                    };
                     self.history = entries
                         .iter()
                         .filter_map(|entry| entry["id"].as_i64())
                         .collect();
-                    self.urls = entries
-                        .iter()
-                        .map(|entry| entry["url"].as_str().unwrap_or_default().to_string())
-                        .collect();
-                    self.current = result["currentIndex"].as_u64().unwrap_or(0) as usize;
+                    self.urls = entries.iter().map(url).collect();
+                    self.current = current;
                     // A new entry of the page's own drops what was ahead.
-                    if !self.crossing && before > 0 && self.history.len() > before {
+                    if before > 0 && self.history.len() > before {
                         self.newer.clear();
                     }
                     let entry = entries.get(self.current);
@@ -2134,14 +2167,6 @@ impl Session {
                 }
             }
             "Page.frameNavigated" if params["frame"].get("parentId").is_none() => {
-                if self.crossing {
-                    // Chrome keeps this entry only; older and newer hold
-                    // the rest.
-                    self.crossing = false;
-                    self.urls.clear();
-                    self.history.clear();
-                    self.page("Page.resetNavigationHistory", json!({}))?;
-                }
                 self.recovered(shared);
                 self.ensure_viewport(shared)?;
                 if let Some(url) = params["frame"]["url"].as_str() {
@@ -2150,7 +2175,12 @@ impl Session {
                 }
                 self.history()?;
             }
-            "Page.loadEventFired" => self.ensure_viewport(shared)?,
+            "Page.loadEventFired" => {
+                self.ensure_viewport(shared)?;
+                if self.crossing.is_some() {
+                    self.history()?;
+                }
+            }
             "Page.navigatedWithinDocument" => {
                 if let Some(url) = params["url"].as_str() {
                     lock(shared).state.url = url.to_string();
@@ -2233,7 +2263,8 @@ fn run(
         current: 0,
         older: Vec::new(),
         newer: Vec::new(),
-        crossing: false,
+        crossing: None,
+        reset: 0,
         crashed: false,
         size: (80, 24),
         viewport_revision: 0,
@@ -2554,7 +2585,8 @@ mod tests {
             current: 0,
             older: Vec::new(),
             newer: Vec::new(),
-            crossing: false,
+            crossing: None,
+            reset: 0,
             crashed: false,
             size: (80, 24),
             viewport_revision: 0,
@@ -3525,7 +3557,9 @@ mod tests {
         session
             .apply(Request::Inherit(older, vec!["https://d.test/".into()]))
             .unwrap();
-        session.apply(Request::Open("https://c.test/".into())).unwrap();
+        session
+            .apply(Request::Open("https://c.test/".into()))
+            .unwrap();
         let history = |session: &mut Session, url: &str| {
             session.history().unwrap();
             let id = session.next;
@@ -3533,6 +3567,12 @@ mod tests {
                                 "entries": [{"id": 7, "url": url, "title": ""}]}});
             receive(session, shared, answer).unwrap();
         };
+        let navigated = |session: &mut Session, url: &str| {
+            let event = json!({"sessionId": "ours", "method": "Page.frameNavigated",
+                               "params": {"frame": {"id": "main", "url": url}}});
+            receive(session, shared, event).unwrap();
+        };
+        navigated(&mut session, "https://c.test/");
         history(&mut session, "https://c.test/");
         let state = engine.state();
         assert!(state.can_go_back && state.can_go_forward, "{state:?}");
@@ -3548,9 +3588,7 @@ mod tests {
         // Back, past Chrome's first entry: to b, and Chrome forgets c once
         // b lands.
         session.apply(Request::Back).unwrap();
-        let navigated = json!({"sessionId": "ours", "method": "Page.frameNavigated",
-                               "params": {"frame": {"id": "main", "url": "https://b.test/"}}});
-        receive(&mut session, shared, navigated).unwrap();
+        navigated(&mut session, "https://b.test/");
         history(&mut session, "https://b.test/");
         assert_eq!(
             lock(shared).kept,
@@ -3573,10 +3611,12 @@ mod tests {
             navigations,
             ["https://c.test/", "https://b.test/", "https://c.test/"]
         );
-        assert!(
-            wire.iter()
-                .any(|m| m["method"] == "Page.resetNavigationHistory")
-        );
+        // Once the reopened page landed, and once b did.
+        let resets = wire
+            .iter()
+            .filter(|m| m["method"] == "Page.resetNavigationHistory")
+            .count();
+        assert_eq!(resets, 2);
     }
 
     /// A stand-in browser that never says a word on DevTools.
