@@ -355,9 +355,24 @@ fn lay_out_pair(
         _ => {
             // Fixed source dialogs use source-positioned underlay while visible;
             // otherwise adaptive gap collapse can move covered content outside
-            // the source rectangle. Restore the configured rules on close.
+            // the source rectangle. Restore the configured rules on close. A
+            // non-modal one that is a top or bottom bar, from the left edge
+            // across most of the view (a cookie banner), covers no content in
+            // place: the page keeps its adaptations.
             let mut underlay = marks.clone();
-            if !page.overlays.is_empty() {
+            let view = page.width.min(f64::from(width) * f64::from(CELL.0));
+            let bar = |l: &crate::model::Layer| {
+                matches!(
+                    l.place,
+                    crate::model::Place::Pinned | crate::model::Place::Docked
+                ) && l.rect.x <= f64::from(CELL.0)
+                    && l.rect.width >= 0.75 * view
+            };
+            let covering = page
+                .overlays
+                .iter()
+                .any(|o| o.modal || !page.layers.get(o.layer).is_some_and(bar));
+            if covering {
                 underlay.adapt = crate::adapt::Adapt::none()
                     .with(
                         crate::adapt::Rule::Shelves,

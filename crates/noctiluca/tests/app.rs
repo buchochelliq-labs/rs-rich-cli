@@ -449,6 +449,35 @@ fn the_media_keys_and_status_stay_on_the_video_that_has_a_source() {
 }
 
 #[test]
+fn a_shops_ratings_read_natively_beside_a_cookie_banner() {
+    // product-grid.html at 120x40: its cookie banner is a non-modal
+    // role=dialog in a bar at the bottom. It covers nothing in place, so
+    // the page keeps its adaptations: each card's stars read as the native
+    // rating (no picture over it), and the rows under the pinned header
+    // are not left blank.
+    let mut driver = app(
+        Box::new(engine()),
+        Options {
+            images: Some(noctiluca::config::Images::Ansi),
+            ..projection(Config::default(), "product-grid.html")
+        },
+    )
+    .driver(120, 40);
+    wait_for(&mut driver, "12,408");
+    let rows = driver.screen().plain();
+    let all = rows.join("\n");
+    let rating = rows
+        .iter()
+        .find(|r| r.contains("12,408"))
+        .unwrap_or_else(|| panic!("{all}"));
+    assert!(rating.contains("★★★★½ 4.5 12,408"), "{all}");
+    assert!(!rating.contains('▀'), "a picture over the rating: {all}");
+    // The header's rows, then the page's first content at once.
+    let header = rows.iter().position(|r| r.contains("Cart 3")).unwrap();
+    assert!(rows[header + 1].contains("Brand"), "{all}");
+}
+
+#[test]
 fn a_site_with_audio_off_keeps_its_media_muted() {
     let config = Config::parse("[site.\"fixture.example\"]\naudio = false\n").unwrap();
     let engine = audio_engine();
