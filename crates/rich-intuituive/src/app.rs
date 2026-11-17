@@ -1524,6 +1524,19 @@ impl Theme {
         )
     }
 
+    /// Whether its colours are all the terminal's own (none truecolour),
+    /// as a stylesheet's `:ansi` reads it: the dark, light and mono
+    /// presets, and a palette's theme from terminal colours.
+    pub(crate) fn is_ansi(&self) -> bool {
+        let ansi = |color: Option<&rich::Color>| {
+            color.is_none_or(|c| c.kind != rich::color::ColorType::Truecolor)
+        };
+        [&self.border, &self.border_focused, &self.title]
+            .into_iter()
+            .chain(self.styles.iter().map(|(_, style)| style))
+            .all(|style| ansi(style.color()) && ansi(style.bgcolor()))
+    }
+
     /// Whether it is for a dark terminal, as a stylesheet's `:dark` and
     /// `:light` read it: by the background its `screen` style (a theme
     /// [from a palette](Self::from_palette)) or its `button` style gives,
@@ -4838,6 +4851,9 @@ impl App {
                 vars: &vars,
                 viewport,
                 dark: self.theme.is_dark(),
+                ansi: self.theme.is_ansi(),
+                nocolor: console.color_system().is_none() || console.no_color(),
+                inline: self.inline.is_some(),
             }),
             chain: Vec::new(),
             announcements: Vec::new(),

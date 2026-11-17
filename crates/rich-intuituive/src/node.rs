@@ -491,6 +491,9 @@ struct SheetNode {
     /// how many children it has, as it was last laid out
     /// (`:first-child`, `:odd`, `:empty`, …).
     place: (usize, usize),
+    /// Its place among its parent's children of its kind, and how many
+    /// there are (`:first-of-type`, `:last-of-type`).
+    kind_place: (usize, usize),
     children: usize,
 }
 
@@ -503,6 +506,12 @@ pub(crate) struct SheetCx<'a> {
     pub viewport: (u16, u16),
     /// The theme is dark (`:dark`, `:light`).
     pub dark: bool,
+    /// The theme's colours are the terminal's own (`:ansi`).
+    pub ansi: bool,
+    /// The console shows no colour (`:nocolor`).
+    pub nocolor: bool,
+    /// The app is inline (`:inline`).
+    pub inline: bool,
 }
 
 /// A node's widget, and what the framework keeps for it between frames.
@@ -2987,6 +2996,8 @@ impl Node {
             focusable: self.focusable,
             index: sheet.place.0,
             siblings: sheet.place.1.max(1),
+            kind_index: sheet.kind_place.0,
+            kind_siblings: sheet.kind_place.1.max(1),
             children: sheet.children,
         }
     }
@@ -2998,6 +3009,23 @@ impl Node {
         if sheet.place != (index, count) {
             sheet.place = (index, count);
             dirty.insert(self.id);
+        }
+    }
+
+    /// Tell `children` where each is among those of its kind; a change
+    /// draws it again (`:first-of-type`, `:last-of-type`).
+    fn place_kinds(children: &[Node], dirty: &mut HashSet<NodeId>) {
+        for (index, child) in children.iter().enumerate() {
+            let same = |other: &&Node| other.what == child.what;
+            let kind_place = (
+                children[..index].iter().filter(same).count(),
+                children.iter().filter(same).count(),
+            );
+            let mut sheet = child.sheet.borrow_mut();
+            if sheet.kind_place != kind_place {
+                sheet.kind_place = kind_place;
+                dirty.insert(child.id);
+            }
         }
     }
 
@@ -3500,6 +3528,7 @@ impl Node {
             // laid out.
             if let Some(sheet) = &frame.sheet {
                 let count = widget.children().len();
+                Node::place_kinds(widget.children(), &mut frame.dirty);
                 for (index, child) in widget.children().iter().enumerate() {
                     child.place_among(index, count, &mut frame.dirty);
                     child.resolve(sheet, &mut frame.chain);
@@ -3522,6 +3551,7 @@ impl Node {
                 let mut fresh = false;
                 let count = widget.children().len();
                 self.sheet.borrow_mut().children = count;
+                Node::place_kinds(widget.children(), &mut frame.dirty);
                 for (index, child) in widget.children().iter().enumerate() {
                     child.place_among(index, count, &mut frame.dirty);
                     fresh |= child.resolve(sheet, &mut frame.chain);
@@ -3992,6 +4022,9 @@ impl Node {
                 focus: &focus_path,
                 hover: &hover_path,
                 dark: cx.dark,
+                ansi: cx.ansi,
+                nocolor: cx.nocolor,
+                inline: cx.inline,
             };
             cx.sheet.style(&frame.chain, &states, cx.vars, cx.viewport)
         } else {

@@ -148,6 +148,10 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   dark, light and mono themes and a palette's theme name. The command
   palette's system commands add *Bell*, which rings the terminal's bell
   (`SystemCommands::NAMES` has seven names now).
+- **More pseudo-classes in stylesheets.** `:first-of-type` and
+  `:last-of-type` count the siblings of a node's own kind; `:ansi` holds
+  while the theme's colours are the terminal's own, `:nocolor` while the
+  console shows no colour, and `:inline` in an inline app.
 
 ### intuiTUIve: pictures without flicker between frames
 

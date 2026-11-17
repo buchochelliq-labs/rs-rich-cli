@@ -333,9 +333,14 @@ panel table:hover { text-style: underline; }
 - `:first-child`, `:last-child`, `:odd`, `:even` (counted from the first,
   as CSS's `:nth-child(odd)` is) and `:empty` (no children): where the
   node is among its parent's children, which follows rows an `each` adds
-  or moves;
+  or moves; `:first-of-type` and `:last-of-type` count only the siblings
+  of the node's own kind (the first `label` after a `rule`);
 - `:dark` and `:light`, by the theme: `:dark #logo` holds while the theme
-  is dark, at the top of the app too.
+  is dark, at the top of the app too;
+- `:ansi` while the theme's colours are all the terminal's own (the
+  built-in presets; not a palette's truecolour theme), `:nocolor` while
+  the console shows no colour (`NO_COLOR`), and `:inline` in an
+  `App::inline` app, as Textual's are.
 
 States, structural and theme ones among them, change colours and text
 styles, not layout.
