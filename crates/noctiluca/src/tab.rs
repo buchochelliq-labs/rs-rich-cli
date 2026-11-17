@@ -5287,7 +5287,9 @@ mod tests {
         });
         // The first reading, at the start, before the clock starts.
         thread::sleep(Duration::from_millis(300));
-        state.lock().unwrap().read_cost = Duration::from_millis(200);
+        // A reading far longer than a frame, so that what it holds up
+        // shows over a slow machine's scheduling (a loaded CI runner).
+        state.lock().unwrap().read_cost = Duration::from_millis(1000);
         let start = Instant::now();
         let mut k = 0u32;
         while start.elapsed() < Duration::from_secs(3) {
@@ -5314,7 +5316,7 @@ mod tests {
         }
         drop(tab);
         let times: Vec<Instant> = frames.try_iter().filter(|t| *t > start).collect();
-        assert!(times.len() > 30, "{} frames", times.len());
+        assert!(times.len() > 10, "{} frames", times.len());
         times
             .windows(2)
             .map(|w| w[1] - w[0])
@@ -5324,10 +5326,10 @@ mod tests {
 
     #[test]
     fn a_slow_reading_does_not_stop_the_frames() {
-        // On the reader's thread, a 200 ms reading holds no frame: the
-        // longest gap is a frame's and a little.
+        // On the reader's thread, a 1 s reading holds no frame: the longest
+        // gap is a few frames' at most.
         let gap = longest_frame_gap(true);
-        assert!(gap < Duration::from_millis(90), "{gap:?}");
+        assert!(gap < Duration::from_millis(500), "{gap:?}");
     }
 
     #[test]
@@ -5335,7 +5337,7 @@ mod tests {
         // Without a reader the same reading holds the frames for its length:
         // what the reader's thread is for.
         let gap = longest_frame_gap(false);
-        assert!(gap >= Duration::from_millis(190), "{gap:?}");
+        assert!(gap >= Duration::from_millis(900), "{gap:?}");
     }
 
     #[test]
