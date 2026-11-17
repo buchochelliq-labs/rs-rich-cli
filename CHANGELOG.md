@@ -156,6 +156,9 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   rs-rich-ext's `Badge` as a node; `.on_remove(run)` adds a `×` (and
   Delete) that removes it. `tag_input(tags)` types tags into a row of
   removable chips.
+- **An accordion.** `accordion(open, sections)` is a column of
+  collapsible sections of which only one is open at a time; `open`
+  (a `Signal<Option<usize>>`) says which, and opens one from the app.
 
 ### intuiTUIve: pictures without flicker between frames
 

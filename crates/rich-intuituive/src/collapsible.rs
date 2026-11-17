@@ -1,6 +1,7 @@
 //! A section that opens and closes: [`collapsible`], and
 //! [`collapsible_with`], whose title follows state, with a status beside
-//! it and a summary while it is closed (a tool call's card).
+//! it and a summary while it is closed (a tool call's card); and an
+//! [`accordion`] of them, only one open at a time.
 
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -139,6 +140,70 @@ pub fn collapsible_with(
     column([header, summary, child.shown_when(move || open.get())])
         .auto()
         .name("collapsible")
+}
+
+/// [`collapsible`] sections, `(title, child)` each, of which only one is
+/// open at a time: opening one closes the one that was open, as
+/// Textual's `Collapsible`s in an accordion and a settings page's groups
+/// do. `open` is the one open (`None`: all closed), set as they open and
+/// close; set it to open one from the app. Each header takes the focus and
+/// opens and closes as a [`collapsible`]'s does.
+///
+/// ```
+/// use intuituive::prelude::*;
+/// use intuituive::accordion;
+///
+/// let app = App::new(|| {
+///     let open = signal(Some(0));
+///     accordion(
+///         open,
+///         [
+///             ("General", label("Name: notes")),
+///             ("Display", label("Theme: dark")),
+///         ],
+///     )
+/// });
+/// let mut driver = app.driver(20, 4);
+/// driver.settle();
+/// assert_eq!(driver.screen().plain()[1].trim_end(), "Name: notes");
+/// driver.press("tab enter");
+/// let rows = driver.screen().plain();
+/// assert_eq!(rows[0].trim_end(), "▸ General");
+/// assert_eq!(rows[1].trim_end(), "▾ Display");
+/// assert_eq!(rows[2].trim_end(), "Theme: dark");
+/// ```
+pub fn accordion<T: Into<String>>(
+    open: Signal<Option<usize>>,
+    sections: impl IntoIterator<Item = (T, Node)>,
+) -> Node {
+    let mut children = Vec::new();
+    let mut opens = Vec::new();
+    for (i, (title, child)) in sections.into_iter().enumerate() {
+        let shown = crate::reactive::signal(open.get_untracked() == Some(i));
+        opens.push(shown);
+        // A section opened or closed by its header: the one open.
+        crate::reactive::watch(
+            move || shown.get(),
+            move |now, _| {
+                if now {
+                    open.set(Some(i));
+                } else if open.get_untracked() == Some(i) {
+                    open.set(None);
+                }
+            },
+        );
+        children.push(collapsible(title, shown, child));
+    }
+    // The one open: the others closed.
+    crate::reactive::watch(
+        move || open.get(),
+        move |now, _| {
+            for (i, shown) in opens.iter().enumerate() {
+                shown.set(now == Some(i));
+            }
+        },
+    );
+    column(children).auto().name("accordion")
 }
 
 /// The slots of a [`collapsible`]: those of its header, its first child.

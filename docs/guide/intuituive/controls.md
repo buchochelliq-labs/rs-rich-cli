@@ -328,6 +328,18 @@ the Tab order. The section is as tall as what it shows. The title is in
 `[-]`. The header is read as `Advanced, button, collapsed` (or
 `expanded`).
 
+### One open at a time: an accordion
+
+```rust
+let open = signal(Some(0));
+accordion(open, [("General", general()), ("Display", display()), ("Keys", keys())])
+```
+
+`accordion(open, sections)` is a column of collapsible sections, each
+`(title, child)`, of which only one is open: opening one closes the one
+that was open. `open` holds the one open (`None` when all are closed),
+and setting it opens one from the app.
+
 ### Titles that follow state, a status and a summary
 
 New in 0.0.24: a tool call's card, as an agent's front end draws one.
