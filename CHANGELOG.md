@@ -35,6 +35,13 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   again (#891); `{` holds the lines that were showing and steps up through
   messages, instead of blanking the log to its first line (#892). A log
   paused near its start keeps its rows full.
+- Layout: a top bar's items, each centred in its height, are drawn on
+  one row, and a run of buttons past the right edge moves into the free
+  cells at its end instead of pulling the whole row left (L2); short
+  one-line pieces of a flex-wrap row (`23M` and `11y ago`) are no longer
+  snapped to card columns, one a row (L6); a menu button at the right
+  edge crowded by a title keeps its face on the title's row, the title
+  wrapping before it (L8).
 
 ## 0.0.26 cohort — published 2026-11-11
 
