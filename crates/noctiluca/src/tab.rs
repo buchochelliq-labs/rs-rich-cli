@@ -57,7 +57,7 @@ use rich_embed::PageState;
 
 use crate::engine::{
     Engine, EngineEvent, Format, HistoryStep, MediaOp, Metrics, NodeId, PageAction, PageReader,
-    Rect, TabId,
+    Playback, Rect, TabId,
 };
 use crate::model::{
     Binding, Block, BlockKind, Control, Entry, Media, MediaKind, Page, Revisions, Role, Run,
@@ -609,12 +609,15 @@ fn build_read(
 }
 
 /// Readings on the reader's thread ([`Worker::read_aside`]): its thread,
-/// whether the engine has none, and the reading out there.
+/// whether the engine has none, the reading out there, whether a playback
+/// read is out, and whether the reader reads no playback.
 #[derive(Default)]
 struct Aside {
     reader: Option<ReaderThread>,
     none: bool,
     out: Option<Out>,
+    playback_out: bool,
+    no_playback: bool,
 }
 
 /// A reading out on the reader's thread: when it began, and the change
@@ -624,36 +627,88 @@ struct Out {
     dirty: Option<Instant>,
 }
 
-/// What the tab asks of the reader's thread: a reading, its number from
-/// [`Engine::begin_read`], the model's revisions (lent while it builds),
-/// the scroll boxes the page appends to, and whether to build the source's
-/// model too.
-struct Ask {
-    ticket: u64,
-    revisions: Revisions,
-    appended: HashSet<NodeId>,
-    source: bool,
+/// What the tab asks of the reader's thread.
+enum Ask {
+    /// A reading: its number from [`Engine::begin_read`], the model's
+    /// revisions (lent while it builds), the scroll boxes the page appends
+    /// to, and whether to build the source's model too.
+    Read {
+        ticket: u64,
+        revisions: Revisions,
+        appended: HashSet<NodeId>,
+        source: bool,
+    },
+    /// The playback of these media elements.
+    Playback(Vec<NodeId>),
 }
 
-/// What the reader's thread answers: the revisions back, and the page
-/// built, `None` when the snapshot failed.
-struct Answer {
-    ticket: u64,
-    revisions: Revisions,
-    read: Option<Built>,
+/// What the reader's thread answers.
+enum Answer {
+    /// A reading: the revisions back, and the page built, `None` when the
+    /// snapshot failed.
+    Read {
+        ticket: u64,
+        revisions: Revisions,
+        read: Option<Built>,
+    },
+    /// Each element's playback; `None` when the reader reads none.
+    Playback(Option<Vec<(NodeId, Option<Playback>)>>),
 }
 
-/// A page the reader's thread built, with what its reading cost.
+/// A page the reader's thread built, with what its reading cost, and its
+/// media's playback when the reader reads it.
 struct Built {
     page: Page,
     source: Option<SourcePage>,
     snapshot_ms: f64,
     build_ms: f64,
+    playback: Option<Vec<(NodeId, Option<Playback>)>>,
+}
+
+/// Each of `nodes`' playback through `reader`; `None` when it reads none.
+fn read_playback(
+    reader: &mut dyn PageReader,
+    nodes: &[NodeId],
+) -> Option<Vec<(NodeId, Option<Playback>)>> {
+    let mut all = Vec::new();
+    for &node in nodes {
+        let answer = reader.playback(node);
+        if answer
+            .as_ref()
+            .is_err_and(|e| e.kind() == std::io::ErrorKind::Unsupported)
+        {
+            return None;
+        }
+        all.push((node, answer.ok()));
+    }
+    Some(all)
+}
+
+/// The media elements whose playback a reading reads.
+fn media_nodes(page: &Page) -> Vec<NodeId> {
+    page.media
+        .iter()
+        .filter(|m| matches!(m.kind, MediaKind::Video | MediaKind::Audio))
+        .map(|m| m.node)
+        .collect()
+}
+
+/// Each media element of `page` gets its playback from `read` (`None`
+/// where it was not read), as [`Worker::probe`] reads it.
+fn set_playback(page: &mut Page, read: &[(NodeId, Option<Playback>)]) {
+    for media in &mut page.media {
+        if matches!(media.kind, MediaKind::Video | MediaKind::Audio) {
+            media.playback = read
+                .iter()
+                .find(|(node, _)| *node == media.node)
+                .and_then(|(_, p)| *p);
+        }
+    }
 }
 
 /// The reader's thread: it takes each asked snapshot through the engine's
-/// [`PageReader`] and builds its model, one at a time. It ends when the
-/// tab drops its end.
+/// [`PageReader`] and builds its model, and reads media elements'
+/// playback, one ask at a time. It ends when the tab drops its end.
 struct ReaderThread {
     asks: Sender<Ask>,
     answers: Receiver<Answer>,
@@ -664,24 +719,37 @@ impl ReaderThread {
         let (asks, asked) = mpsc::channel::<Ask>();
         let (done, answers) = mpsc::channel();
         thread::spawn(move || {
-            for mut ask in asked {
-                let at = crate::trace::start();
-                let read = reader.snapshot().ok().map(|snapshot| {
-                    let snapshot_ms = crate::trace::ms(at);
-                    let built = crate::trace::start();
-                    let (page, source) =
-                        build_read(&snapshot, &mut ask.revisions, &ask.appended, ask.source);
-                    Built {
-                        page,
+            for ask in asked {
+                let answer = match ask {
+                    Ask::Read {
+                        ticket,
+                        mut revisions,
+                        appended,
                         source,
-                        snapshot_ms,
-                        build_ms: crate::trace::ms(built),
+                    } => {
+                        let at = crate::trace::start();
+                        let read = reader.snapshot().ok().map(|snapshot| {
+                            let snapshot_ms = crate::trace::ms(at);
+                            let built = crate::trace::start();
+                            let (page, source) =
+                                build_read(&snapshot, &mut revisions, &appended, source);
+                            let build_ms = crate::trace::ms(built);
+                            let playback = read_playback(&mut *reader, &media_nodes(&page));
+                            Built {
+                                page,
+                                source,
+                                snapshot_ms,
+                                build_ms,
+                                playback,
+                            }
+                        });
+                        Answer::Read {
+                            ticket,
+                            revisions,
+                            read,
+                        }
                     }
-                });
-                let answer = Answer {
-                    ticket: ask.ticket,
-                    revisions: ask.revisions,
-                    read,
+                    Ask::Playback(nodes) => Answer::Playback(read_playback(&mut *reader, &nodes)),
                 };
                 if done.send(answer).is_err() {
                     return;
@@ -830,17 +898,8 @@ impl Worker<'_> {
         if self.aside.out.is_some() {
             return true;
         }
-        if self.aside.reader.is_none() {
-            if self.aside.none {
-                return false;
-            }
-            match self.engine.reader(TabId(0)) {
-                Some(reader) => self.aside.reader = Some(ReaderThread::spawn(reader)),
-                None => {
-                    self.aside.none = true;
-                    return false;
-                }
-            }
+        if !self.has_reader() {
+            return false;
         }
         let now = Instant::now();
         let Ok(ticket) = self.engine.begin_read(TabId(0)) else {
@@ -851,7 +910,7 @@ impl Worker<'_> {
         if let Ok(boxes) = self.engine.appended(TabId(0)) {
             self.appended = boxes.into_iter().collect();
         }
-        let ask = Ask {
+        let ask = Ask::Read {
             ticket,
             revisions: std::mem::replace(&mut self.revisions, Revisions::new()),
             appended: self.appended.clone(),
@@ -860,7 +919,9 @@ impl Worker<'_> {
         let reader = self.aside.reader.as_ref().expect("spawned above");
         if let Err(mpsc::SendError(ask)) = reader.asks.send(ask) {
             // Its thread ended: read on this one from now on.
-            self.revisions = ask.revisions;
+            if let Ask::Read { revisions, .. } = ask {
+                self.revisions = revisions;
+            }
             self.aside.reader = None;
             self.aside.none = true;
             return false;
@@ -880,18 +941,79 @@ impl Worker<'_> {
     /// refused (its scope changed, or its snapshot failed), `None` while
     /// none came back.
     fn take_aside(&mut self) -> Option<bool> {
-        self.aside.out.as_ref()?;
-        let answer = self.aside.reader.as_ref()?.answers.try_recv();
-        match answer {
-            Ok(answer) => Some(self.adopt(answer)),
-            Err(TryRecvError::Empty) => None,
-            Err(TryRecvError::Disconnected) => {
-                self.aside.reader = None;
-                self.aside.none = true;
-                let out = self.aside.out.take()?;
-                self.dirty = out.dirty.or(Some(out.began));
-                Some(false)
+        let mut adopted = None;
+        loop {
+            let answer = self.aside.reader.as_ref()?.answers.try_recv();
+            match answer {
+                Ok(Answer::Read {
+                    ticket,
+                    revisions,
+                    read,
+                }) => adopted = Some(self.adopt(ticket, revisions, read)),
+                Ok(Answer::Playback(read)) => self.playback_read(read),
+                Err(TryRecvError::Empty) => return adopted,
+                Err(TryRecvError::Disconnected) => {
+                    self.aside.reader = None;
+                    self.aside.none = true;
+                    self.aside.playback_out = false;
+                    let out = self.aside.out.take()?;
+                    self.dirty = out.dirty.or(Some(out.began));
+                    return Some(false);
+                }
             }
+        }
+    }
+
+    /// The reader's thread, started at the first ask: `false` when the
+    /// engine has none (the tab reads on its own thread).
+    fn has_reader(&mut self) -> bool {
+        if self.aside.reader.is_none() && !self.aside.none {
+            match self.engine.reader(TabId(0)) {
+                Some(reader) => self.aside.reader = Some(ReaderThread::spawn(reader)),
+                None => self.aside.none = true,
+            }
+        }
+        self.aside.reader.is_some()
+    }
+
+    /// Ask the reader's thread for `nodes`' playback, as
+    /// [`follow_playback`](Self::follow_playback) reads it on this thread.
+    /// `false` when it cannot.
+    fn probe_aside(&mut self, nodes: Vec<NodeId>) -> bool {
+        if self.aside.no_playback || !self.has_reader() {
+            return false;
+        }
+        if self.aside.playback_out {
+            return true;
+        }
+        let sent = self
+            .aside
+            .reader
+            .as_ref()
+            .is_some_and(|r| r.asks.send(Ask::Playback(nodes)).is_ok());
+        self.aside.playback_out = sent;
+        sent
+    }
+
+    /// The playback the reader's thread read: published when it moved, if
+    /// it is of the page's media as they are now.
+    fn playback_read(&mut self, read: Option<Vec<(NodeId, Option<Playback>)>>) {
+        self.aside.playback_out = false;
+        let Some(read) = read else {
+            // It reads none: this thread does.
+            self.aside.no_playback = true;
+            return;
+        };
+        let Some(page) = self.page.clone() else {
+            return;
+        };
+        if media_nodes(&page) != read.iter().map(|r| r.0).collect::<Vec<_>>() {
+            return;
+        }
+        let mut next = (*page).clone();
+        set_playback(&mut next, &read);
+        if next != *page {
+            self.publish(Arc::new(next), None);
         }
     }
 
@@ -902,59 +1024,69 @@ impl Worker<'_> {
         if self.aside.out.is_none() {
             return;
         }
-        let answer = self
-            .aside
-            .reader
-            .as_ref()
-            .and_then(|r| r.answers.recv_timeout(crate::cdp::READING * 3).ok());
+        let deadline = Instant::now() + crate::cdp::READING * 3;
         let out = self.aside.out.take();
-        match answer {
-            Some(answer) => {
-                self.revisions = answer.revisions;
-                // Its pings are this reading's to cover.
-                if let Some(dirty) = out.and_then(|o| o.dirty) {
-                    self.dirty.get_or_insert(dirty);
+        loop {
+            let left = deadline.saturating_duration_since(Instant::now());
+            let answer = self
+                .aside
+                .reader
+                .as_ref()
+                .and_then(|r| r.answers.recv_timeout(left).ok());
+            match answer {
+                Some(Answer::Read { revisions, .. }) => {
+                    self.revisions = revisions;
+                    // Its pings are this reading's to cover.
+                    if let Some(dirty) = out.and_then(|o| o.dirty) {
+                        self.dirty.get_or_insert(dirty);
+                    }
+                    return;
                 }
-            }
-            None => {
-                self.aside.reader = None;
-                self.aside.none = true;
+                Some(Answer::Playback(read)) => self.playback_read(read),
+                None => {
+                    self.aside.reader = None;
+                    self.aside.none = true;
+                    self.aside.playback_out = false;
+                    return;
+                }
             }
         }
     }
 
     /// A reading from the reader's thread: adopted when its scope is still
     /// current (see [`take_aside`](Self::take_aside)).
-    fn adopt(&mut self, answer: Answer) -> bool {
-        self.revisions = answer.revisions;
+    fn adopt(&mut self, ticket: u64, revisions: Revisions, read: Option<Built>) -> bool {
+        self.revisions = revisions;
         let Some(out) = self.aside.out.take() else {
             return false;
         };
         self.last_read = Some((Instant::now(), out.began.elapsed()));
-        let adopted = answer
-            .read
-            .filter(|_| self.engine.adopt_read(TabId(0), answer.ticket));
+        let adopted = read.filter(|_| self.engine.adopt_read(TabId(0), ticket));
         let Some(read) = adopted else {
             self.refused = true;
             self.dirty = out.dirty.or(Some(out.began));
             return false;
         };
         self.refused = false;
+        let mut page = read.page;
+        if let Some(playback) = &read.playback {
+            set_playback(&mut page, playback);
+        }
         self.finish_read(
-            read.page,
+            page,
             read.source,
             read.snapshot_ms,
             read.build_ms,
             Some(out.began),
-            true,
+            read.playback.is_some(),
         );
         true
     }
 
     /// What a reading does once its page is built, on the tab's thread:
     /// the page dressed (Chrome's error page, live logs, pictures, media
-    /// state), its document's state kept or dropped, and the page
-    /// published.
+    /// state, unless the reader's thread read it: `aside`), its document's
+    /// state kept or dropped, and the page published.
     fn finish_read(
         &mut self,
         mut page: Page,
@@ -1000,7 +1132,9 @@ impl Worker<'_> {
             media.still = still;
             media.picture = picture;
         }
-        self.probe(&mut page);
+        if !aside {
+            self.probe(&mut page);
+        }
         // A new document is read again until its layout holds still: the
         // first reading can come from a layout still moving, and nothing
         // in the DOM may say when it stops.
@@ -1299,6 +1433,9 @@ impl Worker<'_> {
             .iter()
             .any(|m| m.playback.is_some_and(|p| !p.paused))
         {
+            return;
+        }
+        if self.probe_aside(media_nodes(&page)) {
             return;
         }
         let mut next = (*page).clone();

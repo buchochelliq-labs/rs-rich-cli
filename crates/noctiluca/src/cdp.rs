@@ -679,15 +679,89 @@ fn snapshot_through(call: &dyn Fn(&str, Value) -> io::Result<Value>) -> io::Resu
     Ok(PageSnapshot { dom, ax })
 }
 
+/// A media element's playback, as [`playback_of`] reads it.
+const PLAYBACK_READ: &str = "function() { return [this.paused, this.muted, this.volume, \
+    this.currentTime, isFinite(this.duration) ? this.duration : -1, this.ended, \
+    this.readyState, this.error !== null]; }";
+
+/// The playback [`PLAYBACK_READ`] returned.
+fn playback_of(value: &Value) -> Playback {
+    let at = |i: usize| value.get(i).cloned().unwrap_or(Value::Null);
+    Playback {
+        paused: at(0).as_bool().unwrap_or(true),
+        muted: at(1).as_bool().unwrap_or(false),
+        volume: at(2).as_f64().unwrap_or(1.0),
+        time: at(3).as_f64().unwrap_or(0.0),
+        duration: at(4).as_f64().filter(|d| *d >= 0.0),
+        ended: at(5).as_bool().unwrap_or(false),
+        ready: at(6).as_u64().unwrap_or(0).min(4) as u8,
+        failed: at(7).as_bool().unwrap_or(false),
+    }
+}
+
+/// The objects the reader's thread makes, released after each read.
+const READER_GROUP: &str = "noctiluca-reader";
+
 /// What reads the page on the tab's reader thread ([`Engine::reader`]):
-/// the page's DevTools, its calls waiting at most [`READING`].
+/// the page's DevTools, a snapshot's calls waiting at most [`READING`] and
+/// a media element's [`PERIODIC`]; and the isolated world it reads media
+/// in, made once and again when the page's document changes.
 struct ChromeReader {
     devtools: DevTools,
+    world: Option<i64>,
+}
+
+impl ChromeReader {
+    /// `node`'s playback in the reader's isolated world.
+    fn playback_in(&mut self, node: i64) -> io::Result<Playback> {
+        let call = |method: &str, args| self.devtools.call(method, args, PERIODIC);
+        let context = match self.world {
+            Some(context) => context,
+            None => world_through(&call)?,
+        };
+        let result = (|| {
+            let object = call(
+                "DOM.resolveNode",
+                json!({"backendNodeId": node, "executionContextId": context,
+                       "objectGroup": READER_GROUP}),
+            )?;
+            let object = object["object"]["objectId"]
+                .as_str()
+                .ok_or_else(|| io::Error::new(ErrorKind::NotFound, "the node is gone"))?;
+            call(
+                "Runtime.callFunctionOn",
+                json!({"objectId": object, "functionDeclaration": PLAYBACK_READ,
+                       "returnByValue": true}),
+            )
+        })();
+        let _ = call(
+            "Runtime.releaseObjectGroup",
+            json!({"objectGroup": READER_GROUP}),
+        );
+        let value = match result {
+            Ok(value) if value.get("exceptionDetails").is_none() => value,
+            Ok(_) => return Err(io::Error::other("the playback read failed")),
+            Err(error) => {
+                // Its world may have gone with a document: made again next.
+                self.world = None;
+                return Err(error);
+            }
+        };
+        self.world = Some(context);
+        Ok(playback_of(&value["result"]["value"]))
+    }
 }
 
 impl crate::engine::PageReader for ChromeReader {
     fn snapshot(&mut self) -> io::Result<PageSnapshot> {
         snapshot_through(&|method, args| self.devtools.call(method, args, READING))
+    }
+
+    fn playback(&mut self, node: i64) -> io::Result<Playback> {
+        match self.playback_in(node) {
+            Err(_) if self.world.is_none() => self.playback_in(node),
+            answer => answer,
+        }
     }
 }
 
@@ -797,6 +871,7 @@ impl Engine for ChromeBackend {
     fn reader(&mut self, _tab: TabId) -> Option<Box<dyn crate::engine::PageReader>> {
         Some(Box::new(ChromeReader {
             devtools: self.devtools.clone(),
+            world: None,
         }))
     }
 
@@ -920,24 +995,8 @@ impl Engine for ChromeBackend {
 
     fn playback(&mut self, _tab: TabId, node: i64) -> io::Result<Playback> {
         let _wait = self.waiting(PERIODIC);
-        let value = self.call_on(
-            node,
-            "function() { return [this.paused, this.muted, this.volume, this.currentTime, \
-               isFinite(this.duration) ? this.duration : -1, this.ended, this.readyState, \
-               this.error !== null]; }",
-            vec![],
-        )?;
-        let at = |i: usize| value.get(i).cloned().unwrap_or(Value::Null);
-        Ok(Playback {
-            paused: at(0).as_bool().unwrap_or(true),
-            muted: at(1).as_bool().unwrap_or(false),
-            volume: at(2).as_f64().unwrap_or(1.0),
-            time: at(3).as_f64().unwrap_or(0.0),
-            duration: at(4).as_f64().filter(|d| *d >= 0.0),
-            ended: at(5).as_bool().unwrap_or(false),
-            ready: at(6).as_u64().unwrap_or(0).min(4) as u8,
-            failed: at(7).as_bool().unwrap_or(false),
-        })
+        let value = self.call_on(node, PLAYBACK_READ, vec![])?;
+        Ok(playback_of(&value))
     }
 
     fn resource(&mut self, _tab: TabId, url: &str) -> io::Result<Vec<u8>> {

@@ -566,6 +566,21 @@ fn read_snapshot(state: &Mutex<FakeState>) -> io::Result<PageSnapshot> {
         .ok_or_else(|| io::Error::other("no page"))
 }
 
+/// A media element's playback as the fake engine reads it, on either
+/// thread.
+fn fake_playback(state: &FakeState, node: i64) -> io::Result<Playback> {
+    let mut playback = state
+        .media
+        .get(&node)
+        .copied()
+        .ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "no media"))?;
+    // A recorded video's clock runs while it plays, looping.
+    if let Some(time) = state.clock(node).filter(|_| !playback.paused) {
+        playback.time = time;
+    }
+    Ok(playback)
+}
+
 /// The fake engine's reader: snapshots from another thread.
 struct FakeReader {
     state: Arc<Mutex<FakeState>>,
@@ -574,6 +589,10 @@ struct FakeReader {
 impl crate::engine::PageReader for FakeReader {
     fn snapshot(&mut self) -> io::Result<PageSnapshot> {
         read_snapshot(&self.state)
+    }
+
+    fn playback(&mut self, node: i64) -> io::Result<Playback> {
+        fake_playback(&self.state.lock().unwrap_or_else(|e| e.into_inner()), node)
     }
 }
 
@@ -939,17 +958,7 @@ impl Engine for FakeEngine {
     }
 
     fn playback(&mut self, _tab: TabId, node: i64) -> io::Result<Playback> {
-        let state = self.lock();
-        let mut playback = state
-            .media
-            .get(&node)
-            .copied()
-            .ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "no media"))?;
-        // A recorded video's clock runs while it plays, looping.
-        if let Some(time) = state.clock(node).filter(|_| !playback.paused) {
-            playback.time = time;
-        }
-        Ok(playback)
+        fake_playback(&self.lock(), node)
     }
 
     fn image_ready(&mut self, _tab: TabId, node: i64) -> io::Result<bool> {

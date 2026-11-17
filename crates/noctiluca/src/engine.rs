@@ -244,6 +244,12 @@ pub type ResourceReader = Box<dyn FnMut(&str) -> io::Result<Vec<u8>> + Send>;
 pub trait PageReader: Send {
     /// The page as laid out, with its accessibility tree.
     fn snapshot(&mut self) -> io::Result<PageSnapshot>;
+    /// A video or audio element's playback, as [`Engine::playback`] reads
+    /// it. [`io::ErrorKind::Unsupported`]: the tab reads it on its own
+    /// thread.
+    fn playback(&mut self, _node: NodeId) -> io::Result<Playback> {
+        Err(io::Error::new(io::ErrorKind::Unsupported, "no media here"))
+    }
 }
 
 /// A browser engine behind Noctiluca.
