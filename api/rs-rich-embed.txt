@@ -57,9 +57,11 @@ pub fn rich_embed::chrome::ChromeEngine::cell_pixels(self, u32, u32) -> rich_emb
 pub fn rich_embed::chrome::ChromeEngine::devtools(&mut self) -> std::io::error::Result<rich_embed::chrome::DevTools>
 pub fn rich_embed::chrome::ChromeEngine::downloads(self, rich_embed::chrome::Downloads) -> rich_embed::chrome::ChromeEngine
 pub fn rich_embed::chrome::ChromeEngine::end_all()
+pub fn rich_embed::chrome::ChromeEngine::ended(&self) -> bool
 pub fn rich_embed::chrome::ChromeEngine::find() -> core::option::Option<std::path::PathBuf>
 pub fn rich_embed::chrome::ChromeEngine::new() -> rich_embed::chrome::ChromeEngine
 pub fn rich_embed::chrome::ChromeEngine::profile(self, impl core::convert::Into<std::path::PathBuf>) -> rich_embed::chrome::ChromeEngine
+pub fn rich_embed::chrome::ChromeEngine::restart(&mut self) -> std::io::error::Result<()>
 pub fn rich_embed::chrome::ChromeEngine::screencast(self, bool) -> rich_embed::chrome::ChromeEngine
 pub fn rich_embed::chrome::ChromeEngine::screencast_on_demand(self, bool) -> rich_embed::chrome::ChromeEngine
 pub fn rich_embed::chrome::ChromeEngine::screencast_scope(&self) -> core::option::Option<rich_embed::chrome::ScreencastScope>
@@ -305,9 +307,11 @@ pub fn rich_embed::chrome::ChromeEngine::cell_pixels(self, u32, u32) -> rich_emb
 pub fn rich_embed::chrome::ChromeEngine::devtools(&mut self) -> std::io::error::Result<rich_embed::chrome::DevTools>
 pub fn rich_embed::chrome::ChromeEngine::downloads(self, rich_embed::chrome::Downloads) -> rich_embed::chrome::ChromeEngine
 pub fn rich_embed::chrome::ChromeEngine::end_all()
+pub fn rich_embed::chrome::ChromeEngine::ended(&self) -> bool
 pub fn rich_embed::chrome::ChromeEngine::find() -> core::option::Option<std::path::PathBuf>
 pub fn rich_embed::chrome::ChromeEngine::new() -> rich_embed::chrome::ChromeEngine
 pub fn rich_embed::chrome::ChromeEngine::profile(self, impl core::convert::Into<std::path::PathBuf>) -> rich_embed::chrome::ChromeEngine
+pub fn rich_embed::chrome::ChromeEngine::restart(&mut self) -> std::io::error::Result<()>
 pub fn rich_embed::chrome::ChromeEngine::screencast(self, bool) -> rich_embed::chrome::ChromeEngine
 pub fn rich_embed::chrome::ChromeEngine::screencast_on_demand(self, bool) -> rich_embed::chrome::ChromeEngine
 pub fn rich_embed::chrome::ChromeEngine::screencast_scope(&self) -> core::option::Option<rich_embed::chrome::ScreencastScope>
@@ -480,6 +484,7 @@ impl !core::panic::unwind_safe::UnwindSafe for rich_embed::LocalPty
 pub struct rich_embed::PageState
 pub rich_embed::PageState::can_go_back: bool
 pub rich_embed::PageState::can_go_forward: bool
+pub rich_embed::PageState::crashed: bool
 pub rich_embed::PageState::error: core::option::Option<alloc::string::String>
 pub rich_embed::PageState::loading: bool
 pub rich_embed::PageState::title: alloc::string::String

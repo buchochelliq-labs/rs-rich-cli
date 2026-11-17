@@ -510,11 +510,15 @@ pub const noctiluca::cdp::WORLD: &str
 pub fn noctiluca::cdp::base64_decode(&str) -> core::option::Option<alloc::vec::Vec<u8>>
 pub fn noctiluca::cdp::find_chrome() -> core::option::Option<std::path::PathBuf>
 pub mod noctiluca::clean
+pub const noctiluca::clean::CRASHED: &str
+pub const noctiluca::clean::STOPPED: &str
 pub fn noctiluca::clean::clean(&str) -> alloc::string::String
 pub fn noctiluca::clean::clean_inline(&str) -> alloc::string::String
 pub fn noctiluca::clean::clean_pre(&str) -> alloc::string::String
+pub fn noctiluca::clean::engine_error(&std::io::error::Error) -> alloc::string::String
 pub fn noctiluca::clean::is_unsafe(char) -> bool
 pub fn noctiluca::clean::markup(&str) -> alloc::string::String
+pub fn noctiluca::clean::stopped(&str) -> alloc::string::String
 pub fn noctiluca::clean::truncate(&str, usize) -> alloc::string::String
 pub mod noctiluca::config
 pub enum noctiluca::config::Destination
@@ -2691,6 +2695,7 @@ pub noctiluca::testing::FakeState::at: usize
 pub noctiluca::testing::FakeState::capture_steps: alloc::collections::vec_deque::VecDeque<core::option::Option<alloc::vec::Vec<u8>>>
 pub noctiluca::testing::FakeState::captures: alloc::vec::Vec<noctiluca::engine::Rect>
 pub noctiluca::testing::FakeState::codecs: std::collections::hash::map::HashMap<alloc::string::String, alloc::string::String>
+pub noctiluca::testing::FakeState::crashed: bool
 pub noctiluca::testing::FakeState::current: core::option::Option<alloc::string::String>
 pub noctiluca::testing::FakeState::events: alloc::vec::Vec<noctiluca::engine::EngineEvent>
 pub noctiluca::testing::FakeState::frames: alloc::vec::Vec<rich_embed::chrome::ScreencastFrame>
@@ -2705,11 +2710,13 @@ pub noctiluca::testing::FakeState::resource_reads: alloc::vec::Vec<alloc::string
 pub noctiluca::testing::FakeState::resource_root: core::option::Option<std::path::PathBuf>
 pub noctiluca::testing::FakeState::resource_steps: std::collections::hash::map::HashMap<alloc::string::String, alloc::collections::vec_deque::VecDeque<core::option::Option<alloc::vec::Vec<u8>>>>
 pub noctiluca::testing::FakeState::resources: std::collections::hash::map::HashMap<alloc::string::String, alloc::vec::Vec<u8>>
+pub noctiluca::testing::FakeState::restarts: usize
 pub noctiluca::testing::FakeState::screencast: bool
 pub noctiluca::testing::FakeState::screencast_area: core::option::Option<noctiluca::engine::Rect>
 pub noctiluca::testing::FakeState::screencast_areas: alloc::vec::Vec<core::option::Option<noctiluca::engine::Rect>>
 pub noctiluca::testing::FakeState::screencast_scale: f64
 pub noctiluca::testing::FakeState::scroll_y: f64
+pub noctiluca::testing::FakeState::stopped: core::option::Option<alloc::string::String>
 pub noctiluca::testing::FakeState::viewport_height: f64
 pub noctiluca::testing::FakeState::viewport_width: f64
 impl noctiluca::testing::FakeState
