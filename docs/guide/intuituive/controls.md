@@ -86,10 +86,11 @@ previous focus. The accessible name always contains the complete label in
 either mode.
 
 Its face is a theme style: `button`, or with `.variant(..)`
-`button.primary` or `button.danger`. Over the face goes `.focus` while it
+`button.primary`, `button.danger`, `button.success` or `button.warning`
+(Textual's five variants). Over the face goes `.focus` while it
 has the focus or the pointer, or is held (`button.primary.focus`, else
 `button.focus`, else `bold reverse`), and `.disabled` while it is
-disabled (else `dim`). The dark, light and mono themes each name the three
+disabled (else `dim`). The dark, light and mono themes each name the five
 faces.
 
 Three rows tall, a button draws a lit top edge and a shaded bottom one
@@ -401,7 +402,7 @@ form.panel("Settings").loading_when(move || saving.get())
 
 | Style | Fallback | What it styles |
 |---|---|---|
-| `button`, `button.primary`, `button.danger` | named by each theme | a button's face |
+| `button`, `button.primary`, `button.danger`, `button.success`, `button.warning` | named by each theme | a button's face |
 | `<face>.focus`, then `button.focus` | `bold reverse` | over the face, picked or held |
 | `<face>.disabled`, then `button.disabled` | `dim` | over the face, disabled |
 | `<face>.light`, `<face>.shade` (and `.focus.light`, …) | none | a tall button's edges |

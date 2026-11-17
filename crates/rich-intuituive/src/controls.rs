@@ -31,7 +31,7 @@
 //!
 //! | Style | What it styles |
 //! |---|---|
-//! | `button`, `button.primary`, `button.danger` | a button's face, by [variant](ButtonVariant) |
+//! | `button`, `button.primary`, `button.danger`, `button.success`, `button.warning` | a button's face, by [variant](ButtonVariant) |
 //! | `<face>.focus` (else `button.focus`) | over the face, with the focus or the pointer on it, or held (`bold reverse`) |
 //! | `<face>.disabled` (else `button.disabled`) | over the face, while it is disabled (`dim`) |
 //! | `<face>.light`, `<face>.shade` (and `<face>.focus.light`, …) | a button three rows tall: its top and bottom edges' colours |
@@ -107,6 +107,12 @@ pub enum ButtonVariant {
     Primary,
     /// `button.danger`: an action that destroys something.
     Danger,
+    /// `button.success`: an action that confirms or completes (Textual's
+    /// `success` variant).
+    Success,
+    /// `button.warning`: an action to take with care (Textual's
+    /// `warning` variant).
+    Warning,
 }
 
 impl ButtonVariant {
@@ -116,6 +122,8 @@ impl ButtonVariant {
             ButtonVariant::Default => "button",
             ButtonVariant::Primary => "button.primary",
             ButtonVariant::Danger => "button.danger",
+            ButtonVariant::Success => "button.success",
+            ButtonVariant::Warning => "button.warning",
         }
     }
 }
@@ -225,8 +233,9 @@ impl Node {
         self
     }
 
-    /// For a [`button`]: its look, the theme's `button.primary` or
-    /// `button.danger` rather than `button`. Ignored on other nodes.
+    /// For a [`button`]: its look, the theme's `button.primary`,
+    /// `button.danger`, `button.success` or `button.warning` rather than
+    /// `button`. Ignored on other nodes.
     ///
     /// ```
     /// use intuituive::prelude::*;

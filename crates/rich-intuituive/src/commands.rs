@@ -334,7 +334,8 @@ impl Provider for Themes {
 /// `App.get_system_commands`: *Theme* (a picker of [`Themes`]), *Keys*
 /// (shows or hides the [`key_panel`](crate::key_panel), or opens the help
 /// when there is none), *Maximize* or *Minimize* (the focused pane),
-/// *Screenshot* and *Quit*. All are on unless turned off:
+/// *Screenshot*, *Bell* (rings the terminal's bell, [`Ctx::bell`](crate::Ctx::bell))
+/// and *Quit*. All are on unless turned off:
 ///
 /// ```
 /// use intuituive::prelude::*;
@@ -363,12 +364,13 @@ impl Default for SystemCommands {
 
 impl SystemCommands {
     /// Every system command's name, in the order the palette lists them.
-    pub const NAMES: [&'static str; 6] = [
+    pub const NAMES: [&'static str; 7] = [
         "theme",
         "keys",
         "maximize",
         "minimize",
         "screenshot",
+        "bell",
         "quit",
     ];
 
@@ -433,6 +435,7 @@ impl SystemCommands {
                     cx.screenshot_to_dir();
                 })
                 .help("Save an SVG of the screen"),
+                "bell" => Hit::new("app.bell", "Bell", |cx| cx.bell()).help("Ring the bell"),
                 "quit" => Hit::new("app.quit", "Quit", |cx| cx.quit()).help("Quit the app"),
                 _ => continue,
             };

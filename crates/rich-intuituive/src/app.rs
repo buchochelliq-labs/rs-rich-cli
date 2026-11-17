@@ -1518,6 +1518,8 @@ impl Theme {
                 ("button", "white on grey30"),
                 ("button.primary", "black on cyan"),
                 ("button.danger", "white on red3"),
+                ("button.success", "black on green3"),
+                ("button.warning", "black on yellow"),
             ],
         )
     }
@@ -1560,6 +1562,8 @@ impl Theme {
                 ("button", "black on grey82"),
                 ("button.primary", "white on blue"),
                 ("button.danger", "white on red3"),
+                ("button.success", "white on green4"),
+                ("button.warning", "black on dark_orange"),
             ],
         )
     }
@@ -1580,6 +1584,8 @@ impl Theme {
                 ("button.focus", "bold underline"),
                 ("button.primary", "bold reverse"),
                 ("button.danger", "bold reverse"),
+                ("button.success", "bold reverse"),
+                ("button.warning", "bold reverse"),
             ],
         )
     }
@@ -1659,7 +1665,14 @@ impl Theme {
         if ansi {
             // Terminal colours have no shades to build faces from: the
             // presets' faces, which use terminal colours too.
-            for name in ["selected", "button", "button.primary", "button.danger"] {
+            for name in [
+                "selected",
+                "button",
+                "button.primary",
+                "button.danger",
+                "button.success",
+                "button.warning",
+            ] {
                 if let Some((_, s)) = preset.styles.iter().find(|(n, _)| n == name) {
                     styles.push((name.to_string(), s.clone()));
                 }
@@ -1687,6 +1700,8 @@ impl Theme {
                 ),
                 ("button.primary".to_string(), on("primary")),
                 ("button.danger".to_string(), on("error")),
+                ("button.success".to_string(), on("success")),
+                ("button.warning".to_string(), on("warning")),
                 (
                     "tooltip".to_string(),
                     format!("{} on {}", color("text"), color("panel")),

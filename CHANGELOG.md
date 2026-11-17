@@ -142,6 +142,12 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   and notification shown (the last 100). `Level::Success` is a new level
   in the theme's `notify.success` style (else `good`); `Level` is now
   `#[non_exhaustive]`.
+- **Success and Warning buttons, and a Bell command.** `ButtonVariant`
+  gains `Success` and `Warning` (Textual's other two variants), drawn in
+  the theme's `button.success` and `button.warning` styles, which the
+  dark, light and mono themes and a palette's theme name. The command
+  palette's system commands add *Bell*, which rings the terminal's bell
+  (`SystemCommands::NAMES` has seven names now).
 
 ### intuiTUIve: pictures without flicker between frames
 

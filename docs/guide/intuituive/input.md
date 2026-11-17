@@ -465,7 +465,8 @@ and no key reaches the screen beneath while it is open.
 The palette also lists the app's **system commands**, after Textual's:
 *Theme* (a picker of the built-in themes), *Keys* (shows or hides the
 `key_panel()`, or opens the help when there is none), *Maximize* or
-*Minimize* (the focused pane), *Screenshot* and *Quit*.
+*Minimize* (the focused pane), *Screenshot*, *Bell* (rings the terminal's
+bell, as `cx.bell()` does) and *Quit*.
 `App::system_commands(SystemCommands::default().without("quit"))` turns
 one off, and `SystemCommands::none()` all of them.
 
