@@ -108,6 +108,22 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   frames lined up with one. Readings for an action, a navigation or a load
   are still read at once on the tab's thread.
 
+### intuiTUIve: widgets for clicks, notices, steps and toasts
+
+- **Clickable spans of markup.** A `[@click=name]…[/]` span in a `text` or
+  `label` runs the action `name` when it is clicked, as Textual's does:
+  the focused path's binding with that id or description, else the app's
+  own `quit`, `bell`, `help` or `palette` (also as `app.quit`, …).
+  `Ctx::run_action(name)` runs one from a handler. `Node::on_span` takes
+  the clicks instead, with a `SpanTarget` (an action and its arguments, or
+  a link), and makes `[link=url]` spans clickable too; `Node::focus_spans`
+  lets the text take the focus, ← and → pick a span and Enter runs it.
+  `Ctx::bell` rings the terminal's bell, counted by `Driver::take_bells`.
+- **Status-bar segments and breadcrumb parts take clicks.**
+  `seg(..).on_click(action)` runs an action when its segment is clicked;
+  `breadcrumb(..).on_select(|i, cx| ..)` is told the part clicked, also
+  when the trail is cut from its start.
+
 ### intuiTUIve: pictures without flicker between frames
 
 - **Kitty uploads go before the cells that name them.** A frame used to

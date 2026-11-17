@@ -166,6 +166,7 @@ mod sheet;
 mod signals;
 mod solver;
 pub mod source;
+mod spans;
 mod spinner;
 mod split;
 pub mod sprite;
@@ -283,6 +284,7 @@ pub use select_field::{SelectOption, select_field, select_field_keyed};
 pub use sheet::{SheetError, Stylesheet};
 pub use signals::{Count, History, falling, history, recent, recent_of, recent_timed, smoothed};
 pub use solver::Solver;
+pub use spans::SpanTarget;
 pub use spinner::spinner;
 pub use state::{
     FrecencyStore, frecency_in, frecency_session, frecency_store, read_state, state_dir,

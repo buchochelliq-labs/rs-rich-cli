@@ -106,6 +106,8 @@ pub struct Ctx {
     screenshots: Vec<Option<std::path::PathBuf>>,
     /// A subtitle for the screen the handler ran on ([`Ctx::set_subtitle`]).
     subtitle: Option<String>,
+    /// Bells rung ([`Ctx::bell`]).
+    bells: u32,
 }
 
 /// The user's editor: `$VISUAL` (a program and its arguments), else
@@ -461,6 +463,8 @@ enum Nav {
     Dismiss(Box<dyn std::any::Any>),
     /// Show another mode's stack of screens.
     SwitchMode(String),
+    /// Run an action by name ([`Ctx::run_action`]).
+    RunAction(String),
 }
 
 /// What a screen opened with [`Ctx::push_for`] calls when it closes: the
@@ -535,6 +539,7 @@ impl Ctx {
             mode: None,
             screenshots: Vec::new(),
             subtitle: None,
+            bells: 0,
         }
     }
 
@@ -1256,6 +1261,37 @@ impl Ctx {
     /// End the app after this event.
     pub fn quit(&mut self) {
         self.quit = true;
+    }
+
+    /// Ring the terminal's bell (BEL), as Textual's `App.bell` does. A loop
+    /// of your own counts them with [`Driver::take_bells`].
+    pub fn bell(&mut self) {
+        self.bells = self.bells.saturating_add(1);
+    }
+
+    /// Run the action called `name`, as a clickable span of markup
+    /// (`[@click=name]…[/]`) does: the binding of the focused node or one
+    /// above it whose [id](crate::Node::binding_id) or description is
+    /// `name`, else one of the app's own: `quit`, `bell`, `help` and
+    /// `palette` (each also with an `app.` before it, as Textual names
+    /// them). An action not found, or one that cannot run now, does
+    /// nothing.
+    ///
+    /// ```
+    /// use intuituive::prelude::*;
+    ///
+    /// let app = App::new(|| {
+    ///     let n = signal(0);
+    ///     text!("{n}")
+    ///         .bind("+", "Add one", move |_| n.update(|n| *n += 1))
+    ///         .on_key("a", |cx| cx.run_action("Add one"))
+    /// });
+    /// let mut driver = app.driver(5, 1);
+    /// driver.press("a");
+    /// assert_eq!(driver.screen().plain()[0].trim_end(), "1");
+    /// ```
+    pub fn run_action(&mut self, name: &str) {
+        self.nav.push(Nav::RunAction(name.to_string()));
     }
 
     /// End the app after this event with `value`, which
@@ -2476,6 +2512,8 @@ pub struct App {
     /// copied since the loop last asked.
     clipboard: bool,
     copies: Vec<String>,
+    /// Bells rung since the loop last asked.
+    bells: u32,
     theme: Theme,
     console: Option<Console>,
     /// The console the last frame used, for components handling events.
@@ -2813,6 +2851,7 @@ impl App {
             focus_events: Vec::new(),
             clipboard: false,
             copies: Vec::new(),
+            bells: 0,
             toasts: Vec::new(),
             toast_corner: Corner::default(),
             notify_width: Size::Fixed(crate::notify::NOTICE_WIDTH),
@@ -3937,6 +3976,9 @@ impl App {
                 if backend.copy(&text).is_ok() {
                     driver.copied(&text);
                 }
+            }
+            for _ in 0..driver.take_bells() {
+                let _ = backend.write("\x07");
             }
         }
         // Programs handlers gave the terminal to: run each with the
@@ -5168,6 +5210,7 @@ impl App {
             self.printed.extend(cx.printed);
         }
         self.copies.extend(cx.copies);
+        self.bells = self.bells.saturating_add(cx.bells);
         self.handoffs.extend(cx.handoffs);
         if let Some(subtitle) = cx.subtitle {
             let layer = cx.layers.clamp(1, self.layers.len()) - 1;
@@ -5254,7 +5297,9 @@ impl App {
             Nav::Help(_) => Some("help opened"),
             Nav::Dismiss(_) => (self.layers.len() > 1).then_some("screen closed"),
             Nav::SwitchMode(_) => Some("mode switched"),
-            Nav::Run(..) | Nav::Maximize(_) | Nav::Minimize | Nav::Then(_) => None,
+            Nav::Run(..) | Nav::RunAction(_) | Nav::Maximize(_) | Nav::Minimize | Nav::Then(_) => {
+                None
+            }
         };
         if let Some(what) = what {
             self.runtime.tracer.push(Traced::Screen(what));
@@ -5327,8 +5372,43 @@ impl App {
                 top.look = look;
             }
             Nav::Run(id, index, sequence) => return self.run_binding(id, index, sequence),
+            Nav::RunAction(name) => return self.run_action(&name),
             Nav::Maximize(id) => self.maximize(id),
             Nav::Minimize => self.minimize(),
+        }
+        false
+    }
+
+    /// Run the action `name` ([`Ctx::run_action`]): a binding on the focus
+    /// path by id or description, else one of the app's own. Whether to
+    /// quit.
+    fn run_action(&mut self, name: &str) -> bool {
+        let mut found = None;
+        for id in self.focus_ids() {
+            with_node(&self.top().root, id, &mut |node| {
+                if found.is_some() {
+                    return;
+                }
+                let keys = node.keys.borrow();
+                let at = keys.iter().position(|bound| {
+                    (bound.id.as_deref() == Some(name) || bound.description == name)
+                        && bound.active()
+                });
+                found = at.map(|index| (node.id, index));
+            });
+            if found.is_some() {
+                break;
+            }
+        }
+        if let Some((id, index)) = found {
+            return self.run_binding(id, index, false);
+        }
+        match name.strip_prefix("app.").unwrap_or(name) {
+            "quit" => return true,
+            "bell" => self.bells = self.bells.saturating_add(1),
+            "help" => self.open_help(crate::help::HelpOptions::new()),
+            "palette" | "command_palette" => self.open_palette(),
+            _ => {}
         }
         false
     }
@@ -8894,6 +8974,12 @@ impl Driver {
     /// [`copied`](Self::copied) when it is there.
     pub fn take_copies(&mut self) -> Vec<String> {
         std::mem::take(&mut self.app.copies)
+    }
+
+    /// How many times the bell was rung ([`Ctx::bell`], the palette's
+    /// *Bell*) since the last call, for the loop to write a BEL each.
+    pub fn take_bells(&mut self) -> u32 {
+        std::mem::take(&mut self.app.bells)
     }
 
     /// What the app shows, for assistive technology: the nodes on the top

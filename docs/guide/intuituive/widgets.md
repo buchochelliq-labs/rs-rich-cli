@@ -41,7 +41,10 @@ column([
   style (`status_bar.gauge`, black on green), the rest in
   `status_bar.gauge.rest`, the label centred over both: a task's
   progress. `.when(|| cond)` on any segment leaves it and its caps out
-  while `cond` is false: a gauge only while tasks run.
+  while `cond` is false: a gauge only while tasks run. `.on_click(|cx|
+  ..)` runs an action when the segment is clicked (a mode that cycles, a
+  count that opens its list); a click on a cap or between segments does
+  nothing.
 - **`facts([("Name", value), ..])`** is a description list: the keys in a
   column as wide as the widest (at most half), in the theme's `facts.key`
   style (bold) or `.key_style(..)`'s, each value beside its key, wrapped
@@ -57,7 +60,9 @@ column([
   the separators in `breadcrumb.separator`; an empty part shows nothing,
   so a leading one puts a separator first. Too long, it loses its start,
   `…` where it was cut. `.crumb_suffix(|| markup)` adds markup after it
-  that is never cut. A file path, with the home directory as `~`, is the
+  that is never cut. `.on_select(|i, cx| ..)` is run with a part's index
+  (0 the first) when it is clicked, cut or not, to go back up the trail.
+  A file path, with the home directory as `~`, is the
   `files` plugin's `path_crumb(|| path)`, built on it.
 - **`key_hints()`** is a footer of the keys that work now: the described
   bindings of the focused node and its ancestors (a pop-up's while one is
@@ -117,6 +122,31 @@ placeholder("sidebar")                            // a coloured block for a prot
 - **`placeholder(label)`** fills its area with the next of twelve colours
   and its label; `.placeholder_variant(PlaceholderVariant::Size)` shows its
   size, `Text` a paragraph, and a click cycles them.
+
+### Clickable spans of markup
+
+A span of markup in a `text` or `label` can run an action, as Textual's
+`[@click=…]` does:
+
+```rust
+label("[@click=save]Save[/] · [@click=app.quit]Quit[/] · [link=https://example.com]Docs[/]")
+    .focus_spans()
+```
+
+- **`[@click=name]…[/]`** runs the action `name` when it is clicked:
+  the binding of the focused node or one above it whose id
+  (`.binding_id(..)`) or description is `name`, else one of the app's
+  own, `quit`, `bell`, `help` or `palette` (also as `app.quit`, …).
+  `cx.run_action(name)` does the same from a handler. Arguments in the
+  tag (`[@click=open('a.txt')]`) are rich's handler syntax.
+- **`.on_span(|cx, target| ..)`** takes the clicks instead, with a
+  `SpanTarget`: `Action { name, args }` or `Link(url)`. With it,
+  `[link=url]` spans are clickable too.
+- **`.focus_spans()`** lets the text take the focus: ← and → pick a span
+  (in the theme's `link.focus` style, reversed by default), and Enter or
+  Space runs it. Its links open with the system's opener unless
+  `on_span` takes them. Without either, a link is left to the terminal
+  (an OSC 8 hyperlink), and a click on it may start a selection.
 
 ## Dials, ratings and carousels
 
