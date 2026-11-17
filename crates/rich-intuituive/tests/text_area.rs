@@ -321,11 +321,10 @@ fn linear_mode_reads_the_caret_line() {
     assert!(!moved.contains("first line"), "{moved:?}");
 }
 
-/// The plan's benchmark: a 100,000-line file pages through without a stall,
-/// because only the lines in view are wrapped, highlighted and drawn.
-#[test]
-fn a_hundred_thousand_lines_page_without_a_stall() {
-    let text: String = (0..100_000)
+/// Pages through a file of `lines` lines (to the end, up twice, home, a
+/// page down): the time a frame takes, and the rows shown at the end.
+fn page_through(lines: usize) -> (Duration, Vec<String>) {
+    let text: String = (0..lines)
         .map(|i| format!("let line_{i} = {i}; // a comment on line {i}\n"))
         .collect();
     let app = App::new(move || {
@@ -341,13 +340,25 @@ fn a_hundred_thousand_lines_page_without_a_stall() {
         driver.update(Duration::ZERO);
         let _ = driver.render();
     }
-    let each = started.elapsed() / 5;
-    let shown = rows(&driver);
+    (started.elapsed() / 5, rows(&driver))
+}
+
+/// The plan's benchmark: a 100,000-line file pages through without a stall,
+/// because only the lines in view are wrapped, highlighted and drawn. A
+/// frame costs about what it costs on a 1,000-line file, on this machine:
+/// what a frame takes in a debug build on a busy runner (80 ms here, over
+/// 250 on a macOS runner) is not what is measured.
+#[test]
+fn a_hundred_thousand_lines_page_without_a_stall() {
+    let (small, _) = page_through(1_000);
+    let (each, shown) = page_through(100_000);
     // A page down from the top: the caret on line 24, the last row.
     assert!(shown[23].contains("line_24 "), "{shown:?}");
-    // Generous for a debug build on a busy runner; a frame in release
-    // takes well under a millisecond.
-    assert!(each < Duration::from_millis(250), "{each:?} a frame");
+    // Work in proportion to the file would take a hundred times as long.
+    assert!(
+        each < small * 4 + Duration::from_millis(50),
+        "{each:?} a frame, {small:?} on 1,000 lines"
+    );
 }
 
 #[test]
