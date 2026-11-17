@@ -3,9 +3,14 @@
 //! and a body; and the corner they stack in
 //! ([`App::toasts_at`](crate::App::toasts_at)).
 
+use std::cell::RefCell;
+use std::rc::Rc;
+use std::time::Duration;
+
 use rich::{Console, Style};
 
-use crate::app::Theme;
+use crate::app::{Ctx, Theme};
+use crate::reactive::{Runtime, Signal};
 use crate::screen::{Rect, Screen};
 
 /// How much a [notification](crate::Ctx::notify) matters: its title and
@@ -80,11 +85,92 @@ pub enum Corner {
     BottomRight,
 }
 
-/// A toast: a line of markup, or a notification's level, title and body.
-#[derive(Clone, Debug, PartialEq, Eq)]
+type Run = Rc<RefCell<Box<dyn FnMut(&mut Ctx)>>>;
+
+/// A notification with buttons, for [`Ctx::notify_with`](crate::Ctx::notify_with):
+/// a level, a title and a body as [`Ctx::notify`](crate::Ctx::notify)
+/// takes them, how long it shows, and [actions](Self::action).
+///
+/// ```
+/// use intuituive::prelude::*;
+/// use intuituive::{Level, Notification};
+///
+/// let app = App::new(|| {
+///     let undone = signal(0);
+///     column([text!("undone {undone}")]).on_key("d", move |cx| {
+///         cx.notify_with(
+///             Notification::new(Level::Success, "Deleted", "3 files")
+///                 .action("Undo", move |_| undone.update(|n| *n += 1)),
+///         )
+///     })
+/// });
+/// let mut driver = app.driver(40, 6);
+/// driver.press("d");
+/// assert!(driver.click_text("Undo"));
+/// assert_eq!(driver.screen().plain()[0].trim_end(), "undone 1");
+/// // Clicked, it went.
+/// assert!(driver.find_text("Deleted").is_none());
+/// ```
+#[must_use = "a notification does nothing until it is passed to Ctx::notify_with"]
+pub struct Notification {
+    level: Level,
+    title: String,
+    body: String,
+    duration: Duration,
+    actions: Vec<(String, Run)>,
+}
+
+impl Notification {
+    /// A notification at `level` with `title` and `body` (markup), shown
+    /// for five seconds.
+    pub fn new(level: Level, title: impl Into<String>, body: impl Into<String>) -> Notification {
+        Notification {
+            level,
+            title: title.into(),
+            body: body.into(),
+            duration: Duration::from_secs(5),
+            actions: Vec::new(),
+        }
+    }
+
+    /// Show it for `duration`.
+    pub fn timeout(mut self, duration: Duration) -> Notification {
+        self.duration = duration;
+        self
+    }
+
+    /// A button labelled `label` (plain text) under the body that runs
+    /// `run` and dismisses the notification, after those added before it.
+    pub fn action(
+        mut self,
+        label: impl Into<String>,
+        run: impl FnMut(&mut Ctx) + 'static,
+    ) -> Notification {
+        self.actions
+            .push((label.into(), Rc::new(RefCell::new(Box::new(run)))));
+        self
+    }
+
+    pub(crate) fn into_note(self) -> (Note, Duration) {
+        let note = Note {
+            markup: self.body,
+            notice: Some((self.level, self.title)),
+            actions: self.actions,
+            id: 0,
+        };
+        (note, self.duration)
+    }
+}
+
+/// A toast: a line of markup, or a notification's level, title and body,
+/// and its buttons.
+#[derive(Clone)]
 pub(crate) struct Note {
     pub markup: String,
     pub notice: Option<(Level, String)>,
+    pub actions: Vec<(String, Run)>,
+    /// Which toast it is, once shown.
+    pub id: u64,
 }
 
 impl Note {
@@ -92,6 +178,31 @@ impl Note {
         Note {
             markup,
             notice: None,
+            actions: Vec::new(),
+            id: 0,
+        }
+    }
+
+    pub(crate) fn notice(level: Level, title: String, markup: String) -> Note {
+        Note {
+            markup,
+            notice: Some((level, title)),
+            actions: Vec::new(),
+            id: 0,
+        }
+    }
+
+    /// What the history keeps of it, shown at `at`.
+    pub(crate) fn record(&self, at: Duration) -> Notified {
+        let (level, title) = match &self.notice {
+            Some((level, title)) => (Some(*level), title.clone()),
+            None => (None, String::new()),
+        };
+        Notified {
+            level,
+            title,
+            body: self.markup.clone(),
+            at,
         }
     }
 
@@ -117,6 +228,66 @@ impl Note {
     }
 }
 
+/// A toast or notification shown, as [`notifications`] keeps it.
+#[derive(Clone, Debug, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct Notified {
+    /// A notification's level; `None` for a plain toast.
+    pub level: Option<Level>,
+    /// Its title (markup); empty for a plain toast.
+    pub title: String,
+    /// Its body, or a toast's line (markup).
+    pub body: String,
+    /// When it was shown, on the app's clock.
+    pub at: Duration,
+}
+
+/// The most [`notifications`] keeps.
+pub(crate) const HISTORY: usize = 100;
+
+/// The app's notification history: every toast and notification shown,
+/// oldest first, the last 100, as a signal that changes as they come, so
+/// a panel of past notifications is a node that reads it. Call it inside
+/// an app (where nodes are built, or in a handler).
+///
+/// ```
+/// use intuituive::prelude::*;
+/// use intuituive::{notifications, Level};
+///
+/// let app = App::new(|| {
+///     let history = notifications();
+///     text(move || format!("{} seen", history.get().len()))
+///         .on_key("n", |cx| cx.notify(Level::Info, "Saved", "notes.txt"))
+///         .on_key("t", |cx| cx.toast("Copied"))
+/// });
+/// let mut driver = app.driver(40, 6);
+/// driver.press("n t");
+/// assert!(driver.screen().plain()[0].starts_with("2 seen"));
+/// ```
+pub fn notifications() -> Signal<Vec<Notified>> {
+    history_of(&Runtime::current_for("notifications()"))
+}
+
+/// `runtime`'s history signal, made the first time it is asked for.
+pub(crate) fn history_of(runtime: &Rc<Runtime>) -> Signal<Vec<Notified>> {
+    match runtime.notifications.get() {
+        Some(history) => history,
+        None => {
+            let history = runtime.enter(|| crate::reactive::signal(Vec::new()).untraced());
+            runtime.notifications.set(Some(history));
+            history
+        }
+    }
+}
+
+/// Where a toast was drawn: which one, its box, and its buttons' places
+/// with their indices.
+pub(crate) struct Drawn {
+    pub id: u64,
+    pub rect: Rect,
+    pub actions: Vec<(Rect, usize)>,
+}
+
 /// The widest a notification grows unless
 /// [`App::notify_width`](crate::App::notify_width) says.
 pub(crate) const NOTICE_WIDTH: u16 = 48;
@@ -124,14 +295,15 @@ pub(crate) const NOTICE_WIDTH: u16 = 48;
 /// Draw `toasts` (oldest first) in `corner` of `area`, newest nearest the
 /// corner, each a cell in from the side: a plain one as a box round its
 /// line, a notification as a box with its title on the top edge and its
-/// body wrapped inside, `most` cells wide at most. Where they drew.
+/// body wrapped inside, `most` cells wide at most, and its buttons on a
+/// row under the body. Where they drew.
 pub(crate) fn draw(
     console: &Console,
     screen: &mut Screen,
     area: Rect,
     toasts: &[&Note],
     (theme, corner, most): (&Theme, Corner, u16),
-) -> Vec<Rect> {
+) -> Vec<Drawn> {
     let mut damage = Vec::new();
     let top = matches!(corner, Corner::TopLeft | Corner::TopRight);
     let left = matches!(corner, Corner::TopLeft | Corner::BottomLeft);
@@ -141,6 +313,14 @@ pub(crate) fn draw(
     for note in toasts.iter().rev() {
         let text = rich::Text::from_markup(&note.markup)
             .unwrap_or_else(|_| rich::Text::new(note.markup.clone()));
+        // The buttons' row: each label padded, a cell between them.
+        let buttons: u16 = note
+            .actions
+            .iter()
+            .map(|(label, _)| rich::cells::cell_len(label) as u16 + 2)
+            .sum::<u16>()
+            + (note.actions.len() as u16).saturating_sub(1);
+        let button_row = u16::from(!note.actions.is_empty());
         let (w, body) = match &note.notice {
             None => {
                 let w = (text.cell_len() as u16 + 4).min(area.width.saturating_sub(2));
@@ -158,6 +338,7 @@ pub(crate) fn draw(
                 let w = widest
                     .saturating_add(4)
                     .max(title)
+                    .max(buttons.saturating_add(4))
                     .min(most)
                     .min(area.width.saturating_sub(2));
                 let mut options = console
@@ -165,7 +346,10 @@ pub(crate) fn draw(
                     .update_width(w.saturating_sub(4).max(1) as usize);
                 options.overflow = Some(rich::Overflow::Fold);
                 let rows = console.render_lines(&text, &options, false).len().max(1);
-                (w, rows.min(u16::MAX as usize) as u16)
+                (
+                    w,
+                    (rows.min(u16::MAX as usize) as u16).saturating_add(button_row),
+                )
             }
         };
         let h = body.saturating_add(2);
@@ -196,7 +380,11 @@ pub(crate) fn draw(
                 for x in rect.x..rect.right() {
                     screen.restyle(x, rect.y, &reverse);
                 }
-                damage.push(rect);
+                damage.push(Drawn {
+                    id: note.id,
+                    rect,
+                    actions: Vec::new(),
+                });
             }
             break;
         }
@@ -243,11 +431,32 @@ pub(crate) fn draw(
                 let mut options = console.options().update_width(rect.width as usize - 4);
                 options.overflow = Some(rich::Overflow::Fold);
                 let inner = console.render_lines(&text, &options, false);
-                let at = Rect::new(rect.x + 2, rect.y + 1, rect.width - 4, body);
-                screen.write_lines(at, &inner[..inner.len().min(body as usize)]);
+                let rows = body - button_row;
+                let at = Rect::new(rect.x + 2, rect.y + 1, rect.width - 4, rows);
+                screen.write_lines(at, &inner[..inner.len().min(rows as usize)]);
             }
         }
-        damage.push(rect);
+        let mut places = Vec::new();
+        if button_row > 0 {
+            let face = theme.named_style("button", "reverse");
+            let (mut x, y) = (rect.x + 2, rect.y + body);
+            for (i, (label, _)) in note.actions.iter().enumerate() {
+                let w = rich::cells::cell_len(label) as u16 + 2;
+                if x + w > rect.right().saturating_sub(2) {
+                    break;
+                }
+                let place = Rect::new(x, y, w, 1);
+                let line = vec![rich::Segment::new(format!(" {label} "), Some(face.clone()))];
+                screen.write_lines(place, &[line]);
+                places.push((place, i));
+                x += w + 1;
+            }
+        }
+        damage.push(Drawn {
+            id: note.id,
+            rect,
+            actions: places,
+        });
         if top {
             next += h;
         } else {

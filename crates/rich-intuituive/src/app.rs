@@ -108,6 +108,8 @@ pub struct Ctx {
     subtitle: Option<String>,
     /// Bells rung ([`Ctx::bell`]).
     bells: u32,
+    /// The toasts shown are dismissed ([`Ctx::dismiss_toasts`]).
+    dismiss_toasts: bool,
 }
 
 /// The user's editor: `$VISUAL` (a program and its arguments), else
@@ -540,6 +542,7 @@ impl Ctx {
             screenshots: Vec::new(),
             subtitle: None,
             bells: 0,
+            dismiss_toasts: false,
         }
     }
 
@@ -1060,11 +1063,37 @@ impl Ctx {
         body: impl Into<String>,
         duration: Duration,
     ) {
-        let note = Note {
-            markup: body.into(),
-            notice: Some((level, title.into())),
-        };
+        let note = Note::notice(level, title.into(), body.into());
         self.toasts.push((note, duration));
+    }
+
+    /// Show `notification`: [`notify`](Self::notify) with buttons under its
+    /// body. A click on a button runs its action and dismisses the
+    /// notification; a click anywhere else on it dismisses it too, as a
+    /// click on any toast does.
+    pub fn notify_with(&mut self, notification: crate::notify::Notification) {
+        self.toasts.push(notification.into_note());
+    }
+
+    /// Dismiss every toast and notification shown now: what a key bound
+    /// to close them calls.
+    ///
+    /// ```
+    /// use intuituive::prelude::*;
+    ///
+    /// let app = App::new(|| {
+    ///     label("hi")
+    ///         .on_key("t", |cx| cx.toast("Copied"))
+    ///         .on_key("x", |cx| cx.dismiss_toasts())
+    /// });
+    /// let mut driver = app.driver(30, 5);
+    /// driver.press("t");
+    /// assert!(driver.find_text("Copied").is_some());
+    /// driver.press("x");
+    /// assert!(driver.find_text("Copied").is_none());
+    /// ```
+    pub fn dismiss_toasts(&mut self) {
+        self.dismiss_toasts = true;
     }
 
     /// Say `text` to assistive technology (a screen reader through the
@@ -2443,6 +2472,10 @@ pub struct App {
     motion: (bool, bool),
     /// Toasts showing, with when each goes, and the corner they stack in.
     toasts: Vec<(Note, Duration)>,
+    /// The id the last toast shown was given.
+    toast_ids: u64,
+    /// Where the toasts were last drawn, for clicks on them.
+    toast_hits: Vec<crate::notify::Drawn>,
     toast_corner: Corner,
     /// The widest a notification grows.
     notify_width: Size,
@@ -2853,6 +2886,8 @@ impl App {
             copies: Vec::new(),
             bells: 0,
             toasts: Vec::new(),
+            toast_ids: 0,
+            toast_hits: Vec::new(),
             toast_corner: Corner::default(),
             notify_width: Size::Fixed(crate::notify::NOTICE_WIDTH),
             animations: Vec::new(),
@@ -3055,8 +3090,16 @@ impl App {
     }
 
     /// Show a toast until `until`, and announce it.
-    fn push_toast(&mut self, note: Note, until: Duration) {
+    fn push_toast(&mut self, mut note: Note, until: Duration) {
         let text = note.spoken();
+        self.toast_ids += 1;
+        note.id = self.toast_ids;
+        let record = note.record(self.now);
+        crate::notify::history_of(&self.runtime).update(|history| {
+            history.push(record);
+            let over = history.len().saturating_sub(crate::notify::HISTORY);
+            history.drain(..over);
+        });
         self.toasts.push((note, until));
         // The toasts shown move a box away from their corner: what was
         // under them draws again, as when one goes, or a wider one moved
@@ -4932,7 +4975,8 @@ impl App {
             let widest = crate::place::resolve(self.notify_width, area.width, &|| area.width);
             let look = (&self.theme, corner, widest);
             let drawn = crate::notify::draw(console, screen, area, &notes, look);
-            frame.damage.extend(drawn);
+            frame.damage.extend(drawn.iter().map(|d| d.rect));
+            self.toast_hits = drawn;
         }
         // The which-key pop-up, once its delay is over.
         self.which_key_at = None;
@@ -5140,10 +5184,11 @@ impl App {
             let note = match std::fs::write(&path, &svg) {
                 Ok(()) if told => Some(Note::plain(format!("Saved {shown}"))),
                 Ok(()) => None,
-                Err(error) => Some(Note {
-                    markup: format!("{shown}: {}", rich::markup::escape(&error.to_string())),
-                    notice: Some((Level::Error, "Screenshot".to_string())),
-                }),
+                Err(error) => Some(Note::notice(
+                    Level::Error,
+                    "Screenshot".to_string(),
+                    format!("{shown}: {}", rich::markup::escape(&error.to_string())),
+                )),
             };
             if let Some(note) = note {
                 self.push_toast(note, self.now + Duration::from_secs(3));
@@ -5218,6 +5263,11 @@ impl App {
         }
         if !cx.screenshots.is_empty() {
             self.screenshots.extend(cx.screenshots);
+            self.poke = true;
+        }
+        if cx.dismiss_toasts && !self.toasts.is_empty() {
+            self.toasts.clear();
+            self.restack = true;
             self.poke = true;
         }
         for (note, duration) in cx.toasts {
@@ -5377,6 +5427,47 @@ impl App {
             Nav::Minimize => self.minimize(),
         }
         false
+    }
+
+    /// A left press or release over a toast: a release runs the button
+    /// under it, if any, and dismisses the toast. `None` when the event is
+    /// not one, or not over a toast; else whether to quit.
+    fn toast_mouse(&mut self, mouse: rich_interact::Mouse) -> Option<bool> {
+        let up = match mouse.kind {
+            MouseKind::Down(Button::Left) => false,
+            MouseKind::Up(Button::Left) => true,
+            _ => return None,
+        };
+        let inside = |rect: &Rect| {
+            (rect.x..rect.right()).contains(&mouse.column)
+                && (rect.y..rect.bottom()).contains(&mouse.row)
+        };
+        let hit = self.toast_hits.iter().find(|drawn| inside(&drawn.rect))?;
+        let id = hit.id;
+        let action = hit
+            .actions
+            .iter()
+            .find(|(rect, _)| inside(rect))
+            .map(|(_, i)| *i);
+        // A toast that went since it was drawn: the click is the nodes'.
+        let at = self.toasts.iter().position(|(note, _)| note.id == id)?;
+        if !up {
+            return Some(false);
+        }
+        let (note, _) = self.toasts.remove(at);
+        self.toast_hits.retain(|drawn| drawn.id != id);
+        self.restack = true;
+        self.poke = true;
+        let Some(run) = action
+            .and_then(|i| note.actions.get(i))
+            .map(|(_, run)| run.clone())
+        else {
+            return Some(false);
+        };
+        let mut cx = self.ctx();
+        let runtime = self.runtime.clone();
+        runtime.enter(|| (run.borrow_mut())(&mut cx));
+        Some(self.apply(cx))
     }
 
     /// Run the action `name` ([`Ctx::run_action`]): a binding on the focus
@@ -8168,6 +8259,10 @@ impl Driver {
         // Picking, or on the inspector's panel: the inspector's.
         if self.app.inspector_mouse(mouse) {
             return false;
+        }
+        // On a toast: its buttons, or a click that dismisses it.
+        if let Some(quit) = self.app.toast_mouse(mouse) {
+            return quit;
         }
         let seq = self.app.trace_mouse(mouse);
         self.app.used = None;

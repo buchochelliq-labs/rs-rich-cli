@@ -266,7 +266,7 @@ pub use node::{
 pub use node::{described, drawn, drawn_described};
 pub use node_list::{list_of, list_of_virtual};
 pub use notice::notice_bar;
-pub use notify::{Corner, Level};
+pub use notify::{Corner, Level, Notification, Notified, notifications};
 pub use palette::Palette;
 pub use parity::{
     PlaceholderVariant, header, key_panel, link, masked_input, placeholder, progress_bar,

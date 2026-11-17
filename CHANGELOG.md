@@ -133,6 +133,15 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   style; `StepState::at(i, current)` gives a wizard's states,
   `.steps_across(sep)` lays them in a row and `.step_nav(page)` moves the
   current step with the keys and clicks.
+- **Toasts with buttons, dismissed by a click or a key, and their
+  history.** `cx.notify_with(Notification::new(level, title, body)
+  .action(label, run))` shows buttons under a notification's body; a
+  click on one runs it and dismisses the notification, and a click
+  anywhere on a toast dismisses it. `cx.dismiss_toasts()` dismisses them
+  all, for a key to call. `notifications()` is a signal of every toast
+  and notification shown (the last 100). `Level::Success` is a new level
+  in the theme's `notify.success` style (else `good`); `Level` is now
+  `#[non_exhaustive]`.
 
 ### intuiTUIve: pictures without flicker between frames
 
