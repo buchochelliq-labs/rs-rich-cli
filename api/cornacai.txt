@@ -152,7 +152,9 @@ impl core::panic::unwind_safe::RefUnwindSafe for cornacai::config::KnownAgent
 impl core::panic::unwind_safe::UnwindSafe for cornacai::config::KnownAgent
 pub const cornacai::config::KNOWN_AGENTS: &[cornacai::config::KnownAgent]
 pub fn cornacai::config::agent_choices(&[rich_marketplace::agents::ListedAgent]) -> alloc::vec::Vec<cornacai::config::AgentChoice>
+pub fn cornacai::config::agent_command(&[alloc::string::String]) -> core::option::Option<std::process::Command>
 pub fn cornacai::config::config_path() -> core::option::Option<std::path::PathBuf>
+pub fn cornacai::config::find_program(&str) -> core::option::Option<std::path::PathBuf>
 pub fn cornacai::config::installed_agents() -> alloc::vec::Vec<cornacai::config::KnownAgent>
 pub fn cornacai::config::marketplace_agents(&std::path::Path) -> alloc::vec::Vec<rich_marketplace::agents::ListedAgent>
 pub fn cornacai::config::on_path(&str) -> bool

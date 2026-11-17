@@ -241,6 +241,9 @@ impl rich_acp::Client for Bridge {
     }
 
     fn agent_log(&self, line: &str) {
+        if let Some(hub) = self.hub.upgrade() {
+            hub.agent_said(line);
+        }
         self.log(crate::clean::clean(line));
     }
 

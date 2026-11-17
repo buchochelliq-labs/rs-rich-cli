@@ -21,6 +21,24 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   tags from before rab. CI and `validate_release.py` run rab's `check` and
   the rab tests instead of `release_cohort.py`'s.
 
+### Cornacai: Claude starts on Windows, and a failed start says why
+
+- **An agent installed with npm starts on Windows.** npm puts a `.cmd`
+  launcher beside a shell script of the same name, which Windows cannot
+  run; Cornacai counted the script as installed and then could not start
+  it. It now finds programs as Windows does (`PATHEXT`), so it runs the
+  `.cmd` and skips the script.
+- **The renamed Claude adapter.** `claude-agent-acp`
+  (`@agentclientprotocol/claude-agent-acp`) is looked for first and is
+  the one `--agents` suggests; `claude-code-acp`, its deprecated old name,
+  still starts.
+- **A start that fails or stalls says why.** When the agent fails to
+  initialise or to open a session, the notice quotes the error it wrote on
+  stderr: from its last `Error:` line, not the stack dump after it. Until
+  now only "Internal error (-32603)" showed. An agent that has not
+  answered within 20 seconds gets a notice too, where the screen used to
+  wait with no word.
+
 ### Noctiluca: the browser recovers, and says why once
 
 - **A browser that stops says why, once.** When Chrome exits (killed, out
