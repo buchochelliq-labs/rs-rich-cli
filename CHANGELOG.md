@@ -46,6 +46,10 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   shop's cookie banner) no longer turns the page's adaptations off: on the
   shop fixture the rating reads `★★★★½ 4.5` instead of the stars'
   picture, and the four blank rows under the pinned header collapse.
+- A tiny picture in front of a line's text whose alt text it cannot show
+  (a chat badge: two cells for `moderator`) reads as that alt text, dim,
+  instead of a two-cell picture or a cut `m…`; emotes among the words stay
+  pictures.
 - intuiTUIve: a new toast stacked over one already shown redraws what is
   under them, so the one it moved leaves nothing of itself beside the new
   one (two toasts read as overlapping boxes).

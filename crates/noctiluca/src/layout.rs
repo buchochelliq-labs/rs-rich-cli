@@ -337,11 +337,28 @@ fn spans(runs: &[Run], base: &str, page: &Page, marks: &Marks) -> Vec<Span> {
         }
         last = run.control;
         // A small picture in the line keeps its cells, its alt text
-        // standing in for it, in one piece.
+        // standing in for it, in one piece. One in front of the line's
+        // text too small to show what its alt text says (a chat's badge
+        // before the author: two cells for `moderator`) reads as that
+        // text instead; one among the words (an emote) stays a picture.
         let picture = run
             .picture
             .as_ref()
             .filter(|p| !p.src.is_empty() && marks.adapt.on(Rule::InlinePictures));
+        let leading = out
+            .iter()
+            .all(|s: &Span| s.picture.is_some() || s.text.trim().is_empty());
+        if let Some(alt) = picture.filter(|_| leading).and_then(tiny_alt) {
+            out.push(Span {
+                text: alt,
+                style: format!("{} dim", run_style(run, base, page, marks.adapt))
+                    .trim()
+                    .to_string(),
+                control: run.control,
+                picture: None,
+            });
+            continue;
+        }
         out.push(Span {
             text: match picture {
                 Some(p) => inline_cells(&p.alt, p.width),
@@ -856,6 +873,35 @@ fn cut_line(first: &[Span], spans: &[Span], width: usize) -> Line {
         }
     }
     line
+}
+
+/// At most this many cells wide, a picture in a line whose alt text needs
+/// more reads as its alt text ([`tiny_alt`]).
+const TINY_PICTURE_CELLS: usize = 3;
+/// A tiny picture's alt text is cut to this many cells.
+const TINY_ALT_CELLS: usize = 16;
+
+/// The text a tiny picture in a line reads as: its alt text, in one piece
+/// (no-break spaces), cut with `…` to [`TINY_ALT_CELLS`]; `None` when the
+/// picture has room for what it shows, or no alt text.
+fn tiny_alt(picture: &crate::model::Picture) -> Option<String> {
+    let cells = ((picture.width / 8.0).round() as usize).clamp(1, 12);
+    let alt = picture.alt.trim();
+    if cells > TINY_PICTURE_CELLS || alt.is_empty() || cell_len(alt) <= cells {
+        return None;
+    }
+    let mut out = String::new();
+    let mut used = 0;
+    for c in alt.chars() {
+        let w = cell_len(&c.to_string());
+        if used + w + 1 > TINY_ALT_CELLS && cell_len(alt) > TINY_ALT_CELLS {
+            out.push('…');
+            break;
+        }
+        out.push(if c.is_whitespace() { '\u{a0}' } else { c });
+        used += w;
+    }
+    Some(out)
 }
 
 /// The cells a small picture in a line takes, as text: its alt text (or
