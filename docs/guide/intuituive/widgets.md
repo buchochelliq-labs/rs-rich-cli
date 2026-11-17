@@ -147,6 +147,29 @@ notice_bar(shown, || "Changed".into(), move || format!("{name} changed on disk")
   picked part in `notice.picked`, the mark in the level's `notify.*`
   style. A screen reader hears it as a status: `Warning: Changed: …`.
 
+### Steps
+
+```rust
+use intuituive::{steps, StepState};
+
+// A plan's checklist: the states from the app's data.
+steps(move || plan.get().titles(), move |i| plan.get().state(i))
+// A wizard's stepper over its pages, moved with the keys and clicks.
+steps(move || pages(), move |i| StepState::at(i, page.get())).steps_across(" ─ ").step_nav(page)
+```
+
+- **`steps(items, status)`** lists `items` (markup) one a row, each after
+  the mark of `status(i)`: `✓` done, `▸` current, `○` pending, `✗` failed
+  (`[x]`, `[>]`, `[ ]`, `[!]` in text mode), in the theme's `steps.done`,
+  `steps.current`, `steps.pending` and `steps.failed` styles. Both
+  closures may read signals.
+- **`StepState::at(i, current)`** is a wizard's states: those before the
+  current page done, those after it pending.
+- **`.steps_across(separator)`** lays them in one row; **`.step_nav(page)`**
+  lets the list take the focus and move `page`: → or ↓ on, ← or ↑ back,
+  Home and End, or a click on a step. A wizard's Next and Back buttons
+  set the same signal.
+
 ### Clickable spans of markup
 
 A span of markup in a `text` or `label` can run an action, as Textual's

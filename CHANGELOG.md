@@ -128,6 +128,11 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   all of it, has action buttons (`.notice_action(label, run)`) and a `×`
   that dismisses it (Esc too). `.notice_level(Level)` puts the level's
   mark before the title; `.notice_open(signal)` opens it from the app.
+- **Steps.** `steps(items, status)` is a checklist or a stepper, each
+  step done `✓`, current `▸`, pending `○` or failed `✗` in its own theme
+  style; `StepState::at(i, current)` gives a wizard's states,
+  `.steps_across(sep)` lays them in a row and `.step_nav(page)` moves the
+  current step with the keys and clicks.
 
 ### intuiTUIve: pictures without flicker between frames
 
