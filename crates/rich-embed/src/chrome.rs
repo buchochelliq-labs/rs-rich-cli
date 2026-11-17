@@ -2017,6 +2017,9 @@ impl Session {
                 Pending::Attach => {
                     self.session = result["sessionId"].as_str().map(str::to_string);
                     self.page("Page.enable", json!({}))?;
+                    // Its events (a crashed renderer, a detach) are not
+                    // promised to a session that has not enabled it.
+                    self.page("Inspector.enable", json!({}))?;
                     self.screencast()?;
                     for command in std::mem::take(&mut self.waiting) {
                         self.apply(command)?;
@@ -2228,26 +2231,37 @@ impl Session {
             "Inspector.detached" | "Target.detachedFromTarget" => {
                 return Err(io::Error::other("the page was closed"));
             }
-            "Inspector.targetCrashed" => {
-                // The browser lives; the page answers nothing until it is
-                // reloaded, so the calls waiting on it fail now.
-                self.crashed = true;
-                for (_, pending) in &mut self.pending {
-                    if let Pending::Call(answer) = std::mem::replace(pending, Pending::Other) {
-                        let _ = answer.send(Err(crashed()));
-                    }
-                }
-                {
-                    let mut state = lock(shared);
-                    state.state.crashed = true;
-                    state.state.loading = false;
-                }
-                notify(shared);
+            "Target.targetCrashed"
+                if params["targetId"].as_str().is_some()
+                    && params["targetId"].as_str() == self.target.as_deref() =>
+            {
+                self.page_crashed(shared);
             }
+            "Inspector.targetCrashed" => self.page_crashed(shared),
             "Inspector.targetReloadedAfterCrash" => self.recovered(shared),
             _ => {}
         }
         Ok(())
+    }
+
+    /// The page's renderer crashed. The browser lives; the page answers
+    /// nothing until it is reloaded, so the calls waiting on it fail now.
+    fn page_crashed(&mut self, shared: &Mutex<Shared>) {
+        if self.crashed {
+            return;
+        }
+        self.crashed = true;
+        for (_, pending) in &mut self.pending {
+            if let Pending::Call(answer) = std::mem::replace(pending, Pending::Other) {
+                let _ = answer.send(Err(crashed()));
+            }
+        }
+        {
+            let mut state = lock(shared);
+            state.state.crashed = true;
+            state.state.loading = false;
+        }
+        notify(shared);
     }
 
     /// The page answers again: reloaded after a crash, or at a new

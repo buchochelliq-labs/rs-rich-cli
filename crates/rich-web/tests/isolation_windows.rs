@@ -17,17 +17,9 @@ use std::time::{Duration, Instant};
 use common::{TOKEN, connect, read_until, running, wait_for};
 use tungstenite::{Message, WebSocket};
 
-/// An example, built next to the test binaries, in `examples/`.
+/// An example, built with the test binaries.
 fn example(name: &str) -> PathBuf {
-    let exe = std::env::current_exe().unwrap();
-    let p = exe
-        .parent()
-        .and_then(|d| d.parent())
-        .unwrap()
-        .join("examples")
-        .join(format!("{name}{}", std::env::consts::EXE_SUFFIX));
-    assert!(p.exists(), "build the example: {p:?}");
-    p
+    common::example(name)
 }
 
 /// An example serving on a free port.

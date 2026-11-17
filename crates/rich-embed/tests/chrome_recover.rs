@@ -76,13 +76,25 @@ fn a_crashed_page_fails_at_once_and_a_reload_brings_it_back() {
         )
     };
     assert_eq!(evaluate().unwrap()["result"]["value"], 2);
+    // What Chrome says of the crash, for a failure's message.
+    let said = devtools.listen(&[
+        "Inspector.targetCrashed",
+        "Target.targetCrashed",
+        "Inspector.detached",
+        "Target.detachedFromTarget",
+    ]);
     // Chrome does not answer Page.crash: the renderer is gone first.
-    let _ = devtools.call("Page.crash", json!({}), Duration::from_secs(2));
+    let crash = devtools.call("Page.crash", json!({}), Duration::from_secs(2));
     let start = Instant::now();
     while !engine.state().crashed && start.elapsed() < Duration::from_secs(10) {
         std::thread::sleep(Duration::from_millis(20));
     }
-    assert!(engine.state().crashed, "{:?}", engine.state());
+    assert!(
+        engine.state().crashed,
+        "{:?}; Page.crash answered {crash:?}; events: {:?}",
+        engine.state(),
+        said.try_iter().map(|e| e.method).collect::<Vec<_>>()
+    );
     let asked = Instant::now();
     let error = evaluate().unwrap_err();
     assert!(

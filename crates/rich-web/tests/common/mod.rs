@@ -13,6 +13,20 @@ use tungstenite::{Message, WebSocket};
 
 pub const TOKEN: &str = "test-token-0123456789";
 
+/// The example `name`, built with the test binaries. Cargo puts examples
+/// in the profile's `examples/`; how deep the test binary sits under that
+/// profile depends on the Cargo (`deps/`, or since 1.100 the build
+/// directory's `build/<package>/<hash>/out/`), so the profile is found by
+/// looking up from the test binary.
+pub fn example(name: &str) -> std::path::PathBuf {
+    let exe = std::env::current_exe().unwrap();
+    let file = format!("{name}{}", std::env::consts::EXE_SUFFIX);
+    exe.ancestors()
+        .map(|dir| dir.join("examples").join(&file))
+        .find(|path| path.is_file())
+        .unwrap_or_else(|| panic!("the {name} example is built (looked up from {exe:?})"))
+}
+
 /// Send a raw request; the status line and the whole response.
 pub fn request(addr: SocketAddr, text: &str) -> (String, String) {
     let mut stream = TcpStream::connect(addr).unwrap();
