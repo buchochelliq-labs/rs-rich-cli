@@ -40,23 +40,16 @@ fn spec(b: Browser, document: u64, node: NodeId) -> Option<Spec> {
         } else {
             (layer.top / f64::from(CELL.1)).round().max(0.0) as u16
         };
-        // A one-line bar (its text and actions on one line in Chrome)
-        // takes one row: see `Spec::one_row`.
-        let middles: Vec<f64> = page
+        // A one-line bar (its text and actions on one line in Chrome:
+        // every box of it shares rows with every other) takes one row:
+        // see `Spec::one_row`.
+        let boxes: Vec<crate::engine::Rect> = page
             .blocks
             .iter()
             .filter(|bl| bl.stack.layer == Some(dialog.layer))
-            .map(|bl| bl.rect.y + bl.rect.height / 2.0)
+            .map(|bl| bl.rect)
             .collect();
-        let one_line = !middles.is_empty()
-            && page
-                .blocks
-                .iter()
-                .filter(|bl| bl.stack.layer == Some(dialog.layer))
-                .all(|bl| bl.rect.height <= 1.5 * f64::from(CELL.1))
-            && middles
-                .iter()
-                .all(|m| (m - middles[0]).abs() <= f64::from(CELL.1));
+        let one_line = one_line(&boxes, f64::from(CELL.1));
         let one_row = one_line
             && !dialog.modal
             && b.effective_adapt().on(crate::adapt::Rule::OneRowBars)
@@ -97,6 +90,18 @@ fn spec(b: Browser, document: u64, node: NodeId) -> Option<Spec> {
             one_row,
         })
     })
+}
+/// Whether a bar's boxes are on one line: each one line tall, and every one
+/// sharing most of the shortest one's height with every other.
+fn one_line(boxes: &[crate::engine::Rect], line: f64) -> bool {
+    let shared = boxes
+        .iter()
+        .map(|r| r.bottom())
+        .fold(f64::INFINITY, f64::min)
+        - boxes.iter().map(|r| r.y).fold(f64::NEG_INFINITY, f64::max);
+    !boxes.is_empty()
+        && boxes.iter().all(|r| r.height <= 1.5 * line)
+        && shared > 0.5 * boxes.iter().map(|r| r.height).fold(f64::INFINITY, f64::min)
 }
 fn owner_alive(b: Browser, document: u64, node: NodeId) -> bool {
     b.page.with(|p| {
@@ -732,4 +737,29 @@ pub(super) fn details(b: Browser) -> Node {
     )
     .no_focus()
     .children_cover_only()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::one_line;
+    use crate::engine::Rect;
+
+    #[test]
+    fn a_bars_boxes_are_one_line_only_when_they_share_its_rows() {
+        // A cookie banner: its text and its two buttons, side by side.
+        let banner = [
+            Rect::new(12.0, 692.7, 199.8, 16.0),
+            Rect::new(223.8, 691.0, 56.8, 21.0),
+            Rect::new(292.5, 691.0, 60.5, 21.0),
+        ];
+        assert!(one_line(&banner, 16.0));
+        // Two 12-pixel lines 18 pixels apart: their middles are a row
+        // apart, and they share no row.
+        let two = [
+            Rect::new(0.0, 0.0, 300.0, 12.0),
+            Rect::new(0.0, 18.0, 300.0, 12.0),
+        ];
+        assert!(!one_line(&two, 16.0));
+        assert!(!one_line(&[], 16.0));
+    }
 }

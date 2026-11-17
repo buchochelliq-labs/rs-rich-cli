@@ -2270,6 +2270,7 @@ pub fn noctiluca::model::build_source_with(&noctiluca::engine::PageSnapshot, &mu
 pub fn noctiluca::model::build_with(&noctiluca::engine::PageSnapshot, &mut noctiluca::model::Revisions, &std::collections::hash::set::HashSet<noctiluca::engine::NodeId>) -> noctiluca::model::Page
 pub fn noctiluca::model::live_runs(&serde_json::value::Value, &str) -> alloc::vec::Vec<noctiluca::model::Run>
 pub fn noctiluca::model::number_text(f64) -> alloc::string::String
+pub fn noctiluca::model::pages_by_name(&str) -> core::option::Option<bool>
 pub fn noctiluca::model::plain(&[noctiluca::model::Run]) -> alloc::string::String
 pub fn noctiluca::model::rating_of(&str) -> core::option::Option<(f64, f64)>
 pub mod noctiluca::pictures

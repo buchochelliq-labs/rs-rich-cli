@@ -3391,6 +3391,17 @@ fn glyph_for(name: &str) -> Option<&'static str> {
     glyph_of_word(&words[0])
 }
 
+/// Which way a button named `name` pages, when its name says so
+/// ("Previous items", "Next", "Back"): `Some(false)` back, `Some(true)`
+/// on.
+pub fn pages_by_name(name: &str) -> Option<bool> {
+    match glyph_for(name) {
+        Some("‹") => Some(false),
+        Some("›") => Some(true),
+        _ => None,
+    }
+}
+
 /// The name of the icon a button draws, as the page spells it in its
 /// own attributes or its icon's (`data-icon`, `<use href="#icon-close">`,
 /// `class="fa-search"`, `data-testid="CloseIcon"`), and its glyph: the

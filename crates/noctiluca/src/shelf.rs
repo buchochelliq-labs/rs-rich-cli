@@ -21,12 +21,17 @@ use crate::model::Shelf;
 /// The strip under `shelf`, `width` cells wide: intuiTUIve's `carousel`'s
 /// arrows and count over the items in view, on one row.
 /// Whether `control` is one of a shelf's own arrow buttons, which its
-/// strip stands in for: a button a few cells wide, beside the shelf (in its
-/// band, or a couple of rows above or under it) and at its left or right
-/// end, not in one of its items.
+/// strip stands in for: a button a few cells wide whose name pages
+/// ("Previous items", "Next"), beside the shelf (in its band, or a couple
+/// of rows above or under it) at the end it pages to (back at its left
+/// end or above it, on at its right end or under it), not in one of its
+/// items. A close or options button there keeps its place.
 pub fn pages_a_shelf(shelves: &[Shelf], control: &crate::model::Control, cell: (f64, f64)) -> bool {
     let (cw, ch) = cell;
     let r = control.rect;
+    let Some(forward) = crate::model::pages_by_name(&control.name) else {
+        return false;
+    };
     control.role == crate::model::Role::Button
         && r.width > 0.0
         && r.width <= 4.0 * cw
@@ -34,7 +39,11 @@ pub fn pages_a_shelf(shelves: &[Shelf], control: &crate::model::Control, cell: (
         && shelves.iter().any(|shelf| {
             let s = shelf.rect;
             let band = r.bottom() >= s.y - 2.0 * ch && r.y <= s.bottom() + 2.0 * ch;
-            let end = (r.x - s.x).abs() <= 3.0 * cw || (r.right() - s.right()).abs() <= 3.0 * cw;
+            let end = if forward {
+                (r.right() - s.right()).abs() <= 3.0 * cw || r.y >= s.bottom() - 0.5
+            } else {
+                (r.x - s.x).abs() <= 3.0 * cw || r.bottom() <= s.y + 0.5
+            } && (r.x - s.x).abs().min((r.right() - s.right()).abs()) <= 3.0 * cw;
             let in_item = shelf.items.iter().any(|i| {
                 r.x >= i.x - 0.5
                     && r.right() <= i.right() + 0.5
