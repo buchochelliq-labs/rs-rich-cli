@@ -175,6 +175,16 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   pictures. It is the new `badge-text` adaptation, on by default:
   `--adapt=-badge-text`, or `badge-text = false` under `[adapt]`, draws
   badges as their pictures again.
+- A grid whose cards snap to fewer columns than Chrome's (the shop's three
+  kettles at 100 columns, two a row) gains rows, and what follows it moves
+  down by them: the "Customers also viewed" shelf no longer lands on the
+  third card's title and price, and its `‹ 1–3 of 6 ›` strip moves with it.
+- The shop's rows, compacted by three generic adaptations, each one that
+  can be switched off: the cookie banner, one line in Chrome, is one row
+  with its buttons beside its text (`one-row-bars`, which also keeps a
+  header's cart on the header's row); a short label right above a title
+  goes in front of it, `Sponsored · Tidewell 1.7 L …` (`fold-labels`);
+  and a shelf's own arrow buttons give way to its strip (`shelves`).
 - intuiTUIve: a new toast stacked over one already shown redraws what is
   under them, so the one it moved leaves nothing of itself beside the new
   one (two toasts read as overlapping boxes).

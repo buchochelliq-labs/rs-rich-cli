@@ -22,15 +22,15 @@
       │ on  bandwidth            lower frame rate and tier when the terminal is short of bandwidth              ┃│
   Book│ on  figure-flow          stack source figures and captions with surrounding ordinary flow               ┃│
   › Ti│ on  wrap-action-labels   wrap complete action names; Shift+F1 lists names in compact mode               ┃│
-    A │ on  badge-text           a tiny badge before a line's text reads as its alt text                        ┃│
+    A │ on  badge-text           a tiny badge before a line's text reads as its alt text                        ││
+      │ on  one-row-bars         a one-row bar (a cookie banner) stays one row, its text cut                    ││
+      │ on  fold-labels          a short label above a title goes in front of it: Sponsored · …                 ││
       │                                                                                                         ││
       │Codecs: what this browser says it can play (canPlayType). DRM playback is never tried.                   ││
       │ H.264 (MP4)    no              video/mp4; codecs="avc1.42E01E"                                          ││
       │ H.265 (MP4)    no              video/mp4; codecs="hev1.1.6.L93.B0"                                      ││
       │ AV1 (MP4)      no              video/mp4; codecs="av01.0.05M.08"                                        ││
       │ VP8 (WebM)     no              video/webm; codecs="vp8"                                                 ││
-      │ VP9 (WebM)     no              video/webm; codecs="vp9"                                                 ││
-      │ AV1 (WebM)     no              video/webm; codecs="av01.0.05M.08"                                       ││
       ╰──────────────────────────────────────────────────────────────────────────────────────────────────────────╯
  projection | row 1/1
  f1 actions | f hints | o open | r reader | q quit

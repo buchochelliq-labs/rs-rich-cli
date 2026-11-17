@@ -26,5 +26,5 @@ why = "#889: the media keys never pick an element with nothing to play (`empty`)
 crate = "noctiluca"
 version = "0.0.6"
 lint = "enum_variant_added"
-items = ["variant Rule:BadgeText"]
-why = "Chat badges as text are made a rule of their own (`badge-text`, on by default), so they can be drawn as pictures again. An exhaustive match over Rule handles the new variant"
+items = ["variant Rule:BadgeText", "variant Rule:OneRowBars", "variant Rule:FoldLabels"]
+why = "New adaptations after #899, each on by default and each one that can be switched off: chat badges as text (`badge-text`), one-row bars such as a cookie banner (`one-row-bars`) and a short label folded into the title under it (`fold-labels`). An exhaustive match over Rule handles the new variants"

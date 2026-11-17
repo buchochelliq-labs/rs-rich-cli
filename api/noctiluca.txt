@@ -65,10 +65,12 @@ pub noctiluca::adapt::Rule::CollapseGaps
 pub noctiluca::adapt::Rule::CollapseNav
 pub noctiluca::adapt::Rule::DecorativeImages
 pub noctiluca::adapt::Rule::FigureFlow
+pub noctiluca::adapt::Rule::FoldLabels
 pub noctiluca::adapt::Rule::IconButtons
 pub noctiluca::adapt::Rule::Indicators
 pub noctiluca::adapt::Rule::InlinePictures
 pub noctiluca::adapt::Rule::LiveTail
+pub noctiluca::adapt::Rule::OneRowBars
 pub noctiluca::adapt::Rule::PageColors
 pub noctiluca::adapt::Rule::ScreenReaderTwins
 pub noctiluca::adapt::Rule::Shelves
@@ -154,6 +156,7 @@ impl core::panic::unwind_safe::UnwindSafe for noctiluca::adapt::RuleInfo
 pub const noctiluca::adapt::BANNER_RATIO: f64
 pub const noctiluca::adapt::DECORATIVE_PX: f64
 pub const noctiluca::adapt::ICON_PX: f64
+pub const noctiluca::adapt::MAX_LABEL_CELLS: usize
 pub const noctiluca::adapt::MAX_PICTURE_ROWS: usize
 pub const noctiluca::adapt::MIN_CHROMA: f64
 pub const noctiluca::adapt::MIN_GRID_CELLS: usize
@@ -2375,6 +2378,7 @@ pub fn noctiluca::pixel_view::state() -> alloc::rc::Rc<core::cell::RefCell<nocti
 pub fn noctiluca::pixel_view::view(noctiluca::app::Browser) -> intuituive::node::Node
 pub mod noctiluca::shelf
 pub fn noctiluca::shelf::page_by(&noctiluca::model::Shelf, bool) -> f64
+pub fn noctiluca::shelf::pages_a_shelf(&[noctiluca::model::Shelf], &noctiluca::model::Control, (f64, f64)) -> bool
 pub fn noctiluca::shelf::strip(&noctiluca::model::Shelf, usize) -> noctiluca::layout::Line
 pub mod noctiluca::ssh
 pub enum noctiluca::ssh::TunnelState

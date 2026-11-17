@@ -133,6 +133,10 @@ impl<'a> Context<'a> {
     pub(super) fn owner(&self, block: usize) -> Option<usize> {
         self.owners[block]
     }
+    /// The source node a browser node is, if the source graph has it.
+    pub(super) fn node_index(&self, node: NodeId) -> Option<usize> {
+        self.node_by_id.get(&node).copied()
+    }
     fn node_rect(&self, node: NodeId) -> Option<Rect> {
         self.relations.nodes[*self.node_by_id.get(&node)?].rect
     }
@@ -391,7 +395,7 @@ pub(super) fn allocate(
     columns: usize,
     cell: (f64, f64),
     marks: &Marks,
-) -> Vec<(usize, f64)> {
+) -> Vec<(usize, f64, usize)> {
     let rel = &source.relations;
     let (cw, ch) = cell;
     let mut stacked = Vec::new();
@@ -501,8 +505,10 @@ pub(super) fn allocate(
             } else {
                 adaptive_columns((x1 - x0) as u16, minimum as u16, 1, count)
             };
-            if fit == 1 {
-                stacked.push((grid.node, target.bottom()));
+            // Fewer columns than Chrome's rows have: the grid gains rows, and
+            // what follows it moves down by them once they are measured.
+            if fit < count {
+                stacked.push((grid.node, target.bottom(), fit));
             }
             let tracks = vec![Track::new(Size::Flex(1)); fit];
             let cells = split(
@@ -593,17 +599,19 @@ pub(super) fn allocate(
     stacked
 }
 
-// After wrapping, measure each actual item subtree as one atomic unit. Nested
-// grids have already been measured. Source anchors and actions never move.
+// After wrapping, measure each actual item subtree as one atomic unit, and
+// stack the units in rows of the grid's snapped columns, each row as tall as
+// its tallest unit. Nested grids have already been measured. Source anchors
+// and actions never move.
 pub(super) fn stack_grids(
     source: &Context<'_>,
     items: &mut [Item],
-    roots: &[(usize, f64)],
+    roots: &[(usize, f64, usize)],
     columns: usize,
     cell: (f64, f64),
 ) {
     let rel = source.relations;
-    for &(root, old_bottom) in roots.iter().rev() {
+    for &(root, old_bottom, fit) in roots.iter().rev() {
         let grid = rel
             .grids
             .iter()
@@ -629,13 +637,18 @@ pub(super) fn stack_grids(
                 measure_grid(items, &unit, columns, cell.1)
             })
             .collect();
-        let total: usize = measured.iter().map(|(_, h)| *h).sum();
+        let fit = fit.max(1);
+        let heights: Vec<usize> = measured
+            .chunks(fit)
+            .map(|row| row.iter().map(|(_, h)| *h).max().unwrap_or(0))
+            .collect();
+        let total: usize = heights.iter().sum();
         if total > u16::MAX as usize {
             continue;
         }
-        let tracks: Vec<_> = measured
+        let tracks: Vec<_> = heights
             .iter()
-            .map(|(_, h)| Track::new(Size::Fixed(*h as u16)))
+            .map(|h| Track::new(Size::Fixed(*h as u16)))
             .collect();
         let slots = split(
             Cells::new(0, 0, 1, total as u16),
@@ -643,10 +656,12 @@ pub(super) fn stack_grids(
             &tracks,
             StackLayout::default(),
         );
-        for ((unit, _), slot) in measured.iter().zip(slots) {
-            for &(i, row) in unit {
-                items[i].top = top + (slot.y as usize + row) as f64 * cell.1;
-                items[i].bottom = items[i].top + items[i].lines.len() as f64 * cell.1;
+        for (row, slot) in measured.chunks(fit).zip(slots) {
+            for (unit, _) in row {
+                for &(i, line) in unit {
+                    items[i].top = top + (slot.y as usize + line) as f64 * cell.1;
+                    items[i].bottom = items[i].top + items[i].lines.len() as f64 * cell.1;
+                }
             }
         }
         let extra = (top + total as f64 * cell.1 - old_bottom).max(0.0);
@@ -655,8 +670,8 @@ pub(super) fn stack_grids(
         let parent = roots
             .iter()
             .rev()
-            .find(|(other, _)| *other != root && rel.contains(*other, root))
-            .map(|(other, _)| *other);
+            .find(|(other, _, _)| *other != root && rel.contains(*other, root))
+            .map(|(other, _, _)| *other);
         for item in items.iter_mut() {
             if item.source.is_some_and(|n| {
                 n > root

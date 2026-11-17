@@ -15,6 +15,10 @@ struct Spec {
     background: Option<String>,
     foreground: Vec<NodeId>,
     skip: u64,
+    /// A non-modal top or bottom bar Chrome draws one row tall (a cookie
+    /// banner): each row's actions go beside its text, not on a row under
+    /// it (the `one-row-bars` rule).
+    one_row: bool,
 }
 fn spec(b: Browser, document: u64, node: NodeId) -> Option<Spec> {
     let (columns, height) = b.viewport.get();
@@ -29,13 +33,48 @@ fn spec(b: Browser, document: u64, node: NodeId) -> Option<Spec> {
         let mut height = ((layer.rect.height / f64::from(CELL.1)).ceil().max(1.0) as u16).min(rows);
         let left = ((layer.rect.x / f64::from(CELL.0)).round().max(0.0) as u16)
             .min(columns.saturating_sub(width));
-        let desired = if layer.place == crate::model::Place::Docked && page.view_height > 0.0 {
+        let mut desired = if layer.place == crate::model::Place::Docked && page.view_height > 0.0 {
             rows.saturating_sub(
                 ((page.view_height - layer.top).max(0.0) / f64::from(CELL.1)).round() as u16,
             )
         } else {
             (layer.top / f64::from(CELL.1)).round().max(0.0) as u16
         };
+        // A one-line bar (its text and actions on one line in Chrome)
+        // takes one row: see `Spec::one_row`.
+        let middles: Vec<f64> = page
+            .blocks
+            .iter()
+            .filter(|bl| bl.stack.layer == Some(dialog.layer))
+            .map(|bl| bl.rect.y + bl.rect.height / 2.0)
+            .collect();
+        let one_line = !middles.is_empty()
+            && page
+                .blocks
+                .iter()
+                .filter(|bl| bl.stack.layer == Some(dialog.layer))
+                .all(|bl| bl.rect.height <= 1.5 * f64::from(CELL.1))
+            && middles
+                .iter()
+                .all(|m| (m - middles[0]).abs() <= f64::from(CELL.1));
+        let one_row = one_line
+            && !dialog.modal
+            && b.effective_adapt().on(crate::adapt::Rule::OneRowBars)
+            && matches!(
+                layer.place,
+                crate::model::Place::Pinned | crate::model::Place::Docked
+            )
+            && layer.rect.x <= f64::from(CELL.0)
+            && layer.rect.width >= 0.75 * page.width.min(f64::from(columns) * f64::from(CELL.0))
+            && layer.rect.height <= 3.0 * f64::from(CELL.1);
+        if one_row {
+            height = 1;
+            // Docked, its one row is where the bar's bottom was.
+            if layer.place == crate::model::Place::Docked && page.view_height > 0.0 {
+                let under = (page.view_height - layer.top - layer.rect.height).max(0.0);
+                desired = rows.saturating_sub((under / f64::from(CELL.1)).round() as u16 + 1);
+            }
+        }
         let (top, skip) = if layer.fixed {
             (desired.min(rows.saturating_sub(height)), 0)
         } else {
@@ -55,6 +94,7 @@ fn spec(b: Browser, document: u64, node: NodeId) -> Option<Spec> {
             background: dialog.background.clone(),
             foreground: dialog.foreground.clone(),
             skip,
+            one_row,
         })
     })
 }
@@ -68,6 +108,15 @@ fn owner_alive(b: Browser, document: u64, node: NodeId) -> bool {
 enum ItemKey {
     Paint(u64),
     Control(NodeId),
+    /// A row's text and its actions on one row: the paint key, the first
+    /// action's node, and the text's width in cells.
+    Beside(u64, NodeId, u16),
+}
+impl ItemKey {
+    /// Whether this item draws paint row `key`.
+    fn paints(self, key: u64) -> bool {
+        matches!(self, ItemKey::Paint(k) | ItemKey::Beside(k, _, _) if k == key)
+    }
 }
 #[derive(Clone, PartialEq)]
 struct Items {
@@ -76,7 +125,7 @@ struct Items {
     groups: HashMap<NodeId, Vec<NodeId>>,
     ordinary: bool,
 }
-fn items(page: &Page, projection: &Projection) -> Items {
+fn items(page: &Page, projection: &Projection, one_row: bool) -> Items {
     // An existing action annotation on image cells remains a source-coordinate
     // hotspot. Do not turn the image into a second button or infer ownership.
     let media_controls: HashSet<_> = projection
@@ -132,17 +181,23 @@ fn items(page: &Page, projection: &Projection) -> Items {
                 span.picture = None;
             }
         }
-        if !removed
-            || !line.plain().trim().is_empty()
-            || projection
-                .regions
-                .iter()
-                .any(|r| r.row <= row && row < r.row + r.rows)
-        {
+        let key = projection.keys.get(row).copied().unwrap_or(row as u64);
+        let pictured = projection
+            .regions
+            .iter()
+            .any(|r| r.row <= row && row < r.row + r.rows);
+        let text = rich::cells::cell_len(line.plain().trim_end());
+        if one_row && !pictured && text > 0 && !group.is_empty() {
             result.push((
-                ItemKey::Paint(projection.keys.get(row).copied().unwrap_or(row as u64)),
+                ItemKey::Beside(key, group[0], text.min(u16::MAX as usize) as u16),
                 row,
             ));
+            groups.insert(group[0], group);
+            bound = bound.saturating_add(1);
+            continue;
+        }
+        if !removed || !line.plain().trim().is_empty() || pictured {
+            result.push((ItemKey::Paint(key), row));
             bound = bound.saturating_add(1);
         }
         if let Some(&first) = group.first() {
@@ -243,7 +298,17 @@ fn paint_row(
     cells: Rc<pictures::Cells>,
     fitted: Memo<Option<Spec>>,
 ) -> Node {
-    let row_of = move || plan.with(|p| p.items.iter().find(|(k, _)| *k == key).map(|(_, r)| *r));
+    let row_of = move || {
+        plan.with(|p| {
+            p.items
+                .iter()
+                .find(|(k, _)| match key {
+                    ItemKey::Paint(paint) => k.paints(paint),
+                    _ => *k == key,
+                })
+                .map(|(_, r)| *r)
+        })
+    };
     let drawn = cells.clone();
     let line = leaf(move |console, width, _| {
         plan.with(|p| {
@@ -391,7 +456,10 @@ fn popup(b: Browser, document: u64, owner: NodeId) -> Node {
     let plan = memo(move || {
         b.page.with(|p| {
             p.as_ref()
-                .map(|page| items(page, &projection.get()))
+                .map(|page| {
+                    let one_row = fitted.with(|s| s.as_ref().is_some_and(|s| s.one_row));
+                    items(page, &projection.get(), one_row)
+                })
                 .unwrap_or_else(|| Items {
                     paint: Projection::default(),
                     items: Vec::new(),
@@ -404,6 +472,38 @@ fn popup(b: Browser, document: u64, owner: NodeId) -> Node {
     let cells = Rc::new(pictures::Cells::with_presentation(b.presentation));
     let build = Rc::new(move |key| match key {
         ItemKey::Paint(_) => paint_row(b, plan, key, cells.clone(), fitted),
+        // The text at its width, its actions after it, on one row.
+        ItemKey::Beside(paint, first, width) => row([
+            column([paint_row(
+                b,
+                plan,
+                ItemKey::Paint(paint),
+                cells.clone(),
+                fitted,
+            )])
+            .fixed(width.saturating_add(1)),
+            keyed(
+                move || plan.with(|p| p.groups.get(&first).cloned().unwrap_or_default()),
+                move |nodes| {
+                    row(nodes.into_iter().map(move |node| {
+                        keyed(
+                            move || {
+                                b.page.with(|p| {
+                                    p.as_ref().and_then(|p| p.control(node)).map(|c| c.revision)
+                                })
+                            },
+                            move |_| action(b, document, owner, node, false, focused),
+                        )
+                        .auto()
+                    }))
+                    .gap(1)
+                    .auto()
+                },
+            )
+            .auto(),
+            column([]).flex(1),
+        ])
+        .fixed(1),
         ItemKey::Control(first) => keyed(
             move || plan.with(|p| p.groups.get(&first).cloned().unwrap_or_default()),
             move |nodes| {
@@ -465,6 +565,7 @@ fn popup(b: Browser, document: u64, owner: NodeId) -> Node {
                         p.items.get(i).map_or(i as u64, |(key, _)| match key {
                             ItemKey::Paint(k) => k.wrapping_mul(2),
                             ItemKey::Control(n) => (*n as u64).wrapping_mul(2).wrapping_add(1),
+                            ItemKey::Beside(k, _, _) => k.wrapping_mul(2),
                         })
                     })
                 })

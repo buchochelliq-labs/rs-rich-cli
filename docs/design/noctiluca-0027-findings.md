@@ -266,12 +266,16 @@ code.
 3. **Blank rows under a pinned header:** four empty rows between the
    shop's header and its first content at the top of the page (rows 5
    to 8 at 120×40, both modes). Not traced further.
-4. **Earlier fixture findings that still hold** (the second pass's
-   list):
-   - the cookie banner takes three rows of the docked strip;
-   - "Sponsored" labels add a row a card;
-   - the "Customers also viewed" shelf's `[Previous items]` button takes
-     its own row above the strip.
+4. **Earlier fixture findings, fixed after #899** (the second pass's
+   list), each by a generic rule (`one-row-bars`, `fold-labels`,
+   `shelves`):
+   - the cookie banner took three rows of the docked strip; it is one row;
+   - "Sponsored" labels added a row a card; they go in front of the title;
+   - the shelf's `[Previous items]` button took its own row above the
+     strip; the strip stands for it.
+   Found on the way: at 100 columns the snapped grid's third card landed
+   under the shelf (what follows a grid did not move down by the rows it
+   gained); fixed too.
 5. **Fixed since the second pass, and seen fixed here:**
    - prices read whole (`$29.99`, `$24.49`, `$49.00`; the
      screen-reader twins rule);

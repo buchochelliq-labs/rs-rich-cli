@@ -42,7 +42,9 @@ site, and each can be switched off.
 | `page-colors` | Keeps the page's saturated text colours (a red label, a chat name), readable on your terminal; greys follow your terminal's own colour. Off, the page's own colours: on a light terminal as the page wrote them, on white; on a dark one with their lightness turned over (dark text reads light, a red stays red), on black | on |
 | `screen-reader-twins` | A price shown in parts for looks (`$`, `29`, a raised `99`, hidden from screen readers) beside the whole price in visually hidden text reads as the whole one, `$29.99`, not `$2999`. Only when the two say the same digits, so hidden hints stay hidden | on |
 | `indicators` | A meter, progress bar or rating the page states on a `<canvas>` or `<svg>` is drawn as a native bar, dial or stars in its place; off, its picture is drawn | on |
-| `shelves` | A [shelf](reading.md#shelves) (a box that scrolls sideways over alike items: "Customers also viewed", a row of videos) gets a strip under it, `‹ 1–3 of 6 ›`, and `<` and `>` page it; off, the items in its box show with no strip | on |
+| `shelves` | A [shelf](reading.md#shelves) (a box that scrolls sideways over alike items: "Customers also viewed", a row of videos) gets a strip under it, `‹ 1–3 of 6 ›`, and `<` and `>` page it; the shelf's own arrow buttons (a few cells wide, at its ends) give way to the strip. Off, the items in its box show with no strip | on |
+| `one-row-bars` | A top or bottom bar Chrome draws one line tall (a cookie banner, a toolbar) stays one row: its text takes the cells it needs, pushing what follows right, and is cut with `…` at the edge; a non-modal banner's buttons go beside its text, `We use cookies to run the shop. [ Accept ] [ Decline ]` | on |
+| `fold-labels` | A short label alone on its row (two words, 16 cells at most: `Sponsored`, `New`) right above a title (a heading or a link) at its left edge goes in front of it: `Sponsored · Tidewell 1.7 L Electric Kettle` | on |
 | `bandwidth` | Lowers a video's frame rate and picture tier when the terminal is short of bandwidth | on |
 
 - `a` (`Alt+A` in the plain keys) toggles between the adapted and the
