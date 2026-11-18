@@ -219,6 +219,33 @@ is drawn:
 | V5 | **Pace from the source.** Take a frame when Chrome's screencast has a new one (on-demand already signals it) and present by its `timestamp`, held to the pacer's cap and rounded to a divisor of the source rate (30, 15, 10 for 30 fps; 24, 12 for 24 fps), instead of fixed 33 ms slots. Accept no frame more than a slot early after a stall (cause 2) | M | `video.rs` unit tests: a 24 fps source gives even 41.7 ms intervals (stdev under 2 ms); a 30 fps source with a 200 ms stall gives no interval under 30 ms after it. Live: stdev of shown intervals |
 | V6 | **One drop point, decided at the tab.** When the pacer or encoder keeps fewer frames than the source sends, tell the tab the even rate it can take (V5's divisor) so that the mailbox and the encoder never need to drop | S (after V5) | Harness: iTerm2 and Sixel shown intervals cluster at one value (66.7 ms at 15 fps), not 33/66 mixed; the encoder's coalesced count is near zero |
 
+### After the fixes: a release build (2026-11-18)
+
+The same watch fixture, after #899–#902, with a release build
+(`cargo build --release -p noctiluca`) and the PTY harness: 30 s at
+120×40 with synchronized output on, frame intervals from the trace's
+`frame_done` (a frame drawn by the app), over the steady window from 2 s
+to 29 s (the first second is the page loading, the last the harness's
+screenshot and quit).
+
+| Protocol | Frames | p50 / p95 / max (ms) | > 60 ms | > 120 ms |
+|---|---|---|---|---|
+| Kitty | 792 | 33.8 / 44.9 / 82.9 | 6 | 0 |
+| iTerm2 | 789 | 33.5 / 45.3 / 145.6 | 11 | 2 |
+| Sixel | 792 | 34.0 / 43.4 / 120.2 | 7 | 1 |
+| Half blocks | 792 | 33.6 / 45.9 / 74.8 | 8 | 0 |
+
+- **The jitter goal is met.** Kitty's p95 is 44.9 ms, under twice the
+  frame period (66.7 ms), with no gap over 120 ms (the debug build's p95
+  was 131 ms). iTerm2 and Sixel are as steady at p95, with two and one
+  gaps just over 120 ms.
+- **No frame blanks its region.** In Kitty every delete of the video's
+  old image (819) comes after the next image's upload; in iTerm2 and
+  Sixel no image is preceded by an erase of its cells.
+- Not covered: a real Kitty, WezTerm or iTerm2 (the harness reads the
+  bytes a terminal would get, not what it shows), and #883's 3-of-3 gate
+  in those terminals.
+
 ## 2. Amazon
 
 `curl -sI https://www.amazon.com` from this machine answers
