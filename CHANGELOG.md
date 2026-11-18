@@ -9,6 +9,13 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Versions: 0.1.0 opened
+
+- Every package moves to 0.1.0 after 0.0.27's publication, as the plan to
+  1.0.0's stage 3 says: the internal requirements are written `"0.1.0"`
+  (Cargo's caret holds them to `>=0.1.0, <0.2.0`), and `rs-rich` on PyPI
+  is 0.1.0. `rab.yml` names the release 0.1.0.
+
 ## 0.0.27 cohort — published 2026-11-18
 
 Published from `main` at `e7fc3d73` (#908's merge) by one `release.yml`

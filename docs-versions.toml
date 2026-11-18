@@ -34,4 +34,4 @@
 # 0.0.27's notes (the publication), the last commit before the 0.1.0
 # versions open. The tags are on e7fc3d73, the release PR's (#908) merge;
 # the notes came after.
-"0.0.27" = "PUBLICATION_COMMIT"
+"0.0.27" = "bd6e981dea8ae6507d15cda9e23757d15b2e40cd"
