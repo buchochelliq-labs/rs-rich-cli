@@ -24,7 +24,7 @@ jobs:
     name: rc cut from main
     # `create` fires for tags too, hence the ref_type check.
     if: github.event.ref_type == 'branch' && startsWith(github.event.ref, 'rc/')
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
         with:

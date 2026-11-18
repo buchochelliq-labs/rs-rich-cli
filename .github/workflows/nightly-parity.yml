@@ -33,7 +33,7 @@ jobs:
     # Scheduled runs only exist on the default branch; a manual dispatch from
     # another ref is refused so a red nightly always describes `main`.
     if: github.ref == 'refs/heads/main'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@v7

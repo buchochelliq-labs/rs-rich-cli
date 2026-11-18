@@ -33,7 +33,7 @@ env:
 jobs:
   release-tests:
     name: release workflow regressions
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
         with:
@@ -93,7 +93,7 @@ jobs:
 
   packages:
     name: registry source identity and staged packages
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
         with:
@@ -120,7 +120,7 @@ jobs:
 
   check:
     name: fmt · clippy · test
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     # The workspace's debug test binaries and doctests outgrew the runner's
     # disk ("No space left on device" while linking doctests, #825), so this
     # job builds without debug info, as the release test does.
@@ -225,7 +225,7 @@ jobs:
 
   features:
     name: feature matrix
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     # Without debug info, as the `check` job: rs-rich-intuituive's
     # all-features test binaries filled the runner's disk ("No space left on
     # device" mid-test).
@@ -395,7 +395,7 @@ jobs:
   # pixels. The CLI's `avif` is in the `features` job's `--all-features`.
   avif:
     name: avif (${{ matrix.crate }})
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
       matrix:
@@ -605,7 +605,7 @@ jobs:
 
   msrv:
     name: minimum supported Rust version
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
         with:
@@ -659,7 +659,7 @@ jobs:
 
   parity:
     name: golden parity vs upstream rich
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
         with:
@@ -705,7 +705,7 @@ jobs:
   # show as Sixel or blocks. Everywhere else its fallbacks are tested with fakes.
   mermaid-cli:
     name: Mermaid CLI backend
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
@@ -750,7 +750,7 @@ jobs:
   # cannot drift from the CLI (#598).
   tapes:
     name: docs tapes up to date
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
         with:
@@ -806,7 +806,7 @@ jobs:
   # needs; that restriction is lifted on this runner. Local pages only.
   browser:
     name: live browser tests (Chrome, as a normal user)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 40
     steps:
       - uses: actions/checkout@v7
@@ -850,7 +850,7 @@ jobs:
   # catches a picture that no longer matches its code.
   guide-screenshots:
     name: guide screenshots up to date
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
         with:
@@ -869,7 +869,7 @@ jobs:
   # move, more than 1.5x slower on a log append, or sends more bytes.
   ratatui-gate:
     name: intuiTUIve vs ratatui benchmark gate
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7
@@ -892,7 +892,7 @@ jobs:
   # than 5% worse, in bytes or time, than the best fixed strategy on a scene.
   paint-bench:
     name: Paint strategies benchmark
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7
@@ -918,7 +918,7 @@ jobs:
   # input decoder the playground uses; and the CLI for wasm32-wasip1.
   wasm:
     name: wasm32 build (playground crates)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
@@ -966,7 +966,7 @@ jobs:
   # test passes without the target, here it must have it.
   wasm-plugins-release:
     name: WASM plugins (release)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7
@@ -1008,7 +1008,7 @@ jobs:
   # into micro's user layer.
   plugin-compatibility:
     name: plugin marketplace compatibility
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7
@@ -1085,7 +1085,7 @@ jobs:
   # tools are pinned in api/tools.toml and cached once built.
   api:
     name: public API and SemVer
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
         with:
@@ -1152,7 +1152,7 @@ jobs:
     # `always()` so this reports failure rather than being skipped when a
     # dependency fails — a skipped required check blocks the PR forever.
     if: always()
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: Fail if any job did not succeed
         env:

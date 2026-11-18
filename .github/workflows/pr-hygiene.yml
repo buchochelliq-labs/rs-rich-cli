@@ -27,7 +27,7 @@ permissions:
 jobs:
   body:
     name: pr body
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     # Bots do not use our template and their PRs are mechanical.
     if: github.event.pull_request.user.type != 'Bot'
     steps:
@@ -102,7 +102,7 @@ jobs:
 
   readiness:
     name: release readiness
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     # Bots do not run release prep and often cannot satisfy human handoff rules.
     if: github.event.pull_request.user.type != 'Bot'
     steps:
@@ -270,7 +270,7 @@ jobs:
 
   base:
     name: base branch
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
       - name: Reject a base that is not main or a release branch
@@ -287,7 +287,7 @@ jobs:
   # job name stable for branch protection; main passes without an ancestry check.
   rc-current:
     name: rc not behind main
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
         with:

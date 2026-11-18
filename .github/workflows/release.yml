@@ -49,7 +49,7 @@ concurrency:
 
 jobs:
   gate:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     outputs:
       sha: ${{ steps.gate.outputs.sha }}
       release: ${{ steps.gate.outputs.release }}
@@ -103,7 +103,7 @@ jobs:
   semver:
     needs: gate
     if: needs.gate.outputs.crates-io == 'true' && needs.gate.outputs.verify-only != 'true'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       # The release tag, not the bare commit: the gate requires it on that
       # commit, and the next step stops the job if it has moved since. This
@@ -175,7 +175,7 @@ jobs:
       !cancelled() && needs.gate.outputs.crates-io == 'true' && needs.ci.result == 'success'
       && ((needs.build.result == 'success' && needs.semver.result == 'success')
           || (needs.build.result == 'skipped' && needs.gate.outputs.verify-only == 'true'))
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     environment: crates-io          # the Trusted Publisher is bound to it
     permissions:
       contents: read
@@ -219,7 +219,7 @@ jobs:
       && ((needs.build.result == 'success'
            && (needs.semver.result == 'success' || needs.semver.result == 'skipped'))
           || (needs.build.result == 'skipped' && needs.gate.outputs.verify-only == 'true'))
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     environment: pypi
     permissions:
       contents: read
@@ -257,7 +257,7 @@ jobs:
     if: >-
       !cancelled() && needs.publish-crates.result == 'success' && needs.gate.outputs.verify-only != 'true'
     continue-on-error: true
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       contents: write   # create the GitHub release and attach the archive
       actions: write    # re-run docs.yml, so the site picks the archive up
@@ -329,7 +329,7 @@ jobs:
   record:
     needs: [gate, ci, build, semver, publish-crates, publish-pypi, publish-playground]
     if: always()
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
