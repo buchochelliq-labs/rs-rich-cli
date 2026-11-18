@@ -68,6 +68,12 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   (`PageState::crashed`) and fails the calls waiting on it at once, where
   each waited 30 seconds and froze the tab; Noctiluca says "The page
   crashed" with the key that reloads it, and the reload brings it back.
+- **Video frames come through after the browser is restarted.**
+  `ChromeEngine::restart` kept the count of screencast restarts the app
+  had asked for, while the new browser numbered its own from one again,
+  so after the first change of the screencast's area or scale every frame
+  was dropped as painted before it, and a playing video fell back to
+  screenshots. Both counts start again with the new browser.
 - **Only the page's own detach ends the engine.** A
   `Target.detachedFromTarget` for another target (a worker, another page)
   no longer ends the session of a live browser.

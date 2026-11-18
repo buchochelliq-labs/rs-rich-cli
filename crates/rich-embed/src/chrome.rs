@@ -886,7 +886,11 @@ impl ChromeEngine {
             shared.kept = (Vec::new(), 0);
             shared.revision = shared.revision.wrapping_add(1);
             shared.applied_viewport = None;
-            shared.restarts_answered = shared.restarts_asked;
+            // The new browser's session numbers its restarts from one
+            // again: counts kept from the old one would leave every later
+            // area or scale change unanswered, and its frames dropped.
+            shared.restarts_asked = 0;
+            shared.restarts_answered = 0;
             discard_frame(&mut shared);
         }
         self.carried = (!kept.0.is_empty()).then_some(kept);
@@ -2646,6 +2650,54 @@ mod tests {
         let last = taken.last().unwrap();
         assert_eq!((last.pixels.width, last.pixels.height), (80, 80));
         assert_eq!(last.meta.scroll_y, 40.0);
+    }
+
+    /// After the browser is restarted, a change of the screencast's area
+    /// restarts the new browser's screencast, and its frames come through.
+    #[test]
+    fn area_frames_come_after_the_browser_is_restarted() {
+        let Some(binary) = std::env::var_os("RICH_EMBED_CHROME") else {
+            eprintln!("skipped: set RICH_EMBED_CHROME to a Chrome or Chromium binary to run");
+            return;
+        };
+        let mut engine = ChromeEngine::new()
+            .binary(binary)
+            .screencast_on_demand(true);
+        engine.resize(20, 10).unwrap();
+        let page = "data:text/html,<body style='margin:0'><script>let n=0;(function f(){\
+                    document.body.style.background='rgb('+(n++%25256)+',0,0)';\
+                    requestAnimationFrame(f)})()</script>";
+        let area = |x| ScreencastArea {
+            x,
+            y: 0,
+            width: 40,
+            height: 40,
+        };
+        let frame = |engine: &mut ChromeEngine, area: ScreencastArea| {
+            let start = Instant::now();
+            while start.elapsed() < Duration::from_secs(30) {
+                if let Some(frame) = engine.take_screencast()
+                    && frame.pixels.width.abs_diff(area.width) <= 2
+                {
+                    return Some(frame);
+                }
+                thread::sleep(Duration::from_millis(20));
+            }
+            None
+        };
+        engine.open(page).unwrap();
+        for x in [0, 10, 20] {
+            engine.set_screencast_area(Some(area(x))).unwrap();
+            assert!(frame(&mut engine, area(x)).is_some(), "no frame at {x}");
+        }
+        engine.restart().unwrap();
+        engine.open(page).unwrap();
+        engine.set_screencast_area(Some(area(30))).unwrap();
+        assert!(
+            frame(&mut engine, area(30)).is_some(),
+            "no area frame after the restart: {:?}",
+            engine.state().error
+        );
     }
 
     #[cfg(unix)]
