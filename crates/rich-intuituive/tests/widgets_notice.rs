@@ -106,3 +106,36 @@ fn the_close_mark_or_escape_dismisses_it() {
     assert!(!shown.get_untracked());
     assert_eq!(rows(&driver)[0], "runs 0");
 }
+
+#[test]
+fn a_notice_bar_docks_by_a_method() {
+    let app = App::new(|| {
+        let shown = signal(true);
+        column([
+            label("body"),
+            notice_bar(shown, || "Ready".into(), || "an update".into())
+                .dock(intuituive::Dock::Bottom),
+        ])
+    });
+    let mut driver = app.driver(30, 4);
+    driver.settle();
+    let rows = rows(&driver);
+    assert_eq!(rows[0], "body");
+    assert!(rows[3].contains("Ready an update"), "{rows:#?}");
+    // Code wins over a stylesheet's dock.
+    let app = App::new(|| {
+        let shown = signal(true);
+        column([
+            label("body"),
+            notice_bar(shown, || "Ready".into(), || "an update".into())
+                .dock(intuituive::Dock::Top)
+                .class("bar"),
+        ])
+    })
+    .stylesheet(".bar { dock: bottom; }");
+    let mut driver = app.driver(30, 4);
+    driver.settle();
+    let rows = self::rows(&driver);
+    assert!(rows[0].contains("Ready an update"), "{rows:#?}");
+    assert_eq!(rows[1], "body");
+}

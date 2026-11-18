@@ -283,6 +283,8 @@ pub struct Node {
     set: [bool; 9],
     /// Where it sits across its parent's axis, when code said.
     align_self: Option<Align>,
+    /// The edge it keeps to in its parent, when code said.
+    dock: Option<Dock>,
     /// Its classes, for stylesheets: fixed ones, and ones that hold while a
     /// condition does.
     classes: Vec<String>,
@@ -579,6 +581,7 @@ impl Node {
             drop: None,
             set: [false; 9],
             align_self: None,
+            dock: None,
             classes: Vec::new(),
             class_when: Vec::new(),
             selected_when: None,
@@ -910,7 +913,7 @@ impl Node {
         } else {
             layout.max.unwrap_or(self.max)
         };
-        let dock = layout.dock.map(|dock| match dock {
+        let dock = self.dock.or(layout.dock).map(|dock| match dock {
             Dock::Top => "top",
             Dock::Bottom => "bottom",
             Dock::Left => "left",
@@ -1148,6 +1151,37 @@ impl Node {
     /// [`align_items`](Self::align_items) says. CSS's `align-self`.
     pub fn align_self(mut self, align: Align) -> Node {
         self.align_self = Some(align);
+        self
+    }
+
+    /// In a [`column`](fn@column) or [`row`]: keep to `edge`, first or
+    /// last whatever its place among the children, and at the far edge
+    /// when the rest leave room over: a status bar at the bottom of a
+    /// screen, a notice at the top. [`Dock::Top`] and [`Dock::Bottom`] in
+    /// a column, [`Dock::Left`] and [`Dock::Right`] in a row; an edge
+    /// across the parent's axis is ignored, as it is in a wrapping stack.
+    /// A stylesheet's `dock`; code wins over it.
+    ///
+    /// ```
+    /// use intuituive::prelude::*;
+    /// use intuituive::Dock;
+    ///
+    /// let app = App::new(|| {
+    ///     column([
+    ///         label("body"),
+    ///         label("status").dock(Dock::Bottom).fixed(1),
+    ///         label("title").dock(Dock::Top),
+    ///     ])
+    /// });
+    /// let mut driver = app.driver(10, 4);
+    /// driver.settle();
+    /// let rows = driver.screen().plain();
+    /// assert_eq!(rows[0].trim_end(), "title");
+    /// assert_eq!(rows[1].trim_end(), "body");
+    /// assert_eq!(rows[3].trim_end(), "status");
+    /// ```
+    pub fn dock(mut self, edge: Dock) -> Node {
+        self.dock = Some(edge);
         self
     }
 
@@ -2865,7 +2899,7 @@ impl Node {
     ) -> Node {
         let (size, min, max, span, set) = (self.size, self.min, self.max, self.span, self.set);
         let size_with = self.size_with.take();
-        let align_self = self.align_self;
+        let (align_self, dock) = (self.align_self, self.dock);
         // Where it goes in layers is the box's place.
         let (inset, place) = (self.inset.take(), self.place.take());
         // Shown or hidden by the viewport as a whole, box and all.
@@ -2878,6 +2912,7 @@ impl Node {
         outer.max = max;
         outer.span = span;
         outer.align_self = align_self;
+        outer.dock = dock;
         outer.inset = inset;
         outer.place = place;
         outer.set[SET_SIZE] = set[SET_SIZE];
@@ -2956,9 +2991,9 @@ impl Node {
         self.sheet.borrow().layout.hidden || self.shown_when.iter().any(|(_, shown)| !shown())
     }
 
-    /// The edge a stylesheet docks it to, if any.
-    pub(crate) fn dock(&self) -> Option<Dock> {
-        self.sheet.borrow().layout.dock
+    /// The edge code or a stylesheet docks it to, if any; code wins.
+    pub(crate) fn docked(&self) -> Option<Dock> {
+        self.dock.or(self.sheet.borrow().layout.dock)
     }
 
     /// Where it sits across its parent's axis, if code or a stylesheet

@@ -288,7 +288,7 @@ pub use screen::{PaintStats, PaintStrategy};
 pub use scroll_virtual::{scroll_virtual, scroll_virtual_with};
 pub use select::{ListSearch, Mark, MultiSelect, list_search, multi_select};
 pub use select_field::{SelectOption, select_field, select_field_keyed};
-pub use sheet::{SheetError, Stylesheet};
+pub use sheet::{Dock, SheetError, Stylesheet};
 pub use signals::{Count, History, falling, history, recent, recent_of, recent_timed, smoothed};
 pub use solver::Solver;
 pub use spans::SpanTarget;

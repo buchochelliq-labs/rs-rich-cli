@@ -423,7 +423,7 @@ and other `@` rules are an error.
 | `keyline` | `thin`, `heavy` or `double`, then a colour: lines round and between a row's, column's or grid's children, as `border-collapse: collapse` draws them; `none` |
 | `gap`, `grid-columns`, `grid-rows` | a stack's or grid's spacing; a grid's tracks |
 | `display` | `none` hides the node and what is inside, in any container (a split's pane, a scroll's or a switch's child), takes it out of the Tab order, and out of a grid's cells |
-| `dock` | `top` or `bottom` in a column, `left` or `right` in a row: kept at that edge |
+| `dock` | `top` or `bottom` in a column, `left` or `right` in a row: kept at that edge. Code's `.dock(Dock::Bottom)` wins |
 | `align-items`, `align-self` | `flex-start`, `center`, `flex-end` or `stretch` (`align-self` also `auto`): where a stack's children sit across its axis |
 | `justify-content` | `flex-start`, `center`, `flex-end`, `space-between`, `space-around` or `space-evenly`: what a stack does with the room its children leave |
 | `flex-wrap`, `align-content` | `nowrap` or `wrap`; where a wrapping stack's lines sit (the `justify-content` values, or `stretch`) |

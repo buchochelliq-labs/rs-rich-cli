@@ -102,3 +102,62 @@ fn a_tag_input_adds_once_removes_and_takes_a_paste() {
             .ends_with("text box: a, b")
     );
 }
+
+#[test]
+fn a_tag_input_wraps_its_chips_and_grows_from_min_to_max() {
+    let app = App::new(|| {
+        let tags = signal(Vec::<String>::new());
+        column([tag_input(tags).grow(1, 2), label("below")])
+    });
+    let mut driver = app.driver(16, 4);
+    driver.settle();
+    let rows = |driver: &Driver| -> Vec<String> {
+        driver
+            .screen()
+            .plain()
+            .iter()
+            .map(|r| r.trim_end().to_string())
+            .collect()
+    };
+    assert_eq!(rows(&driver)[1], "below");
+    driver.type_text("alpha,beta,");
+    // ` alpha × ` and ` beta × ` do not both fit in 16: two rows.
+    assert_eq!(rows(&driver)[..3], [" alpha ×", " beta ×", "below"]);
+    // Typed text that does not fit after the last chip goes under it, but
+    // the input grows no taller than 2: the last two rows are shown.
+    driver.type_text("gamma-delta");
+    assert_eq!(rows(&driver)[..3], [" beta ×", "gamma-delta", "below"]);
+    driver.press("enter");
+    // The caret has a row of its own under the new chip.
+    assert_eq!(rows(&driver)[..3], [" gamma-delta ×", "", "below"]);
+    // A click on the `×` of a chip on a row below the first removes it.
+    driver.click(13, 0);
+    assert_eq!(rows(&driver)[..3], [" alpha ×", " beta ×", "below"]);
+}
+
+#[test]
+fn a_tag_input_moves_its_caret_in_what_is_typed() {
+    let app = App::new(|| {
+        let tags = signal(Vec::<String>::new());
+        column([
+            tag_input(tags),
+            text(move || format!("({})", tags.get().join("|"))),
+        ])
+    });
+    let mut driver = app.driver(20, 2);
+    driver.settle();
+    driver.type_text("ac");
+    driver.press("left");
+    driver.type_text("b");
+    // The caret is on `c`, reversed.
+    let styled = intuituive::testing::styled(&driver);
+    assert!(styled.contains("ab[reverse]c[/]"), "{styled}");
+    driver.press("home");
+    driver.type_text("x");
+    driver.press("end");
+    driver.type_text("y");
+    driver.press("home delete right right backspace");
+    assert_eq!(driver.screen().plain()[0].trim_end(), "acy");
+    driver.press("enter");
+    assert_eq!(driver.screen().plain()[1].trim_end(), "(acy)");
+}

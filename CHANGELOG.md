@@ -9,6 +9,24 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### intuiTUIve: tag input, docking and toast buttons (#906)
+
+- **`tag_input` wraps and edits.** Its chips wrap onto more rows when
+  they do not fit its width, and `.grow(min, max)` makes it as tall as
+  its rows, from `min` to `max`, as a `text_area`'s (past `max` the last
+  rows show, with what is typed). The text being typed has a caret that
+  ←, →, Home and End move; Backspace and Delete take the character before
+  or after it.
+- **`Node::dock(Dock)` docks any node** to the top or bottom of a column,
+  or the left or right of a row, as a stylesheet's `dock` does; code wins
+  over the stylesheet. A notice bar docks with it (`.dock(Dock::Top)`).
+  `Dock` is public.
+- **A notification's buttons from the keyboard.** Alt+1 runs the first
+  button of the newest notification with buttons (to Alt+9 for the
+  ninth), unless a node on the focus path binds the key; a screen reader
+  hears the buttons and their keys with the notification (`… Buttons:
+  Undo, Alt+1; View, Alt+2`).
+
 ### Cornacai: signing in from a terminal (claude-agent-acp)
 
 - **Claude's adapter can be signed in to from Cornacai.**

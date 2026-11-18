@@ -3031,6 +3031,7 @@ pub fn intuituive::node::Node::class_when(self, &str, impl core::ops::function::
 pub fn intuituive::node::Node::collapse_borders(self) -> intuituive::node::Node
 pub fn intuituive::node::Node::controlled_modal(self) -> intuituive::node::Node
 pub fn intuituive::node::Node::disabled_when(self, impl core::ops::function::Fn() -> bool + 'static) -> intuituive::node::Node
+pub fn intuituive::node::Node::dock(self, intuituive::Dock) -> intuituive::node::Node
 pub fn intuituive::node::Node::draggable<T: 'static>(self, T) -> intuituive::node::Node
 pub fn intuituive::node::Node::error_message(self, impl core::ops::function::Fn() -> core::option::Option<alloc::string::String> + 'static) -> intuituive::node::Node
 pub fn intuituive::node::Node::error_when(self, impl core::ops::function::Fn() -> bool + 'static) -> intuituive::node::Node
@@ -4413,6 +4414,7 @@ pub fn intuituive::node::Node::class_when(self, &str, impl core::ops::function::
 pub fn intuituive::node::Node::collapse_borders(self) -> intuituive::node::Node
 pub fn intuituive::node::Node::controlled_modal(self) -> intuituive::node::Node
 pub fn intuituive::node::Node::disabled_when(self, impl core::ops::function::Fn() -> bool + 'static) -> intuituive::node::Node
+pub fn intuituive::node::Node::dock(self, intuituive::Dock) -> intuituive::node::Node
 pub fn intuituive::node::Node::draggable<T: 'static>(self, T) -> intuituive::node::Node
 pub fn intuituive::node::Node::error_message(self, impl core::ops::function::Fn() -> core::option::Option<alloc::string::String> + 'static) -> intuituive::node::Node
 pub fn intuituive::node::Node::error_when(self, impl core::ops::function::Fn() -> bool + 'static) -> intuituive::node::Node
@@ -7368,6 +7370,29 @@ impl core::marker::Unpin for intuituive::focus::Direction
 impl core::marker::UnsafeUnpin for intuituive::focus::Direction
 impl core::panic::unwind_safe::RefUnwindSafe for intuituive::focus::Direction
 impl core::panic::unwind_safe::UnwindSafe for intuituive::focus::Direction
+pub enum intuituive::Dock
+pub intuituive::Dock::Bottom
+pub intuituive::Dock::Left
+pub intuituive::Dock::Right
+pub intuituive::Dock::Top
+impl core::clone::Clone for intuituive::Dock
+pub fn intuituive::Dock::clone(&self) -> intuituive::Dock
+impl core::cmp::Eq for intuituive::Dock
+impl core::cmp::PartialEq for intuituive::Dock
+pub fn intuituive::Dock::eq(&self, &intuituive::Dock) -> bool
+impl core::fmt::Debug for intuituive::Dock
+pub fn intuituive::Dock::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::hash::Hash for intuituive::Dock
+pub fn intuituive::Dock::hash<__H: core::hash::Hasher>(&self, &mut __H)
+impl core::marker::Copy for intuituive::Dock
+impl core::marker::StructuralPartialEq for intuituive::Dock
+impl core::marker::Freeze for intuituive::Dock
+impl core::marker::Send for intuituive::Dock
+impl core::marker::Sync for intuituive::Dock
+impl core::marker::Unpin for intuituive::Dock
+impl core::marker::UnsafeUnpin for intuituive::Dock
+impl core::panic::unwind_safe::RefUnwindSafe for intuituive::Dock
+impl core::panic::unwind_safe::UnwindSafe for intuituive::Dock
 #[non_exhaustive] pub enum intuituive::Easing
 pub intuituive::Easing::EaseIn
 pub intuituive::Easing::EaseInOut
@@ -8971,6 +8996,7 @@ pub fn intuituive::node::Node::class_when(self, &str, impl core::ops::function::
 pub fn intuituive::node::Node::collapse_borders(self) -> intuituive::node::Node
 pub fn intuituive::node::Node::controlled_modal(self) -> intuituive::node::Node
 pub fn intuituive::node::Node::disabled_when(self, impl core::ops::function::Fn() -> bool + 'static) -> intuituive::node::Node
+pub fn intuituive::node::Node::dock(self, intuituive::Dock) -> intuituive::node::Node
 pub fn intuituive::node::Node::draggable<T: 'static>(self, T) -> intuituive::node::Node
 pub fn intuituive::node::Node::error_message(self, impl core::ops::function::Fn() -> core::option::Option<alloc::string::String> + 'static) -> intuituive::node::Node
 pub fn intuituive::node::Node::error_when(self, impl core::ops::function::Fn() -> bool + 'static) -> intuituive::node::Node

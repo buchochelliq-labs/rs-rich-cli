@@ -142,6 +142,9 @@ notice_bar(shown, || "Changed".into(), move || format!("{name} changed on disk")
   with `…`, its actions and a `×` at the right. Enter or a click on the
   text opens it: the title on the first row, the whole text wrapped
   under it. `×`, or Esc while it has the focus, sets `shown` false.
+  Put it first or last in a column, or dock it there with
+  `.dock(Dock::Top)` or `.dock(Dock::Bottom)` (any node takes `.dock`,
+  as a stylesheet's `dock`, which code wins over).
 - ← and → pick the text, an action or `×`; Enter or Space runs it.
   `.notice_closes(true)` dismisses the bar after an action runs, and
   `.notice_open(signal)` opens it from the app and says whether it is.
@@ -197,7 +200,12 @@ tag_input(tags)                                   // a Signal<Vec<String>>
 - **`tag_input(tags)`** types tags into a row of removable chips: Enter,
   Tab or a comma adds what was typed (once), Backspace with nothing typed
   removes the last tag, a click on a `×` removes that one, and a paste
-  adds a tag at each comma. One row, cut at its width.
+  adds a tag at each comma. ← and →, Home and End move the caret in what
+  is typed; Backspace and Delete take the character before or after it.
+- The chips wrap onto more rows when they do not fit. It is one row
+  unless sized otherwise; **`.grow(min, max)`** makes it as tall as its
+  rows, from `min` to `max`, as a `text_area`'s, and past `max` the last
+  rows show, with what is typed.
 
 ### A pager strip
 

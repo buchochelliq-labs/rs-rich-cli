@@ -130,3 +130,54 @@ fn the_history_keeps_what_was_shown_after_it_goes() {
     }
     assert_eq!(history.get_untracked().len(), 100);
 }
+
+#[test]
+fn alt_and_a_number_runs_the_newest_notifications_button() {
+    let (mut driver, out) = app();
+    let (undo, view, _) = out.get().unwrap();
+    driver.take_announcements();
+    driver.press("n");
+    // Announced with its buttons and their keys.
+    let said: Vec<String> = driver
+        .take_announcements()
+        .into_iter()
+        .map(|a| a.text)
+        .collect();
+    assert_eq!(
+        said,
+        ["Warning: Trash: 3 files moved. Buttons: Undo, Alt+1; View, Alt+2"]
+    );
+    // A plain toast after it has no buttons: the keys still reach the
+    // notification.
+    driver.press("t");
+    driver.press("alt+2");
+    assert_eq!((undo.get_untracked(), view.get_untracked()), (0, 1));
+    assert!(driver.find_text("Trash").is_none());
+    assert!(driver.find_text("Copied").is_some());
+    // With no notification with buttons, or past the last button, the key
+    // is the app's.
+    driver.press("n");
+    driver.press("alt+3");
+    assert!(driver.find_text("Trash").is_some());
+    driver.press("alt+1");
+    assert_eq!((undo.get_untracked(), view.get_untracked()), (1, 1));
+}
+
+#[test]
+fn a_binding_on_the_focus_path_wins_over_a_toasts_key() {
+    let app = App::new(|| {
+        let (mine, undo) = (signal(0u32), signal(0u32));
+        column([text!("mine {mine} undo {undo}")])
+            .on_key("alt+1", move |_| mine.update(|n| *n += 1))
+            .on_key("n", move |cx| {
+                cx.notify_with(
+                    Notification::new(Level::Info, "Moved", "a file")
+                        .action("Undo", move |_| undo.update(|n| *n += 1)),
+                )
+            })
+    });
+    let mut driver = app.driver(40, 8);
+    driver.press("n alt+1");
+    assert_eq!(rows(&driver)[0], "mine 1 undo 0");
+    assert!(driver.find_text("Moved").is_some());
+}

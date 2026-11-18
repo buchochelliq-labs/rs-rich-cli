@@ -427,7 +427,7 @@ impl MeasureCx<'_> {
         // Docked children go first or last; hidden ones take no room and
         // no gap.
         use crate::sheet::Dock;
-        let rank = |child: &Node| match (child.dock(), axis) {
+        let rank = |child: &Node| match (child.docked(), axis) {
             (Some(Dock::Top), Axis::Vertical) | (Some(Dock::Left), Axis::Horizontal) => 0,
             (Some(Dock::Bottom), Axis::Vertical) | (Some(Dock::Right), Axis::Horizontal) => 2,
             _ => 1,

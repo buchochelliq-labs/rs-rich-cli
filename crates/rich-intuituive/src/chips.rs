@@ -191,18 +191,36 @@ impl Widget for Chip {
 /// A [`tag_input`]'s widget.
 struct TagInput {
     tags: Signal<Vec<String>>,
-    draft: String,
-    /// Where each tag's `×` was last drawn, by index.
-    closes: Vec<(usize, u16)>,
+    /// What is being typed: a signal, so it lays out again as it wraps.
+    draft: Signal<String>,
+    /// The caret in what is being typed, in chars.
+    caret: usize,
+    /// Where each tag's `×` was last drawn, by index: its column and row.
+    closes: Vec<(usize, u16, u16)>,
+}
+
+/// One piece of a [`tag_input`]'s rows: a chip's cells, or what is being
+/// typed (`None`).
+struct Piece {
+    cells: Option<(Vec<Segment>, Option<u16>)>,
+    width: usize,
 }
 
 /// A box that types tags into `tags`: each tag a removable [`chip`], then
 /// what is being typed. Enter, Tab or a comma adds what was typed (trimmed,
 /// once: a tag already there is not added again); Backspace with nothing
 /// typed removes the last tag, and a click on a chip's `×` removes it.
+/// ← and →, Home and End move the caret in what is typed, Backspace and
+/// Delete take the character before or after it.
+///
 /// The chips are in the theme's `badge.label` style, what is typed after
-/// them with a block caret while it has the focus. One row, cut at its
-/// width. Its role is a text box, its value the tags.
+/// them with a block caret (the theme's `tag_input.caret`, `reverse`)
+/// while it has the focus. The chips wrap onto more rows when they do not
+/// fit its width; it is one row unless sized otherwise, and
+/// [`grow(min, max)`](Node::grow) makes it as tall as its rows, from `min`
+/// to `max`, as a [`text_area`](crate::text_area)'s. Where there are more
+/// rows than room, the last ones are shown, with what is typed. Its role
+/// is a text box, its value the tags.
 ///
 /// ```
 /// use intuituive::prelude::*;
@@ -224,7 +242,8 @@ struct TagInput {
 pub fn tag_input(tags: Signal<Vec<String>>) -> Node {
     widget(TagInput {
         tags,
-        draft: String::new(),
+        draft: crate::reactive::signal(String::new()),
+        caret: 0,
         closes: Vec::new(),
     })
     .what("tag_input")
@@ -235,8 +254,9 @@ pub fn tag_input(tags: Signal<Vec<String>>) -> Node {
 impl TagInput {
     /// Add what was typed as a tag.
     fn commit(&mut self) {
-        let tag = self.draft.trim().to_string();
-        self.draft.clear();
+        let tag = self.draft.get_untracked().trim().to_string();
+        self.draft.set(String::new());
+        self.caret = 0;
         if tag.is_empty() {
             return;
         }
@@ -246,6 +266,69 @@ impl TagInput {
             }
         });
     }
+
+    /// The byte offset of the caret in what is typed.
+    fn caret_byte(&self, draft: &str) -> usize {
+        draft
+            .char_indices()
+            .nth(self.caret)
+            .map_or(draft.len(), |(at, _)| at)
+    }
+
+    fn insert(&mut self, c: char) {
+        let at = self.draft.with_untracked(|draft| self.caret_byte(draft));
+        self.draft.update(|draft| draft.insert(at, c));
+        self.caret += 1;
+    }
+
+    /// Take the character at the caret.
+    fn remove(&mut self) {
+        let at = self.draft.with_untracked(|draft| self.caret_byte(draft));
+        self.draft.update(|draft| {
+            draft.remove(at);
+        });
+    }
+
+    /// The chips, then what is typed (with a cell for the caret after it).
+    fn pieces(&self, console: &Console) -> Vec<Piece> {
+        let (tags, draft) = (self.tags.get(), self.draft.get());
+        let mut pieces: Vec<Piece> = tags
+            .iter()
+            .map(|tag| {
+                let (cells, close) = chip_cells(console, &Badge::label(tag.clone()), true);
+                let width = cells.iter().map(Segment::cell_length).sum();
+                Piece {
+                    cells: Some((cells, close)),
+                    width,
+                }
+            })
+            .collect();
+        pieces.push(Piece {
+            cells: None,
+            width: rich::cells::cell_len(&draft) + 1,
+        });
+        pieces
+    }
+}
+
+/// Where each piece goes, as its row and column: on the row it starts
+/// unless it does not fit after what is there, a cell between pieces.
+fn wrap_pieces(pieces: &[Piece], width: u16) -> Vec<(u16, usize)> {
+    let width = (width as usize).max(1);
+    let mut out = Vec::with_capacity(pieces.len());
+    let (mut row, mut x) = (0u16, 0usize);
+    for piece in pieces {
+        let at = if x == 0 { 0 } else { x + 1 };
+        if x > 0 && at + piece.width > width {
+            row = row.saturating_add(1);
+            out.push((row, 0));
+            x = piece.width;
+        } else {
+            out.push((row, at));
+            x = at + piece.width;
+        }
+    }
+    out
 }
 
 impl Widget for TagInput {
@@ -259,46 +342,83 @@ impl Widget for TagInput {
 
     fn access_value(&self) -> Option<String> {
         let mut value = self.tags.get_untracked().join(", ");
-        if !self.draft.is_empty() {
+        let draft = self.draft.get_untracked();
+        if !draft.is_empty() {
             if !value.is_empty() {
                 value.push_str(", ");
             }
-            value.push_str(&self.draft);
+            value.push_str(&draft);
         }
         Some(value)
     }
 
-    fn measure(&mut self, _cx: &MeasureCx, axis: Axis, width: u16, _height: u16) -> u16 {
+    fn measure(&mut self, cx: &MeasureCx, axis: Axis, width: u16, _height: u16) -> u16 {
         match axis {
-            Axis::Vertical => 1,
+            Axis::Vertical => {
+                let pieces = self.pieces(cx.console());
+                wrap_pieces(&pieces, width)
+                    .last()
+                    .map_or(1, |(row, _)| row.saturating_add(1))
+            }
             Axis::Horizontal => width,
         }
     }
 
     fn draw(&mut self, cx: &mut DrawCx, canvas: &mut Canvas) {
         let console = cx.console();
-        let mut line = Vec::new();
+        let (width, height) = (canvas.width(), canvas.height().max(1));
+        let pieces = self.pieces(console);
+        let draft = self.draft.get_untracked();
+        let places = wrap_pieces(&pieces, width);
+        let rows = places.last().map_or(1, |(row, _)| row + 1);
+        // More rows than room: the last ones, with what is typed.
+        let skip = rows.saturating_sub(height);
+        let mut lines: Vec<Vec<Segment>> = vec![Vec::new(); (rows - skip) as usize];
+        let mut used = vec![0usize; lines.len()];
         let mut closes = Vec::new();
-        for (i, tag) in self.tags.get().iter().enumerate() {
-            if i > 0 {
-                line.push(Segment::new(" ", None));
+        let mut caret = None;
+        for (i, (piece, &(row, x))) in pieces.into_iter().zip(&places).enumerate() {
+            let Some(y) = row.checked_sub(skip) else {
+                continue;
+            };
+            let line = &mut lines[y as usize];
+            if x > used[y as usize] {
+                line.push(Segment::new(" ".repeat(x - used[y as usize]), None));
             }
-            let at: usize = line.iter().map(Segment::cell_length).sum();
-            let (cells, close) = chip_cells(console, &Badge::label(tag.clone()), true);
-            if let Some(close) = close {
-                closes.push((i, (at + close as usize).min(u16::MAX as usize) as u16));
+            used[y as usize] = x + piece.width;
+            match piece.cells {
+                Some((cells, close)) => {
+                    if let Some(close) = close {
+                        let at = (x + close as usize).min(u16::MAX as usize) as u16;
+                        closes.push((i, at, y));
+                    }
+                    line.extend(cells);
+                }
+                None => {
+                    // Typed text wider than the row: the part round the caret.
+                    let before: usize = draft.chars().take(self.caret).map(char_cells).sum();
+                    let room = (width as usize).saturating_sub(x).max(1);
+                    let shift = (before + 1).saturating_sub(room);
+                    let mut skipped = 0;
+                    let shown: String = draft
+                        .chars()
+                        .skip_while(|&c| {
+                            let skip = skipped < shift;
+                            if skip {
+                                skipped += char_cells(c);
+                            }
+                            skip
+                        })
+                        .collect();
+                    line.push(Segment::new(shown, None));
+                    caret = Some(((x + before - skipped).min(u16::MAX as usize) as u16, y));
+                }
             }
-            line.extend(cells);
         }
-        if !line.is_empty() {
-            line.push(Segment::new(" ", None));
-        }
-        line.push(Segment::new(self.draft.clone(), None));
-        let caret: usize = line.iter().map(Segment::cell_length).sum();
-        canvas.lines(&[line]);
-        if cx.focused() {
+        canvas.lines(&lines);
+        if let (true, Some((x, y))) = (cx.focused(), caret) {
             let style = cx.style("tag_input.caret", "reverse");
-            canvas.restyle(caret.min(u16::MAX as usize) as u16, 0, 1, 1, &style);
+            canvas.restyle(x, y, 1, 1, &style);
         }
         self.closes = closes;
     }
@@ -311,7 +431,11 @@ impl Widget for TagInput {
                     MouseKind::Down(MouseButton::Left) | MouseKind::Up(MouseButton::Left)
                 ) =>
             {
-                let Some(&(i, _)) = self.closes.iter().find(|(_, x)| *x == mouse.column) else {
+                let Some(&(i, _, _)) = self
+                    .closes
+                    .iter()
+                    .find(|(_, x, y)| *x == mouse.column && *y == mouse.row)
+                else {
                     return Used::No;
                 };
                 if mouse.kind == MouseKind::Up(MouseButton::Left) {
@@ -324,10 +448,12 @@ impl Widget for TagInput {
                 Used::Yes
             }
             WidgetEvent::Key(key) if !key.modifiers.ctrl && !key.modifiers.alt => {
+                let draft = self.draft.get_untracked();
+                let chars = draft.chars().count();
                 match key.code {
                     KeyCode::Enter | KeyCode::Char(',') => self.commit(),
-                    KeyCode::Tab if !self.draft.trim().is_empty() => self.commit(),
-                    KeyCode::Backspace if self.draft.is_empty() => {
+                    KeyCode::Tab if !draft.trim().is_empty() => self.commit(),
+                    KeyCode::Backspace if draft.is_empty() => {
                         if self.tags.get_untracked().is_empty() {
                             return Used::No;
                         }
@@ -336,9 +462,17 @@ impl Widget for TagInput {
                         });
                     }
                     KeyCode::Backspace => {
-                        self.draft.pop();
+                        if self.caret > 0 {
+                            self.caret -= 1;
+                            self.remove();
+                        }
                     }
-                    KeyCode::Char(c) => self.draft.push(c),
+                    KeyCode::Delete if self.caret < chars => self.remove(),
+                    KeyCode::Left if self.caret > 0 => self.caret -= 1,
+                    KeyCode::Right if self.caret < chars => self.caret += 1,
+                    KeyCode::Home if !draft.is_empty() => self.caret = 0,
+                    KeyCode::End if !draft.is_empty() => self.caret = chars,
+                    KeyCode::Char(c) => self.insert(c),
                     _ => return Used::No,
                 }
                 cx.redraw();
@@ -349,7 +483,7 @@ impl Widget for TagInput {
                     if c == ',' || c == '\n' {
                         self.commit();
                     } else {
-                        self.draft.push(c);
+                        self.insert(c);
                     }
                 }
                 cx.redraw();
@@ -362,4 +496,8 @@ impl Widget for TagInput {
     fn focusable(&self) -> bool {
         true
     }
+}
+
+fn char_cells(c: char) -> usize {
+    rich::cells::cell_len(c.encode_utf8(&mut [0; 4]))
 }
