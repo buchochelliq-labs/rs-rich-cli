@@ -3911,10 +3911,14 @@ fn stack(dom: &Dom, ax: &Ax<'_>, page: &mut Page) {
         block.stack.over = media
             .iter()
             .filter(|(m, by, mo)| {
+                // As big as the picture counts, to holds' pixel (a
+                // player's overlay frame is its video's box, rounded),
+                // but only over one painted strictly before it: two boxes
+                // as big as each other in one paint order would each lie
+                // over the other, and neither would be drawn.
+                let larger = area(by) > area(&rect);
                 page.media[*m].node != block.node
-                    && mo.is_some_and(|mo| mo <= o)
-                    // As big as the picture counts, to holds' pixel: a
-                    // player's overlay frame is its video's box, rounded.
+                    && mo.is_some_and(|mo| if larger { mo <= o } else { mo < o })
                     && area(by) >= area(&rect) * 0.99
                     && holds(*by, rect)
             })

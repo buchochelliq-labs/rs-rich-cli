@@ -752,6 +752,32 @@ fn a_players_overlay_frame_lies_over_its_video_and_hides_nothing() {
 }
 
 #[test]
+fn two_pictures_as_big_as_each_other_in_one_paint_order_are_both_drawn() {
+    // Neither lies over the other: each would, and the projection would
+    // then skip both as art in the other's pixels.
+    use noctiluca::engine::Rect;
+    use noctiluca::layout::Marks;
+    use noctiluca::testing::PageBuilder;
+    let mut p = PageBuilder::new("https://fixture.example/pair.html", "Pair", 800.0, 600.0);
+    let body = p.body();
+    p.paint(body, 1);
+    let a = p.image(body, "a.png", "First", Rect::new(0.0, 0.0, 320.0, 180.0));
+    p.paint(a, 2);
+    let b = p.image(body, "b.png", "Second", Rect::new(0.0, 0.0, 320.0, 180.0));
+    p.paint(b, 2);
+    let page = build(&p.snapshot(), &mut Revisions::new());
+    let overs: Vec<Option<usize>> = page
+        .blocks
+        .iter()
+        .filter(|b| matches!(b.kind, BlockKind::Media(_)))
+        .map(|b| b.stack.over)
+        .collect();
+    assert_eq!(overs, [None, None], "{:#?}", page.blocks);
+    let projection = noctiluca::layout::project(&page, 100, (8.0, 18.0), &Marks::default());
+    assert!(!projection.regions.is_empty(), "{:#?}", projection.regions);
+}
+
+#[test]
 fn an_app_shells_bars_above_and_under_its_scrolling_main_box_are_layers() {
     // The page does not scroll; its main box does (a streaming site's
     // directory): the top bar above it is pinned, the sign-up bar under it
