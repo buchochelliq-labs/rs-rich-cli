@@ -9,21 +9,57 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
-## 0.0.27 cohort — to be published
+### Cornacai: signing in from a terminal (claude-agent-acp)
 
-To be published from `main` by one `release.yml` run on rab v2.1.2 (tag
-`release-0.0.27`): core 0.0.17 / macros 0.0.11 / plugin API 0.0.11 /
-art 0.0.20 / diagram 0.0.10 / mermaid 0.0.13 / lumis 0.0.11 / ext 0.0.24 /
-micro 0.0.13 / record 0.0.15 / interact 0.0.15 / ratatui 0.0.12 /
-intuituive 0.0.12 / embed 0.0.10 / web 0.0.10 / data 0.0.11 /
-marketplace 0.0.6 / acp 0.0.4 / noctiluca 0.0.6 / cornacai 0.0.4 /
-CLI 0.0.27, and `rs-rich` 0.0.15 on PyPI. The last point release before
-0.1.0's API review: Noctiluca's video is smooth with a release build
-(Kitty's frame intervals p95 44.9 ms, no frame blanks its region), the
-browser recovers when Chrome exits or a page crashes, shop and chat pages
-read better, and 0.0.26's real-site faults #889, #891 and #892 and #884's
-overlay redraws are fixed; intuiTUIve gains widgets for clicks, notices,
-steps and toasts. See [the release notes](docs/releases/0.0.27.md).
+- **Claude's adapter can be signed in to from Cornacai.**
+  `claude-agent-acp` offers its sign-in methods only to a client that says
+  it runs terminal sign-ins (`clientCapabilities.auth.terminal`), and
+  Cornacai did not, so it offered none and Cornacai said only "Sign in
+  with the agent's own command". Cornacai now says it does when it starts
+  the agent: the sign-in prompt lists the agent's terminal methods
+  (*in this terminal*), and picking one gives the terminal to the agent's
+  own command with the method's arguments (`claude-agent-acp --cli auth
+  login --claudeai`), then sends what failed again. It does not call
+  `authenticate` for them, which the adapter refuses.
+  `Options::sign_in_command` sets the command (the launch command by
+  default; `None` offers none).
+- **An agent offering no usable sign-in is explained:** the notice lists
+  what it offered, with each method's description, then two numbered
+  steps: how to sign in by hand and that Ctrl+N opens a session. For
+  Claude's adapter the first is the command to paste, the launch command
+  with `--cli auth login --claudeai` (or `--console`), quoted when its
+  path has a space, so no separate `claude` install is needed; for Gemini
+  and Codex it names their sign-in and API-key variable
+  (`config::sign_in_hint`, which takes the launch command). Pressing Esc
+  at the sign-in prompt says that Ctrl+N asks again.
+- rs-rich-acp: `ClientCapabilities::terminal_sign_in` and
+  `AuthCapabilities` (`auth.terminal`); `AuthMethod::args`, the arguments
+  of a `terminal` method, and `AuthMethod::in_terminal`.
+
+### Versions: 0.1.0 opened
+
+- Every package moves to 0.1.0 after 0.0.27's publication, as the plan to
+  1.0.0's stage 3 says: the internal requirements are written `"0.1.0"`
+  (Cargo's caret holds them to `>=0.1.0, <0.2.0`), and `rs-rich` on PyPI
+  is 0.1.0. `rab.yml` names the release 0.1.0.
+
+## 0.0.27 cohort — published 2026-11-18
+
+Published from `main` at `e7fc3d73` (#908's merge) by one `release.yml`
+run on rab v2.1.2 (tag `release-0.0.27`): core 0.0.17 / macros 0.0.11 /
+plugin API 0.0.11 / art 0.0.20 / diagram 0.0.10 / mermaid 0.0.13 /
+lumis 0.0.11 / ext 0.0.24 / micro 0.0.13 / record 0.0.15 / interact
+0.0.15 / ratatui 0.0.12 / intuituive 0.0.12 / embed 0.0.10 / web 0.0.10 /
+data 0.0.11 / marketplace 0.0.6 / acp 0.0.4 / noctiluca 0.0.6 /
+cornacai 0.0.4 / CLI 0.0.27, and `rs-rich` 0.0.15 on PyPI
+(`python-v0.0.15`, same commit). The last point release before 0.1.0's
+API review: Noctiluca's video is smooth with a release build (Kitty's
+frame intervals p95 44.9 ms, no frame blanks its region), a live stream's
+video no longer freezes (#890), the browser recovers when Chrome exits or
+a page crashes, shop and chat pages read better, and 0.0.26's real-site
+faults #889, #891 and #892 and #884's overlay redraws are fixed;
+intuiTUIve gains widgets for clicks, notices, steps and toasts. See
+[the release notes](docs/releases/0.0.27.md).
 
 ### Dependencies: security fixes in the lockfiles
 

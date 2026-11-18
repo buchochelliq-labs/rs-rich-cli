@@ -201,9 +201,29 @@ methods the agent offered when it started, one button each; the one you
 pick is sent to the agent (`authenticate`), which does the signing in its
 own way (a browser page, an API key it reads), and what failed is sent
 again: the session opens, or your prompt goes through. Esc signs in with
-none. Methods that need the agent run in a terminal are not offered;
-sign in with the agent's own command for those, then start Cornacai
-again.
+none.
+
+A method marked *in this terminal* is one the agent asks the client to
+run: Cornacai gives the terminal to the agent's own command with that
+method's arguments (for the Claude adapter, `claude-agent-acp --cli auth
+login --claudeai` for a Claude subscription, or `--console` for the
+Anthropic Console), you sign in there, and Cornacai comes back and sends
+what failed again. Agents offer these methods only to a client that says
+it runs them, which Cornacai does when it starts the agent itself.
+
+An agent that wants a sign-in and offers no method Cornacai can use gets
+a notice listing what it offered, then two steps: how to sign in by hand,
+and Ctrl+N to open a session. For Claude's adapter the first step is the
+command to paste into another terminal, built from the one Cornacai
+started it with:
+
+```text
+claude-agent-acp --cli auth login --claudeai   # a Claude subscription
+claude-agent-acp --cli auth login --console    # an Anthropic Console account
+```
+
+(or set `ANTHROPIC_API_KEY` before starting Cornacai). For Gemini and
+Codex it names their own sign-in and API-key variable.
 
 ## Configuration
 
@@ -247,7 +267,6 @@ wait_for(&mut driver, "Prompt", Duration::from_secs(10));
 - An agent terminal shown live as a terminal in its card: on a PTY its
   output is read as plain text.
 - Sending a selection from the shell pane to the agent.
-- Sign-in methods that run the agent in a terminal.
 
 The design, its security model and its open questions are in
 [the design note](https://github.com/buchochelliq-labs/rs-rich-cli/blob/main/docs/design/cornacai.md).

@@ -83,13 +83,23 @@ pub struct Options {
     /// Reopen this session (`session/load`) instead of opening a new one,
     /// when the agent offers it.
     pub resume: Option<String>,
+    /// The command an agent's `terminal` sign-in methods run with their
+    /// arguments, given the terminal for the user to sign in: the agent's
+    /// launch command by default. `None`: no terminal sign-in is offered,
+    /// and the agent leaves those methods out.
+    pub sign_in_command: Option<Vec<String>>,
 }
 
 impl Options {
     /// `launch` in `cwd`, reads answered, writes and terminals asking, no
     /// shell pane.
     pub fn new(launch: Launch, cwd: impl Into<PathBuf>) -> Options {
+        let sign_in_command = match &launch {
+            Launch::Command(argv) => Some(argv.clone()),
+            Launch::Replay { .. } => None,
+        };
         Options {
+            sign_in_command,
             launch,
             cwd: cwd.into(),
             read: true,
@@ -106,6 +116,14 @@ impl Options {
     #[must_use]
     pub fn session_store(mut self, store: SessionStore) -> Options {
         self.store = Some(store);
+        self
+    }
+
+    /// Run the agent's `terminal` sign-in methods with `command` (`None`:
+    /// offer none).
+    #[must_use]
+    pub fn sign_in_command(mut self, command: Option<Vec<String>>) -> Options {
+        self.sign_in_command = command;
         self
     }
 
@@ -147,6 +165,7 @@ impl Options {
             .read_files(self.read)
             .write_files(self.write)
             .terminals(self.terminal)
+            .terminal_sign_in(self.sign_in_command.is_some())
     }
 }
 
@@ -163,6 +182,8 @@ pub(crate) struct Hub {
     store_lock: Mutex<()>,
     /// The sign-in methods `initialize` advertised.
     auth_methods: Mutex<Vec<AuthMethod>>,
+    /// What a `terminal` sign-in method runs ([`Options::sign_in_command`]).
+    sign_in_command: Option<Vec<String>>,
     /// Whether the agent offers `session/load`.
     can_load: AtomicBool,
     /// The agent's last lines on stderr, for a start-up that fails.
@@ -725,6 +746,7 @@ pub fn app(options: Options) -> (App, Handle) {
         store: options.store.clone(),
         store_lock: Mutex::new(()),
         auth_methods: Mutex::new(Vec::new()),
+        sign_in_command: options.sign_in_command.clone(),
         can_load: AtomicBool::new(false),
         agent_said: Mutex::new(std::collections::VecDeque::new()),
         answered: AtomicBool::new(false),
@@ -1046,10 +1068,11 @@ fn open_session(hub: &Arc<Hub>, proxy: &Proxy, ui: Ui, session: Session, open: O
     }
 }
 
-/// The agent wants the user signed in: ask which of its methods, call
-/// `authenticate` with it, then do `retry` again. Methods of the
-/// `terminal` type are not offered (Cornacai does not advertise terminal
-/// sign-in); with none left, the user is told how to sign in instead.
+/// The agent wants the user signed in: ask which of its methods, then
+/// sign in with it and do `retry` again. A method of the `terminal` type
+/// runs the agent's own command with its arguments, given the terminal
+/// ([`Options::sign_in_command`]); any other calls `authenticate`. With no
+/// method Cornacai can use, the user is told how to sign in instead.
 fn sign_in(hub: &Arc<Hub>, proxy: &Proxy, retry: Retry) {
     let session = retry.session();
     let methods = hub
@@ -1059,25 +1082,23 @@ fn sign_in(hub: &Arc<Hub>, proxy: &Proxy, retry: Retry) {
         .clone();
     let usable: Vec<AuthMethod> = methods
         .iter()
-        .filter(|m| m.kind.as_deref().is_none_or(|kind| kind == "agent"))
+        .filter(|m| {
+            if m.in_terminal() {
+                hub.sign_in_command.is_some()
+            } else {
+                m.kind.as_deref().is_none_or(|kind| kind == "agent")
+            }
+        })
         .cloned()
         .collect();
     let Some(connection) = hub.connection.get() else {
         return;
     };
     if usable.is_empty() {
-        let names: Vec<String> = methods.iter().map(|m| clean(&m.name)).collect();
-        let names = if names.is_empty() {
-            String::new()
-        } else {
-            format!(" ({})", markup(&names.join(", ")))
-        };
+        let how = how_to_sign_in(hub, &methods);
         proxy.run(move || {
             session.busy.set(false);
-            session.notice(format!(
-                "[red]The agent needs you to sign in first[/]{names}. Sign in with the \
-                 agent's own command, then start Cornacai again."
-            ));
+            session.notice(how);
         });
         return;
     }
@@ -1089,11 +1110,55 @@ fn sign_in(hub: &Arc<Hub>, proxy: &Proxy, retry: Retry) {
     let Ok(Some(method)) = rx.recv() else {
         proxy.run(move || {
             session.busy.set(false);
-            session.notice("[yellow]Not signed in:[/] the agent will ask again.");
+            session.notice("[yellow]Not signed in.[/] Ctrl+N asks again.");
         });
         return;
     };
     let name = markup(&clean(&method.name));
+    if method.in_terminal() {
+        let Some(argv) = hub.sign_in_command.clone() else {
+            return;
+        };
+        let shown = markup(&clean(
+            &[argv.clone(), method.args.clone()].concat().join(" "),
+        ));
+        let Some(mut command) = crate::config::agent_command(&[argv, method.args.clone()].concat())
+        else {
+            return;
+        };
+        command.current_dir(&hub.cwd);
+        let (done, ended) = std::sync::mpsc::channel();
+        let ran = proxy.run_with(move |cx| {
+            cx.handoff_then(command, move |result, _| {
+                let _ = done.send(result);
+            });
+        });
+        if !ran {
+            return;
+        }
+        match ended.recv() {
+            Ok(Ok(Some(0))) => {
+                session.notice_from(proxy, format!("[green]Signed in[/] with {name}."));
+                retry.run(hub, proxy);
+            }
+            Ok(result) => {
+                let why = match result {
+                    Ok(Some(code)) => format!("it ended with exit code {code}"),
+                    Ok(None) => "it was stopped".to_string(),
+                    Err(e) => markup(&e.to_string()),
+                };
+                proxy.run(move || {
+                    session.busy.set(false);
+                    session.notice(format!(
+                        "[red]Signing in with {name} failed:[/] `{shown}`: {why}. \
+                         Ctrl+N tries again."
+                    ));
+                });
+            }
+            Err(_) => {}
+        }
+        return;
+    }
     session.notice_from(proxy, format!("[dim]Signing in with {name}…[/]"));
     match connection.authenticate(method.id.clone()) {
         Ok(()) => {
@@ -1108,6 +1173,41 @@ fn sign_in(hub: &Arc<Hub>, proxy: &Proxy, retry: Retry) {
             });
         }
     }
+}
+
+/// What to say when the agent wants the user signed in and offers no
+/// method Cornacai can run: the methods it named, with what each says,
+/// and how the agent signs in by itself when Cornacai knows it.
+fn how_to_sign_in(hub: &Hub, methods: &[AuthMethod]) -> String {
+    let mut out = String::from("[red]The agent needs you to sign in first.[/]");
+    let terminal_only = !methods.is_empty() && methods.iter().all(AuthMethod::in_terminal);
+    if methods.is_empty() {
+        out.push_str(" It offers no way to sign in from here.");
+    } else {
+        out.push_str(" It offers:");
+        for method in methods {
+            out.push_str(&format!("\n  • {}", markup(&clean(&method.name))));
+            if let Some(about) = &method.description {
+                out.push_str(&format!(" [dim]· {}[/]", markup(&clean(about))));
+            }
+        }
+        if terminal_only {
+            out.push_str(
+                "\nThese run in a terminal, which Cornacai does only for an agent it starts itself.",
+            );
+        }
+    }
+    let argv = hub
+        .sign_in_command
+        .clone()
+        .unwrap_or_else(|| hub.agent_key.split_whitespace().map(String::from).collect());
+    let step = crate::config::sign_in_hint(&argv)
+        .unwrap_or_else(|| "sign in with the agent's own program in another terminal".to_string());
+    out.push_str(&format!(
+        "\n[b]1.[/] {}.\n[b]2.[/] Back here, press Ctrl+N to open a session.",
+        markup(&clean(&step))
+    ));
+    out
 }
 
 /// The sign-in prompt: one button per method; Esc signs in with none.
@@ -1128,6 +1228,9 @@ fn ask_sign_in(cx: &mut Ctx, methods: Vec<AuthMethod>, tx: Sender<Option<AuthMet
             let mut line = format!("[b]{}[/] {}", i + 1, markup(&clean(&method.name)));
             if let Some(about) = &method.description {
                 line.push_str(&format!(" [dim]· {}[/]", markup(&clean(about))));
+            }
+            if method.in_terminal() {
+                line.push_str(" [dim](in this terminal; Cornacai comes back after)[/]");
             }
             lines.push(line);
         }

@@ -33,6 +33,7 @@ pub cornacai::app::Options::pty: bool
 pub cornacai::app::Options::read: bool
 pub cornacai::app::Options::resume: core::option::Option<alloc::string::String>
 pub cornacai::app::Options::shell: core::option::Option<cornacai::app::ShellPane>
+pub cornacai::app::Options::sign_in_command: core::option::Option<alloc::vec::Vec<alloc::string::String>>
 pub cornacai::app::Options::store: core::option::Option<cornacai::store::SessionStore>
 pub cornacai::app::Options::terminal: bool
 pub cornacai::app::Options::write: bool
@@ -43,6 +44,7 @@ pub fn cornacai::app::Options::resume(self, impl core::convert::Into<alloc::stri
 pub fn cornacai::app::Options::session_store(self, cornacai::store::SessionStore) -> cornacai::app::Options
 pub fn cornacai::app::Options::shell_command(self, alloc::vec::Vec<alloc::string::String>) -> cornacai::app::Options
 pub fn cornacai::app::Options::shell_pane(self, impl core::ops::function::FnOnce() -> rich_embed::pane::TerminalPane + 'static) -> cornacai::app::Options
+pub fn cornacai::app::Options::sign_in_command(self, core::option::Option<alloc::vec::Vec<alloc::string::String>>) -> cornacai::app::Options
 impl core::marker::Freeze for cornacai::app::Options
 impl !core::marker::Send for cornacai::app::Options
 impl !core::marker::Sync for cornacai::app::Options
@@ -159,6 +161,7 @@ pub fn cornacai::config::installed_agents() -> alloc::vec::Vec<cornacai::config:
 pub fn cornacai::config::marketplace_agents(&std::path::Path) -> alloc::vec::Vec<rich_marketplace::agents::ListedAgent>
 pub fn cornacai::config::on_path(&str) -> bool
 pub fn cornacai::config::rich_plugin_dir() -> core::option::Option<std::path::PathBuf>
+pub fn cornacai::config::sign_in_hint(&[alloc::string::String]) -> core::option::Option<alloc::string::String>
 pub mod cornacai::mention
 pub struct cornacai::mention::Mention
 pub cornacai::mention::Mention::path: std::path::PathBuf

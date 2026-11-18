@@ -1,0 +1,6 @@
+{"note": "The agent wants a sign-in and offers no method (claude-agent-acp to a client that does not advertise auth.terminal): Cornacai says how to sign in instead of a prompt."}
+{"client": {"id": 0, "method": "initialize"}}
+{"agent": {"jsonrpc": "2.0", "id": 0, "result": {"protocolVersion": 1, "authMethods": []}}}
+{"client": {"id": 1, "method": "session/new"}}
+{"agent": {"jsonrpc": "2.0", "id": 1, "error": {"code": -32000, "message": "Authentication required"}}}
+{"quiet": 300}

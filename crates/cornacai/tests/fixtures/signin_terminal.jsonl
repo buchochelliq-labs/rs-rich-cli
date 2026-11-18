@@ -1,0 +1,7 @@
+{"note": "Terminal sign-in, as claude-agent-acp offers it: the client advertises auth.terminal, the agent offers methods of type terminal with args, session/new fails with auth_required, the user picks one, the client runs the agent's own command with its args in the terminal (no authenticate), then sends session/new again."}
+{"client": {"id": 0, "method": "initialize", "params": {"clientCapabilities": {"auth": {"terminal": true}}}}}
+{"agent": {"jsonrpc": "2.0", "id": 0, "result": {"protocolVersion": 1, "authMethods": [{"id": "claude-ai-login", "name": "Claude Subscription", "description": "Use Claude subscription", "type": "terminal", "args": ["--cli", "auth", "login", "--claudeai"]}, {"id": "console-login", "name": "Anthropic Console", "description": "Use Anthropic Console (API usage billing)", "type": "terminal", "args": ["--cli", "auth", "login", "--console"]}]}}}
+{"client": {"id": 1, "method": "session/new"}}
+{"agent": {"jsonrpc": "2.0", "id": 1, "error": {"code": -32000, "message": "Authentication required"}}}
+{"client": {"id": 2, "method": "session/new"}}
+{"agent": {"jsonrpc": "2.0", "id": 2, "result": {"sessionId": "sess_tty"}}}
