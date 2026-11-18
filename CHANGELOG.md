@@ -24,10 +24,14 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   `Options::sign_in_command` sets the command (the launch command by
   default; `None` offers none).
 - **An agent offering no usable sign-in is explained:** the notice lists
-  what it offered, with each method's description, and for the agents
-  Cornacai knows says how to sign in by hand (Claude: `claude`, then
-  `/login`, or `ANTHROPIC_API_KEY`; Gemini; Codex: `codex login`), then
-  that Ctrl+N opens a session (`config::sign_in_hint`).
+  what it offered, with each method's description, then two numbered
+  steps: how to sign in by hand and that Ctrl+N opens a session. For
+  Claude's adapter the first is the command to paste, the launch command
+  with `--cli auth login --claudeai` (or `--console`), quoted when its
+  path has a space, so no separate `claude` install is needed; for Gemini
+  and Codex it names their sign-in and API-key variable
+  (`config::sign_in_hint`, which takes the launch command). Pressing Esc
+  at the sign-in prompt says that Ctrl+N asks again.
 - rs-rich-acp: `ClientCapabilities::terminal_sign_in` and
   `AuthCapabilities` (`auth.terminal`); `AuthMethod::args`, the arguments
   of a `terminal` method, and `AuthMethod::in_terminal`.

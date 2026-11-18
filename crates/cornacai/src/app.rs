@@ -1110,7 +1110,7 @@ fn sign_in(hub: &Arc<Hub>, proxy: &Proxy, retry: Retry) {
     let Ok(Some(method)) = rx.recv() else {
         proxy.run(move || {
             session.busy.set(false);
-            session.notice("[yellow]Not signed in:[/] the agent will ask again.");
+            session.notice("[yellow]Not signed in.[/] Ctrl+N asks again.");
         });
         return;
     };
@@ -1180,6 +1180,7 @@ fn sign_in(hub: &Arc<Hub>, proxy: &Proxy, retry: Retry) {
 /// and how the agent signs in by itself when Cornacai knows it.
 fn how_to_sign_in(hub: &Hub, methods: &[AuthMethod]) -> String {
     let mut out = String::from("[red]The agent needs you to sign in first.[/]");
+    let terminal_only = !methods.is_empty() && methods.iter().all(AuthMethod::in_terminal);
     if methods.is_empty() {
         out.push_str(" It offers no way to sign in from here.");
     } else {
@@ -1190,16 +1191,22 @@ fn how_to_sign_in(hub: &Hub, methods: &[AuthMethod]) -> String {
                 out.push_str(&format!(" [dim]· {}[/]", markup(&clean(about))));
             }
         }
+        if terminal_only {
+            out.push_str(
+                "\nThese run in a terminal, which Cornacai does only for an agent it starts itself.",
+            );
+        }
     }
-    let program = hub.agent_key.split_whitespace().next().unwrap_or_default();
-    match crate::config::sign_in_hint(program) {
-        Some(hint) => out.push_str(&format!(
-            "\nTo sign in: {hint}. Then Ctrl+N opens a session."
-        )),
-        None => out.push_str(
-            "\nSign in with the agent's own program in a terminal, then Ctrl+N opens a session.",
-        ),
-    }
+    let argv = hub
+        .sign_in_command
+        .clone()
+        .unwrap_or_else(|| hub.agent_key.split_whitespace().map(String::from).collect());
+    let step = crate::config::sign_in_hint(&argv)
+        .unwrap_or_else(|| "sign in with the agent's own program in another terminal".to_string());
+    out.push_str(&format!(
+        "\n[b]1.[/] {}.\n[b]2.[/] Back here, press Ctrl+N to open a session.",
+        markup(&clean(&step))
+    ));
     out
 }
 

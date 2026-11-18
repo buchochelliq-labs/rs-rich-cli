@@ -619,6 +619,23 @@ fn an_agent_offering_no_sign_in_is_explained() {
     finish(&mut driver, &handle);
 }
 
+#[test]
+fn claudes_adapter_offering_no_sign_in_is_given_the_command_to_paste() {
+    // As claude-agent-acp does for a client without `auth.terminal`.
+    let dir = workspace("signin-none-claude");
+    let options =
+        replay("signin_none.jsonl", &dir).sign_in_command(Some(vec!["claude-agent-acp".into()]));
+    let (mut driver, handle) = start_with(options);
+    wait_for(&mut driver, "needs you to sign in first", WAIT);
+    let text = screen(&driver);
+    assert!(
+        text.contains("claude-agent-acp --cli auth login --claudeai"),
+        "{text}"
+    );
+    assert!(text.contains("press Ctrl+N"), "{text}");
+    finish(&mut driver, &handle);
+}
+
 #[cfg(unix)]
 #[test]
 fn with_the_pty_setting_a_command_runs_on_a_terminal() {

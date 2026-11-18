@@ -161,7 +161,7 @@ pub fn cornacai::config::installed_agents() -> alloc::vec::Vec<cornacai::config:
 pub fn cornacai::config::marketplace_agents(&std::path::Path) -> alloc::vec::Vec<rich_marketplace::agents::ListedAgent>
 pub fn cornacai::config::on_path(&str) -> bool
 pub fn cornacai::config::rich_plugin_dir() -> core::option::Option<std::path::PathBuf>
-pub fn cornacai::config::sign_in_hint(&str) -> core::option::Option<&'static str>
+pub fn cornacai::config::sign_in_hint(&[alloc::string::String]) -> core::option::Option<alloc::string::String>
 pub mod cornacai::mention
 pub struct cornacai::mention::Mention
 pub cornacai::mention::Mention::path: std::path::PathBuf
