@@ -7,31 +7,3 @@
 # them (without their file locations), and why; `items = ["*"]` takes every
 # item of the lint. Once the version is on crates.io the entries are spent:
 # the script says so, and they are removed.
-
-[[break]]
-crate = "rs-rich-embed"
-version = "0.0.10"
-lint = "constructible_struct_adds_field"
-items = ["field PageState.crashed"]
-why = "A page whose renderer crashed is told apart from one that loads (0.0.27's \"the browser has gone\" fixes, B3): ChromeEngine sets it on Inspector.targetCrashed. A struct literal adds it or uses ..Default::default()"
-
-[[break]]
-crate = "noctiluca"
-version = "0.0.6"
-lint = "constructible_struct_adds_field"
-items = ["field Playback.live", "field Playback.empty"]
-why = "#889: the media keys never pick an element with nothing to play (`empty`), and a length not known yet is told from a live stream's (`live`). A struct literal adds them or uses ..Default::default()"
-
-[[break]]
-crate = "noctiluca"
-version = "0.0.6"
-lint = "enum_variant_added"
-items = ["variant Rule:BadgeText", "variant Rule:OneRowBars", "variant Rule:FoldLabels"]
-why = "New adaptations after #899, each on by default and each one that can be switched off: chat badges as text (`badge-text`), one-row bars such as a cookie banner (`one-row-bars`) and a short label folded into the title under it (`fold-labels`). An exhaustive match over Rule handles the new variants"
-
-[[break]]
-crate = "rs-rich-intuituive"
-version = "0.0.12"
-lint = "enum_marked_non_exhaustive"
-items = ["enum Level"]
-why = "Toasts gain a Success level (`Level::Success`, in the theme's `notify.success` style), and Level is marked non-exhaustive so another level is not a break again. A match over Level outside the crate adds a `_` arm"

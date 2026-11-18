@@ -198,6 +198,52 @@ pub const KNOWN_AGENTS: &[KnownAgent] = &[
     },
 ];
 
+/// How a known agent's user signs in by themselves, outside Cornacai, for
+/// an agent that offers no sign-in Cornacai can run. `argv` is the command
+/// Cornacai starts the agent with; the agent is known by its program's file
+/// name (with or without a path or an extension such as `.cmd`). For
+/// Claude's adapter the step is that same command with its own sign-in
+/// arguments, ready to paste: it needs no separate `claude` install.
+pub fn sign_in_hint(argv: &[String]) -> Option<String> {
+    let program = argv.first()?;
+    // Either separator: a Windows path is read on any system.
+    let file = program.rsplit(['/', '\\']).next().unwrap_or(program);
+    let name = file.split_once('.').map_or(file, |(stem, _)| stem);
+    let with = |args: &[&str]| {
+        let words = argv.iter().map(String::as_str).chain(args.iter().copied());
+        words.map(quoted).collect::<Vec<_>>().join(" ")
+    };
+    match name {
+        "claude-agent-acp" | "claude-code-acp" => Some(format!(
+            "in another terminal, run `{}` (a Claude subscription) or `{}` \
+             (an Anthropic Console account); or set ANTHROPIC_API_KEY before \
+             starting Cornacai",
+            with(&["--cli", "auth", "login", "--claudeai"]),
+            with(&["--cli", "auth", "login", "--console"]),
+        )),
+        "gemini" => Some(format!(
+            "in another terminal, run `{}` and choose how to sign in; or set \
+             GEMINI_API_KEY before starting Cornacai",
+            quoted(program)
+        )),
+        "codex-acp" | "codex" => Some(
+            "in another terminal, run `codex login`; or set OPENAI_API_KEY \
+             before starting Cornacai"
+                .to_string(),
+        ),
+        _ => None,
+    }
+}
+
+/// `word` as a shell reads it back: in double quotes when it has a space.
+fn quoted(word: &str) -> String {
+    if word.contains(char::is_whitespace) {
+        format!("\"{word}\"")
+    } else {
+        word.to_string()
+    }
+}
+
 /// rs-rich-cli's plugin install directory, where `rich plugin install`
 /// records the marketplace's agents: `RICH_PLUGIN_DIR`, else
 /// `%LOCALAPPDATA%\\rich\\plugins` on Windows, else
@@ -388,6 +434,22 @@ mod tests {
             |p: &Path| files.iter().any(|f| Path::new(f) == p),
         )
         .map(|p| p.display().to_string())
+    }
+
+    #[test]
+    fn known_agents_say_how_to_sign_in() {
+        let argv = |words: &[&str]| words.iter().map(|w| w.to_string()).collect::<Vec<_>>();
+        let claude = sign_in_hint(&argv(&["claude-agent-acp"])).unwrap();
+        assert!(claude.contains("`claude-agent-acp --cli auth login --claudeai`"));
+        assert!(claude.contains("--console"));
+        // A Windows path with a space is quoted, and the shim is kept.
+        let windows = sign_in_hint(&argv(&["C:\\Program Files\\npm\\claude-agent-acp.cmd"]));
+        assert!(windows.unwrap().contains(
+            "`\"C:\\Program Files\\npm\\claude-agent-acp.cmd\" --cli auth login --claudeai`"
+        ));
+        assert!(sign_in_hint(&argv(&["/usr/bin/gemini", "--experimental-acp"])).is_some());
+        assert_eq!(sign_in_hint(&argv(&["my-agent"])), None);
+        assert_eq!(sign_in_hint(&[]), None);
     }
 
     #[test]

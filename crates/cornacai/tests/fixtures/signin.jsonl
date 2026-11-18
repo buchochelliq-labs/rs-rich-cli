@@ -1,4 +1,4 @@
-{"note": "Sign-in: session/new fails with auth_required; the user picks one of the agent's methods, authenticate is called with it, and session/new is sent again. Later a prompt fails the same way: the user signs in again and the same prompt is sent again. The terminal-type method is not offered."}
+{"note": "Sign-in: session/new fails with auth_required; the user picks one of the agent's methods, authenticate is called with it, and session/new is sent again. Later a prompt fails the same way: the user signs in again and the same prompt is sent again. The terminal-type method is not offered: a replay has no command to run it with."}
 {"client": {"id": 0, "method": "initialize"}}
 {"agent": {"jsonrpc": "2.0", "id": 0, "result": {"protocolVersion": 1, "authMethods": [{"id": "browser", "name": "Log in with the browser", "description": "Opens a page to sign in"}, {"id": "key", "name": "Use an API key", "type": "agent"}, {"id": "tty", "name": "Log in from a terminal", "type": "terminal"}]}}}
 {"client": {"id": 1, "method": "session/new"}}

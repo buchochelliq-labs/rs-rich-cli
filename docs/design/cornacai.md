@@ -224,9 +224,15 @@ When `session/new`, `session/load` or a prompt fails with the
 auth-required error (`-32000`), Cornacai offers the methods `initialize`
 advertised (those of the `agent` type, the default), calls `authenticate`
 with the one picked, and sends the failed request again. Terminal sign-in
-(`type: "terminal"`, which needs the client capability `auth.terminal`) is
-not advertised, so such methods are not offered; the user is told to sign
-in with the agent's own command.
+(`type: "terminal"`) is advertised (`clientCapabilities.auth.terminal`)
+when Cornacai starts the agent itself: such a method is offered too, and
+picking it hands the terminal to the agent's launch command with the
+method's `args` (intuiTUIve's `Ctx::handoff_then`); when that exits 0, the
+failed request is sent again, without `authenticate` (agents refuse it for
+terminal methods). With no usable method, the notice lists what the agent
+offered and, for known agents, how to sign in by hand (0.1.0, after the
+0.0.27 run with `claude-agent-acp`, which offered nothing to a client
+without `auth.terminal`).
 
 ## First run
 

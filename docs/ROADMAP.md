@@ -1,9 +1,9 @@
 # Roadmap
 
 What each release delivered, and where this goes next: the
-[plan to 1.0.0](plans/1.0.0.md), after the 0.0.26 cohort (published
-2026-11-11), with [0.0.27](plans/0.0.27.md), a point release, next and then 0.1.0, the API
-review of [stage 3](plans/1.0.0.md#stage-3-api-review-and-stability-tooling-010).
+[plan to 1.0.0](plans/1.0.0.md), after the 0.0.27 cohort (published
+2026-11-18), with 0.1.0, the API review of
+[stage 3](plans/1.0.0.md#stage-3-api-review-and-stability-tooling-010), next.
 Ordered by what unblocks people, not by what is most interesting to build.
 
 Two rules constrain everything here:
@@ -216,6 +216,15 @@ and #499). Delivered:
   and `capture` commands;
 - Atkinson dithering, OKLab distance, Sixel/GIF colour modes, alpha backgrounds
   (#498) and `--theme-file` (#499).
+
+## 0.0.27 — Noctiluca's video smooth, the browser recoverable (published 2026-11-18)
+
+The [0.0.27 plan](plans/0.0.27.md) fixed what the 0.0.26 real-site check
+found (#889 to #892) and three things the maintainer saw: video that
+jittered and flickered, Amazon not right, and "the browser has gone". Its
+real-site check found #890's cause, a live stream's overlay frame hiding
+the video (see the [release notes](releases/0.0.27.md)). 0.1.0, the API
+review, follows it.
 
 ## 0.0.26 — Noctiluca made steady, before the API review (published 2026-11-11)
 

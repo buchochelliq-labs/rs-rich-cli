@@ -3,7 +3,23 @@
 Status: handoff note, updated when a session ends mid-round. The loop and its
 rules are in [the demo gaps](intuituive-demo-gaps.md).
 
-## Where things stand (2026-11-11)
+## Where things stand (2026-11-18)
+
+- **0.0.27 is published** (21 crates and `rs-rich` 0.0.15 on PyPI from
+  `main` at `e7fc3d73`, `release-0.0.27`, on 2026-11-18, by one run on rab
+  v2.1.2; see the [0.0.27 release notes](../releases/0.0.27.md#publication)).
+  Its real-site check found and fixed #890 (a live stream's overlay frame
+  hid the video). `release.py tag` failed after pushing the tags, while it
+  waited on the run; the run itself published everything.
+- **The 0.1.0 versions are open**: every package at 0.1.0, with `rs-rich`
+  0.1.0 on PyPI ([the plan to 1.0.0](../plans/1.0.0.md), stage 3).
+- **Next: 0.1.0's API review.** Also waiting: the Cornacai run with a real
+  agent on Windows (not recorded for 0.0.26 or 0.0.27), CI's move to
+  Ubuntu 26.04 (Playwright and the Python 3.9 job; CI is pinned to 24.04),
+  the 1 to 2.5 s video pauses on busy live pages, and why `release.py tag`'s
+  wait failed on Windows.
+
+## Where things stood (2026-11-11)
 
 - **0.0.26 is published** (21 crates and `rs-rich` 0.0.14 on PyPI from
   `main` at `e5422bf9`, `release-0.0.26`, on 2026-11-11, by one run on rab
