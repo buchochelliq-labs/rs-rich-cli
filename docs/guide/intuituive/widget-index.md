@@ -145,6 +145,7 @@ from an off-by-default feature name it: `art`, `micro`, `viz`, `files` and
 | ![](../../assets/intuituive/widgets/image.svg){ .tui-icon width="20" } | [image](plugins.md#images-art) | `image`, `image_with`, `image_of` | An image, as half blocks or terminal graphics (`art` feature) |
 | ![](../../assets/intuituive/widgets/sprite_sheet.svg){ .tui-icon width="20" } | [sprite_sheet](timers.md#sprites-stages-and-pixel-buffers) | `sprite_sheet` | Frames cut from one image, for animation (`art` feature) |
 | ![](../../assets/intuituive/widgets/micro_sprite.svg){ .tui-icon width="20" } | [micro_sprite](timers.md#sprites-stages-and-pixel-buffers) | `micro_sprite` | A micro asset as a sprite (`micro` feature) |
+| ![](../../assets/intuituive/widgets/sparkline.svg){ .tui-icon width="20" } | [line_chart](plugins.md#charts-with-a-cursor) | `line_chart`, `bar_chart`, `heatmap`, `Window`, `HeatGrid` | Charts over signals with a cursor, a readout and a rolling window (`viz` feature) |
 | ![](../../assets/intuituive/widgets/sparkline.svg){ .tui-icon width="20" } | [sparkline](plugins.md#levels-sparklines-and-big-text) | `sparkline` | Values as a line of bars (`viz` feature) |
 | ![](../../assets/intuituive/widgets/meter.svg){ .tui-icon width="20" } | [meter](plugins.md#levels-sparklines-and-big-text) | `meter` | A level with a peak hold (`viz` feature) |
 | ![](../../assets/intuituive/widgets/bar_spectrum.svg){ .tui-icon width="20" } | [bar_spectrum](plugins.md#levels-sparklines-and-big-text) | `bar_spectrum` | Bands as vertical bars (`viz` feature) |

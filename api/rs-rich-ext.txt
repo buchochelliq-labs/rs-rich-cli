@@ -2281,6 +2281,7 @@ pub struct rich_ext::chart::Heatmap
 impl rich_ext::chart::Heatmap
 pub fn rich_ext::chart::Heatmap::cell_width(self, usize) -> Self
 pub fn rich_ext::chart::Heatmap::charset(self, rich_ext::chart::Charset) -> Self
+pub fn rich_ext::chart::Heatmap::column_cells(&self, usize) -> alloc::vec::Vec<(core::ops::range::Range<usize>, core::ops::range::Range<usize>)>
 pub fn rich_ext::chart::Heatmap::columns<S: core::convert::Into<alloc::string::String>>(self, impl core::iter::traits::collect::IntoIterator<Item = S>) -> Self
 pub fn rich_ext::chart::Heatmap::format(self, rich_ext::chart::ValueFormat) -> Self
 pub fn rich_ext::chart::Heatmap::legend(self, bool) -> Self
@@ -2423,6 +2424,7 @@ pub fn rich_ext::chart::LineChart::charset(self, rich_ext::chart::Charset) -> Se
 pub fn rich_ext::chart::LineChart::height(self, usize) -> Self
 pub fn rich_ext::chart::LineChart::legend(self, bool) -> Self
 pub fn rich_ext::chart::LineChart::new() -> Self
+pub fn rich_ext::chart::LineChart::plot_columns(&self, usize) -> core::option::Option<(usize, alloc::vec::Vec<f64>)>
 pub fn rich_ext::chart::LineChart::series(self, rich_ext::chart::Series) -> Self
 pub fn rich_ext::chart::LineChart::width(self, usize) -> Self
 pub fn rich_ext::chart::LineChart::x_format(self, rich_ext::chart::ValueFormat) -> Self
@@ -2631,6 +2633,7 @@ pub fn rich_ext::chart::Series::name(&self) -> &str
 pub fn rich_ext::chart::Series::points(&self) -> &[(f64, f64)]
 pub fn rich_ext::chart::Series::scatter(impl core::convert::Into<alloc::string::String>, impl core::iter::traits::collect::IntoIterator<Item = (f64, f64)>) -> Self
 pub fn rich_ext::chart::Series::style(self, impl core::convert::Into<alloc::string::String>) -> Self
+pub fn rich_ext::chart::Series::with_points(self, impl core::iter::traits::collect::IntoIterator<Item = (f64, f64)>) -> Self
 impl core::clone::Clone for rich_ext::chart::Series
 pub fn rich_ext::chart::Series::clone(&self) -> rich_ext::chart::Series
 impl core::cmp::PartialEq for rich_ext::chart::Series

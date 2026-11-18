@@ -103,6 +103,8 @@ pub mod border;
 mod builtin;
 mod calendar;
 mod carousel;
+#[cfg(feature = "viz")]
+mod chart_nodes;
 mod chips;
 mod clock;
 mod collapsible;
@@ -218,6 +220,10 @@ pub use big_text::big_text;
 pub use bindings::{ModePage, Scaled, Stepped};
 pub use border::{Border, BorderSet, Edge, Shadow, Sides};
 pub use carousel::carousel;
+#[cfg(feature = "viz")]
+pub use chart_nodes::{
+    HeatGrid, Window, bar_chart, bar_chart_with, heatmap, heatmap_with, line_chart, line_chart_with,
+};
 pub use chips::{chip, chip_of, tag_input};
 pub use collapsible::{Status, accordion, collapsible, collapsible_with};
 pub use color_picker::color_picker;

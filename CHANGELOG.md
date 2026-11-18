@@ -9,6 +9,21 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### intuiTUIve: charts with a cursor (#903)
+
+- **`line_chart`, `bar_chart` and `heatmap`** in the `viz` plugin:
+  rs-rich-ext's `LineChart`, `BarChart` and `Heatmap` as nodes over
+  closures that read signals (`_with` forms configure the chart). ← and →
+  (and the pointer) move a cursor along the x axis, drawn in the theme's
+  `chart.cursor` style, with a readout row of the values under it.
+  `.chart_window(Window::Last(n))` or `Window::Span(duration)` keeps the
+  newest of a stream, and the chart draws again only when what is in view
+  changes. A screen reader hears the chart's kind, its series and the
+  readout. `HeatGrid` holds a heatmap's data.
+- rs-rich-ext: `LineChart::plot_columns` (where the plot is, and the x of
+  each column), `Heatmap::column_cells` (where each column is drawn) and
+  `Series::with_points` (a series over other points).
+
 ### intuiTUIve: a colour picker (#904)
 
 - **`color_picker(value: Signal<Color>)`**: a saturation and value grid and

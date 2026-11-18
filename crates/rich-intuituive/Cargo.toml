@@ -169,6 +169,10 @@ required-features = ["tracing"]
 name = "tracing"
 required-features = ["tracing"]
 
+[[test]]
+name = "widgets_charts"
+required-features = ["viz"]
+
 # The Yazi clone is built from the `files` feature's components.
 [[example]]
 name = "files"
