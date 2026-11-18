@@ -10162,6 +10162,7 @@ pub fn intuituive::chip(impl core::convert::Into<alloc::string::String>) -> intu
 pub fn intuituive::chip_of(impl core::ops::function::Fn() -> rich_ext::badge::Badge + 'static) -> intuituive::node::Node
 pub fn intuituive::collapsible(impl core::convert::Into<alloc::string::String>, intuituive::reactive::Signal<bool>, intuituive::node::Node) -> intuituive::node::Node
 pub fn intuituive::collapsible_with(impl core::ops::function::Fn() -> alloc::string::String + 'static, intuituive::reactive::Signal<bool>, intuituive::node::Node) -> intuituive::node::Node
+pub fn intuituive::color_picker(intuituive::reactive::Signal<rich::color::Color>) -> intuituive::node::Node
 pub fn intuituive::column(impl core::iter::traits::collect::IntoIterator<Item = intuituive::node::Node>) -> intuituive::node::Node
 pub fn intuituive::command_line(intuituive::command_line::CommandLine) -> intuituive::node::Node
 pub fn intuituive::command_line_with(intuituive::command_line::CommandLine, intuituive::command_line::CommandLineOptions) -> intuituive::node::Node

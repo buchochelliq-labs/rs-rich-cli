@@ -208,6 +208,32 @@ tag_input(tags)                                   // a Signal<Vec<String>>
   go on the last row, cut at the width, starting at a later chip while
   something is typed so that it shows.
 
+### A colour picker
+
+```rust
+use intuituive::color_picker;
+use rich::Color;
+
+let accent = signal(Color::from_rgb(0x3a, 0x7b, 0xd5));
+color_picker(accent)              // a Signal<Color>, set as it changes
+```
+
+- **`color_picker(value)`** draws a grid of saturation (across) and value
+  (down) at the colour's hue, with a strip of hues at its right, both in
+  half blocks, and under them a swatch, the `#rrggbb` and the colour's
+  name when it has one (the console's own, `bright_red`, or CSS's basic
+  sixteen and orange). The grid takes the width less the strip and eight
+  rows unless the node is sized taller. The app setting `value` moves it.
+- With the focus ← → ↑ ↓ move in the grid (PageUp, PageDown, Home and End
+  to its edges); Tab goes on to the hue strip (↑ and ↓ turn the hue) and
+  the hex field, where the first digit typed replaces it, six digits (or
+  three, then Enter) set it and Esc puts it back. Shift+Tab goes back. A
+  click or a drag in the grid or the strip picks there.
+- On 256 colours or fewer the console shows the nearest colour it has, and
+  the name says which (`≈ color(68)`); the value stays exact. In text mode
+  it is the hex field alone. A screen reader hears a slider, `Colour`,
+  valued `#ff0000 red`. The kit example opens one with `c`.
+
 ### A pager strip
 
 `pager(page, || pages)` shows which page a `Signal<usize>` is on, from 0,

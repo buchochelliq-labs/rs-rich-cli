@@ -106,6 +106,7 @@ mod carousel;
 mod chips;
 mod clock;
 mod collapsible;
+mod color_picker;
 pub mod command_line;
 mod commands;
 pub mod complete;
@@ -219,6 +220,7 @@ pub use border::{Border, BorderSet, Edge, Shadow, Sides};
 pub use carousel::carousel;
 pub use chips::{chip, chip_of, tag_input};
 pub use collapsible::{Status, accordion, collapsible, collapsible_with};
+pub use color_picker::color_picker;
 pub use command_line::{CommandLine, CommandLineOptions, command_line, command_line_with};
 pub use commands::{Hit, HitSink, Provider, SystemCommands, Themes};
 pub use complete::{

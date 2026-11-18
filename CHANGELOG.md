@@ -9,6 +9,17 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### intuiTUIve: a colour picker (#904)
+
+- **`color_picker(value: Signal<Color>)`**: a saturation and value grid and
+  a hue strip in half blocks, a `#rrggbb` field that takes typing, and a
+  swatch, with the colour's name when it has one. Arrows move in the grid
+  and turn the hue, Tab goes between the grid, the strip and the field,
+  and the mouse clicks or drags in the grid and the strip. On 256 colours
+  or fewer it says the nearest one shown (`≈ color(68)`), the value kept
+  exact; in text mode it is the field alone. Its role is a slider, its
+  value the hex and the name. The kit example opens one with `c`.
+
 ### intuiTUIve: tag input, docking and toast buttons (#906)
 
 - **`tag_input` wraps and edits.** Its chips wrap onto more rows when

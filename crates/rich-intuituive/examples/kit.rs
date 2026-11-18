@@ -1,16 +1,18 @@
 //! The widgets after Textual's and other kits' in one screen: a notice
 //! bar, a wizard's stepper and a plan's checklist, button variants,
-//! chips and a tag input, an accordion, a pager and a range slider.
+//! chips and a tag input, an accordion, a pager and a range slider; and
+//! a colour picker in a pop-up.
 //!
 //!     cargo run -p rs-rich-intuituive --example kit
 //!
 //! Tab moves between them. On the stepper ← and → move the page; t shows
-//! a toast with an Undo button. Ctrl+Q quits.
+//! a toast with an Undo button (Alt+1 runs it); c opens the colour picker
+//! (Esc closes it). Ctrl+Q quits.
 
 use intuituive::prelude::*;
 use intuituive::{
-    ButtonVariant, Level, Notification, StepState, accordion, button, chip, notice_bar, pager,
-    range_slider, steps, tag_input,
+    ButtonVariant, Level, Notification, StepState, accordion, button, chip, color_picker,
+    notice_bar, pager, range_slider, steps, tag_input,
 };
 
 const PAGES: [&str; 4] = ["Account", "Plan", "Payment", "Done"];
@@ -23,6 +25,7 @@ fn main() -> std::io::Result<()> {
         let open = signal(Some(0usize));
         let results = signal(0usize);
         let (low, high) = (signal(20.0), signal(80.0));
+        let accent = signal(intuituive::rich::Color::from_rgb(0x3a, 0x7b, 0xd5));
         let plan = ["Fetch", "Build", "Test", "Deploy"];
         let plan_states = [
             StepState::Done,
@@ -103,6 +106,13 @@ fn main() -> std::io::Result<()> {
                     .action("Undo", |_| {})
                     .timeout(std::time::Duration::from_secs(600)),
             )
+        })
+        .on_key("c", move |cx| {
+            cx.modal(Size::Fixed(36), Size::Auto, move || {
+                column([color_picker(accent).fixed(9)])
+                    .panel("Accent colour")
+                    .on_key("escape", |cx| cx.pop())
+            })
         })
     })
     .run()
