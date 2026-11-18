@@ -38,6 +38,14 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   now only "Internal error (-32603)" showed. An agent that has not
   answered within 20 seconds gets a notice too, where the screen used to
   wait with no word.
+- **The plan is intuiTUIve's `steps` checklist.** It draws as before
+  (`✓` done, `▸` current, `○` pending, in the theme's `steps.*` styles),
+  and a screen reader now hears it as a list with each step's state
+  ("Read the code done, Run the tests current").
+- intuiTUIve: a step of `steps` longer than the width wraps under its
+  text, and keeps the line breaks of its own, instead of being cut to one
+  row; a click anywhere on its rows picks it. A long plan entry in
+  Cornacai shows whole, as it did before the plan used `steps`.
 
 ### Noctiluca: the browser recovers, and says why once
 

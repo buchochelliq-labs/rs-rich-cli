@@ -69,12 +69,14 @@ struct Steps {
     separator: String,
     /// The step moved with the keys and clicks ([`Node::step_nav`]).
     nav: Option<Signal<usize>>,
-    /// Where each step was drawn: its row, first column and the column
-    /// after it.
-    hits: Vec<(u16, u16, u16)>,
+    /// Where each step was drawn: its first row, its rows, its first
+    /// column and the column after its widest row.
+    hits: Vec<(u16, u16, u16, u16)>,
 }
 
-/// A list of steps, one a row: each `items` entry (console markup) after
+/// A list of steps, each on its own rows: each `items` entry (console
+/// markup, wrapped to the width under its text, its own line breaks kept)
+/// after
 /// the mark of its state, `status(i)`: `✓` done, `▸` current, `○` pending
 /// and `✗` failed (`[x]`, `[>]`, `[ ]` and `[!]` in text mode). Both are
 /// read again whenever a signal they read changes. Each mark is in the
@@ -186,8 +188,11 @@ impl Node {
 }
 
 impl Steps {
-    /// Each step's cells: its mark and its text, in its state's style.
-    fn rows(&self, console: &rich::Console) -> Vec<Vec<Segment>> {
+    /// Each step's lines: its mark and its text, in its state's style.
+    /// With `wrap`, the text wraps to that many cells, the lines after the
+    /// first indented under it; without, it is one line, cut with `…` at
+    /// its own width (the one-row stepper of [`Node::steps_across`]).
+    fn rows(&self, console: &rich::Console, wrap: Option<usize>) -> Vec<Vec<Vec<Segment>>> {
         let text_mode = crate::a11y::text_mode();
         (self.items)()
             .into_iter()
@@ -196,20 +201,61 @@ impl Steps {
                 let state = (self.status)(i);
                 let (mark, text_mark, name, fallback) = state.look();
                 let style = crate::widget::theme_style(console, name, fallback);
-                let mark = if text_mode { text_mark } else { mark };
-                let mut line = vec![Segment::new(format!("{mark} "), Some(style.clone()))];
-                let width = crate::widget::markup_width(&item);
-                let text = crate::widget::markup_line(console, &item, width);
+                let mark = format!("{} ", if text_mode { text_mark } else { mark });
+                let indent = rich::cells::cell_len(&mark);
                 let whole = matches!(state, StepState::Current | StepState::Pending);
-                line.extend(text.into_iter().map(|piece| match (&piece.style, whole) {
+                let restyle = |piece: Segment| match (&piece.style, whole) {
                     (Some(own), true) => Segment::new(piece.text, Some(style.combine(own))),
                     (None, true) => Segment::new(piece.text, Some(style.clone())),
                     _ => piece,
-                }));
-                line
+                };
+                let texts: Vec<Vec<Segment>> = match wrap {
+                    Some(width) => {
+                        let text = rich::Text::from_markup(&item)
+                            .unwrap_or_else(|_| rich::Text::new(item.clone()));
+                        let options = console
+                            .options()
+                            .update_width(width.saturating_sub(indent).max(1));
+                        let mut lines = console.render_lines(&text, &options, false);
+                        while lines.len() > 1
+                            && lines
+                                .last()
+                                .is_some_and(|l| cells_text(l).trim().is_empty())
+                        {
+                            lines.pop();
+                        }
+                        if lines.is_empty() {
+                            vec![Vec::new()]
+                        } else {
+                            lines
+                        }
+                    }
+                    None => {
+                        let width = crate::widget::markup_width(&item);
+                        vec![crate::widget::markup_line(console, &item, width)]
+                    }
+                };
+                texts
+                    .into_iter()
+                    .enumerate()
+                    .map(|(k, text)| {
+                        let lead = if k == 0 {
+                            Segment::new(mark.clone(), Some(style.clone()))
+                        } else {
+                            Segment::new(" ".repeat(indent), None)
+                        };
+                        std::iter::once(lead)
+                            .chain(text.into_iter().map(restyle))
+                            .collect()
+                    })
+                    .collect()
             })
             .collect()
     }
+}
+
+fn cells_text(line: &[Segment]) -> String {
+    line.iter().map(|s| s.text.as_str()).collect()
 }
 
 fn cells(line: &[Segment]) -> usize {
@@ -240,14 +286,18 @@ impl Widget for Steps {
     }
 
     fn measure(&mut self, cx: &MeasureCx, axis: Axis, width: u16, _height: u16) -> u16 {
-        let rows = self.rows(cx.console());
+        // Unwrapped for the width it would take, wrapped to `width` for the
+        // rows it takes there.
+        let wrap = (axis == Axis::Vertical && !self.across && width > 0).then_some(width as usize);
+        let rows = self.rows(cx.console(), wrap);
+        let first = |item: &Vec<Vec<Segment>>| item.first().map_or(0, |l| cells(l));
         let wanted = match (axis, self.across) {
             (Axis::Vertical, true) => 1,
-            (Axis::Vertical, false) => rows.len(),
-            (Axis::Horizontal, false) => rows.iter().map(|r| cells(r)).max().unwrap_or(0),
+            (Axis::Vertical, false) => rows.iter().map(Vec::len).sum(),
+            (Axis::Horizontal, false) => rows.iter().flatten().map(|l| cells(l)).max().unwrap_or(0),
             (Axis::Horizontal, true) => {
                 let gaps = rows.len().saturating_sub(1) * rich::cells::cell_len(&self.separator);
-                rows.iter().map(|r| cells(r)).sum::<usize>() + gaps
+                rows.iter().map(first).sum::<usize>() + gaps
             }
         }
         .min(u16::MAX as usize) as u16;
@@ -258,8 +308,10 @@ impl Widget for Steps {
     }
 
     fn draw(&mut self, cx: &mut DrawCx, canvas: &mut Canvas) {
-        let rows = self.rows(cx.console());
+        let wrap = (!self.across).then_some(canvas.width().max(1) as usize);
+        let rows = self.rows(cx.console(), wrap);
         let mut hits = Vec::new();
+        let cap = |n: usize| n.min(u16::MAX as usize) as u16;
         let lines: Vec<Vec<Segment>> = if self.across {
             let sep = cx.style("steps.separator", "dim");
             let mut line = Vec::new();
@@ -268,22 +320,25 @@ impl Widget for Steps {
                     line.push(Segment::new(self.separator.clone(), Some(sep.clone())));
                 }
                 let start = cells(&line);
-                line.extend(row);
-                hits.push((0, start as u16, cells(&line).min(u16::MAX as usize) as u16));
+                line.extend(row.into_iter().next().unwrap_or_default());
+                hits.push((0, 1, cap(start), cap(cells(&line))));
             }
             vec![line]
         } else {
-            for (i, row) in rows.iter().enumerate() {
-                hits.push((i as u16, 0, cells(row).min(u16::MAX as usize) as u16));
+            let mut at = 0usize;
+            for item in &rows {
+                let widest = item.iter().map(|l| cells(l)).max().unwrap_or(0);
+                hits.push((cap(at), cap(item.len()), 0, cap(widest)));
+                at += item.len();
             }
-            rows
+            rows.into_iter().flatten().collect()
         };
         canvas.lines(&lines);
         if let (Some(current), true) = (self.nav, cx.focused())
-            && let Some(&(row, start, end)) = hits.get(current.get())
+            && let Some(&(row, count, start, end)) = hits.get(current.get())
         {
             let style = cx.style("steps.focus", "reverse");
-            canvas.restyle(start, row, end - start, 1, &style);
+            canvas.restyle(start, row, end - start, count, &style);
         }
         self.hits = hits;
     }
@@ -299,8 +354,9 @@ impl Widget for Steps {
         let at = current.get_untracked().min(count - 1);
         let to = match event {
             WidgetEvent::Mouse(mouse) if mouse.kind == MouseKind::Down(MouseButton::Left) => {
-                let hit = self.hits.iter().position(|&(row, start, end)| {
-                    row == mouse.row && (start..end).contains(&mouse.column)
+                let hit = self.hits.iter().position(|&(row, count, start, end)| {
+                    (row..row.saturating_add(count)).contains(&mouse.row)
+                        && (start..end).contains(&mouse.column)
                 });
                 match hit {
                     Some(hit) => hit,

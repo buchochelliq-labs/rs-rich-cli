@@ -28,7 +28,8 @@ use rich_intuituive::files::path_completer;
 use rich_intuituive::prelude::*;
 use rich_intuituive::widgets::{Decision, DiffOptions, accepted_text, diff_view_with};
 use rich_intuituive::{
-    Driver, Origin, Status, button, collapsible_with, history_session, markdown, switch,
+    Driver, Origin, Status, StepState, button, collapsible_with, history_session, markdown, steps,
+    switch,
 };
 
 use crate::bridge::{Bridge, Review, display};
@@ -1341,9 +1342,25 @@ fn session_view(hub: Arc<Hub>, session: Session, prompts: Rc<RefCell<HashMap<u64
     )
     .follow_end()
     .flex(1);
-    let plan = text(move || plan_markup(&s.plan.get()))
-        .auto()
-        .shown_when(move || s.plan.with(|p| !p.is_empty()));
+    // The plan as intuiTUIve's checklist: done, current, pending.
+    let plan = column([
+        label("[b]Plan[/]"),
+        steps(
+            move || {
+                s.plan
+                    .with(|p| p.iter().map(|e| markup(&e.content)).collect())
+            },
+            move |i| {
+                s.plan.with(|p| {
+                    p.get(i)
+                        .map_or(StepState::Pending, |e| step_state(&e.status))
+                })
+            },
+        )
+        .padding(0, 1),
+    ])
+    .auto()
+    .shown_when(move || s.plan.with(|p| !p.is_empty()));
     let walk = rich_ext::listing::walk(&cwd)
         .skip_dir(".git")
         .skip_dir("target")
@@ -1517,18 +1534,13 @@ fn reopen_list(
     });
 }
 
-/// The plan, one entry a line.
-fn plan_markup(plan: &[rich_acp::PlanEntry]) -> String {
-    let mut out = String::from("[b]Plan[/]");
-    for entry in plan {
-        let mark = match entry.status {
-            PlanEntryStatus::Completed => "[green]✓[/]",
-            PlanEntryStatus::InProgress => "[yellow]▸[/]",
-            _ => "[dim]○[/]",
-        };
-        out.push_str(&format!("\n {mark} {}", markup(&entry.content)));
+/// A plan entry's state as a step of the checklist.
+fn step_state(status: &PlanEntryStatus) -> StepState {
+    match status {
+        PlanEntryStatus::Completed => StepState::Done,
+        PlanEntryStatus::InProgress => StepState::Current,
+        _ => StepState::Pending,
     }
-    out
 }
 
 /// Entry `i` of `s`'s conversation.

@@ -162,8 +162,9 @@ steps(move || plan.get().titles(), move |i| plan.get().state(i))
 steps(move || pages(), move |i| StepState::at(i, page.get())).steps_across(" ─ ").step_nav(page)
 ```
 
-- **`steps(items, status)`** lists `items` (markup) one a row, each after
-  the mark of `status(i)`: `✓` done, `▸` current, `○` pending, `✗` failed
+- **`steps(items, status)`** lists `items` (markup), each after the mark
+  of `status(i)`, wrapped to the width under its text and keeping its own
+  line breaks: `✓` done, `▸` current, `○` pending, `✗` failed
   (`[x]`, `[>]`, `[ ]`, `[!]` in text mode), in the theme's `steps.done`,
   `steps.current`, `steps.pending` and `steps.failed` styles. Both
   closures may read signals.
