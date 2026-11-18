@@ -424,6 +424,9 @@ impl ChromeBackend {
             "Browser.downloadWillBegin",
             "Browser.downloadProgress",
         ]);
+        if crate::trace::on() {
+            trace_screencast(&devtools);
+        }
         let backend = ChromeBackend {
             model_scope: None,
             read_scope: None,
@@ -513,7 +516,7 @@ impl ChromeBackend {
 
     fn call(&self, method: &str, params: Value) -> io::Result<Value> {
         let wait = Duration::from_millis(self.wait.load(Ordering::Relaxed));
-        self.devtools.call(method, params, wait)
+        traced(&self.devtools, method, params, wait, "tab")
     }
 
     /// Each call waits at most `timeout` until the [`Wait`] is dropped.
@@ -757,7 +760,7 @@ struct ChromeReader {
 impl ChromeReader {
     /// `node`'s playback in the reader's isolated world.
     fn playback_in(&mut self, node: i64) -> io::Result<Playback> {
-        let call = |method: &str, args| self.devtools.call(method, args, PERIODIC);
+        let call = |method: &str, args| traced(&self.devtools, method, args, PERIODIC, "reader");
         let context = match self.world {
             Some(context) => context,
             None => world_through(&call)?,
@@ -797,7 +800,7 @@ impl ChromeReader {
 
 impl crate::engine::PageReader for ChromeReader {
     fn snapshot(&mut self) -> io::Result<PageSnapshot> {
-        snapshot_through(&|method, args| self.devtools.call(method, args, READING))
+        snapshot_through(&|method, args| traced(&self.devtools, method, args, READING, "reader"))
     }
 
     fn playback(&mut self, node: i64) -> io::Result<Playback> {
@@ -806,6 +809,48 @@ impl crate::engine::PageReader for ChromeReader {
             answer => answer,
         }
     }
+}
+
+/// `method` through `devtools`; when tracing, a call that took 50 ms or
+/// more writes a `cdp` line with its method, time and the thread (`tab`
+/// or `reader`) that waited.
+fn traced(
+    devtools: &DevTools,
+    method: &str,
+    params: Value,
+    wait: Duration,
+    from: &str,
+) -> io::Result<Value> {
+    let at = crate::trace::start();
+    let answer = devtools.call(method, params, wait);
+    let ms = crate::trace::ms(at);
+    if ms >= 50.0 {
+        crate::trace::event(
+            "cdp",
+            json!({"method": method, "ms": ms, "from": from, "ok": answer.is_ok()}),
+        );
+    }
+    answer
+}
+
+/// When tracing, a `chrome_frame` line for each screencast frame Chrome
+/// sends, as the engine's thread reads it, with the time Chrome painted
+/// it: a gap in these with none in Chrome's times is ours (the engine's
+/// thread did not read), a gap in both is Chrome's.
+fn trace_screencast(devtools: &DevTools) {
+    let frames = devtools.listen(&["Page.screencastFrame"]);
+    let _ = std::thread::Builder::new()
+        .name("noctiluca-trace".into())
+        .spawn(move || {
+            for frame in frames {
+                let meta = &frame.params["metadata"];
+                crate::trace::event(
+                    "chrome_frame",
+                    json!({"painted": meta["timestamp"].as_f64(),
+                           "w": meta["deviceWidth"].as_f64(), "h": meta["deviceHeight"].as_f64()}),
+                );
+            }
+        });
 }
 
 /// The trace's line for a snapshot: its two calls' times and its size.
