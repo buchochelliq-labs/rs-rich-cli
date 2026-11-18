@@ -1,9 +1,9 @@
 {
   "tape": "docs/tapes/cornacai.tape",
   "tape_fnv1a64": "f21da7d1f37aaa0f",
-  "recorder": "rs-rich-record 0.0.15",
+  "recorder": "rs-rich-record 0.1.0",
   "rich": null,
-  "commit": "0a17e549dca220724a2b85aed3f04b95706bb4a8",
+  "commit": "1e45ef4f22195753fbe2888e799f6720317caae7",
   "screenshots": [
     "mention",
     "review",

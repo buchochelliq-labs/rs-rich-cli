@@ -219,8 +219,9 @@ struct Piece {
 /// fit its width; it is one row unless sized otherwise, and
 /// [`grow(min, max)`](Node::grow) makes it as tall as its rows, from `min`
 /// to `max`, as a [`text_area`](crate::text_area)'s. Where there are more
-/// rows than room, the last ones are shown, with what is typed. Its role
-/// is a text box, its value the tags.
+/// rows than room, the rest go on the last row, cut at the width; while
+/// something is typed, that row starts at a later chip if it must, so
+/// what is typed shows. Its role is a text box, its value the tags.
 ///
 /// ```
 /// use intuituive::prelude::*;
@@ -312,15 +313,16 @@ impl TagInput {
 }
 
 /// Where each piece goes, as its row and column: on the row it starts
-/// unless it does not fit after what is there, a cell between pieces.
-fn wrap_pieces(pieces: &[Piece], width: u16) -> Vec<(u16, usize)> {
+/// unless it does not fit after what is there, a cell between pieces; on
+/// row `last` at most, the rest of them after it on that row.
+fn wrap_pieces(pieces: &[Piece], width: u16, last: u16) -> Vec<(u16, usize)> {
     let width = (width as usize).max(1);
     let mut out = Vec::with_capacity(pieces.len());
     let (mut row, mut x) = (0u16, 0usize);
     for piece in pieces {
         let at = if x == 0 { 0 } else { x + 1 };
-        if x > 0 && at + piece.width > width {
-            row = row.saturating_add(1);
+        if x > 0 && at + piece.width > width && row < last {
+            row += 1;
             out.push((row, 0));
             x = piece.width;
         } else {
@@ -356,7 +358,7 @@ impl Widget for TagInput {
         match axis {
             Axis::Vertical => {
                 let pieces = self.pieces(cx.console());
-                wrap_pieces(&pieces, width)
+                wrap_pieces(&pieces, width, u16::MAX)
                     .last()
                     .map_or(1, |(row, _)| row.saturating_add(1))
             }
@@ -369,18 +371,36 @@ impl Widget for TagInput {
         let (width, height) = (canvas.width(), canvas.height().max(1));
         let pieces = self.pieces(console);
         let draft = self.draft.get_untracked();
-        let places = wrap_pieces(&pieces, width);
+        // Rows past the room go on the last row, cut at the width; while
+        // something is typed, that row starts at a later chip if it must,
+        // so what is typed shows.
+        let mut places = wrap_pieces(&pieces, width, height - 1);
         let rows = places.last().map_or(1, |(row, _)| row + 1);
-        // More rows than room: the last ones, with what is typed.
-        let skip = rows.saturating_sub(height);
-        let mut lines: Vec<Vec<Segment>> = vec![Vec::new(); (rows - skip) as usize];
+        let typed = pieces.last().map_or(0, |piece| piece.width);
+        let end = places.last().map_or(0, |&(_, x)| x + typed);
+        if !draft.is_empty() && end > width as usize {
+            let need = end - width as usize;
+            let from = places
+                .iter()
+                .filter(|(row, x)| *row == rows - 1 && *x >= need)
+                .map(|&(_, x)| x)
+                .next()
+                .unwrap_or_else(|| places.last().map_or(0, |&(_, x)| x));
+            for (row, x) in &mut places {
+                if *row == rows - 1 {
+                    // Pieces before `from` are left out.
+                    *x = x.checked_sub(from).unwrap_or(usize::MAX);
+                }
+            }
+        }
+        let mut lines: Vec<Vec<Segment>> = vec![Vec::new(); rows as usize];
         let mut used = vec![0usize; lines.len()];
         let mut closes = Vec::new();
         let mut caret = None;
-        for (i, (piece, &(row, x))) in pieces.into_iter().zip(&places).enumerate() {
-            let Some(y) = row.checked_sub(skip) else {
+        for (i, (piece, &(y, x))) in pieces.into_iter().zip(&places).enumerate() {
+            if x == usize::MAX {
                 continue;
-            };
+            }
             let line = &mut lines[y as usize];
             if x > used[y as usize] {
                 line.push(Segment::new(" ".repeat(x - used[y as usize]), None));

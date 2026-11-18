@@ -1445,12 +1445,12 @@ fn view(ui: Ui, hub: Arc<Hub>, shell: Option<ShellPane>) -> Node {
 }
 
 /// Keys as the hints row says them: `Ctrl+N`, `Enter`, `F2`, and a pair
-/// with the same modifiers as `Alt+N/P`.
+/// with the same modifiers as `Alt+N/P`. A letter alone stays as it is
+/// (`n` is not `N`).
 fn say_keys(keys: &str) -> String {
     let word = |part: &str| -> String {
         let mut chars = part.chars();
         match chars.next() {
-            Some(first) if chars.as_str().is_empty() => first.to_uppercase().collect(),
             Some(first) => first.to_uppercase().chain(chars).collect(),
             None => String::new(),
         }
@@ -1473,7 +1473,9 @@ fn say_keys(keys: &str) -> String {
         }
         // A key after the first, held with the same modifiers: `/P`.
         let same = i > 0 && first_held.as_deref() == Some(held.as_str());
-        if held.is_empty() || same {
+        if held.is_empty() && base.chars().count() == 1 {
+            out.push_str(base);
+        } else if held.is_empty() || same {
             out.push_str(&word(base));
         } else {
             out.push_str(&format!("{held}+{}", word(base)));
@@ -1901,6 +1903,18 @@ pub fn wait_for(driver: &mut Driver, text: &str, timeout: Duration) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn hints_say_keys_as_the_row_did() {
+        assert_eq!(say_keys("ctrl+n"), "Ctrl+N");
+        assert_eq!(say_keys("alt+enter"), "Alt+Enter");
+        assert_eq!(say_keys("alt+n/alt+p"), "Alt+N/P");
+        assert_eq!(say_keys("f2"), "F2");
+        assert_eq!(say_keys("esc"), "Esc");
+        assert_eq!(say_keys("]/n"), "]/n");
+        assert_eq!(say_keys("A"), "A");
+        assert_eq!(say_keys("ctrl++"), "Ctrl++");
+    }
 
     #[test]
     fn a_failure_quotes_the_agents_error_not_its_stack_dump() {

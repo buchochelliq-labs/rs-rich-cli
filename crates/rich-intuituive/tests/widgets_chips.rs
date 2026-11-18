@@ -124,15 +124,19 @@ fn a_tag_input_wraps_its_chips_and_grows_from_min_to_max() {
     // ` alpha × ` and ` beta × ` do not both fit in 16: two rows.
     assert_eq!(rows(&driver)[..3], [" alpha ×", " beta ×", "below"]);
     // Typed text that does not fit after the last chip goes under it, but
-    // the input grows no taller than 2: the last two rows are shown.
+    // the input grows no taller than 2: the last row starts at a later
+    // chip, so what is typed shows.
     driver.type_text("gamma-delta");
-    assert_eq!(rows(&driver)[..3], [" beta ×", "gamma-delta", "below"]);
+    assert_eq!(rows(&driver)[..3], [" alpha ×", "gamma-delta", "below"]);
     driver.press("enter");
-    // The caret has a row of its own under the new chip.
-    assert_eq!(rows(&driver)[..3], [" gamma-delta ×", "", "below"]);
-    // A click on the `×` of a chip on a row below the first removes it.
-    driver.click(13, 0);
-    assert_eq!(rows(&driver)[..3], [" alpha ×", " beta ×", "below"]);
+    // Nothing typed: the rest on the last row, cut at the width.
+    assert_eq!(
+        rows(&driver)[..3],
+        [" alpha ×", " beta ×   gamma-", "below"]
+    );
+    // A click on the `×` of a chip on the second row removes it.
+    driver.click(6, 1);
+    assert_eq!(rows(&driver)[..3], [" alpha ×", " gamma-delta ×", "below"]);
 }
 
 #[test]

@@ -204,8 +204,9 @@ tag_input(tags)                                   // a Signal<Vec<String>>
   is typed; Backspace and Delete take the character before or after it.
 - The chips wrap onto more rows when they do not fit. It is one row
   unless sized otherwise; **`.grow(min, max)`** makes it as tall as its
-  rows, from `min` to `max`, as a `text_area`'s, and past `max` the last
-  rows show, with what is typed.
+  rows, from `min` to `max`, as a `text_area`'s. Past its height the rest
+  go on the last row, cut at the width, starting at a later chip while
+  something is typed so that it shows.
 
 ### A pager strip
 

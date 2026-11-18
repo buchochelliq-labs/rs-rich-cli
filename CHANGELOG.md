@@ -13,8 +13,9 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 - **`tag_input` wraps and edits.** Its chips wrap onto more rows when
   they do not fit its width, and `.grow(min, max)` makes it as tall as
-  its rows, from `min` to `max`, as a `text_area`'s (past `max` the last
-  rows show, with what is typed). The text being typed has a caret that
+  its rows, from `min` to `max`, as a `text_area`'s (past its height the
+  rest go on the last row, which starts at a later chip while something
+  is typed, so that it shows). The text being typed has a caret that
   ←, →, Home and End move; Backspace and Delete take the character before
   or after it.
 - **`Node::dock(Dock)` docks any node** to the top or bottom of a column,
@@ -37,7 +38,12 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   `tab.next`, `tab.previous`, `shell.toggle`, `log.show`, `app.quit`,
   `turn.cancel`), so it follows a keymap: `cornacai/keys.toml` beside
   `config.toml` remaps them. It looks the same, except that a hint that
-  does not fit is left out whole rather than cut.
+  does not fit is left out whole rather than cut, and that while a
+  pop-up is open (an edit's review, a permission prompt) the row lists
+  the keys that work in it rather than the screen's, which do not reach
+  the screen then: the review's diff keys, and nothing under a
+  permission prompt, whose keys are on its own line. The `cornacai` tape's
+  review and permission screenshots are re-recorded for that.
 - intuiTUIve: `Node::listed_as(keys)` lists the binding added last under
   other keys in the help, the palette and `key_hints` (a pair bound apart,
   shown as one hint).
