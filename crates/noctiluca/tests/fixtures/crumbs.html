@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<title>Crumbs</title>
+<!-- A reference page's second header row for Noctiluca's tests: an icon
+     button named in words (its face is wider than its 34 px box) and a
+     breadcrumb trail after it on the same line, then a sidebar whose
+     links are laid out as blocks, one under another. -->
+<style>
+  body { margin: 0; font: 16px sans-serif }
+  .bar { display: flex; align-items: center; gap: 18px; padding: 4px 0 }
+  .bar button { width: 34px; height: 30px; padding: 0; border: 0; background: #eee }
+  ol { display: flex; gap: 20px; margin: 0; padding: 0; list-style: none }
+  ol li { display: flex }
+  ol a { display: block }
+  nav.side a { display: block; padding: 2px 0 }
+</style>
+<div class="bar">
+  <button type="button" aria-label="Toggle sidebar"><svg width="16" height="16" aria-hidden="true">
+    <rect x="2" y="3" width="12" height="2"/><rect x="2" y="7" width="12" height="2"/></svg></button>
+  <ol aria-label="Breadcrumbs">
+    <li><a href="#web">Web</a></li>
+    <li><a href="#html">HTML</a></li>
+    <li><a href="#reference">Reference</a></li>
+    <li><a href="#elements">Elements</a></li>
+  </ol>
+</div>
+<h1>The table element</h1>
+<nav class="side" aria-label="Related">
+  <a href="#caption">Captions</a>
+  <a href="#rows">Rows</a>
+  <a href="#cells">Cells</a>
+</nav>
+<p>The page's text, after its header.</p>
+</html>

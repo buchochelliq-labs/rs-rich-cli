@@ -32,6 +32,25 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   and which thread waited) and `slow_turn` (a turn of the tab's loop that
   held it 100 ms or more, by part) lines.
 
+### Noctiluca: block links and a button's wide face keep their lines (#880)
+
+- **Links laid out as blocks each take a line.** A sidebar's links set
+  `display: block`, one under another in Chrome, ran together into one
+  word (`SyntaxExamplesNotes`): a link's text is walked into the block it
+  is in, and nothing ended the line. A block-level link now starts and
+  ends a line there; a flex or grid item (a row of tabs, blocks side by
+  side) does not.
+- **A button whose face is wider than its box no longer pushes the row
+  after it under it.** An icon button named in words (`[Toggle sidebar]`
+  in a 34 px box) ran over the breadcrumb trail Chrome put after it on its
+  line, so the trail's first links went to the row below and read after
+  the rest (`Reference Elements <table>` then `Web HTML` on MDN). The
+  one-line boxes after such a face on its line now move right along its
+  row, a cell past it, when the row has room and nothing else is there.
+- Tested with fixture pages (`tests/fixtures/crumbs.html`,
+  `tests/fixtures/sidebar-gaps.html`) and a built page in
+  `tests/model.rs`.
+
 ### Noctiluca: rows blank beside a sticky sidebar collapse (#786)
 
 - `collapse-gaps` also collapses rows blank in every column but a sticky

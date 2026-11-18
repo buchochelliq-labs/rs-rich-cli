@@ -2412,6 +2412,94 @@ fn project_part(
         }
         items[n].x1 = items[n].x1.max(end);
     }
+    // A control's face wider than its box (an icon button named in words,
+    // `[Toggle sidebar]` in four cells) runs over what follows it on its
+    // row in Chrome (a breadcrumb trail): the one-line boxes after it on
+    // that row move right, as a run, a cell past it, when the row has room
+    // and nothing else is there; else they stay (and go under it).
+    let on_a_line = |n: usize, item: &Item| {
+        // A button's box is taller than its face's line.
+        let tall = if one_row.contains(&n) { 2.0 } else { 1.5 };
+        item.row.is_none()
+            && item.media.is_none()
+            && item.log.is_none()
+            && item.bottom - item.top <= tall * ch
+            && (item.one_line || item.wrap.is_some())
+    };
+    let drawn_len = |item: &Item| {
+        item.lines
+            .iter()
+            .map(|l| l.spans.iter().map(|s| cell_len(&s.text)).sum::<usize>())
+            .max()
+            .unwrap_or(0)
+            .max(need_of(item))
+            .max(item.x1 - item.x0)
+    };
+    let mut faces: Vec<usize> = one_row
+        .iter()
+        .copied()
+        .filter(|&n| on_a_line(n, &items[n]))
+        .collect();
+    faces.sort_by_key(|&n| items[n].x0);
+    for face in faces {
+        let (x0, middle) = (items[face].x0, (items[face].top + items[face].bottom) / 2.0);
+        let reach = x0 + drawn_len(&items[face]);
+        // What Chrome put on the face's line after it, in order.
+        let mut row: Vec<usize> = (0..items.len())
+            .filter(|&m| {
+                let it = &items[m];
+                m != face
+                    && on_a_line(m, it)
+                    && it.x0 >= x0
+                    && ((it.top + it.bottom) / 2.0 - middle).abs() < ch / 2.0
+            })
+            .collect();
+        row.sort_by_key(|&m| (items[m].x0, items[m].x1));
+        if row.first().is_none_or(|&m| items[m].x0 >= reach) {
+            continue;
+        }
+        let mut end = reach;
+        let mut moved: Vec<(usize, usize, usize)> = Vec::new();
+        for &m in &row {
+            let it = &items[m];
+            let (mut a, mut b) = (it.x0, it.x1);
+            if a <= end {
+                let shift = end + 1 - a;
+                a += shift;
+                b += shift;
+                moved.push((m, a, b));
+            }
+            end = end.max(if one_row.contains(&m) {
+                a + drawn_len(it)
+            } else {
+                b
+            });
+        }
+        let fits = moved.iter().all(|&(_, _, b)| b <= columns);
+        let clear = moved.iter().all(|&(m, a, b)| {
+            let (top, bottom) = (items[m].top, items[m].bottom);
+            !items.iter().enumerate().any(|(o, it)| {
+                o != face
+                    && !row.contains(&o)
+                    && it.top < bottom - 0.5
+                    && top < it.bottom - 0.5
+                    && it.x0 < b
+                    && a < it.x1
+            })
+        });
+        if fits && clear {
+            // On the face's row, as Chrome has them on its line.
+            let row_top = (items[face].top / ch).round() * ch;
+            for (m, a, b) in moved {
+                let item = &mut items[m];
+                item.x0 = a;
+                item.x1 = b;
+                let height = item.bottom - item.top;
+                item.top = row_top;
+                item.bottom = row_top + height;
+            }
+        }
+    }
     // Terminal glyphs are not Chrome's: a box whose text needs more cells
     // than it has grows to the right, into cells no box beside it (on the
     // rows it spans) claims, before its text wraps.

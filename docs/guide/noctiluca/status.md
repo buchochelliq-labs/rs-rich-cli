@@ -13,9 +13,14 @@ Measured in [Noctiluca's video and readings](../../design/noctiluca-youtube-perf
 |---|---|
 | Video beside a busy chat | No pause over half a second on a busy Twitch channel, in Kitty and half blocks, at 24 frames a second (pauses of 1 to 2 s, 3 to 7 times in 75 s, before): stills of the chat's new pictures wait for the frames. Done |
 | Reference pages | Rows a main column leaves blank beside a sticky sidebar (a table of contents, an ad) collapse to one, as rows blank in every column did (#786): MDN at 120 columns no longer has runs of 6 to 8 blank rows on most screens. Done |
+| Reflow across sites | Links laid out as blocks each take a line, and a button whose face is wider than its box moves the trail after it along its row instead of pushing it under (#880: MDN's breadcrumbs at 120 columns). Done for these two; #880's other cases are open |
 
 ### Known limits in 0.1.0
 
+- **#880's other cases:** BBC News's narrow time labels wrap (`7 hrs` /
+  `ago`), Wikipedia's header links split a word over two rows (`Create` /
+  `account`), and at 80 columns MDN's breadcrumbs still go under the
+  sidebar button when its row's other buttons take the room.
 - **CodeMirror examples** still read as one line (MDN's *Try it*); its
   cause is not the gaps' and is left for later.
 - **Also seen, as in 0.0.27:** the reader view starts with the page's

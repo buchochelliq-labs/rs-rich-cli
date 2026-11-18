@@ -849,4 +849,34 @@ fn rows_blank_beside_a_sticky_sidebar_collapse() {
         at("The last paragraph") <= at("max_by_key") + 2,
         "{lines:#?}"
     );
+    // The sidebar's block links each take a line.
+    assert!(at("Examples") > at("Syntax"), "{lines:#?}");
+}
+
+#[test]
+fn a_buttons_wide_face_moves_the_trail_after_it_along_its_row() {
+    let Some(binary) = chrome() else { return };
+    let mut live = Live::start(binary);
+    let page = live.wait_open("crumbs.html", "after its header");
+    let lines = projected(&page);
+    let at = |t: &str| {
+        lines
+            .iter()
+            .position(|l| l.contains(t))
+            .unwrap_or_else(|| panic!("{t}: {lines:#?}"))
+    };
+    // `[Toggle sidebar]` needs more cells than its 34 px: the trail after
+    // it keeps its row and its order, rather than its first links going
+    // under the button.
+    let row = &lines[at("[Toggle sidebar]")];
+    let order: Vec<usize> = ["[Toggle sidebar]", "Web", "HTML", "Reference", "Elements"]
+        .iter()
+        .map(|t| row.find(t).unwrap_or_else(|| panic!("{t}: {lines:#?}")))
+        .collect();
+    assert!(order.windows(2).all(|w| w[0] < w[1]), "{lines:#?}");
+    // Links laid out as blocks each take a line.
+    assert!(
+        at("Rows") > at("Captions") && at("Cells") > at("Rows"),
+        "{lines:#?}"
+    );
 }
