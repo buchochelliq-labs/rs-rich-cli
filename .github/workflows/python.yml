@@ -87,7 +87,9 @@ jobs:
 
   compat:
     name: compatibility with rich 15.0.0 (Python ${{ matrix.python }})
-    runs-on: ubuntu-latest
+    # Ubuntu 24.04, not ubuntu-latest: actions/setup-python has no CPython
+    # 3.9 for Ubuntu 26.04, and the abi3 wheels promise 3.9 and later.
+    runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
       matrix:
