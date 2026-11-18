@@ -108,6 +108,18 @@ fn a_reply_streams_in_as_markdown_with_its_plan_and_title() {
     // The plan, and the title the agent gave the session.
     assert!(text.contains("✓ Read the code"), "{text}");
     assert!(text.contains("▸ Run the tests"), "{text}");
+    // It is intuiTUIve's steps checklist: a screen reader hears each
+    // step with its state.
+    let read: Vec<String> = driver
+        .accessibility()
+        .iter()
+        .map(|n| n.describe())
+        .collect();
+    assert!(
+        read.iter()
+            .any(|d| d.contains("Read the code done") && d.contains("Run the tests current")),
+        "{read:?}"
+    );
     wait_for(&mut driver, "1 Planning", WAIT);
     finish(&mut driver, &handle);
 }

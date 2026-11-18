@@ -38,6 +38,10 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   now only "Internal error (-32603)" showed. An agent that has not
   answered within 20 seconds gets a notice too, where the screen used to
   wait with no word.
+- **The plan is intuiTUIve's `steps` checklist.** It draws as before
+  (`✓` done, `▸` current, `○` pending, in the theme's `steps.*` styles),
+  and a screen reader now hears it as a list with each step's state
+  ("Read the code done, Run the tests current").
 
 ### Noctiluca: the browser recovers, and says why once
 
