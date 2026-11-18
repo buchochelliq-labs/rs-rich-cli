@@ -12,11 +12,14 @@ Measured in [Noctiluca's video and readings](../../design/noctiluca-youtube-perf
 | Works | Notes |
 |---|---|
 | Video beside a busy chat | No pause over half a second on a busy Twitch channel, in Kitty and half blocks, at 24 frames a second (pauses of 1 to 2 s, 3 to 7 times in 75 s, before): stills of the chat's new pictures wait for the frames. Done |
+| Reference pages | Rows a main column leaves blank beside a sticky sidebar (a table of contents, an ad) collapse to one, as rows blank in every column did (#786): MDN at 120 columns no longer has runs of 6 to 8 blank rows on most screens. Done |
 
 ### Known limits in 0.1.0
 
-- **Also seen, as in 0.0.27:** CodeMirror examples read as one line; the
-  reader view starts with the page's header.
+- **CodeMirror examples** still read as one line (MDN's *Try it*); its
+  cause is not the gaps' and is left for later.
+- **Also seen, as in 0.0.27:** the reader view starts with the page's
+  header.
 
 ## In 0.0.27 (Noctiluca 0.0.6): smooth video, a browser that recovers
 

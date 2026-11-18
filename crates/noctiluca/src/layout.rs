@@ -2617,7 +2617,53 @@ fn project_part(
     // up by them, so what is beside it keeps its place.
     let collapse = adapt.on(Rule::CollapseGaps);
     let mut lifted = 0usize;
+    // A sticky sidebar (a sticky box in the flow, narrower than half the
+    // page: a table of contents, an ad that stays in view) sits beside
+    // whatever the page scrolls past it, so it holds no gap open: rows
+    // blank in every column but its own collapse too (#786). Its extent
+    // is its box and its blocks' (one that scrolls within itself shows
+    // more than its box); a picture inside it is part of it.
+    let mut sidebars: Vec<(usize, crate::engine::Rect)> = page
+        .layers
+        .iter()
+        .enumerate()
+        .filter(|(_, l)| !l.fixed && l.place == Place::Flow && l.rect.width < page.width / 2.0)
+        .map(|(k, l)| (k, l.rect))
+        .collect();
+    let mut beside = std::collections::HashSet::new();
+    for block in &page.blocks {
+        let Some((_, extent)) = block
+            .stack
+            .layer
+            .and_then(|l| sidebars.iter_mut().find(|(k, _)| *k == l))
+        else {
+            continue;
+        };
+        beside.insert(block.node);
+        let (top, bottom) = (
+            extent.y.min(block.rect.y),
+            extent.bottom().max(block.rect.bottom()),
+        );
+        extent.y = top;
+        extent.height = bottom - top;
+    }
+    let in_sidebar = |node: crate::engine::NodeId, media: Option<(usize, usize, usize)>| {
+        beside.contains(&node)
+            || media
+                .and_then(|(index, _, _)| page.media.get(index))
+                .is_some_and(|m| {
+                    sidebars.iter().any(|(_, r)| {
+                        m.rect.x >= r.x - 1.0
+                            && m.rect.right() <= r.right() + 1.0
+                            && m.rect.y >= r.y - 1.0
+                            && m.rect.bottom() <= r.bottom() + 1.0
+                    })
+                })
+    };
+    // The rows the boxes outside sticky sidebars take.
+    let mut flow_rows = 0usize;
     for (top, anchor, _, x0, x1, lines, node, media, table_row) in boxes {
+        let sidebar = collapse && !sidebars.is_empty() && in_sidebar(node, media);
         // A page can place a block millions of pixels down: blank rows
         // past a few screens tell the reader nothing, so the gap is capped
         // and the grid grows with the content, not the coordinates.
@@ -2627,8 +2673,13 @@ fn project_part(
         // Rows blank in every column (no box drew on them: the place of
         // an empty slot, a hidden menu, a spacer) collapse to one, none at
         // the top of the page.
-        let keep = grid.len() + usize::from(!grid.is_empty());
-        if collapse && y0 > keep {
+        let below = if sidebars.is_empty() {
+            grid.len()
+        } else {
+            flow_rows
+        };
+        let keep = below + usize::from(below > 0);
+        if collapse && !sidebar && y0 > keep {
             lifted += y0 - keep;
             y0 = keep;
         }
@@ -2655,6 +2706,9 @@ fn project_part(
             media: usize::MAX,
         };
         occupied.push((node, rectangle));
+        if !sidebar {
+            flow_rows = flow_rows.max(y + lines.len());
+        }
         if let Some(at) = logs.iter().position(|(log, _)| *log == node) {
             slots.push(LogSlot {
                 node,

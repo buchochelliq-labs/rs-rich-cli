@@ -623,6 +623,114 @@ fn rows_blank_in_every_column_collapse_and_rows_beside_a_sidebar_stay() {
     );
 }
 
+/// A main column whose code takes fewer rows than its box (a tall line
+/// height), beside a sidebar (`position`) holding a table of contents
+/// and a tall picture, then a paragraph after the code.
+fn beside_a_sidebar(position: &str) -> Page {
+    use noctiluca::engine::Rect;
+    use noctiluca::testing::PageBuilder;
+    let mut p = PageBuilder::new(
+        "file:///noctiluca/fixtures/sidebar-gaps.html",
+        "Sidebar gaps",
+        800.0,
+        700.0,
+    );
+    let body = p.body();
+    let aside = p.element(
+        body,
+        "ASIDE",
+        &[],
+        &[("position", position)],
+        Some(Rect::new(0.0, 40.0, 200.0, 420.0)),
+    );
+    for (k, name) in ["One", "Two", "Three", "Four"].iter().enumerate() {
+        let y = 40.0 + 18.0 * k as f64;
+        let href = format!("#{k}");
+        let a = p.element(
+            aside,
+            "A",
+            &[("href", href.as_str())],
+            &[("display", "block")],
+            Some(Rect::new(0.0, y, 80.0, 18.0)),
+        );
+        p.text(a, name, Rect::new(0.0, y, 40.0, 18.0));
+    }
+    p.image(
+        aside,
+        "ad.png",
+        "An ad",
+        Rect::new(0.0, 130.0, 200.0, 320.0),
+    );
+    let lead = p.element(
+        body,
+        "P",
+        &[],
+        &[],
+        Some(Rect::new(220.0, 40.0, 560.0, 18.0)),
+    );
+    p.text(
+        lead,
+        "Before the code.",
+        Rect::new(220.0, 40.0, 130.0, 18.0),
+    );
+    let pre = p.element(
+        body,
+        "PRE",
+        &[],
+        &[("white-space", "pre")],
+        Some(Rect::new(220.0, 76.0, 560.0, 300.0)),
+    );
+    for (k, line) in ["let a = 1;", "let b = 2;", "a + b"].iter().enumerate() {
+        let y = 76.0 + 100.0 * k as f64;
+        p.text(pre, line, Rect::new(220.0, y, 90.0, 18.0));
+    }
+    let after = p.element(
+        body,
+        "P",
+        &[],
+        &[],
+        Some(Rect::new(220.0, 420.0, 560.0, 18.0)),
+    );
+    p.text(
+        after,
+        "After the code.",
+        Rect::new(220.0, 420.0, 120.0, 18.0),
+    );
+    build(&p.snapshot(), &mut Revisions::new())
+}
+
+#[test]
+fn rows_blank_beside_a_sticky_sidebar_collapse() {
+    let at = |lines: &[String], text: &str| {
+        lines
+            .iter()
+            .position(|l| l.contains(text))
+            .unwrap_or_else(|| panic!("{text}: {lines:#?}"))
+    };
+    let lines_of = |page: &Page| -> Vec<String> {
+        projection(page, 100, (8.0, 18.0), &Marks::default())
+            .iter()
+            .map(Line::plain)
+            .collect()
+    };
+    // A sticky sidebar stays in view as the page scrolls past it: the
+    // rows blank in the main column beside its picture collapse.
+    let sticky = beside_a_sidebar("sticky");
+    assert!(sticky.layers.iter().any(|l| !l.fixed), "a sticky layer");
+    let lines = lines_of(&sticky);
+    assert!(
+        at(&lines, "After the code") <= at(&lines, "a + b") + 2,
+        "{lines:#?}"
+    );
+    assert!(lines.iter().any(|l| l.contains("One")), "{lines:#?}");
+    // A sidebar in the flow keeps its rows beside the main column.
+    let lines = lines_of(&beside_a_sidebar("static"));
+    assert!(
+        at(&lines, "After the code") >= at(&lines, "a + b") + 4,
+        "{lines:#?}"
+    );
+}
+
 /// The projection of a saved snapshot at `columns`: the page's lines, its
 /// pinned strip's and its docked strip's.
 fn strips(name: &str, columns: u16) -> (Vec<String>, Vec<String>, Vec<String>) {

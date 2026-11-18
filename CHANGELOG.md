@@ -32,6 +32,19 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   and which thread waited) and `slow_turn` (a turn of the tab's loop that
   held it 100 ms or more, by part) lines.
 
+### Noctiluca: rows blank beside a sticky sidebar collapse (#786)
+
+- `collapse-gaps` also collapses rows blank in every column but a sticky
+  sidebar's: a sticky box in the page's flow narrower than half the page
+  (a table of contents, an ad that stays in view as the page scrolls),
+  with its blocks and the pictures in it. It sits beside whatever the
+  page scrolls past, so it no longer holds open the rows a main column
+  leaves blank where its code and paragraphs take fewer rows than their
+  boxes. On MDN's `Array.prototype.map()` at 120x40, runs of 6 to 8 blank
+  rows beside the sidebar came on most screens; one run of 5 is left. A
+  sidebar in the flow keeps its rows beside the main column, as before.
+  Tested with a fixture page (`tests/fixtures/sidebar-gaps.html`).
+
 ### Cornacai: signing in from a terminal (claude-agent-acp)
 
 - **Claude's adapter can be signed in to from Cornacai.**

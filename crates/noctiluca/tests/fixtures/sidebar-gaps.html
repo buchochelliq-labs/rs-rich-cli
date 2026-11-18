@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<title>Sidebar gaps</title>
+<!-- A reference page for Noctiluca's tests: a main column whose code and
+     paragraphs have a tall line height (they take fewer terminal rows than
+     their boxes), beside a sticky sidebar that holds a table of contents
+     and a tall picture and stays in view as the page scrolls. The rows the
+     main column leaves blank beside the sidebar collapse (#786). -->
+<style>
+  body { margin: 0; font: 16px/1.8 sans-serif }
+  .page { display: flex; gap: 24px; padding: 8px }
+  aside { position: sticky; top: 0; align-self: flex-start; width: 220px; flex: none }
+  aside a { display: block }
+  aside img { display: block; width: 200px; height: 320px; margin-top: 16px }
+  main { flex: 1; min-width: 0 }
+  pre { font: 15px/2.6 monospace; margin: 24px 0 }
+  p { margin: 24px 0 }
+</style>
+<div class="page">
+  <aside aria-label="On this page">
+    <a href="#syntax">Syntax</a>
+    <a href="#examples">Examples</a>
+    <a href="#notes">Notes</a>
+    <img src="media/field.jpg" alt="A field at dusk">
+  </aside>
+  <main>
+    <h1>The fold method</h1>
+    <p>Before the code.</p>
+    <pre>let total = items
+  .iter()
+  .fold(0, |sum, x| sum + x);
+let mean = total / items.len();
+println!("{mean}");</pre>
+    <p>After the code.</p>
+    <pre>let words = text.split(' ');
+let longest = words.max_by_key(|w| w.len());</pre>
+    <p>The last paragraph.</p>
+  </main>
+</div>
+</html>

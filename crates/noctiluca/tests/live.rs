@@ -828,3 +828,25 @@ fn a_video_beside_a_chat_that_brings_new_pictures_keeps_its_frames() {
         "the frames waited: longest gap {max:.2} s, {long} over 0.5 s"
     );
 }
+
+#[test]
+fn rows_blank_beside_a_sticky_sidebar_collapse() {
+    let Some(binary) = chrome() else { return };
+    let mut live = Live::start(binary);
+    let page = live.wait_open("sidebar-gaps.html", "The last paragraph");
+    let lines = projected(&page);
+    let at = |t: &str| {
+        lines
+            .iter()
+            .position(|l| l.contains(t))
+            .unwrap_or_else(|| panic!("{t}: {lines:#?}"))
+    };
+    // The code's five lines take five rows, not their boxes' height: the
+    // paragraph after them follows at most two rows on, beside the
+    // sticky sidebar's picture.
+    assert!(at("After the code") <= at("println!") + 2, "{lines:#?}");
+    assert!(
+        at("The last paragraph") <= at("max_by_key") + 2,
+        "{lines:#?}"
+    );
+}
