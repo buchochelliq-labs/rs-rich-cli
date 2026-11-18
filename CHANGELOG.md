@@ -16,7 +16,7 @@ From the maintainer's first run with Claude's adapter (`claude-agent-acp`).
 - **A permission prompt says what will happen and why.** It leads with the
   operation in words, built from the tool call's kind, locations, content
   and input: "Edit src/app.rs: 12 lines added, 3 removed", "Create
-  notes.md: 4 lines", "Run `cargo test` in DIR", "Read …", "Fetch URL",
+  notes.md: 4 lines", "Run `cargo test` in the workspace", "Read …", "Fetch URL",
   "Switch out of Plan mode and start on this plan". Then the agent's
   reason, marked as its words: the last paragraph or two of its message in
   this turn before the tool call (else a `description` in the tool's

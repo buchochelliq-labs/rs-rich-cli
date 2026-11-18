@@ -20,7 +20,7 @@ command, and the finished turn.
 
 | An `@` mention | An edit to review | A permission prompt | Done |
 |---|---|---|---|
-| ![The prompt completing @src/main.rs](../media/tapes/cornacai/mention.png) | ![The agent's edit as a diff, one hunk to accept or reject](../media/tapes/cornacai/review.png) | ![The agent asking to run cargo test, with its three options](../media/tapes/cornacai/permission.png) | ![The finished turn: the answer, the tool cards and the plan](../media/tapes/cornacai/done.png) |
+| ![The prompt completing @src/main.rs](../media/tapes/cornacai/mention.png) | ![The agent's edit as a diff, one hunk to accept or reject](../media/tapes/cornacai/review.png) | ![The agent asking to run cargo test in the workspace, its reason in its own words, and its three options explained](../media/tapes/cornacai/permission.png) | ![The finished turn: the answer, the tool cards and the plan](../media/tapes/cornacai/done.png) |
 
 [Tape](../tapes/cornacai.tape) · [Cast](../media/tapes/cornacai/cornacai.cast) · [GIF](../media/tapes/cornacai/cornacai.gif)
 
@@ -129,7 +129,7 @@ the rest.
 
 - **Permission prompts.** Every `session/request_permission` opens a
   prompt. It leads with what will happen, in words: "Edit src/app.rs: 12
-  lines added, 3 removed", "Run `cargo test` in DIR", "Read notes.md",
+  lines added, 3 removed", "Run `cargo test` in the workspace", "Read notes.md",
   "Fetch URL". Then why, in the agent's own words: the last paragraph or
   two it wrote in this turn before the tool call (or, when it wrote
   nothing, a `description` its tool's input carries). Then one button per

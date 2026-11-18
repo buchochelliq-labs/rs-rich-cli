@@ -160,8 +160,10 @@ fn a_permission_prompt_says_what_will_happen_why_and_what_each_option_means() {
     wait_for(&mut driver, "The agent asks to run", WAIT);
     let text = screen(&driver);
     // What will happen leads, in words, with where it runs.
-    let what = format!("Run `cargo test --all` in {}", dir.display());
-    assert!(text.contains(&what[..60.min(what.len())]), "{text}");
+    assert!(
+        text.contains("Run `cargo test --all` in the workspace"),
+        "{text}"
+    );
     // Why: the agent's last paragraph before the call, as its words.
     assert!(text.contains("Why, in the agent's words:"), "{text}");
     assert!(

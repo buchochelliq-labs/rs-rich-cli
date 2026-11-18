@@ -7,28 +7,28 @@
   The program prints a fixed greeting; the name can come from …
 
 The change
-
-main prints a fixed Hello. I will read the name from the first argument, with world as the default:
-
-           ╭─ Permission ─────────────────────────────────────────────────────────────────────────╮
- let name =│ The agent asks to run · Greeting by name                                             │
-     .nth(1│ “Run the tests” (the agent's words)                                                  │
-     .unwra│ $ cargo test                                                                         │
+           ╭─ The agent asks to run · Greeting by name ───────────────────────────────────────────╮
+main prints│ Run `cargo test` in the workspace                                                    │
+           │ Why, in the agent's words:                                                           │
+           │ │ Now the tests, to check both greetings.                                            │
+ let name =│ 1 Allow once · allow it this time; the agent asks again next time                    │
+     .nth(1│ 2 Always allow cargo test · allow it, and let the agent do this without asking (it   │
+     .unwra│ keeps the choice, usually for this session)                                          │
+           │ 3 Reject · refuse this time; the agent is told and may try another way               │
            │                                                                                      │
-           │  1 Allow once  2 Always allow cargo test  3 Reject                                   │
-▸ edit Edit│                                                                                      │          ✓
-  diff src/│ 1–9 choose · Esc rejects once                                                        │
-Wrote src/m╰──────────────────────────────────────────────────────────────────────────────────────╯
+▸ edit Edit│  1 Allow once  2 Always allow cargo test  3 Reject                                   │          ✓
+  diff src/│                                                                                      │
+Wrote src/m│ “Run the tests” (the agent's words)                                                  │
+           │ $ cargo test                                                                         │
+Now the tes│ 1–9 choose · Esc rejects once                                                        │
+           ╰──────────────────────────────────────────────────────────────────────────────────────╯
 ▸ execute Run the tests                                                                                pending
-
-
-
 
 Plan
  ✓ Read src/main.rs
  ✓ Take the name from the arguments
  ▸ Run the tests
-╭─ the agent is working (Esc cancels) · mode ask ────────────────────────────────────────────────────────────╮
+╭─ the agent is working (Esc cancels) · mode Ask (Shift+Tab, Alt+M) ─────────────────────────────────────────╮
 │Ask the agent…  @ names a file                                                                              │
 ╰────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
-Enter send · Alt+Enter line · Esc cancel · Ctrl+N new · Ctrl+O reopen · Alt+N/P tab · Ctrl+T shell · F2 log ·
+Enter send · Shift+Tab/Alt+M mode (Plan) · Alt+Enter line · Esc cancel · Ctrl+N new · Ctrl+O reopen · Alt+N/P

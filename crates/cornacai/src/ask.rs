@@ -78,9 +78,9 @@ fn files(call: &ToolCall, cwd: &Path) -> String {
 }
 
 /// What will happen, in words, as console markup (escaped): "Edit
-/// src/app.rs: 12 lines added, 3 removed", "Run `cargo test` in DIR",
-/// "Read notes.md", "Fetch URL", "Switch out of Plan mode and start on
-/// this plan". `mode` is the session's current mode's name.
+/// src/app.rs: 12 lines added, 3 removed", "Run `cargo test` in the
+/// workspace", "Read notes.md", "Fetch URL", "Switch out of Plan mode and
+/// start on this plan". `mode` is the session's current mode's name.
 pub(crate) fn intent(call: &ToolCall, cwd: &Path, mode: Option<&str>) -> String {
     let changes = diffs(call, cwd);
     if !changes.is_empty() {
@@ -111,14 +111,15 @@ pub(crate) fn intent(call: &ToolCall, cwd: &Path, mode: Option<&str>) -> String 
     match &call.kind {
         ToolKind::Execute => {
             let command = input(call, "command").unwrap_or(call.title.as_str());
+            // The agent's commands run in the workspace unless the input
+            // names another directory.
             let dir = input(call, "cwd")
                 .map(|d| display(Path::new(d), cwd))
                 .filter(|d| !d.is_empty())
-                .unwrap_or_else(|| cwd.display().to_string());
+                .map_or_else(|| "the workspace".to_string(), |d| markup(&clean(&d)));
             format!(
-                "Run `{}` in {}",
-                markup(&clean(&cut(command, COMMAND_CHARS))),
-                markup(&clean(&dir))
+                "Run `{}` in {dir}",
+                markup(&clean(&cut(command, COMMAND_CHARS)))
             )
         }
         ToolKind::Read => or_title("Read", &files),
