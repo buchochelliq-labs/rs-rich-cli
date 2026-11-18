@@ -142,11 +142,16 @@ pub fn controls_execution(path: &Path) -> bool {
         let Some(name) = name.to_str() else {
             continue;
         };
+        // Compared as a case-insensitive file system would open it, and
+        // with the trailing dots and spaces Windows drops: a directory the
+        // agent creates as `.Claude.` is `.claude` to everything that reads it.
+        let name = name.trim_end_matches(['.', ' ']);
+        let listed = |names: &[&str]| names.iter().any(|n| n.eq_ignore_ascii_case(name));
         if components.peek().is_some() {
-            if DIRS.contains(&name) {
+            if listed(DIRS) {
                 return true;
             }
-        } else if FILES.contains(&name) {
+        } else if listed(FILES) {
             return true;
         }
     }
@@ -212,5 +217,33 @@ mod tests {
         assert!(controls_execution(Path::new("/w/.vscode/settings.json")));
         assert!(!controls_execution(Path::new("/w/src/main.rs")));
         assert!(!controls_execution(Path::new("/w/.git")));
+    }
+
+    #[test]
+    fn execution_controlling_names_match_as_the_file_system_does() {
+        // A case-insensitive file system (Windows, macOS by default) opens
+        // `.CLAUDE/settings.json` as `.claude/settings.json`, and Windows
+        // drops trailing dots and spaces from a name it creates.
+        assert!(controls_execution(Path::new("/w/.GIT/hooks/pre-commit")));
+        assert!(controls_execution(Path::new("/w/.Claude/settings.json")));
+        assert!(controls_execution(Path::new("/w/claude.md")));
+        assert!(controls_execution(Path::new("/w/.MCP.json")));
+        assert!(controls_execution(Path::new("/w/.claude./settings.json")));
+        assert!(controls_execution(Path::new("/w/.mcp.json ")));
+        assert!(!controls_execution(Path::new("/w/claude.md.bak")));
+        assert!(!controls_execution(Path::new("/w/.gitx/config")));
+    }
+
+    #[test]
+    fn a_new_execution_controlling_directory_is_seen_through_check() {
+        // What the bridge does: resolve the agent's path, then ask about the
+        // resolved one. A directory that does not exist yet keeps the
+        // agent's spelling, whatever its case.
+        let dir = scratch("case");
+        let workspace = Workspace::new(dir.join("inside")).unwrap();
+        let path = workspace.cwd().join(".CLAUDE").join("settings.json");
+        let resolved = workspace.check(&path).unwrap();
+        assert!(controls_execution(&resolved));
+        let _ = std::fs::remove_dir_all(dir);
     }
 }

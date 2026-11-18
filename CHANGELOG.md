@@ -9,6 +9,15 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### ACP: the write guard matches names as the file system does
+
+- `rs-rich-acp`'s `controls_execution` compares names case-insensitively
+  and without trailing dots and spaces. An agent creating `.CLAUDE/settings.json`
+  or `.claude./settings.json` in a workspace that has no `.claude/` yet now gets
+  Cornacai's "this file controls what runs" warning on its write review, as
+  `.claude/settings.json` does. Writes were reviewed either way; only the
+  warning was missing.
+
 ## 0.0.27 cohort — to be published
 
 To be published from `main` by one `release.yml` run on rab v2.1.2 (tag
