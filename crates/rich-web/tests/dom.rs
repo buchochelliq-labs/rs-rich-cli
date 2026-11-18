@@ -331,13 +331,14 @@ fn a_dom_session_runs_end_to_end() {
     socket.send(Message::text("c1:1")).unwrap();
     read_until(&mut socket, "Copied 3 characters");
 
-    // A click on the button, as an SGR report.
+    // A click on the button, as an SGR report. The toast lies over it, and
+    // a click on a toast dismisses it (as Textual's does): the first click
+    // takes the toast away, the second reaches the button.
     let save_row = 5;
-    socket
-        .send(Message::text(format!(
-            "d\x1b[<0;2;{save_row}M\x1b[<0;2;{save_row}m"
-        )))
-        .unwrap();
+    let click = format!("d\x1b[<0;2;{save_row}M\x1b[<0;2;{save_row}m");
+    socket.send(Message::text(click.clone())).unwrap();
+    read_until(&mut socket, r#"[4,[["Save                ",0]]]"#);
+    socket.send(Message::text(click)).unwrap();
     read_until(&mut socket, r#"{"t":"say","text":"Saved","urgent":false}"#);
 
     // Ctrl+C quits: the session closes, with no terminal teardown.
