@@ -26,7 +26,9 @@ use rich_acp::{
 use rich_embed::TerminalPane;
 use rich_intuituive::files::path_completer;
 use rich_intuituive::prelude::*;
-use rich_intuituive::widgets::{Decision, DiffOptions, accepted_text, diff_view_with};
+use rich_intuituive::widgets::{
+    Decision, DiffOptions, KeyHintsOptions, accepted_text, diff_view_with, key_hints_with, tabs,
+};
 use rich_intuituive::{
     Driver, Origin, Status, StepState, button, collapsible_with, history_session, markdown, steps,
     switch,
@@ -1271,22 +1273,49 @@ fn ask_sign_in(cx: &mut Ctx, methods: Vec<AuthMethod>, tx: Sender<Option<AuthMet
 fn view(ui: Ui, hub: Arc<Hub>, shell: Option<ShellPane>) -> Node {
     let prompts: Rc<RefCell<HashMap<u64, u64>>> = Rc::default();
     let shell_id = Rc::new(RefCell::new(None::<u64>));
-    let tabs = text(move || {
-        let active = ui.active.get();
-        let sessions = ui.sessions.get();
-        let mut line = String::new();
-        for (i, session) in sessions.iter().enumerate() {
-            let busy = if session.busy.get() { " …" } else { "" };
-            let title = markup(&session.title.get());
-            if i == active {
-                line.push_str(&format!("[reverse] {} {title}{busy} [/]", i + 1));
-            } else {
-                line.push_str(&format!(" {} {title}{busy} ", i + 1));
+    let focus_prompt = {
+        let prompts = prompts.clone();
+        move |cx: &mut Ctx| {
+            let key = ui.current().key;
+            if let Some(id) = prompts.borrow().get(&key) {
+                cx.focus(*id);
             }
         }
-        format!("{line}  [dim]·[/] [b]{}[/]", markup(&ui.agent.get()))
+    };
+    // intuiTUIve's tab strip, drawn as the line was by hand: each title
+    // padded, no divider, the selected one reversed; clicks select, and
+    // the keys stay the screen's (the prompt keeps the focus).
+    let strip = tabs(
+        move || {
+            ui.sessions.with(|sessions| {
+                sessions
+                    .iter()
+                    .enumerate()
+                    .map(|(i, session)| {
+                        let busy = if session.busy.get() { " …" } else { "" };
+                        format!("{} {}{busy}", i + 1, markup(&session.title.get()))
+                    })
+                    .collect()
+            })
+        },
+        ui.active,
+    )
+    .divider("")
+    .theme_styles([
+        ("tabs.selected", "reverse"),
+        ("tabs.selected.blur", "reverse"),
+    ])
+    .no_focus()
+    .on_select({
+        let focus_prompt = focus_prompt.clone();
+        move |i, cx| {
+            ui.active.set(i);
+            let _ = cx.after(Duration::ZERO, focus_prompt.clone());
+        }
     })
-    .fixed(1);
+    .auto();
+    let agent = text(move || format!("  [dim]·[/] [b]{}[/]", markup(&ui.agent.get()))).flex(1);
+    let tabs = row([strip, agent]).fixed(1);
     let views = {
         let (hub, prompts) = (hub.clone(), prompts.clone());
         switch(
@@ -1304,15 +1333,12 @@ fn view(ui: Ui, hub: Arc<Hub>, shell: Option<ShellPane>) -> Node {
         )
         .flex(1)
     };
-    let hints = text(move || {
-        let busy = ui.current_tracked().busy.get();
-        let esc = if busy { "Esc cancel · " } else { "" };
-        format!(
-            "[dim]Enter send · Alt+Enter line · {esc}Ctrl+N new · Ctrl+O reopen · \
-             Alt+N/P tab · Ctrl+T shell · F2 log · Ctrl+Q quit[/]"
-        )
-    })
-    .fixed(1);
+    // The keys that work now, from the bindings' descriptions: they follow
+    // a user's keymap (`keys.toml`).
+    let hints = key_hints_with(
+        KeyHintsOptions::new().format(|keys, what| format!("{} {what}", say_keys(keys))),
+    )
+    .theme_styles([("key_hints.hint", "dim")]);
     let main = column([tabs, views, hints]).flex(2);
     let has_shell = shell.is_some();
     let screen = match shell {
@@ -1326,15 +1352,6 @@ fn view(ui: Ui, hub: Arc<Hub>, shell: Option<ShellPane>) -> Node {
         }
         None => row([main]),
     };
-    let focus_prompt = {
-        let prompts = prompts.clone();
-        move |cx: &mut Ctx| {
-            let key = ui.current().key;
-            if let Some(id) = prompts.borrow().get(&key) {
-                cx.focus(*id);
-            }
-        }
-    };
     let mut screen = screen;
     for n in 1..=9usize {
         let focus_prompt = focus_prompt.clone();
@@ -1346,8 +1363,7 @@ fn view(ui: Ui, hub: Arc<Hub>, shell: Option<ShellPane>) -> Node {
         });
     }
     screen
-        .on_key("ctrl+q", |cx| cx.quit())
-        .on_key("ctrl+n", {
+        .bind_id("session.new", "ctrl+n", "new", {
             let hub = hub.clone();
             let focus_prompt = focus_prompt.clone();
             move |cx| {
@@ -1364,7 +1380,7 @@ fn view(ui: Ui, hub: Arc<Hub>, shell: Option<ShellPane>) -> Node {
                 let _ = cx.after(Duration::ZERO, focus_prompt.clone());
             }
         })
-        .on_key("ctrl+o", {
+        .bind_id("session.reopen", "ctrl+o", "reopen", {
             let hub = hub.clone();
             let focus_prompt = focus_prompt.clone();
             move |cx| {
@@ -1373,7 +1389,7 @@ fn view(ui: Ui, hub: Arc<Hub>, shell: Option<ShellPane>) -> Node {
                 }
             }
         })
-        .on_key("alt+n", {
+        .bind_id("tab.next", "alt+n", "tab", {
             let focus_prompt = focus_prompt.clone();
             move |cx| {
                 let n = ui.sessions.with_untracked(Vec::len);
@@ -1381,7 +1397,9 @@ fn view(ui: Ui, hub: Arc<Hub>, shell: Option<ShellPane>) -> Node {
                 let _ = cx.after(Duration::ZERO, focus_prompt.clone());
             }
         })
-        .on_key("alt+p", {
+        // One hint for the pair, `Alt+N/P tab`.
+        .listed_as("alt+n alt+p")
+        .bind_id("tab.previous", "alt+p", "previous tab", {
             let focus_prompt = focus_prompt.clone();
             move |cx| {
                 let n = ui.sessions.with_untracked(Vec::len);
@@ -1389,7 +1407,8 @@ fn view(ui: Ui, hub: Arc<Hub>, shell: Option<ShellPane>) -> Node {
                 let _ = cx.after(Duration::ZERO, focus_prompt.clone());
             }
         })
-        .on_key("ctrl+t", {
+        .unlisted()
+        .bind_id("shell.toggle", "ctrl+t", "shell", {
             let focus_prompt = focus_prompt.clone();
             move |cx| {
                 if !has_shell {
@@ -1407,7 +1426,7 @@ fn view(ui: Ui, hub: Arc<Hub>, shell: Option<ShellPane>) -> Node {
                 }
             }
         })
-        .on_key("f2", move |cx| {
+        .bind_id("log.show", "f2", "log", move |cx| {
             cx.modal(Size::Percent(90), Size::Percent(80), move || {
                 scroll(text(move || {
                     let logs = ui.logs.get();
@@ -1422,14 +1441,48 @@ fn view(ui: Ui, hub: Arc<Hub>, shell: Option<ShellPane>) -> Node {
                 .on_key("escape f2 q", |cx| cx.pop())
             })
         })
+        .bind_id("app.quit", "ctrl+q", "quit", |cx| cx.quit())
 }
 
-impl Ui {
-    /// The active session, subscribing to which it is.
-    fn current_tracked(&self) -> Session {
-        let at = self.active.get();
-        self.sessions.with(|s| s[at.min(s.len() - 1)])
+/// Keys as the hints row says them: `Ctrl+N`, `Enter`, `F2`, and a pair
+/// with the same modifiers as `Alt+N/P`.
+fn say_keys(keys: &str) -> String {
+    let word = |part: &str| -> String {
+        let mut chars = part.chars();
+        match chars.next() {
+            Some(first) if chars.as_str().is_empty() => first.to_uppercase().collect(),
+            Some(first) => first.to_uppercase().chain(chars).collect(),
+            None => String::new(),
+        }
+    };
+    let mut out = String::new();
+    let mut first_held = None;
+    for (i, key) in keys.split('/').enumerate() {
+        let (held, base) = match key.strip_suffix("++") {
+            Some(held) => (held, "+"),
+            None => key.rsplit_once('+').unwrap_or(("", key)),
+        };
+        let held: Vec<String> = held
+            .split('+')
+            .filter(|p| !p.is_empty())
+            .map(word)
+            .collect();
+        let held = held.join("+");
+        if i > 0 {
+            out.push('/');
+        }
+        // A key after the first, held with the same modifiers: `/P`.
+        let same = i > 0 && first_held.as_deref() == Some(held.as_str());
+        if held.is_empty() || same {
+            out.push_str(&word(base));
+        } else {
+            out.push_str(&format!("{held}+{}", word(base)));
+        }
+        if i == 0 {
+            first_held = Some(held);
+        }
     }
+    out
 }
 
 /// One session's conversation, plan and prompt.
@@ -1476,6 +1529,10 @@ fn session_view(hub: Arc<Hub>, session: Session, prompts: Rc<RefCell<HashMap<u64
         .complete_at('@', path_completer(walk))
         .history(history_session())
         .on_submit(move |text, cx| send(&send_hub, s, text, cx))
+        // The text area's own keys, listed for the hints row: it takes
+        // them before these bindings would run.
+        .bind("enter", "send", |_| {})
+        .bind("alt+enter", "line", |_| {})
         .autofocus();
     prompts.borrow_mut().insert(s.key, prompt.id());
     let prompt = prompt.panel_with(move || {
@@ -1489,15 +1546,19 @@ fn session_view(hub: Arc<Hub>, session: Session, prompts: Rc<RefCell<HashMap<u64
             None => status,
         }
     });
-    column([transcript, plan, prompt.auto()]).on_key("escape", move |_| {
-        if !s.busy.get_untracked() {
-            return;
-        }
-        if let (Some(connection), Some(id)) = (hub.connection.get(), s.id.get_untracked()) {
-            let _ = connection.cancel(&id);
-            s.notice("[dim]Cancelling…[/]");
-        }
-    })
+    column([transcript, plan, prompt.auto()])
+        .bind_when(
+            move || s.busy.get_untracked(),
+            "escape",
+            "cancel",
+            move |_| {
+                if let (Some(connection), Some(id)) = (hub.connection.get(), s.id.get_untracked()) {
+                    let _ = connection.cancel(&id);
+                    s.notice("[dim]Cancelling…[/]");
+                }
+            },
+        )
+        .binding_id("turn.cancel")
 }
 
 /// Send `text` as a prompt turn of `s`.

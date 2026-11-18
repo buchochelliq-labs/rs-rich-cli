@@ -108,6 +108,27 @@ Cornacai are kept inside.
 | F2 | The agent's log (what it wrote to its standard error) |
 | Ctrl+Q | Quit |
 
+A click on a tab opens its session too. The row of hints at the bottom
+lists the keys that work now, from the bindings themselves, so it follows
+a keys file. `cornacai/keys.toml`, beside `config.toml`, remaps them by
+id, one `id = "keys"` a line (`none` unbinds), and is read again when it
+changes:
+
+```toml
+# cornacai/keys.toml
+session.new = "ctrl+j"
+session.reopen = "ctrl+o"
+tab.next = "alt+n"
+tab.previous = "alt+p"
+shell.toggle = "ctrl+t"
+log.show = "f2"
+app.quit = "ctrl+q"
+turn.cancel = "escape"
+```
+
+Enter and Alt+Enter are the prompt's own keys and are not remapped
+there.
+
 ## `@` file mentions
 
 Type `@` and part of a path: the prompt offers the workspace's files that

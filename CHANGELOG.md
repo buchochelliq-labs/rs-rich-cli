@@ -27,6 +27,21 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   hears the buttons and their keys with the notification (`… Buttons:
   Undo, Alt+1; View, Alt+2`).
 
+### Cornacai: intuiTUIve's tabs and key hints (#907)
+
+- **The session tabs are intuiTUIve's `tabs` strip**, drawn as before (each
+  title padded, the selected one reversed); a click on a tab opens its
+  session.
+- **The hints row is a `key_hints` footer** over Cornacai's bindings, which
+  now have descriptions and ids (`session.new`, `session.reopen`,
+  `tab.next`, `tab.previous`, `shell.toggle`, `log.show`, `app.quit`,
+  `turn.cancel`), so it follows a keymap: `cornacai/keys.toml` beside
+  `config.toml` remaps them. It looks the same, except that a hint that
+  does not fit is left out whole rather than cut.
+- intuiTUIve: `Node::listed_as(keys)` lists the binding added last under
+  other keys in the help, the palette and `key_hints` (a pair bound apart,
+  shown as one hint).
+
 ### Cornacai: signing in from a terminal (claude-agent-acp)
 
 - **Claude's adapter can be signed in to from Cornacai.**

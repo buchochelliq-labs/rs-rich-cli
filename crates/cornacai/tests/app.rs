@@ -653,3 +653,45 @@ fn with_the_pty_setting_a_command_runs_on_a_terminal() {
     assert!(text.contains("on a terminal"), "{text}");
     assert!(!text.contains("on pipes"), "{text}");
 }
+
+#[test]
+fn the_tab_line_and_hints_row_are_intuituives_tabs_and_key_hints() {
+    let dir = workspace("tabline");
+    let (app, handle) = app(replay("sessions.jsonl", &dir));
+    // A user's keymap moves a binding: the hints row follows it.
+    let mut driver = app.keymap([("session.new", "ctrl+j")]).driver(110, 30);
+    wait_for(&mut driver, "Prompt", WAIT);
+    let rows = |driver: &Driver| -> Vec<String> {
+        rich_intuituive::testing::styled(driver)
+            .lines()
+            .map(String::from)
+            .collect()
+    };
+    let shown = rows(&driver);
+    assert_eq!(
+        shown[0],
+        "[reverse] 1 Session 1 [/]  [dim]·[/] [bold]the agent[/]"
+    );
+    assert_eq!(
+        shown[29],
+        "[dim]Enter send · Alt+Enter line · Ctrl+J new · Ctrl+O reopen · Alt+N/P tab · \
+         Ctrl+T shell · F2 log · Ctrl+Q quit[/]"
+    );
+    driver.press("ctrl+j");
+    wait_for(&mut driver, "2 Session 2", WAIT);
+    wait_for(&mut driver, "Prompt", WAIT);
+    assert_eq!(
+        rows(&driver)[0],
+        " 1 Session 1 [reverse] 2 Session 2 [/]  [dim]·[/] [bold]the agent[/]"
+    );
+    send(&mut driver, "Second");
+    wait_for(&mut driver, "Answer from two.", WAIT);
+    // A click on the first tab selects it, and the prompt keeps the keys.
+    assert!(driver.click_text("1 Session 1"));
+    driver.settle();
+    assert!(!screen(&driver).contains("Answer from two."));
+    assert!(rows(&driver)[0].starts_with("[reverse] 1 Session 1 [/]"));
+    send(&mut driver, "First");
+    wait_for(&mut driver, "Answer from one.", WAIT);
+    finish(&mut driver, &handle);
+}

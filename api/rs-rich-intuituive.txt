@@ -3117,6 +3117,7 @@ pub fn intuituive::node::Node::bind_unless(self, impl core::ops::function::Fn() 
 pub fn intuituive::node::Node::bind_when(self, impl core::ops::function::Fn() -> bool + 'static, &str, &str, impl core::ops::function::FnMut(&mut intuituive::app::Ctx) + 'static) -> intuituive::node::Node
 pub fn intuituive::node::Node::fall_through(self) -> intuituive::node::Node
 pub fn intuituive::node::Node::in_mode<T: core::cmp::PartialEq + 'static>(self, intuituive::reactive::Signal<T>, T, &str, impl core::ops::function::FnOnce(intuituive::node::Node) -> intuituive::node::Node) -> intuituive::node::Node
+pub fn intuituive::node::Node::listed_as(self, &str) -> intuituive::node::Node
 pub fn intuituive::node::Node::modes<T: core::cmp::PartialEq + core::clone::Clone + 'static>(self, intuituive::reactive::Signal<T>, &[intuituive::ModePage<'_, T>]) -> intuituive::node::Node
 pub fn intuituive::node::Node::on_key_up(self, &str, impl core::ops::function::FnMut(&mut intuituive::app::Ctx) + 'static) -> intuituive::node::Node
 pub fn intuituive::node::Node::repeat(self, core::time::Duration, core::time::Duration) -> intuituive::node::Node
@@ -4500,6 +4501,7 @@ pub fn intuituive::node::Node::bind_unless(self, impl core::ops::function::Fn() 
 pub fn intuituive::node::Node::bind_when(self, impl core::ops::function::Fn() -> bool + 'static, &str, &str, impl core::ops::function::FnMut(&mut intuituive::app::Ctx) + 'static) -> intuituive::node::Node
 pub fn intuituive::node::Node::fall_through(self) -> intuituive::node::Node
 pub fn intuituive::node::Node::in_mode<T: core::cmp::PartialEq + 'static>(self, intuituive::reactive::Signal<T>, T, &str, impl core::ops::function::FnOnce(intuituive::node::Node) -> intuituive::node::Node) -> intuituive::node::Node
+pub fn intuituive::node::Node::listed_as(self, &str) -> intuituive::node::Node
 pub fn intuituive::node::Node::modes<T: core::cmp::PartialEq + core::clone::Clone + 'static>(self, intuituive::reactive::Signal<T>, &[intuituive::ModePage<'_, T>]) -> intuituive::node::Node
 pub fn intuituive::node::Node::on_key_up(self, &str, impl core::ops::function::FnMut(&mut intuituive::app::Ctx) + 'static) -> intuituive::node::Node
 pub fn intuituive::node::Node::repeat(self, core::time::Duration, core::time::Duration) -> intuituive::node::Node
@@ -9082,6 +9084,7 @@ pub fn intuituive::node::Node::bind_unless(self, impl core::ops::function::Fn() 
 pub fn intuituive::node::Node::bind_when(self, impl core::ops::function::Fn() -> bool + 'static, &str, &str, impl core::ops::function::FnMut(&mut intuituive::app::Ctx) + 'static) -> intuituive::node::Node
 pub fn intuituive::node::Node::fall_through(self) -> intuituive::node::Node
 pub fn intuituive::node::Node::in_mode<T: core::cmp::PartialEq + 'static>(self, intuituive::reactive::Signal<T>, T, &str, impl core::ops::function::FnOnce(intuituive::node::Node) -> intuituive::node::Node) -> intuituive::node::Node
+pub fn intuituive::node::Node::listed_as(self, &str) -> intuituive::node::Node
 pub fn intuituive::node::Node::modes<T: core::cmp::PartialEq + core::clone::Clone + 'static>(self, intuituive::reactive::Signal<T>, &[intuituive::ModePage<'_, T>]) -> intuituive::node::Node
 pub fn intuituive::node::Node::on_key_up(self, &str, impl core::ops::function::FnMut(&mut intuituive::app::Ctx) + 'static) -> intuituive::node::Node
 pub fn intuituive::node::Node::repeat(self, core::time::Duration, core::time::Duration) -> intuituive::node::Node
