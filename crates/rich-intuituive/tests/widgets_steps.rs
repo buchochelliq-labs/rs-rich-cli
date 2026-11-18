@@ -96,3 +96,50 @@ fn text_mode_marks_are_ascii() {
         "{shown}"
     );
 }
+
+#[test]
+fn a_long_step_wraps_under_its_text_and_keeps_its_line_breaks() {
+    // A plan entry longer than the width, and one with a line break of its
+    // own: every word shows, each wrapped line under the step's text.
+    let app = App::new(|| {
+        column([
+            steps(
+                || {
+                    vec![
+                        "Read the configuration and the tests".into(),
+                        "Run them\nthen report".into(),
+                        "Done".into(),
+                    ]
+                },
+                |i| [StepState::Done, StepState::Current, StepState::Pending][i],
+            ),
+            label("after"),
+        ])
+    });
+    let mut driver = app.driver(16, 8);
+    driver.settle();
+    assert_eq!(
+        rows(&driver)[..7],
+        [
+            "✓ Read the",
+            "  configuration",
+            "  and the tests",
+            "▸ Run them",
+            "  then report",
+            "○ Done",
+            "after",
+        ]
+    );
+    // A screen reader hears the whole step.
+    let read: Vec<String> = driver
+        .accessibility()
+        .iter()
+        .map(|n| n.describe())
+        .collect();
+    assert!(
+        read.iter()
+            .any(|d| d.contains("Run them\nthen report current")
+                || d.contains("Run them then report current")),
+        "{read:?}"
+    );
+}
