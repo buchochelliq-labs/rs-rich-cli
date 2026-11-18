@@ -50,22 +50,23 @@ topic and a widget index.
 
 </div>
 
-## New in 0.0.26
+## New in 0.0.27
 
 ![Memo, intuiTUIve's elephant, in the cartoon look](assets/intuituive/mascot/memo-cartoon.svg){ .tui-mascot width="128" }
-0.0.26, published on 2026-11-11 ([release notes](releases/0.0.26.md)), is one more
-release before 0.1.0's API review: it makes Noctiluca steady.
+0.0.27, published on 2026-11-18 ([release notes](releases/0.0.27.md)), is the
+last point release before 0.1.0's API review: it makes Noctiluca's video
+smooth and its browser recoverable.
 
-- **[Noctiluca](guide/noctiluca.md):** about 24 video frames a second on
-  a page that keeps changing (about one before), the iTerm2 video gate
-  passed (#883), and sound on by default (off over SSH).
-- **intuiTUIve and rs-rich-ext:** premeasured cells for fullscreen
-  terminals, `ImagePresentation` for fitted pictures, and the terminal
-  restored when an inline app's last repaint fails.
-- **Also:** the nightly differential parity run green again, and
-  releases on rab v2.1.1.
+- **[Noctiluca](guide/noctiluca.md):** smooth video with a release build
+  (Kitty's frame intervals p95 44.9 ms), a live stream that no longer
+  freezes (#890), and a browser that recovers when Chrome exits or a page
+  crashes.
+- **intuiTUIve:** widgets for clicks, notices, steps, chips, accordions,
+  pagers and range sliders, and toasts with buttons and a history.
+- **Also:** shops and chat read better, and 0.0.26's real-site faults are
+  fixed.
 
-Earlier releases are under [Releases](releases/0.0.26.md) in the
+Earlier releases are under [Releases](releases/0.0.27.md) in the
 navigation; the [roadmap](ROADMAP.md) says what comes next.
 
 ### Which version are these docs for?
@@ -278,6 +279,6 @@ published or not. Each crate versions independently; see
 | ![](assets/rs-rich/troubleshooting.svg){ .rs-icon width="20" } [Troubleshooting](troubleshooting.md) | When the output is not what you expected |
 | ![](assets/rs-rich/known-issues.svg){ .rs-icon width="20" } [Known issues](known-issues.md) | What is known not to work yet |
 | ![](assets/rs-rich/plans.svg){ .rs-icon width="20" } [Development plans](plans/1.0.0.md) | What each release sets out to do |
-| ![](assets/rs-rich/releases.svg){ .rs-icon width="20" } [Releases](releases/0.0.26.md) | What each release shipped |
+| ![](assets/rs-rich/releases.svg){ .rs-icon width="20" } [Releases](releases/0.0.27.md) | What each release shipped |
 | ![](assets/rs-rich/parity.svg){ .rs-icon width="20" } [Parity with Python rich](parity.md) | What matches upstream, and how it is proven |
 | ![](assets/rs-rich/contributing.svg){ .rs-icon width="20" } [Contributing](BRANCHING.md) | Branches, architecture and design notes |

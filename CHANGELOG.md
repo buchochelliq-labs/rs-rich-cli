@@ -9,21 +9,23 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
-## 0.0.27 cohort — to be published
+## 0.0.27 cohort — published 2026-11-18
 
-To be published from `main` by one `release.yml` run on rab v2.1.2 (tag
-`release-0.0.27`): core 0.0.17 / macros 0.0.11 / plugin API 0.0.11 /
-art 0.0.20 / diagram 0.0.10 / mermaid 0.0.13 / lumis 0.0.11 / ext 0.0.24 /
-micro 0.0.13 / record 0.0.15 / interact 0.0.15 / ratatui 0.0.12 /
-intuituive 0.0.12 / embed 0.0.10 / web 0.0.10 / data 0.0.11 /
-marketplace 0.0.6 / acp 0.0.4 / noctiluca 0.0.6 / cornacai 0.0.4 /
-CLI 0.0.27, and `rs-rich` 0.0.15 on PyPI. The last point release before
-0.1.0's API review: Noctiluca's video is smooth with a release build
-(Kitty's frame intervals p95 44.9 ms, no frame blanks its region), the
-browser recovers when Chrome exits or a page crashes, shop and chat pages
-read better, and 0.0.26's real-site faults #889, #891 and #892 and #884's
-overlay redraws are fixed; intuiTUIve gains widgets for clicks, notices,
-steps and toasts. See [the release notes](docs/releases/0.0.27.md).
+Published from `main` at `e7fc3d73` (#908's merge) by one `release.yml`
+run on rab v2.1.2 (tag `release-0.0.27`): core 0.0.17 / macros 0.0.11 /
+plugin API 0.0.11 / art 0.0.20 / diagram 0.0.10 / mermaid 0.0.13 /
+lumis 0.0.11 / ext 0.0.24 / micro 0.0.13 / record 0.0.15 / interact
+0.0.15 / ratatui 0.0.12 / intuituive 0.0.12 / embed 0.0.10 / web 0.0.10 /
+data 0.0.11 / marketplace 0.0.6 / acp 0.0.4 / noctiluca 0.0.6 /
+cornacai 0.0.4 / CLI 0.0.27, and `rs-rich` 0.0.15 on PyPI
+(`python-v0.0.15`, same commit). The last point release before 0.1.0's
+API review: Noctiluca's video is smooth with a release build (Kitty's
+frame intervals p95 44.9 ms, no frame blanks its region), a live stream's
+video no longer freezes (#890), the browser recovers when Chrome exits or
+a page crashes, shop and chat pages read better, and 0.0.26's real-site
+faults #889, #891 and #892 and #884's overlay redraws are fixed;
+intuiTUIve gains widgets for clicks, notices, steps and toasts. See
+[the release notes](docs/releases/0.0.27.md).
 
 ### Dependencies: security fixes in the lockfiles
 

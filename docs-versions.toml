@@ -31,3 +31,7 @@
 # versions open. The tags are on e5422bf9 (#894's merge); the notes came
 # after.
 "0.0.26" = "01f40e0635c1030ba40bf6c68a6e4f2e8901422b"
+# 0.0.27's notes (the publication), the last commit before the 0.1.0
+# versions open. The tags are on e7fc3d73, the release PR's (#908) merge;
+# the notes came after.
+"0.0.27" = "PUBLICATION_COMMIT"

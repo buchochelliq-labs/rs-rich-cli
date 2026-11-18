@@ -53,23 +53,22 @@ console.print_str("[bold red]Hello[/] [green]World[/] — 42");
 [Getting started](docs/getting-started.md) has a complete program; the
 [tutorial](docs/tutorial/index.md) builds up from there.
 
-## New in 0.0.26
+## New in 0.0.27
 
-Published on 2026-11-11 ([release notes](docs/releases/0.0.26.md)), one more
-release before 0.1.0's API review:
+Published on 2026-11-18 ([release notes](docs/releases/0.0.27.md)), the
+last point release before 0.1.0's API review:
 
-- **[Noctiluca](docs/guide/noctiluca.md) plays video smoothly on a page that
-  keeps changing:** about 24 frames a second where it managed about one
-  before, with the screencast limited to the playing region. It passes the
-  iTerm2 video gate (#883), and sound is on by default (off over SSH;
-  `--audio`, `--mute`).
-- **intuiTUIve and rs-rich-ext:** premeasured cells for fullscreen
-  terminals (`write_premeasured`; `Cell.width` is now `u16`),
-  `ImagePresentation` for fitted pictures, and an inline app that restores
-  the terminal when its last repaint fails.
-- **Also:** the nightly differential parity run is green again, with
-  Markdown fixes in `rs-rich` and upstream's own dependencies pinned for
-  the parity jobs, and releases run on rab v2.1.1.
+- **[Noctiluca](docs/guide/noctiluca.md)'s video is smooth:** with a
+  release build, Kitty's frame intervals have a p95 of 44.9 ms and no frame
+  blanks its region in any protocol. A live stream's video no longer
+  freezes (#890), and the browser recovers when Chrome exits or a page
+  crashes, saying why once.
+- **Shops and chat** read better (native ratings, one-row bars, chat
+  badges as text), and 0.0.26's real-site faults #889, #891 and #892 are
+  fixed.
+- **intuiTUIve:** widgets for clicks, notices, steps, chips, accordions,
+  pagers and range sliders, toasts with buttons and a history, and
+  streaming Markdown's last limits (#797).
 
 The [changelog](CHANGELOG.md) lists every change.
 
@@ -184,7 +183,7 @@ why, is in [docs/ROADMAP.md](docs/ROADMAP.md); the tracking epic is
 ## Releases
 
 Each release has notes in [`docs/releases/`](docs/releases/) (the newest
-published one is [0.0.26](docs/releases/0.0.26.md)), and
+published one is [0.0.27](docs/releases/0.0.27.md)), and
 [`CHANGELOG.md`](CHANGELOG.md) lists every change. What comes next is in the
 [roadmap](docs/ROADMAP.md) and the [plan to 1.0.0](docs/plans/1.0.0.md),
 whose stage 3 is 0.1.0. The
