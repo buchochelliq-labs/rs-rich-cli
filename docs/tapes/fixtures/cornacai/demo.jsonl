@@ -2,7 +2,7 @@
 {"client": {"id": 0, "method": "initialize"}}
 {"agent": {"jsonrpc": "2.0", "id": 0, "result": {"protocolVersion": 1, "agentInfo": {"name": "demo-agent", "version": "1.0"}}}}
 {"client": {"id": 1, "method": "session/new"}}
-{"agent": {"jsonrpc": "2.0", "id": 1, "result": {"sessionId": "sess_demo", "modes": {"currentModeId": "ask", "availableModes": [{"id": "ask", "name": "Ask"}]}}}}
+{"agent": {"jsonrpc": "2.0", "id": 1, "result": {"sessionId": "sess_demo", "modes": {"currentModeId": "ask", "availableModes": [{"id": "ask", "name": "Ask", "description": "Ask before every change"}, {"id": "plan", "name": "Plan", "description": "Plan first, change nothing"}]}}}}
 {"client": {"id": 2, "method": "session/prompt", "params": {"sessionId": "sess_demo", "prompt": [{"type": "text", "text": "Greet by name in @src/main.rs please"}, {"type": "resource_link", "uri": "file://$WORKSPACE/src/main.rs", "name": "main.rs"}]}}}
 {"agent": {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "sess_demo", "update": {"sessionUpdate": "plan", "entries": [{"content": "Read src/main.rs", "priority": "high", "status": "in_progress"}, {"content": "Take the name from the arguments", "priority": "high", "status": "pending"}, {"content": "Run the tests", "priority": "medium", "status": "pending"}]}}}}
 {"quiet": 300}
@@ -35,6 +35,7 @@
 {"client": {"id": 100, "result": {}}}
 {"agent": {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "sess_demo", "update": {"sessionUpdate": "tool_call_update", "toolCallId": "call_edit", "status": "completed"}}}}
 {"agent": {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "sess_demo", "update": {"sessionUpdate": "plan", "entries": [{"content": "Read src/main.rs", "priority": "high", "status": "completed"}, {"content": "Take the name from the arguments", "priority": "high", "status": "completed"}, {"content": "Run the tests", "priority": "medium", "status": "in_progress"}]}}}}
+{"agent": {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "sess_demo", "update": {"sessionUpdate": "agent_message_chunk", "messageId": "m2", "content": {"type": "text", "text": "Now the tests, to check both greetings."}}}}}
 {"agent": {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "sess_demo", "update": {"sessionUpdate": "tool_call", "toolCallId": "call_test", "title": "Run the tests", "kind": "execute", "status": "pending", "rawInput": {"command": "cargo test"}}}}}
 {"agent": {"jsonrpc": "2.0", "id": "perm-1", "method": "session/request_permission", "params": {"sessionId": "sess_demo", "toolCall": {"toolCallId": "call_test", "title": "Run the tests", "kind": "execute", "rawInput": {"command": "cargo test"}}, "options": [{"optionId": "once", "name": "Allow once", "kind": "allow_once"}, {"optionId": "always", "name": "Always allow cargo test", "kind": "allow_always"}, {"optionId": "no", "name": "Reject", "kind": "reject_once"}]}}}
 {"client": {"id": "perm-1", "result": {"outcome": {"outcome": "selected", "optionId": "once"}}}}

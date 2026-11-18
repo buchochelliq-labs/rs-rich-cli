@@ -90,7 +90,7 @@ fn a_reply_streams_in_as_markdown_with_its_plan_and_title() {
     let dir = workspace("stream");
     let (mut driver, handle) = start("stream.jsonl", &dir);
     wait_for(&mut driver, "replay-agent 0.1", WAIT);
-    wait_for(&mut driver, "mode default", WAIT);
+    wait_for(&mut driver, "mode Ask", WAIT);
     send(&mut driver, "Explain the plan");
     wait_for(&mut driver, "Done", WAIT);
     let text = screen(&driver);
@@ -148,6 +148,149 @@ fn a_permission_prompt_offers_the_agents_options_and_sends_the_choice() {
     assert!(text.contains("edit Editing config.json"), "{text}");
     assert!(text.contains("✓"), "{text}");
     assert!(text.contains("Set debug to true."), "{text}");
+    finish(&mut driver, &handle);
+}
+
+#[test]
+fn a_permission_prompt_says_what_will_happen_why_and_what_each_option_means() {
+    let dir = workspace("permission-why");
+    let (mut driver, handle) = start("permission_why.jsonl", &dir);
+    wait_for(&mut driver, "Prompt", WAIT);
+    send(&mut driver, "Is the fix right?");
+    wait_for(&mut driver, "The agent asks to run", WAIT);
+    let text = screen(&driver);
+    // What will happen leads, in words, with where it runs.
+    let what = format!("Run `cargo test --all` in {}", dir.display());
+    assert!(text.contains(&what[..60.min(what.len())]), "{text}");
+    // Why: the agent's last paragraph before the call, as its words.
+    assert!(text.contains("Why, in the agent's words:"), "{text}");
+    assert!(
+        text.contains("│ I will run the whole test suite, to see"),
+        "{text}"
+    );
+    assert!(text.contains("│ The parser looked fine."), "{text}");
+    assert!(!text.contains("│ First I read the parser."), "{text}");
+    // What each option means.
+    assert!(
+        text.contains("allow it this time; the agent asks again"),
+        "{text}"
+    );
+    assert!(text.contains("usually for this session"), "{text}");
+    assert!(text.contains("refuse this time"), "{text}");
+    // The technical detail comes after, the command in full.
+    let lead = text.find("Run `cargo test --all`").unwrap();
+    let detail = text.find("$ cargo test --all").unwrap();
+    assert!(lead < detail, "{text}");
+    driver.press("1");
+    send(&mut driver, "Read the docs");
+    // No message before the call: its input's description stands in.
+    wait_for(&mut driver, "Fetch https://example.com/guide", WAIT);
+    let text = screen(&driver);
+    assert!(text.contains("│ The guide names the setting"), "{text}");
+    driver.press("escape");
+    wait_for(&mut driver, "I will not fetch it.", WAIT);
+    finish(&mut driver, &handle);
+}
+
+#[test]
+fn a_change_in_a_permission_prompt_is_shown_as_a_diff_to_accept_or_reject() {
+    let dir = workspace("permission-diff");
+    let (mut driver, handle) = start("permission_diff.jsonl", &dir);
+    wait_for(&mut driver, "Prompt", WAIT);
+    send(&mut driver, "Tidy the files");
+    // The diff, its size in words, and the actions by name.
+    wait_for(&mut driver, "Review the change", WAIT);
+    let text = screen(&driver);
+    assert!(
+        text.contains("Edit b.txt: 2 lines added, 1 removed"),
+        "{text}"
+    );
+    assert!(text.contains("+ BETA"), "{text}");
+    assert!(text.contains("+ gamma"), "{text}");
+    assert!(text.contains("- beta"), "{text}");
+    assert!(text.contains("y accept the change"), "{text}");
+    assert!(text.contains("x or Esc reject it"), "{text}");
+    assert!(
+        text.contains("accept this change; the agent asks again"),
+        "{text}"
+    );
+    // A hunk key: the change is taken or left whole.
+    driver.press("a");
+    wait_for(&mut driver, "taken or left whole", WAIT);
+    driver.press("y");
+    wait_for(&mut driver, "Edit c.txt", WAIT);
+    driver.press("x");
+    wait_for(&mut driver, "Edit d.txt", WAIT);
+    driver.press("2");
+    wait_for(&mut driver, "Done tidying.", WAIT);
+    let text = screen(&driver);
+    // Changes applied without a prompt say why: the mode, or the
+    // "always" chosen.
+    assert!(
+        text.contains("diff a.txt · applied without asking, in Accept edits mode"),
+        "{text}"
+    );
+    assert!(
+        text.contains(
+            "diff e.txt · applied without asking: you chose “Yes, allow all edits during"
+        ),
+        "{text}"
+    );
+    // Those asked about say nothing of the kind.
+    for asked in ["b.txt", "c.txt", "d.txt"] {
+        assert!(
+            !text.contains(&format!("diff {asked} · applied")),
+            "{asked}: {text}"
+        );
+    }
+    finish(&mut driver, &handle);
+}
+
+#[test]
+fn modes_show_by_name_and_change_with_shift_tab_or_the_picker() {
+    let dir = workspace("modes");
+    let (mut driver, handle) = start("modes.jsonl", &dir);
+    // The mode by name, its keys, and plan mode named in the hints.
+    wait_for(&mut driver, "mode Manual (Shift+Tab, Alt+M)", WAIT);
+    let text = screen(&driver);
+    assert!(text.contains("Shift+Tab/Alt+M mode (Plan)"), "{text}");
+    // Shift+Tab: the next mode, once the agent agrees.
+    driver.press("shift+tab");
+    wait_for(&mut driver, "mode Accept edits", WAIT);
+    assert!(screen(&driver).contains("Now in Accept edits mode."));
+    // Alt+M: the modes with what each does.
+    driver.press("alt+m");
+    wait_for(&mut driver, "Create a plan before making changes", WAIT);
+    let text = screen(&driver);
+    assert!(
+        text.contains("● Accept edits · Automatically accept all file edits"),
+        "{text}"
+    );
+    driver.press("down down enter");
+    // The agent refuses: a notice, and the mode stays.
+    wait_for(&mut driver, "The mode did not change to Plan", WAIT);
+    assert!(screen(&driver).contains("Plan mode is busy"));
+    assert!(screen(&driver).contains("mode Accept edits"));
+    driver.press("alt+m");
+    wait_for(&mut driver, "Create a plan before making changes", WAIT);
+    driver.press("down down enter");
+    wait_for(&mut driver, "mode Plan", WAIT);
+    // Leaving plan mode: the plan, readable, in the prompt.
+    send(&mut driver, "Plan the fix");
+    wait_for(
+        &mut driver,
+        "Switch out of Plan mode and start on this plan",
+        WAIT,
+    );
+    let text = screen(&driver);
+    assert!(text.contains("The plan (the agent's words)"), "{text}");
+    assert!(text.contains("Steps"), "{text}");
+    assert!(!text.contains("## Steps"), "{text}");
+    assert!(text.contains("Fix the off-by-one"), "{text}");
+    assert!(text.contains("│ I have read enough to plan it."), "{text}");
+    driver.press("2");
+    wait_for(&mut driver, "Starting on step one.", WAIT);
+    wait_for(&mut driver, "mode Manual", WAIT);
     finish(&mut driver, &handle);
 }
 
@@ -444,7 +587,7 @@ fn the_docs_tape_replays() {
         &dir,
     ));
     wait_for(&mut driver, "demo-agent 1.0", WAIT);
-    wait_for(&mut driver, "mode ask", WAIT);
+    wait_for(&mut driver, "mode Ask", WAIT);
     driver.type_text("Greet by name in @src/ma");
     wait_for(&mut driver, "src/main.rs", WAIT);
     driver.press("enter");
@@ -454,6 +597,7 @@ fn the_docs_tape_replays() {
     driver.press("A");
     wait_for(&mut driver, "The agent asks to run", WAIT);
     assert!(screen(&driver).contains("$ cargo test"));
+    assert!(screen(&driver).contains("│ Now the tests, to check both greetings."));
     driver.press("1");
     wait_for(&mut driver, "and the tests pass.", WAIT);
     let text = screen(&driver);
@@ -482,7 +626,7 @@ fn a_session_is_reopened_with_its_history_replayed_then_goes_on() {
     assert!(text.contains("❯ What does main do?"), "{text}");
     assert!(text.contains("It prints a greeting."), "{text}");
     assert!(text.contains("read Read main.rs"), "{text}");
-    assert!(text.contains("mode code"), "{text}");
+    assert!(text.contains("mode Code"), "{text}");
     send(&mut driver, "And now?");
     wait_for(&mut driver, "Now it greets by name.", WAIT);
     finish(&mut driver, &handle);

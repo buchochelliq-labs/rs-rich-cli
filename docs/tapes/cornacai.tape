@@ -19,7 +19,7 @@ Show
 Type "cornacai"
 Enter
 Wait /demo-agent 1.0/
-Wait /mode ask/
+Wait /mode Ask/
 Sleep 500ms
 Type "Greet by name in @src/ma"
 Wait /src\/main.rs/
