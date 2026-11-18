@@ -3,7 +3,9 @@
 # which needs the binary built with the test-only `fake-agent` feature. A
 # prompt with an `@` file mention completed from the workspace, a plan and
 # an answer streaming in as Markdown, the agent's edit reviewed as a diff
-# and accepted, a permission prompt for a command, and the finished turn.
+# and accepted, a permission prompt for a command (what it runs, the
+# agent's reason and what each option means), and the finished turn. The
+# session offers a plan mode, which the hints name.
 # The same transcript is driven by the crate's test `the_docs_tape_replays`.
 # A running tool call's spinner turns on the real clock, so it is masked.
 Set Title "Cornacai · a session with a coding agent"
@@ -19,7 +21,7 @@ Show
 Type "cornacai"
 Enter
 Wait /demo-agent 1.0/
-Wait /mode ask/
+Wait /mode Ask/
 Sleep 500ms
 Type "Greet by name in @src/ma"
 Wait /src\/main.rs/

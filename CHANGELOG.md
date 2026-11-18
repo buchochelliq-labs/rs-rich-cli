@@ -85,6 +85,45 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   other keys in the help, the palette and `key_hints` (a pair bound apart,
   shown as one hint).
 
+### Cornacai: clearer permission prompts, changes reviewed as diffs, modes
+
+From the maintainer's first run with Claude's adapter (`claude-agent-acp`).
+
+- **A permission prompt says what will happen and why.** It leads with the
+  operation in words, built from the tool call's kind, locations, content
+  and input: "Edit src/app.rs: 12 lines added, 3 removed", "Create
+  notes.md: 4 lines", "Run `cargo test` in the workspace", "Read …", "Fetch URL",
+  "Switch out of Plan mode and start on this plan". Then the agent's
+  reason, marked as its words: the last paragraph or two of its message in
+  this turn before the tool call (else a `description` in the tool's
+  input). Each option is listed with what its kind means (once, always
+  for this session as the agent keeps it, refuse). The agent's title, the
+  paths and the command in full follow, dimmed.
+- **A change in a permission prompt is shown as a diff, to accept or
+  reject whole.** An agent that applies its edits itself (Claude's
+  adapter does) sends the diff in the permission request; the prompt now
+  draws it with intuiTUIve's diff view, `y` accepts the change (the
+  allow-once option), `x` or Esc rejects it, and the agent's other
+  options keep their numbers. A permission is all or nothing, so the hunk
+  keys (`a`, `r`, `A`, `R`) say so instead of splitting it. Writes through
+  `fs/write_text_file` are still reviewed hunk by hunk.
+- **A change made without asking says why.** In a mode that accepts edits,
+  or after an "always" option, the agent asks nothing and the change
+  appears only in the conversation; its card now says "applied without
+  asking, in Accept edits mode" or "applied without asking: you chose
+  “Yes, allow all edits during this session” earlier". Replayed history
+  (`session/load`) is not marked.
+- **Modes are shown by name and can be changed.** Each session keeps the
+  modes `session/new` or `session/load` gave; the prompt's title names
+  the current one with its keys, Shift+Tab moves to the next (as in
+  Claude Code) and Alt+M lists them with their descriptions. Cornacai
+  asks with `session/set_mode` and shows the mode once the agent agrees;
+  a refusal is a notice. When the agent offers a plan mode, the prompt's
+  title names it (`Shift+Tab, Alt+M · Plan mode too`); the prompt to leave it shows the plan as Markdown.
+- `cornacai::session::Session` has new fields (`modes`, `asks`,
+  `replaying`) and `Session::set_modes`, `Session::mode_name` and
+  `session::mode_name`; `session::Asks` holds what the user was asked.
+
 ### Cornacai: signing in from a terminal (claude-agent-acp)
 
 - **Claude's adapter can be signed in to from Cornacai.**
