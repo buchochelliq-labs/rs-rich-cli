@@ -219,3 +219,5 @@ model literals and reader behavior remain available. A manually constructed
 enum variant (`figure-flow`, default on); exhaustive matches over `Rule` must
 handle it. It only changes ordinary source-aware flow and is disabled by
 faithful mode and source-preserving popup underlays.
+`Rule::BadgeText` (`badge-text`), `Rule::OneRowBars` (`one-row-bars`) and
+`Rule::FoldLabels` (`fold-labels`), all default on, are appended the same way.

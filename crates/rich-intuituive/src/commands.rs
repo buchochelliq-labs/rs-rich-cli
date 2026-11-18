@@ -334,7 +334,10 @@ impl Provider for Themes {
 /// `App.get_system_commands`: *Theme* (a picker of [`Themes`]), *Keys*
 /// (shows or hides the [`key_panel`](crate::key_panel), or opens the help
 /// when there is none), *Maximize* or *Minimize* (the focused pane),
-/// *Screenshot* and *Quit*. All are on unless turned off:
+/// *Screenshot* and *Quit*, all on unless turned off; and *Bell*, which
+/// rings the terminal's bell ([`Ctx::bell`](crate::Ctx::bell)), off unless
+/// turned on with [`with`](Self::with)`("bell")` (in Textual it is the
+/// example of a command of your own):
 ///
 /// ```
 /// use intuituive::prelude::*;
@@ -356,19 +359,25 @@ pub struct SystemCommands {
 impl Default for SystemCommands {
     fn default() -> Self {
         SystemCommands {
-            on: SystemCommands::NAMES.to_vec(),
+            on: SystemCommands::NAMES
+                .iter()
+                .copied()
+                .filter(|name| *name != "bell")
+                .collect(),
         }
     }
 }
 
 impl SystemCommands {
-    /// Every system command's name, in the order the palette lists them.
-    pub const NAMES: [&'static str; 6] = [
+    /// Every system command's name, in the order the palette lists them
+    /// (`bell` off by default).
+    pub const NAMES: [&'static str; 7] = [
         "theme",
         "keys",
         "maximize",
         "minimize",
         "screenshot",
+        "bell",
         "quit",
     ];
 
@@ -433,6 +442,7 @@ impl SystemCommands {
                     cx.screenshot_to_dir();
                 })
                 .help("Save an SVG of the screen"),
+                "bell" => Hit::new("app.bell", "Bell", |cx| cx.bell()).help("Ring the bell"),
                 "quit" => Hit::new("app.quit", "Quit", |cx| cx.quit()).help("Quit the app"),
                 _ => continue,
             };

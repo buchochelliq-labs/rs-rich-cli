@@ -2099,3 +2099,39 @@ fn a_results_metadata_stays_on_one_row_and_a_crowded_menu_keeps_its_face() {
     assert!(!lines.iter().any(|l| l.trim() == "[Action menu]"), "{text}");
     assert!(lines.iter().any(|l| l.contains("right edge")), "{text}");
 }
+
+#[test]
+fn only_a_shelfs_paging_buttons_give_way_to_its_strip() {
+    let page = page("product-grid");
+    let cell = (8.0, 16.0);
+    let named = |name: &str| {
+        page.controls
+            .iter()
+            .find(|c| c.name == name)
+            .unwrap()
+            .clone()
+    };
+    // The shelf's own arrows, above and under it at its left end.
+    assert!(noctiluca::shelf::pages_a_shelf(
+        &page.shelves,
+        &named("Previous items"),
+        cell
+    ));
+    assert!(noctiluca::shelf::pages_a_shelf(
+        &page.shelves,
+        &named("Next items"),
+        cell
+    ));
+    // A close button in the same place is not one.
+    let mut close = named("Previous items");
+    close.name = "Close".into();
+    assert!(!noctiluca::shelf::pages_a_shelf(
+        &page.shelves,
+        &close,
+        cell
+    ));
+    // Nor a "Next" button at the far end from where it pages, above the shelf.
+    let mut next = named("Previous items");
+    next.name = "Next".into();
+    assert!(!noctiluca::shelf::pages_a_shelf(&page.shelves, &next, cell));
+}

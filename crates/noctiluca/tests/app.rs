@@ -919,3 +919,82 @@ fn a_crashed_page_shows_a_notice_and_reload_brings_it_back() {
     assert!(!state.lock().unwrap().crashed);
     assert_eq!(state.lock().unwrap().restarts, 0, "the browser lived");
 }
+
+fn shop(config: Config, columns: u16, rows: u16) -> Driver {
+    let mut driver = app(
+        Box::new(engine()),
+        Options {
+            images: Some(noctiluca::config::Images::Ansi),
+            ..projection(config, "product-grid.html")
+        },
+    )
+    .driver(columns, rows);
+    wait_for(&mut driver, "12,408");
+    driver
+}
+
+#[test]
+fn a_shops_banner_label_and_shelf_arrows_take_no_rows_of_their_own() {
+    let driver = shop(Config::default(), 120, 40);
+    let rows = driver.screen().plain();
+    let all = rows.join("\n");
+    // The cookie banner, one row in Chrome, is one row: its actions
+    // beside its text, on the last row of the page.
+    let banner = rows
+        .iter()
+        .position(|r| r.contains("We use cookies to run the shop."))
+        .unwrap_or_else(|| panic!("{all}"));
+    assert!(rows[banner].contains("[ Accept ]"), "{all}");
+    assert!(rows[banner].contains("[ Decline ]"), "{all}");
+    assert!(rows[banner + 1].contains("projection |"), "{all}");
+    // The card's label goes in front of its title.
+    assert!(all.contains("Sponsored · Tidewell 1.7 L"), "{all}");
+    // The header's cart is on the header's row.
+    let header = rows
+        .iter()
+        .position(|r| r.contains("Search the shop"))
+        .unwrap();
+    assert!(rows[header].contains("Cart 3"), "{all}");
+}
+
+#[test]
+fn a_reflowed_grid_moves_the_shelf_under_it_and_the_strip_stands_for_its_arrows() {
+    // At 100 columns the three cards snap to two a row: the third gains a
+    // row of its own, and the shelf after the grid moves under it, its
+    // strip with it.
+    let driver = shop(Config::default(), 100, 60);
+    let rows = driver.screen().plain();
+    let all = rows.join("\n");
+    let at = |text: &str| {
+        rows.iter()
+            .position(|r| r.contains(text))
+            .unwrap_or_else(|| panic!("no {text}: {all}"))
+    };
+    assert!(at("$49.00") < at("Customers also viewed"), "{all}");
+    assert!(at("Customers also viewed") < at("1–3 of 6"), "{all}");
+    assert!(at("Kettle descaler") < at("1–3 of 6"), "{all}");
+    assert!(
+        !all.contains("Previous items") && !all.contains("Next items"),
+        "{all}"
+    );
+}
+
+#[test]
+fn with_the_rules_off_the_banner_and_the_label_keep_their_rows() {
+    let config = Config::parse("[adapt]\none-row-bars = false\nfold-labels = false\n").unwrap();
+    let driver = shop(config, 120, 40);
+    let rows = driver.screen().plain();
+    let all = rows.join("\n");
+    let banner = rows
+        .iter()
+        .position(|r| r.contains("We use cookies"))
+        .unwrap_or_else(|| panic!("{all}"));
+    assert!(!rows[banner].contains("Accept"), "{all}");
+    assert!(!all.contains("Sponsored ·"), "{all}");
+    // Its own row, beside the next card's title.
+    assert!(
+        rows.iter()
+            .any(|r| r.trim_start().starts_with("Sponsored  ")),
+        "{all}"
+    );
+}

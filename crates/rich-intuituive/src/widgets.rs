@@ -3162,7 +3162,22 @@ impl Node {
     /// Call `handler` with the title picked (a click, ←/→, a number key)
     /// instead of setting the strip's signal: the app moves to it its own
     /// way (Yazi's tab switch also ends visual mode), and sets the signal
-    /// itself.
+    /// itself. On a [`breadcrumb`](crate::widgets::breadcrumb), it is run
+    /// with the part clicked; on a [`list_of`](crate::list_of), with the
+    /// row chosen.
+    ///
+    /// ```
+    /// use intuituive::prelude::*;
+    /// use intuituive::widgets::breadcrumb;
+    ///
+    /// let app = App::new(|| {
+    ///     let at = signal(vec!["Settings".to_string(), "Display".into(), "Colours".into()]);
+    ///     breadcrumb(move || at.get()).on_select(move |i, _| at.update(|parts| parts.truncate(i + 1)))
+    /// });
+    /// let mut driver = app.driver(40, 1);
+    /// assert!(driver.click_text("Display"));
+    /// assert_eq!(driver.screen().plain()[0].trim_end(), "Settings › Display");
+    /// ```
     ///
     /// ```
     /// use intuituive::prelude::*;
@@ -3190,9 +3205,10 @@ impl Node {
         self.widget_mut(|tabs: &mut Tabs| {
             tabs.on_select = handler.take().map(|h| Box::new(h) as _)
         });
-        if let Some(handler) = handler.take() {
+        let handler = handler.and_then(|h| crate::bars::crumb_select(&self, Box::new(h)));
+        if let Some(handler) = handler {
             // A [`list_of`](crate::list_of): Enter or a click on a row.
-            self.node_list(|list| list.set_on_select(Box::new(handler)));
+            self.node_list(|list| list.set_on_select(handler));
         }
         self
     }

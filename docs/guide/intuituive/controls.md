@@ -86,10 +86,11 @@ previous focus. The accessible name always contains the complete label in
 either mode.
 
 Its face is a theme style: `button`, or with `.variant(..)`
-`button.primary` or `button.danger`. Over the face goes `.focus` while it
+`button.primary`, `button.danger`, `button.success` or `button.warning`
+(Textual's five variants). Over the face goes `.focus` while it
 has the focus or the pointer, or is held (`button.primary.focus`, else
 `button.focus`, else `bold reverse`), and `.disabled` while it is
-disabled (else `dim`). The dark, light and mono themes each name the three
+disabled (else `dim`). The dark, light and mono themes each name the five
 faces.
 
 Three rows tall, a button draws a lit top edge and a shaded bottom one
@@ -233,6 +234,14 @@ knob takes `control.focus`. It is twenty cells wide unless sized.
 It is read as `Font size, slider: 14`, its value with as many decimals as
 its step has, and a browser gets `aria-valuenow`.
 
+### Two handles
+
+`range_slider(low, high, range, step)` holds a span: two `Signal<f64>`s,
+`low` never above `high`, the track between them filled. The arrows move
+the picked handle (Space or Enter picks the other), a click moves the
+nearer one under the pointer and a drag moves it on. It is read as
+`Price, slider: 20 to 80`.
+
 ## Select fields
 
 ```rust
@@ -327,6 +336,18 @@ the Tab order. The section is as tall as what it shows. The title is in
 `[-]`. The header is read as `Advanced, button, collapsed` (or
 `expanded`).
 
+### One open at a time: an accordion
+
+```rust
+let open = signal(Some(0));
+accordion(open, [("General", general()), ("Display", display()), ("Keys", keys())])
+```
+
+`accordion(open, sections)` is a column of collapsible sections, each
+`(title, child)`, of which only one is open: opening one closes the one
+that was open. `open` holds the one open (`None` when all are closed),
+and setting it opens one from the app.
+
 ### Titles that follow state, a status and a summary
 
 New in 0.0.24: a tool call's card, as an agent's front end draws one.
@@ -401,7 +422,7 @@ form.panel("Settings").loading_when(move || saving.get())
 
 | Style | Fallback | What it styles |
 |---|---|---|
-| `button`, `button.primary`, `button.danger` | named by each theme | a button's face |
+| `button`, `button.primary`, `button.danger`, `button.success`, `button.warning` | named by each theme | a button's face |
 | `<face>.focus`, then `button.focus` | `bold reverse` | over the face, picked or held |
 | `<face>.disabled`, then `button.disabled` | `dim` | over the face, disabled |
 | `<face>.light`, `<face>.shade` (and `.focus.light`, …) | none | a tall button's edges |

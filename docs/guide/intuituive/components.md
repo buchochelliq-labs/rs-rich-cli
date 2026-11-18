@@ -286,10 +286,23 @@ scroll(
   through its links, then on, the focused one drawn in
   `markdown.link.focus` (else `reverse`); Enter or a click calls
   `.on_link(|url, cx| ..)`.
-- **Limits.** A reference-style link whose definition sits in another
-  block is not resolved, and list items separated by blank lines draw as
-  lists of one item each (a line indented under an item stays with it).
-  A table draws as a table once its delimiter row arrives.
+- **Loose lists and reference links.** A list whose items are a blank
+  line apart (a loose list) is one block, so it draws as one list,
+  numbered on; a line indented under an item stays with it. A
+  reference-style link (`[the guide][guide]`) whose definition
+  (`[guide]: https://…`) is in another block, even one that arrives
+  later, resolves: every block that may use one renders with the
+  document's definitions, and takes the focus when it does.
+- A table draws as a table once its delimiter row arrives.
+
+The `answer` example streams an answer in a fragment a key press: the
+loose list and the code fence while it is still open, then the reference
+link resolved once its definition arrives last
+(`docs/tapes/answer.tape`).
+
+![A loose list streamed in: the first item and its indented second paragraph, as one list](../../media/tapes/answer/list.png)
+
+![The answer at its end: the list numbered on, the code, and "the config guide" drawn as a link](../../media/tapes/answer/done.png)
 
 ### A Markdown viewer
 

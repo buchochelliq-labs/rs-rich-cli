@@ -82,7 +82,24 @@ pub enum Rule {
     FigureFlow,
     /// Wrap complete action names in the terminal and source popups.
     WrapActionLabels,
+    /// A picture of at most three cells in front of a line's text, whose
+    /// alt text needs more (a chat's badge before the author: two cells
+    /// for `moderator`), reads as that text, dimmed. Off, it is drawn as
+    /// the picture, like an emote among the words.
+    BadgeText,
+    /// A top or bottom bar Chrome draws as one row (a cookie banner, a
+    /// toolbar) stays one row: its text takes the cells it needs, pushing
+    /// what follows on the row right, and is cut with `…` at the edge.
+    OneRowBars,
+    /// A short label alone on its row (`Sponsored`, `New`: two words at
+    /// most, [`MAX_LABEL_CELLS`] cells) right above a title (a heading or
+    /// a link) at its left edge goes in front of it: `Sponsored · Title`.
+    FoldLabels,
 }
+
+/// A label [folded](Rule::FoldLabels) into the title under it is at most
+/// this many cells.
+pub const MAX_LABEL_CELLS: usize = 16;
 
 /// What a rule is, for the config, the command line and the about page.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -199,6 +216,24 @@ pub const RULES: &[RuleInfo] = &[
         rule: Rule::WrapActionLabels,
         name: "wrap-action-labels",
         what: "wrap complete action names; Shift+F1 lists names in compact mode",
+        default: true,
+    },
+    RuleInfo {
+        rule: Rule::BadgeText,
+        name: "badge-text",
+        what: "a tiny badge before a line's text reads as its alt text",
+        default: true,
+    },
+    RuleInfo {
+        rule: Rule::OneRowBars,
+        name: "one-row-bars",
+        what: "a one-row bar (a cookie banner) stays one row, its text cut",
+        default: true,
+    },
+    RuleInfo {
+        rule: Rule::FoldLabels,
+        name: "fold-labels",
+        what: "a short label above a title goes in front of it: Sponsored · …",
         default: true,
     },
 ];
@@ -642,7 +677,7 @@ mod tests {
         assert!(adapt.on(Rule::DecorativeImages) && adapt.on(Rule::LiveTail));
         assert!(!adapt.on(Rule::TextOverPictures));
         assert!(Adapt::none().is_none());
-        assert_eq!(RULES.len(), 17);
+        assert_eq!(RULES.len(), 20);
         for info in RULES {
             assert_eq!(Rule::parse(info.name), Some(info.rule));
         }

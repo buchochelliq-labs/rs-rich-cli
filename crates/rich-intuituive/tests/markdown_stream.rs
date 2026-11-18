@@ -211,3 +211,71 @@ fn a_whole_replacement_splits_from_the_start() {
         driver.screen().plain()
     );
 }
+
+#[test]
+fn a_reference_link_defined_in_another_block_is_a_link() {
+    // The definition streams in after the paragraph that uses it.
+    let links: Rc<RefCell<Vec<String>>> = Rc::default();
+    let doc = Rc::new(Cell::new(None));
+    let mut driver = {
+        let links = links.clone();
+        let doc = doc.clone();
+        App::new(move || {
+            let text = signal("See [the docs][docs] first.".to_string());
+            doc.set(Some(text));
+            let links = links.clone();
+            column([
+                button("before", |_| {}),
+                markdown(text).on_link(move |url, _| links.borrow_mut().push(url.to_string())),
+            ])
+        })
+    }
+    .driver(40, 8);
+    driver.settle();
+    let text = doc.get().unwrap();
+    text.update(|t| t.push_str("\n\nMore text.\n\n[docs]: https://docs.example/start"));
+    driver.settle();
+    let screen = driver.screen().plain().join("\n");
+    assert!(screen.contains("See the docs first."), "{screen}");
+    assert!(!screen.contains("[docs]"), "{screen}");
+    driver.press("tab enter");
+    assert_eq!(*links.borrow(), ["https://docs.example/start"]);
+}
+
+#[test]
+fn a_loose_list_streams_in_as_one_list() {
+    let doc = Rc::new(Cell::new(None));
+    let mut driver = app_over(doc.clone(), Rc::default()).driver(40, 12);
+    driver.settle();
+    let text = doc.get().unwrap();
+    for part in [
+        "1. first\n\n",
+        "   still the first\n\n",
+        "2. second\n\n",
+        "3. third",
+    ] {
+        text.update(|t| t.push_str(part));
+        driver.settle();
+    }
+    let screen = driver.screen().plain();
+    let all = screen.join("\n");
+    // One list, numbered on: its items keep their numbers and their
+    // continuation stays with the first.
+    let at = |s: &str| {
+        screen
+            .iter()
+            .position(|l| l.contains(s))
+            .unwrap_or_else(|| panic!("{all}"))
+    };
+    assert!(screen[at("first")].contains('1'), "{all}");
+    assert!(screen[at("second")].contains('2'), "{all}");
+    assert!(screen[at("third")].contains('3'), "{all}");
+    assert!(
+        at("first") < at("still the first") && at("still the first") < at("second"),
+        "{all}"
+    );
+    // As one list draws: not three lists a block apart (two blank rows
+    // between items).
+    assert!(at("second") - at("still the first") <= 2, "{all}");
+    assert!(at("third") - at("second") <= 2, "{all}");
+}

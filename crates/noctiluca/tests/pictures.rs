@@ -235,6 +235,26 @@ fn small_pictures_in_a_logs_lines_are_drawn_in_their_cells() {
     assert!(!text.contains(":glow:"), "an emote left as text:\n{text}");
 }
 
+#[test]
+fn with_badge_text_off_a_badge_is_drawn_as_its_picture() {
+    // The same log with the `badge-text` rule off: the badge in front of
+    // its author is drawn in its two cells, as an emote is.
+    let mut config = Config::default();
+    config.adapt.set(noctiluca::adapt::Rule::BadgeText, false);
+    let engine = FakeEngine::from_dir(&snapshots()).unwrap();
+    let options = options_with("stream-with-log.html", Images::Ansi, config);
+    let mut driver = app(Box::new(engine), options).driver(120, 40);
+    let (_, drawn) = run_until(&mut driver, Duration::from_secs(20), |_, screen| {
+        screen.lines().any(|l| l.contains("▀ ada"))
+    });
+    let text = screen(&driver);
+    assert!(drawn, "no badge drawn as a picture:\n{text}");
+    assert!(
+        !text.lines().any(|l| l.contains("moderator ada")),
+        "a badge as text:\n{text}"
+    );
+}
+
 /// A page of one tall picture, 400 x 600 CSS pixels, with a long alt text
 /// and no caption of its own.
 fn tall_picture() -> noctiluca::model::Page {

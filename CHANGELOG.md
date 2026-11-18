@@ -108,6 +108,76 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   frames lined up with one. Readings for an action, a navigation or a load
   are still read at once on the tab's thread.
 
+### intuiTUIve: streaming Markdown's last limits (#797)
+
+- A list whose items are a blank line apart (a loose list) streams in as
+  one list, numbered on, instead of a list an item a block apart.
+- A reference-style link (`[the guide][guide]`) whose definition is in
+  another block, even one that arrives later, resolves and takes the
+  focus; before, it drew as its brackets.
+- Two examples recorded for the docs: `kit` (the notice bar, steps, button
+  variants, chips and a tag input, an accordion, a pager, a range slider
+  and a toast with a button; `docs/tapes/kit.tape`) and `answer` (an
+  answer streaming in a fragment a key press; `docs/tapes/answer.tape`).
+
+### intuiTUIve: widgets for clicks, notices, steps and toasts
+
+- **Clickable spans of markup.** A `[@click=name]…[/]` span in a `text` or
+  `label` runs the action `name` when it is clicked, as Textual's does:
+  the focused path's binding with that id or description, else the app's
+  own `quit`, `bell`, `help` or `palette` (also as `app.quit`, …).
+  `Ctx::run_action(name)` runs one from a handler. `Node::on_span` takes
+  the clicks instead, with a `SpanTarget` (an action and its arguments, or
+  a link), and makes `[link=url]` spans clickable too; `Node::focus_spans`
+  lets the text take the focus, ← and → pick a span and Enter runs it.
+  `Ctx::bell` rings the terminal's bell, counted by `Driver::take_bells`.
+- **Status-bar segments and breadcrumb parts take clicks.**
+  `seg(..).on_click(action)` runs an action when its segment is clicked;
+  `breadcrumb(..).on_select(|i, cx| ..)` is told the part clicked, also
+  when the trail is cut from its start.
+- **A notice bar.** `notice_bar(shown, title, text)` is a bar that folds
+  to one row (the text cut with `…`), opens on Enter or a click to show
+  all of it, has action buttons (`.notice_action(label, run)`) and a `×`
+  that dismisses it (Esc too). `.notice_level(Level)` puts the level's
+  mark before the title; `.notice_open(signal)` opens it from the app.
+- **Steps.** `steps(items, status)` is a checklist or a stepper, each
+  step done `✓`, current `▸`, pending `○` or failed `✗` in its own theme
+  style; `StepState::at(i, current)` gives a wizard's states,
+  `.steps_across(sep)` lays them in a row and `.step_nav(page)` moves the
+  current step with the keys and clicks.
+- **Toasts with buttons, dismissed by a click or a key, and their
+  history.** `cx.notify_with(Notification::new(level, title, body)
+  .action(label, run))` shows buttons under a notification's body; a
+  click on one runs it and dismisses the notification, and a click
+  anywhere on a toast dismisses it. `cx.dismiss_toasts()` dismisses them
+  all, for a key to call. `notifications()` is a signal of every toast
+  and notification shown (the last 100). `Level::Success` is a new level
+  in the theme's `notify.success` style (else `good`); `Level` is now
+  `#[non_exhaustive]`.
+- **Success and Warning buttons, and a Bell command.** `ButtonVariant`
+  gains `Success` and `Warning` (Textual's other two variants), drawn in
+  the theme's `button.success` and `button.warning` styles, which the
+  dark, light and mono themes and a palette's theme name. The command
+  palette's system commands add *Bell*, which rings the terminal's bell;
+  it is off unless `SystemCommands::default().with("bell")` turns it on,
+  so the palettes apps show now are unchanged (`SystemCommands::NAMES` has
+  seven names now).
+- **More pseudo-classes in stylesheets.** `:first-of-type` and
+  `:last-of-type` count the siblings of a node's own kind; `:ansi` holds
+  while the theme's colours are the terminal's own, `:nocolor` while the
+  console shows no colour, and `:inline` in an inline app.
+- **Chips and a tag input.** `chip(text)` and `chip_of(|| badge)` show
+  rs-rich-ext's `Badge` as a node; `.on_remove(run)` adds a `×` (and
+  Delete) that removes it. `tag_input(tags)` types tags into a row of
+  removable chips.
+- **An accordion.** `accordion(open, sections)` is a column of
+  collapsible sections of which only one is open at a time; `open`
+  (a `Signal<Option<usize>>`) says which, and opens one from the app.
+- **A pager strip and a slider with two handles.** `pager(page, ||
+  pages)` shows `‹ 2 of 5 ›` (or dots, `.pager_dots()`) and moves a page
+  signal with the keys and clicks. `range_slider(low, high, range, step)`
+  holds a span whose handles never cross.
+
 ### intuiTUIve: pictures without flicker between frames
 
 - **Kitty uploads go before the cells that name them.** A frame used to
@@ -172,7 +242,19 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 - A tiny picture in front of a line's text whose alt text it cannot show
   (a chat badge: two cells for `moderator`) reads as that alt text, dim,
   instead of a two-cell picture or a cut `m…`; emotes among the words stay
-  pictures.
+  pictures. It is the new `badge-text` adaptation, on by default:
+  `--adapt=-badge-text`, or `badge-text = false` under `[adapt]`, draws
+  badges as their pictures again.
+- A grid whose cards snap to fewer columns than Chrome's (the shop's three
+  kettles at 100 columns, two a row) gains rows, and what follows it moves
+  down by them: the "Customers also viewed" shelf no longer lands on the
+  third card's title and price, and its `‹ 1–3 of 6 ›` strip moves with it.
+- The shop's rows, compacted by three generic adaptations, each one that
+  can be switched off: the cookie banner, one line in Chrome, is one row
+  with its buttons beside its text (`one-row-bars`, which also keeps a
+  header's cart on the header's row); a short label right above a title
+  goes in front of it, `Sponsored · Tidewell 1.7 L …` (`fold-labels`);
+  and a shelf's own arrow buttons give way to its strip (`shelves`).
 - intuiTUIve: a new toast stacked over one already shown redraws what is
   under them, so the one it moved leaves nothing of itself beside the new
   one (two toasts read as overlapping boxes).

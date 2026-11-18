@@ -13,8 +13,11 @@
 //! its [classes](crate::Node::class) (`.danger`) and its states (`:focus`,
 //! `:focus-within`, `:hover`, `:selected`, `:disabled`, `:error`, `:blur`,
 //! `:enabled`, `:can-focus`; where it is among its siblings,
-//! `:first-child`, `:last-child`, `:odd`, `:even`, and `:empty`; and the
-//! theme's `:dark` and `:light`), with
+//! `:first-child`, `:last-child`, `:first-of-type`, `:last-of-type` (among
+//! the siblings of its kind), `:odd`, `:even`, and `:empty`; the theme's
+//! `:dark` and `:light`; `:ansi` while the theme's colours are the
+//! terminal's own, `:nocolor` while the console shows no colour
+//! (`NO_COLOR`), and `:inline` in an [inline](crate::App::inline) app), with
 //! descendants separated by spaces and children by `>`; `*` is any node.
 //! The more specific rule wins, then the later one. A rule may nest rules
 //! (`&:hover { … }`, `& .title { … }`, `.title { … }`), read as their
@@ -166,6 +169,9 @@ enum State {
     /// Its parent's first or last child.
     FirstChild,
     LastChild,
+    /// The first or last of its parent's children of its kind.
+    FirstOfType,
+    LastOfType,
     /// At an odd place among its siblings (the first, the third, …), or
     /// an even one, as CSS's `:nth-child(odd)` counts.
     Odd,
@@ -175,6 +181,12 @@ enum State {
     /// While the theme is dark, or light.
     Dark,
     Light,
+    /// While the theme's colours are the terminal's (no truecolour).
+    Ansi,
+    /// While the console shows no colour.
+    NoColor,
+    /// In an inline app.
+    Inline,
 }
 
 /// A colour, or a theme style's colour by name (`$accent`).
@@ -372,6 +384,10 @@ pub(crate) struct Element {
     /// Its place among its parent's children, and how many there are.
     pub index: usize,
     pub siblings: usize,
+    /// Its place among its parent's children of its kind, and how many
+    /// there are.
+    pub kind_index: usize,
+    pub kind_siblings: usize,
     /// How many children it has.
     pub children: usize,
 }
@@ -393,6 +409,12 @@ pub(crate) struct States<'a> {
     pub hover: &'a [NodeId],
     /// The theme is dark.
     pub dark: bool,
+    /// The theme's colours are the terminal's own (`:ansi`).
+    pub ansi: bool,
+    /// The console shows no colour (`:nocolor`).
+    pub nocolor: bool,
+    /// The app is inline (`:inline`).
+    pub inline: bool,
 }
 
 /// Fetch a theme style by name, for `$name`.
@@ -739,11 +761,16 @@ impl Compound {
             State::CanFocus => element.focusable,
             State::FirstChild => element.index == 0,
             State::LastChild => element.index + 1 >= element.siblings,
+            State::FirstOfType => element.kind_index == 0,
+            State::LastOfType => element.kind_index + 1 >= element.kind_siblings,
             State::Odd => element.index.is_multiple_of(2),
             State::Even => !element.index.is_multiple_of(2),
             State::Empty => element.children == 0,
             State::Dark => states.dark,
             State::Light => !states.dark,
+            State::Ansi => states.ansi,
+            State::NoColor => states.nocolor,
+            State::Inline => states.inline,
         })
     }
 }
@@ -1311,11 +1338,16 @@ fn parse_compound(word: &str) -> Result<Compound, String> {
                 "can-focus" => State::CanFocus,
                 "first-child" => State::FirstChild,
                 "last-child" => State::LastChild,
+                "first-of-type" => State::FirstOfType,
+                "last-of-type" => State::LastOfType,
                 "odd" => State::Odd,
                 "even" => State::Even,
                 "empty" => State::Empty,
                 "dark" => State::Dark,
                 "light" => State::Light,
+                "ansi" => State::Ansi,
+                "nocolor" => State::NoColor,
+                "inline" => State::Inline,
                 _ => return Err(format!("unknown state `:{state}`")),
             });
         } else if piece == "*" {
@@ -1786,6 +1818,8 @@ mod tests {
             focusable: false,
             index: 0,
             siblings: 1,
+            kind_index: 0,
+            kind_siblings: 1,
             children: 0,
         }
     }
@@ -1806,6 +1840,9 @@ mod tests {
             focus: &[],
             hover: &[],
             dark: true,
+            ansi: false,
+            nocolor: false,
+            inline: false,
         };
         let style = |chain: &[Element]| sheet.style(chain, &states, &no_vars, WIDE).unwrap();
         let red = Style::parse("red").unwrap();
@@ -1836,12 +1873,18 @@ mod tests {
             focus: &focus,
             hover: &[],
             dark: true,
+            ansi: false,
+            nocolor: false,
+            inline: false,
         };
         assert!(sheet.style(&full, &states, &no_vars, WIDE).is_some());
         let states = States {
             focus: &[],
             hover: &[],
             dark: true,
+            ansi: false,
+            nocolor: false,
+            inline: false,
         };
         assert!(sheet.style(&full, &states, &no_vars, WIDE).is_none());
     }
@@ -1991,6 +2034,9 @@ mod tests {
             focus: &[],
             hover: &[],
             dark: true,
+            ansi: false,
+            nocolor: false,
+            inline: false,
         }
     }
 
@@ -2110,6 +2156,9 @@ mod tests {
             focus: &[],
             hover: &hovered,
             dark: true,
+            ansi: false,
+            nocolor: false,
+            inline: false,
         };
         let style = nested
             .style(&[hover_card], &states, &no_vars, WIDE)
@@ -2204,6 +2253,9 @@ mod tests {
             focus: &[],
             hover: &[],
             dark: false,
+            ansi: false,
+            nocolor: false,
+            inline: false,
         };
         assert_eq!(
             style(&logo(), &states).unwrap().color(),
@@ -2223,6 +2275,9 @@ mod tests {
             focus: &id,
             hover: &[],
             dark: true,
+            ansi: false,
+            nocolor: false,
+            inline: false,
         };
         assert_eq!(
             style(std::slice::from_ref(&input), &states),
@@ -2386,6 +2441,9 @@ mod tests {
             focus: &[],
             hover: &[],
             dark: true,
+            ansi: false,
+            nocolor: false,
+            inline: false,
         };
         assert!(sheet.style(&main, &states, &no_vars, (70, 10)).is_some());
         assert!(sheet.style(&main, &states, &no_vars, (70, 11)).is_none());
@@ -2440,6 +2498,9 @@ mod tests {
             focus: &[],
             hover: &[],
             dark: true,
+            ansi: false,
+            nocolor: false,
+            inline: false,
         };
         assert!(
             sheet
@@ -2449,5 +2510,48 @@ mod tests {
         field.error = true;
         let style = sheet.style(&[field], &states, &no_vars, WIDE).unwrap();
         assert_eq!(style, Style::parse("bold red").unwrap());
+    }
+
+    #[test]
+    fn of_type_and_the_app_wide_states() {
+        let sheet = Stylesheet::parse(
+            "label:first-of-type { color: red; } label:last-of-type { color: blue; } \
+             :ansi .a { color: green; } :nocolor .n { background: grey11; } \
+             .i:inline { text-style: underline; }",
+        )
+        .unwrap();
+        let at = |kind_index: usize, kind_siblings: usize, classes: &[&str]| {
+            let mut e = element("label", None, classes);
+            // Among four children, the labels are two of them.
+            (e.index, e.siblings) = (kind_index + 1, 4);
+            (e.kind_index, e.kind_siblings) = (kind_index, kind_siblings);
+            e
+        };
+        let states = plain_states();
+        let style = |chain: &[Element], states: &States| sheet.style(chain, states, &no_vars, WIDE);
+        assert_eq!(
+            style(&[at(0, 2, &[])], &states),
+            Some(Style::parse("red").unwrap())
+        );
+        assert_eq!(
+            style(&[at(1, 2, &[])], &states),
+            Some(Style::parse("blue").unwrap())
+        );
+        assert_eq!(
+            style(&[at(0, 3, &["a"])], &states),
+            Some(Style::parse("red").unwrap())
+        );
+        let all = States {
+            ansi: true,
+            nocolor: true,
+            inline: true,
+            ..plain_states()
+        };
+        let row = || element("row", None, &[]);
+        assert_eq!(
+            style(&[row(), at(1, 3, &["a", "n", "i"])], &all),
+            Some(Style::parse("underline green on grey11").unwrap())
+        );
+        assert_eq!(style(&[row(), at(1, 3, &["a", "n", "i"])], &states), None);
     }
 }

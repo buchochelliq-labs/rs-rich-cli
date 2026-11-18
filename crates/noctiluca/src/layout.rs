@@ -340,7 +340,8 @@ fn spans(runs: &[Run], base: &str, page: &Page, marks: &Marks) -> Vec<Span> {
         // standing in for it, in one piece. One in front of the line's
         // text too small to show what its alt text says (a chat's badge
         // before the author: two cells for `moderator`) reads as that
-        // text instead; one among the words (an emote) stays a picture.
+        // text instead (the `badge-text` rule); one among the words (an
+        // emote) stays a picture.
         let picture = run
             .picture
             .as_ref()
@@ -348,7 +349,10 @@ fn spans(runs: &[Run], base: &str, page: &Page, marks: &Marks) -> Vec<Span> {
         let leading = out
             .iter()
             .all(|s: &Span| s.picture.is_some() || s.text.trim().is_empty());
-        if let Some(alt) = picture.filter(|_| leading).and_then(tiny_alt) {
+        if let Some(alt) = picture
+            .filter(|_| leading && marks.adapt.on(Rule::BadgeText))
+            .and_then(tiny_alt)
+        {
             out.push(Span {
                 text: alt,
                 style: format!("{} dim", run_style(run, base, page, marks.adapt))
@@ -1490,6 +1494,9 @@ fn project_part(
     let mut freed: Vec<(f64, f64, usize, usize)> = Vec::new();
     // Controls: one row each, cut rather than wrapped.
     let mut one_row: Vec<usize> = Vec::new();
+    // Text items by what made them, for folding labels into titles: the
+    // item, whether its block is a heading, and the block's layer.
+    let mut texts: Vec<(usize, bool, Option<usize>)> = Vec::new();
     // The one-row indicators among them (a bar, steps, stars).
     let mut indicator_items: Vec<usize> = Vec::new();
     // The items of each top or bottom bar's blocks, by the bar's layer,
@@ -1584,7 +1591,9 @@ fn project_part(
             let (x0, x1) = snap(shelf.rect.x, shelf.rect.right());
             let top = shelf.rect.bottom();
             items.push(Item {
-                source: None,
+                // The shelf's own node: the strip moves with what moves it
+                // (a grid above it that gained rows).
+                source: source.and_then(|s| s.node_index(shelf.node)),
                 anchor: None,
                 allocation: None,
                 top,
@@ -1615,6 +1624,14 @@ fn project_part(
         let Some(dy) = in_part(block) else {
             continue;
         };
+        // A shelf's own arrows: its strip pages it.
+        if part == Part::Flow
+            && adapt.on(Rule::Shelves)
+            && let BlockKind::Control(c) = block.kind
+            && crate::shelf::pages_a_shelf(&page.shelves, &page.controls[c], (cw, ch))
+        {
+            continue;
+        }
         // Art over a picture is in the picture's pixels: it takes no rows.
         let over = block.stack.over.filter(|m| pictured.contains(m));
         if over.is_some() && matches!(block.kind, BlockKind::Media(_)) {
@@ -1943,6 +1960,7 @@ fn project_part(
                 });
             }
             kind => {
+                let made = items.len();
                 let base = match kind {
                     BlockKind::Heading(1) => "bold underline",
                     BlockKind::Heading(_) => "bold",
@@ -1983,6 +2001,10 @@ fn project_part(
                         first,
                     ));
                 }
+                if matches!(kind, BlockKind::Paragraph | BlockKind::Heading(_)) {
+                    let heading = matches!(kind, BlockKind::Heading(_));
+                    texts.extend((made..items.len()).map(|n| (n, heading, block.stack.layer)));
+                }
             }
         }
         for item in &mut items[first_item..] {
@@ -2020,8 +2042,12 @@ fn project_part(
         {
             let item = items.pop().expect("one item");
             one_row.retain(|&n| n != first_item);
+            texts.retain(|&(n, _, _)| n != first_item);
             overlaid.push((m, item));
         }
+    }
+    if adapt.on(Rule::FoldLabels) {
+        fold_labels(&mut items, &texts, (cw, ch));
     }
     let mut stacked_grids = Vec::new();
     // A grid snaps first, on Chrome's own places.
@@ -2167,11 +2193,19 @@ fn project_part(
         else {
             continue;
         };
+        let one = adapt.on(Rule::OneRowBars) && bar.rect.height <= 3.0 * ch;
         for n in band {
             let item = &mut items[n];
             let height = item.bottom - item.top;
             item.top = row * ch;
             item.bottom = item.top + height;
+            // Its text on the bar's one row, pushing what follows right,
+            // cut at the edge rather than wrapped onto rows of its own.
+            if one && item.wrap.is_some() && !item.one_line {
+                item.one_line = true;
+                item.bottom = item.top + ch;
+                one_row.push(n);
+            }
         }
     }
     // A control whose face needs more cells than its box pushes the
@@ -2854,6 +2888,77 @@ fn project_part(
 /// items flowing into more rows. Every box inside an item moves with it;
 /// what is under the grid moves by the rows it grew or saved. `parts`
 /// gives a box's top, bottom, first and end columns, and left edge.
+/// A short label alone on its row, right above a title at its left edge,
+/// goes in front of the title's text: `Sponsored · Tidewell 1.7 L …`
+/// ([`Rule::FoldLabels`]). The label's item is emptied (it takes no row);
+/// the title starts where the label was.
+fn fold_labels(items: &mut [Item], texts: &[(usize, bool, Option<usize>)], cell: (f64, f64)) {
+    let (cw, ch) = cell;
+    let plain = |item: &Item| -> Option<String> {
+        let (spans, first) = item.wrap.as_ref()?;
+        if !first.is_empty()
+            || spans
+                .iter()
+                .any(|s| s.control.is_some() || s.picture.is_some())
+        {
+            return None;
+        }
+        let text: String = spans.iter().map(|s| s.text.as_str()).collect();
+        let text = text.trim().to_string();
+        (!text.is_empty()
+            && cell_len(&text) <= crate::adapt::MAX_LABEL_CELLS
+            && text.split_whitespace().count() <= 2
+            && item.bottom - item.top <= 1.5 * ch)
+            .then_some(text)
+    };
+    let titled = |item: &Item, heading: bool| {
+        item.wrap.as_ref().is_some_and(|(spans, first)| {
+            first.is_empty()
+                && (heading
+                    || spans
+                        .iter()
+                        .find(|s| !s.text.trim().is_empty())
+                        .is_some_and(|s| s.control.is_some()))
+        })
+    };
+    for (k, &(label, heading, layer)) in texts.iter().enumerate() {
+        if heading || items[label].media.is_some() {
+            continue;
+        }
+        let Some(text) = plain(&items[label]) else {
+            continue;
+        };
+        let Some(&(title, _, _)) = texts[k + 1..].first().filter(|&&(n, h, l)| {
+            let (a, b) = (&items[label], &items[n]);
+            l == layer
+                && titled(b, h)
+                && (b.left - a.left).abs() <= cw
+                && b.top >= a.bottom - 0.5
+                && b.top - a.bottom <= 0.6 * ch
+        }) else {
+            continue;
+        };
+        let style = items[label]
+            .wrap
+            .as_ref()
+            .and_then(|(spans, _)| spans.iter().find(|s| !s.text.trim().is_empty()))
+            .map_or(String::new(), |s| s.style.clone());
+        let top = items[label].top;
+        items[label].wrap = None;
+        items[label].lines = Vec::new();
+        items[label].bottom = items[label].top;
+        let item = &mut items[title];
+        if let Some((spans, _)) = &mut item.wrap {
+            spans.insert(0, Span::new(" · ".to_string(), "bright_black"));
+            spans.insert(
+                0,
+                Span::new(text, format!("{style} dim").trim().to_string()),
+            );
+        }
+        item.top = top;
+    }
+}
+
 fn snap_grid<T>(
     grid: &crate::model::Grid,
     items: &mut [T],

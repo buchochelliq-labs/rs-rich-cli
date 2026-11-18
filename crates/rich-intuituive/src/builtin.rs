@@ -1282,6 +1282,8 @@ pub(crate) struct TextNode {
     pub forms: Option<Box<dyn Fn() -> Vec<String>>>,
     /// Which of the three code set, which a stylesheet leaves alone.
     pub code: [bool; 3],
+    /// Its clickable spans (`[@click=…]`, links).
+    pub spans: crate::spans::Spans,
 }
 
 impl TextNode {
@@ -1295,6 +1297,7 @@ impl TextNode {
             cut_middle: false,
             forms: None,
             code: [false; 3],
+            spans: crate::spans::Spans::default(),
         }
     }
 
@@ -1476,6 +1479,11 @@ impl Widget for TextNode {
     fn draw(&mut self, cx: &mut DrawCx, canvas: &mut Canvas) {
         let lines = self.lines(cx.console(), canvas.width(), true);
         canvas.lines(&lines);
+        self.spans.drawn(cx, canvas, &lines);
+    }
+
+    fn event(&mut self, cx: &mut EventCx, event: &WidgetEvent) -> Used {
+        self.spans.event(cx, event)
     }
 }
 
