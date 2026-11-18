@@ -108,6 +108,18 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   frames lined up with one. Readings for an action, a navigation or a load
   are still read at once on the tab's thread.
 
+### intuiTUIve: streaming Markdown's last limits (#797)
+
+- A list whose items are a blank line apart (a loose list) streams in as
+  one list, numbered on, instead of a list an item a block apart.
+- A reference-style link (`[the guide][guide]`) whose definition is in
+  another block, even one that arrives later, resolves and takes the
+  focus; before, it drew as its brackets.
+- Two examples recorded for the docs: `kit` (the notice bar, steps, button
+  variants, chips and a tag input, an accordion, a pager, a range slider
+  and a toast with a button; `docs/tapes/kit.tape`) and `answer` (an
+  answer streaming in a fragment a key press; `docs/tapes/answer.tape`).
+
 ### intuiTUIve: widgets for clicks, notices, steps and toasts
 
 - **Clickable spans of markup.** A `[@click=name]…[/]` span in a `text` or

@@ -300,6 +300,7 @@ the room and the answers at the bottom) and styles its title.
   |cx| ..))`** adds buttons on a row under the body, in the theme's
   `button` style; `.timeout(duration)` sets how long it shows. A click on
   a button runs its action and dismisses the notification.
+  ![A "Saved" notification at the bottom right of the kit example, with an Undo button](../../media/tapes/kit/toast.png)
 - **A click on any toast dismisses it**, and `cx.dismiss_toasts()`
   dismisses all of them: bind it to a key (`.on_key("ctrl+x", |cx|
   cx.dismiss_toasts())`).

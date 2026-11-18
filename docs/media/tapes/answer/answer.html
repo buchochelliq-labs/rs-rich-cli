@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>answer · streaming Markdown on intuiTUIve</title>
+<style>
+:root { color-scheme: light dark; --screen-bg: #292929; --screen-fg: #c5c8c6; }
+body { margin: 0 auto; max-width: 72rem; padding: 1.5rem 1rem 3rem; font: 16px/1.5 system-ui, sans-serif; }
+h1 { font-size: 1.5rem; }
+h2 { font-size: 1.15rem; margin-top: 2.5rem; }
+figure { margin: 1.5rem 0; }
+figcaption { margin-top: .5rem; text-align: center; opacity: .85; }
+.screen { position: relative; overflow-x: auto; border-radius: 8px; background: var(--screen-bg); box-shadow: 0 4px 18px rgba(0, 0, 0, .3); }
+.screen pre { margin: 0; padding: 12px 14px; color: var(--screen-fg); background: var(--screen-bg); font: 14px/1.25 "Fira Code", "DejaVu Sans Mono", Menlo, Consolas, monospace; }
+.key { position: absolute; right: 12px; bottom: 12px; padding: 2px 10px; border-radius: 6px; background: #141414; color: #f0f0f0; border: 1px solid #787878; font: bold 14px/1.6 system-ui, sans-serif; }
+.key[hidden] { display: none; }
+.controls { display: flex; gap: .75rem; align-items: center; margin-top: .5rem; }
+.controls input { flex: 1; }
+.controls output { min-width: 4.5rem; font-variant-numeric: tabular-nums; text-align: right; }
+button { font: inherit; padding: .25rem .9rem; }
+</style>
+</head>
+<body>
+<main>
+<h1>answer · streaming Markdown on intuiTUIve</h1>
+<figure class="player" aria-label="Recording">
+<div class="screen"><pre id="tape-screen"></pre><div class="key" id="tape-key" hidden></div></div>
+<div class="controls">
+<button type="button" id="tape-play" aria-pressed="false">Play</button>
+<input type="range" id="tape-position" min="0" max="0" value="0" aria-label="Position in the recording">
+<output id="tape-time" for="tape-position">0.0 s</output>
+</div>
+</figure>
+<h2>Screenshots</h2>
+<figure id="shot-list">
+<div class="screen"><pre>                           <span style="font-weight: bold; text-decoration: underline">Moving the config</span>                            
+                                                                        
+Three steps, in order:                                                  
+                                                                        
+                                                                        
+<span style="color: #68a0b3; text-decoration-color: #68a0b3"> 1 </span>Read the old file from <span style="color: #398280; text-decoration-color: #398280; background-color: #4b4e55; font-weight: bold">~/.app.toml</span>.                                  
+<span style="color: #68a0b3; text-decoration-color: #68a0b3">   </span>Keep its comments: the new reader keeps them too.                    
+                                                                        
+                                                                        
+                                                                        
+                                                                        
+                                                                        
+                                                                        
+                                                                        
+                                                                        
+                                                                        
+                                                                        
+                                                                        
+                                                                        
+                                                                        
+                                                                        
+                                                                        
+                                                                        
+<span style="color: #777877; text-decoration-color: #777877">3 of 7 fragments · Space for the next</span>                                   </pre></div>
+<figcaption>list</figcaption>
+</figure>
+<figure id="shot-code">
+<div class="screen"><pre>                           <span style="font-weight: bold; text-decoration: underline">Moving the config</span>                            
+                                                                        
+Three steps, in order:                                                  
+                                                                        
+                                                                        
+<span style="color: #68a0b3; text-decoration-color: #68a0b3"> 1 </span>Read the old file from <span style="color: #398280; text-decoration-color: #398280; background-color: #4b4e55; font-weight: bold">~/.app.toml</span>.                                  
+<span style="color: #68a0b3; text-decoration-color: #68a0b3">   </span>Keep its comments: the new reader keeps them too.                    
+<span style="color: #68a0b3; text-decoration-color: #68a0b3"> 2 </span>Write it to the new place.                                           
+<span style="color: #68a0b3; text-decoration-color: #68a0b3"> 3 </span>Remove the old one, once the app has started with the new.           
+                                                                        
+The new place is in [the config guide][guide]. In code:                 
+                                                                        
+<span style="background-color: #2b303b">                                                                        </span>
+<span style="background-color: #2b303b"> </span><span style="color: #b48ead; text-decoration-color: #b48ead; background-color: #2b303b">let</span><span style="color: #c0c5ce; text-decoration-color: #c0c5ce; background-color: #2b303b"> old = </span><span style="color: #96b5b4; text-decoration-color: #96b5b4; background-color: #2b303b">read</span><span style="color: #c0c5ce; text-decoration-color: #c0c5ce; background-color: #2b303b">(&quot;</span><span style="color: #a3be8c; text-decoration-color: #a3be8c; background-color: #2b303b">~/.app.toml</span><span style="color: #c0c5ce; text-decoration-color: #c0c5ce; background-color: #2b303b">&quot;)?;</span><span style="background-color: #2b303b">                                        </span>
+<span style="background-color: #2b303b">                                                                        </span>
+                                                                        
+                                                                        
+                                                                        
+                                                                        
+                                                                        
+                                                                        
+                                                                        
+                                                                        
+<span style="color: #777877; text-decoration-color: #777877">5 of 7 fragments · Space for the next</span>                                   </pre></div>
+<figcaption>code</figcaption>
+</figure>
+<figure id="shot-done">
+<div class="screen"><pre>                           <span style="font-weight: bold; text-decoration: underline">Moving the config</span>                            
+                                                                        
+Three steps, in order:                                                  
+                                                                        
+                                                                        
+<span style="color: #68a0b3; text-decoration-color: #68a0b3"> 1 </span>Read the old file from <span style="color: #398280; text-decoration-color: #398280; background-color: #4b4e55; font-weight: bold">~/.app.toml</span>.                                  
+<span style="color: #68a0b3; text-decoration-color: #68a0b3">   </span>Keep its comments: the new reader keeps them too.                    
+<span style="color: #68a0b3; text-decoration-color: #68a0b3"> 2 </span>Write it to the new place.                                           
+<span style="color: #68a0b3; text-decoration-color: #68a0b3"> 3 </span>Remove the old one, once the app has started with the new.           
+                                                                        
+The new place is in <span style="color: #608ab1; text-decoration-color: #608ab1; text-decoration: underline">the config guide</span>. In code:                          
+                                                                        
+<span style="background-color: #2b303b">                                                                        </span>
+<span style="background-color: #2b303b"> </span><span style="color: #b48ead; text-decoration-color: #b48ead; background-color: #2b303b">let</span><span style="color: #c0c5ce; text-decoration-color: #c0c5ce; background-color: #2b303b"> old = </span><span style="color: #96b5b4; text-decoration-color: #96b5b4; background-color: #2b303b">read</span><span style="color: #c0c5ce; text-decoration-color: #c0c5ce; background-color: #2b303b">(&quot;</span><span style="color: #a3be8c; text-decoration-color: #a3be8c; background-color: #2b303b">~/.app.toml</span><span style="color: #c0c5ce; text-decoration-color: #c0c5ce; background-color: #2b303b">&quot;)?;</span><span style="background-color: #2b303b">                                        </span>
+<span style="background-color: #2b303b"> </span><span style="color: #96b5b4; text-decoration-color: #96b5b4; background-color: #2b303b">write</span><span style="color: #c0c5ce; text-decoration-color: #c0c5ce; background-color: #2b303b">(</span><span style="color: #96b5b4; text-decoration-color: #96b5b4; background-color: #2b303b">config_dir</span><span style="color: #c0c5ce; text-decoration-color: #c0c5ce; background-color: #2b303b">().</span><span style="color: #96b5b4; text-decoration-color: #96b5b4; background-color: #2b303b">join</span><span style="color: #c0c5ce; text-decoration-color: #c0c5ce; background-color: #2b303b">(&quot;</span><span style="color: #a3be8c; text-decoration-color: #a3be8c; background-color: #2b303b">app.toml</span><span style="color: #c0c5ce; text-decoration-color: #c0c5ce; background-color: #2b303b">&quot;), old)?;</span><span style="background-color: #2b303b">                            </span>
+<span style="background-color: #2b303b">                                                                        </span>
+                                                                        
+That is all.                                                            
+                                                                        
+                                                                        
+                                                                        
+                                                                        
+                                                                        
+<span style="color: #777877; text-decoration-color: #777877">done · Tab to the links, Enter to follow one</span>                            </pre></div>
+<figcaption>done</figcaption>
+</figure>
+<figure id="shot-link">
+<div class="screen"><pre>                           <span style="font-weight: bold; text-decoration: underline">Moving the config</span>                            
+                                                                        
+Three steps, in order:                                                  
+                                                                        
+                                                                        
+<span style="color: #68a0b3; text-decoration-color: #68a0b3"> 1 </span>Read the old file from <span style="color: #398280; text-decoration-color: #398280; background-color: #4b4e55; font-weight: bold">~/.app.toml</span>.                                  
+<span style="color: #68a0b3; text-decoration-color: #68a0b3">   </span>Keep its comments: the new reader keeps them too.                    
+<span style="color: #68a0b3; text-decoration-color: #68a0b3"> 2 </span>Write it to the new place.                                           
+<span style="color: #68a0b3; text-decoration-color: #68a0b3"> 3 </span>Remove the old one, once the app has started with the new.           
+                                                                        
+The new place is in <span style="color: #292929; text-decoration-color: #292929; background-color: #608ab1; text-decoration: underline">the config guide</span>. In code:                          
+                                                                        
+<span style="background-color: #2b303b">                                                                        </span>
+<span style="background-color: #2b303b"> </span><span style="color: #b48ead; text-decoration-color: #b48ead; background-color: #2b303b">let</span><span style="color: #c0c5ce; text-decoration-color: #c0c5ce; background-color: #2b303b"> old = </span><span style="color: #96b5b4; text-decoration-color: #96b5b4; background-color: #2b303b">read</span><span style="color: #c0c5ce; text-decoration-color: #c0c5ce; background-color: #2b303b">(&quot;</span><span style="color: #a3be8c; text-decoration-color: #a3be8c; background-color: #2b303b">~/.app.toml</span><span style="color: #c0c5ce; text-decoration-color: #c0c5ce; background-color: #2b303b">&quot;)?;</span><span style="background-color: #2b303b">                                        </span>
+<span style="background-color: #2b303b"> </span><span style="color: #96b5b4; text-decoration-color: #96b5b4; background-color: #2b303b">write</span><span style="color: #c0c5ce; text-decoration-color: #c0c5ce; background-color: #2b303b">(</span><span style="color: #96b5b4; text-decoration-color: #96b5b4; background-color: #2b303b">config_dir</span><span style="color: #c0c5ce; text-decoration-color: #c0c5ce; background-color: #2b303b">().</span><span style="color: #96b5b4; text-decoration-color: #96b5b4; background-color: #2b303b">join</span><span style="color: #c0c5ce; text-decoration-color: #c0c5ce; background-color: #2b303b">(&quot;</span><span style="color: #a3be8c; text-decoration-color: #a3be8c; background-color: #2b303b">app.toml</span><span style="color: #c0c5ce; text-decoration-color: #c0c5ce; background-color: #2b303b">&quot;), old)?;</span><span style="background-color: #2b303b">                            </span>
+<span style="background-color: #2b303b">                                                                        </span>
+                                                                        
+That is all.                                                            
+                                                                        
+                                                                        
+                                                                        
+                                                                        
+                                                                        
+link: <span style="text-decoration: underline">https://docs.example/config</span>                                       </pre></div>
+<figcaption>link</figcaption>
+</figure>
+</main>
+<script type="application/json" id="tape-data">{"rows":["\u003cspan style=\"color: #ff2c7a; text-decoration-color: #ff2c7a; font-weight: bold\">❯\u003c/span>                                                                       ","                                                                        ","\u003cspan style=\"color: #ff2c7a; text-decoration-color: #ff2c7a; font-weight: bold\">❯\u003c/span> an                                                                    ","\u003cspan style=\"color: #ff2c7a; text-decoration-color: #ff2c7a; font-weight: bold\">❯\u003c/span> answ                                                                  ","\u003cspan style=\"color: #ff2c7a; text-decoration-color: #ff2c7a; font-weight: bold\">❯\u003c/span> answer                                                                ","\u003cspan style=\"color: #777877; text-decoration-color: #777877\">0 of 7 fragments · Space for the next\u003c/span>                                   ","                           \u003cspan style=\"font-weight: bold; text-decoration: underline\">Moving the config\u003c/span>                            ","Three steps, in order:                                                  ","\u003cspan style=\"color: #777877; text-decoration-color: #777877\">1 of 7 fragments · Space for the next\u003c/span>                                   ","\u003cspan style=\"color: #68a0b3; text-decoration-color: #68a0b3\"> 1 \u003c/span>Read the old file from \u003cspan style=\"color: #398280; text-decoration-color: #398280; background-color: #4b4e55; font-weight: bold\">~/.app.toml\u003c/span>.                                  ","\u003cspan style=\"color: #777877; text-decoration-color: #777877\">2 of 7 fragments · Space for the next\u003c/span>                                   ","\u003cspan style=\"color: #68a0b3; text-decoration-color: #68a0b3\">   \u003c/span>Keep its comments: the new reader keeps them too.                    ","\u003cspan style=\"color: #777877; text-decoration-color: #777877\">3 of 7 fragments · Space for the next\u003c/span>                                   ","\u003cspan style=\"color: #68a0b3; text-decoration-color: #68a0b3\"> 2 \u003c/span>Write it to the new place.                                           ","\u003cspan style=\"color: #68a0b3; text-decoration-color: #68a0b3\"> 3 \u003c/span>Remove the old one, once the app has started with the new.           ","\u003cspan style=\"color: #777877; text-decoration-color: #777877\">4 of 7 fragments · Space for the next\u003c/span>                                   ","The new place is in [the config guide][guide]. In code:                 ","\u003cspan style=\"background-color: #2b303b\">                                                                        \u003c/span>","\u003cspan style=\"background-color: #2b303b\"> \u003c/span>\u003cspan style=\"color: #b48ead; text-decoration-color: #b48ead; background-color: #2b303b\">let\u003c/span>\u003cspan style=\"color: #c0c5ce; text-decoration-color: #c0c5ce; background-color: #2b303b\"> old = \u003c/span>\u003cspan style=\"color: #96b5b4; text-decoration-color: #96b5b4; background-color: #2b303b\">read\u003c/span>\u003cspan style=\"color: #c0c5ce; text-decoration-color: #c0c5ce; background-color: #2b303b\">(&quot;\u003c/span>\u003cspan style=\"color: #a3be8c; text-decoration-color: #a3be8c; background-color: #2b303b\">~/.app.toml\u003c/span>\u003cspan style=\"color: #c0c5ce; text-decoration-color: #c0c5ce; background-color: #2b303b\">&quot;)?;\u003c/span>\u003cspan style=\"background-color: #2b303b\">                                        \u003c/span>","\u003cspan style=\"color: #777877; text-decoration-color: #777877\">5 of 7 fragments · Space for the next\u003c/span>                                   ","\u003cspan style=\"background-color: #2b303b\"> \u003c/span>\u003cspan style=\"color: #96b5b4; text-decoration-color: #96b5b4; background-color: #2b303b\">write\u003c/span>\u003cspan style=\"color: #c0c5ce; text-decoration-color: #c0c5ce; background-color: #2b303b\">(\u003c/span>\u003cspan style=\"color: #96b5b4; text-decoration-color: #96b5b4; background-color: #2b303b\">config_dir\u003c/span>\u003cspan style=\"color: #c0c5ce; text-decoration-color: #c0c5ce; background-color: #2b303b\">().\u003c/span>\u003cspan style=\"color: #96b5b4; text-decoration-color: #96b5b4; background-color: #2b303b\">join\u003c/span>\u003cspan style=\"color: #c0c5ce; text-decoration-color: #c0c5ce; background-color: #2b303b\">(&quot;\u003c/span>\u003cspan style=\"color: #a3be8c; text-decoration-color: #a3be8c; background-color: #2b303b\">app.toml\u003c/span>\u003cspan style=\"color: #c0c5ce; text-decoration-color: #c0c5ce; background-color: #2b303b\">&quot;), old)?;\u003c/span>\u003cspan style=\"background-color: #2b303b\">                            \u003c/span>","\u003cspan style=\"color: #777877; text-decoration-color: #777877\">6 of 7 fragments · Space for the next\u003c/span>                                   ","The new place is in \u003cspan style=\"color: #608ab1; text-decoration-color: #608ab1; text-decoration: underline\">the config guide\u003c/span>. In code:                          ","That is all.                                                            ","\u003cspan style=\"color: #777877; text-decoration-color: #777877\">done · Tab to the links, Enter to follow one\u003c/span>                            ","The new place is in \u003cspan style=\"color: #292929; text-decoration-color: #292929; background-color: #608ab1; text-decoration: underline\">the config guide\u003c/span>. In code:                          ","link: \u003cspan style=\"text-decoration: underline\">https://docs.example/config\u003c/span>                                       "],"frames":[[0.0,[0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]],[0.046,[2,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]],[0.129,[3,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]],[0.218,[4,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]],[0.275,[1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,5]],[0.384,[6,1,7,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,8]],[0.504,[6,1,7,1,1,9,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,10]],[0.625,[6,1,7,1,1,9,11,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,12]],[1.198,[6,1,7,1,1,9,11,13,14,1,1,1,1,1,1,1,1,1,1,1,1,1,1,15]],[1.477,[6,1,7,1,1,9,11,13,14,1,16,1,17,18,17,1,1,1,1,1,1,1,1,19]],[1.955,[6,1,7,1,1,9,11,13,14,1,16,1,17,18,20,17,1,1,1,1,1,1,1,21]],[2.072,[6,1,7,1,1,9,11,13,14,1,22,1,17,18,20,17,1,23,1,1,1,1,1,24]],[2.643,[6,1,7,1,1,9,11,13,14,1,25,1,17,18,20,17,1,23,1,1,1,1,1,24]],[2.762,[6,1,7,1,1,9,11,13,14,1,25,1,17,18,20,17,1,23,1,1,1,1,1,26]]],"keys":[[0.259,"⏎"],[0.38,"␣"],[0.501,"␣"],[0.621,"␣"],[1.193,"␣"],[1.314,"␣"],[1.947,"␣"],[2.068,"␣"],[2.64,"⇥"],[2.76,"⏎"],[3.334,"Ctrl+Q"]],"keyShown":0.8,"idle":2.0}</script>
+<script>(() => {
+  const data = JSON.parse(document.getElementById("tape-data").textContent);
+  const screen = document.getElementById("tape-screen");
+  const key = document.getElementById("tape-key");
+  const play = document.getElementById("tape-play");
+  const position = document.getElementById("tape-position");
+  const time = document.getElementById("tape-time");
+  const last = data.frames.length - 1;
+  let index = 0, timer = null;
+  position.max = String(last);
+  function show(i) {
+    index = i;
+    const [t, rows] = data.frames[i];
+    screen.innerHTML = rows.map((r) => data.rows[r]).join("\n");
+    position.value = String(i);
+    time.value = t.toFixed(1) + " s";
+    const pressed = data.keys.filter(([k]) => k <= t && t - k <= data.keyShown).pop();
+    key.hidden = !pressed;
+    key.textContent = pressed ? pressed[1] : "";
+  }
+  function stop() {
+    clearTimeout(timer);
+    timer = null;
+    play.textContent = "Play";
+    play.setAttribute("aria-pressed", "false");
+  }
+  function step() {
+    if (index >= last) { stop(); return; }
+    const wait = Math.min(data.frames[index + 1][0] - data.frames[index][0], data.idle);
+    timer = setTimeout(() => { show(index + 1); step(); }, Math.max(wait, 0) * 1000);
+  }
+  play.addEventListener("click", () => {
+    if (timer) { stop(); return; }
+    if (index >= last) show(0);
+    play.textContent = "Pause";
+    play.setAttribute("aria-pressed", "true");
+    step();
+  });
+  position.addEventListener("input", () => { stop(); show(Number(position.value)); });
+  show(last);
+})();</script>
+</body>
+</html>

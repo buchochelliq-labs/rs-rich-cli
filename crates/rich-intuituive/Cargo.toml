@@ -105,6 +105,10 @@ tracing = ["rich-ext/tracing", "rich-ext/local-socket", "dep:tracing", "dep:trac
 
 # ratatui-textarea's examples as one gallery; its Vim tab needs `vim`.
 [[example]]
+name = "answer"
+required-features = ["syntax"]
+
+[[example]]
 name = "textarea"
 required-features = ["vim"]
 

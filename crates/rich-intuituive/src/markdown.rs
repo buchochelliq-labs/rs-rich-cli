@@ -12,9 +12,10 @@
 //! it neither render nor draw again. A fence still open draws as code, as
 //! CommonMark reads it, so the text does not jump when it closes.
 //!
-//! Reference-style links whose definition is in another block are not
-//! resolved, and a list whose items are separated by blank lines draws as
-//! one list an item.
+//! A list whose items are separated by blank lines (a loose list) is one
+//! block, so it draws as one list. A reference-style link (`[text][ref]`)
+//! whose definition (`[ref]: url`) is in another block is resolved: every
+//! block that may use one renders with the document's definitions.
 
 use std::cell::RefCell;
 use std::ops::Range;
@@ -42,6 +43,9 @@ type Lines = Rc<Vec<Vec<Segment>>>;
 #[derive(Default)]
 struct Shared {
     code_theme: RefCell<Option<String>>,
+    /// The document's link reference definitions (`[ref]: url`), one a
+    /// line, which every block that may use one renders with.
+    definitions: RefCell<String>,
     on_link: RefCell<Option<OnLink>>,
     on_rows: RefCell<Option<OnRows>>,
 }
@@ -141,13 +145,79 @@ fn fence(line: &str) -> Option<(char, usize)> {
     (n >= 3).then_some((c, n))
 }
 
+/// A list item's marker, if `line` opens one: the bullet (`-`, `*`, `+`),
+/// or the delimiter after an ordered item's number (`.`, `)`). Items of one
+/// list have the same marker.
+fn list_marker(line: &str) -> Option<char> {
+    let indent = line.len() - line.trim_start_matches(' ').len();
+    if indent > 3 {
+        return None;
+    }
+    let rest = &line[indent..];
+    let digits = rest.chars().take_while(char::is_ascii_digit).count();
+    let (marker, after) = if digits > 0 && digits <= 9 {
+        let c = rest[digits..].chars().next()?;
+        (c, &rest[digits + 1..])
+    } else {
+        let c = rest.chars().next()?;
+        (c, &rest[1..])
+    };
+    let kind = if digits > 0 {
+        ['.', ')'].contains(&marker)
+    } else {
+        ['-', '*', '+'].contains(&marker)
+    };
+    // A marker is followed by a space or ends the line; `---` and `* * *`
+    // are breaks, not items.
+    let spaced = after.is_empty() || after.starts_with([' ', '\t']);
+    let rule = digits == 0 && {
+        let t: String = rest.chars().filter(|c| !c.is_whitespace()).collect();
+        t.len() >= 3 && t.chars().all(|c| c == marker)
+    };
+    (kind && spaced && !rule).then_some(marker)
+}
+
+/// The link reference definitions in `text` (`[ref]: url`, outside
+/// fences), one a line.
+fn definitions(text: &str) -> String {
+    let mut out = String::new();
+    let mut open: Option<(char, usize)> = None;
+    for line in text.lines() {
+        if let Some((c, n)) = open {
+            if fence(line).is_some_and(|(fc, fnn)| fc == c && fnn >= n) {
+                open = None;
+            }
+            continue;
+        }
+        if let Some(f) = fence(line) {
+            open = Some(f);
+            continue;
+        }
+        let t = line.trim_start();
+        if line.len() - t.len() <= 3
+            && t.starts_with('[')
+            && !t.starts_with("[^")
+            && let Some(close) = t.find("]:")
+            && close > 1
+            && !t[close + 2..].trim().is_empty()
+        {
+            out.push_str(t);
+            out.push('\n');
+        }
+    }
+    out
+}
+
 /// The blocks of `text` from byte `from` (a line's start): the runs of
 /// lines between blank lines, outside fences, each without its last line
-/// break.
+/// break. A list's next item after a blank line (a loose list) stays in
+/// the list's block.
 pub(crate) fn split_blocks(text: &str, from: usize) -> Vec<Range<usize>> {
     let mut blocks: Vec<Range<usize>> = Vec::new();
     let mut open: Option<(char, usize)> = None;
     let mut current: Option<Range<usize>> = None;
+    // The marker of the list the current block is, if it is one.
+    let mut list: Option<char> = None;
     let mut blank = false;
     let mut at = from;
     for line in text[from..].split_inclusive('\n') {
@@ -173,7 +243,9 @@ pub(crate) fn split_blocks(text: &str, from: usize) -> Vec<Range<usize>> {
         // After a blank line, a line that starts with whitespace stays with
         // the block above (a list item's next paragraph); any other starts
         // a block.
-        let continues = !blank || content.starts_with([' ', '\t']);
+        let continues = !blank
+            || content.starts_with([' ', '\t'])
+            || list.is_some() && list_marker(content) == list;
         match &mut current {
             Some(block) if continues => block.end = end,
             _ => {
@@ -181,6 +253,7 @@ pub(crate) fn split_blocks(text: &str, from: usize) -> Vec<Range<usize>> {
                     blocks.push(done);
                 }
                 current = Some(start..end);
+                list = list_marker(content);
             }
         }
         blank = false;
@@ -216,26 +289,27 @@ impl MarkdownView {
             self.blocks.extend(split_blocks(text, from));
             self.seen.clear();
             self.seen.push_str(text);
+            *self.shared.definitions.borrow_mut() = definitions(text);
         });
+        let defined = !self.shared.definitions.borrow().is_empty();
         let runtime = Runtime::current();
         let text = &self.seen;
         for (i, range) in self.blocks.iter().enumerate() {
             let source = &text[range.clone()];
             match self.sources.get(i) {
                 Some(signal) => {
-                    if signal.with_untracked(|s| s != source) {
-                        // A block that gains or loses its links takes the
-                        // focus or stops: made again.
-                        let links = has_links(source);
-                        if links != self.children[i].focusable {
-                            let fresh = signal_of(source);
-                            let node = runtime.untracked(|| block(fresh, self.shared.clone()));
-                            std::mem::replace(&mut self.children[i], node).forget(&runtime);
-                            self.sources[i] = fresh;
-                        } else {
-                            let source = source.to_string();
-                            runtime.untracked(|| signal.set(source));
-                        }
+                    // A block that gains or loses its links (its source
+                    // changed, or definitions came in elsewhere) takes the
+                    // focus or stops: made again.
+                    let links = has_links(source, defined);
+                    if links != self.children[i].focusable {
+                        let fresh = signal_of(source);
+                        let node = runtime.untracked(|| block(fresh, self.shared.clone()));
+                        std::mem::replace(&mut self.children[i], node).forget(&runtime);
+                        self.sources[i] = fresh;
+                    } else if signal.with_untracked(|s| s != source) {
+                        let source = source.to_string();
+                        runtime.untracked(|| signal.set(source));
                     }
                 }
                 None => {
@@ -257,13 +331,27 @@ fn signal_of(source: &str) -> Signal<String> {
     Runtime::current().untracked(|| signal(source.to_string()))
 }
 
-/// Whether a block's source may hold a link: it then takes the focus.
-fn has_links(source: &str) -> bool {
-    source.contains("](") || source.contains("<http") || source.contains("]: ")
+/// Whether a block's source may hold a link: it then takes the focus. With
+/// reference definitions in the document, any bracket may be one.
+fn has_links(source: &str, defined: bool) -> bool {
+    source.contains("](")
+        || source.contains("<http")
+        || source.contains("]: ")
+        || defined && source.contains(']')
+}
+
+/// What a block renders: its source, and the document's reference
+/// definitions when it may use one.
+fn rendered_source(source: &str, definitions: &str) -> String {
+    if definitions.is_empty() || !source.contains(']') {
+        return source.to_string();
+    }
+    format!("{source}\n\n{definitions}")
 }
 
 fn block(source: Signal<String>, shared: Rc<Shared>) -> Node {
-    let links = has_links(&source.get_untracked());
+    let defined = !shared.definitions.borrow().is_empty();
+    let links = has_links(&source.get_untracked(), defined);
     let node = Node::from_widget(
         Box::new(Block {
             source,
@@ -363,13 +451,14 @@ impl Block {
     /// The block rendered at `width`, rendering it again only when its
     /// source or the width changed.
     fn lines(&mut self, console: &Console, width: u16) -> Lines {
-        let fresh = self.source.with(|source| {
-            self.cache
-                .as_ref()
-                .is_some_and(|(w, s, _)| *w == width && s == source)
-        });
+        let source = self
+            .source
+            .with(|source| rendered_source(source, &self.shared.definitions.borrow()));
+        let fresh = self
+            .cache
+            .as_ref()
+            .is_some_and(|(w, s, _)| *w == width && *s == source);
         if !fresh {
-            let source = self.source.get_untracked();
             let lines = render(
                 console,
                 &source,
@@ -612,7 +701,23 @@ impl MarkdownStream {
 
 #[cfg(test)]
 mod tests {
-    use super::split_blocks;
+    use super::{definitions, list_marker, split_blocks};
+
+    #[test]
+    fn list_markers_and_definitions_are_found() {
+        assert_eq!(list_marker("- a"), Some('-'));
+        assert_eq!(list_marker("12. a"), Some('.'));
+        assert_eq!(list_marker("3) a"), Some(')'));
+        assert_eq!(list_marker("* * *"), None);
+        assert_eq!(list_marker("-a"), None);
+        assert_eq!(list_marker("    - code"), None);
+        assert_eq!(
+            definitions(
+                "[a]: https://a.example\n```\n[b]: inside\n```\n[^n]: note\n  [c]: /c \"t\""
+            ),
+            "[a]: https://a.example\n[c]: /c \"t\"\n"
+        );
+    }
 
     fn blocks(text: &str) -> Vec<&str> {
         split_blocks(text, 0)
@@ -636,11 +741,15 @@ mod tests {
             blocks("text\n\n~~~\ncode\n\nmore"),
             ["text", "~~~\ncode\n\nmore"]
         );
-        // An indented line after a blank line stays with the block above.
+        // An indented line after a blank line stays with the block above,
+        // and so does a loose list's next item.
         assert_eq!(
-            blocks("1. item\n\n   more\n\n2. next"),
-            ["1. item\n\n   more", "2. next"]
+            blocks("1. item\n\n   more\n\n2. next\n\nafter"),
+            ["1. item\n\n   more\n\n2. next", "after"]
         );
+        assert_eq!(blocks("- a\n\n- b\n\n* c"), ["- a\n\n- b", "* c"]);
+        // A break is not an item.
+        assert_eq!(blocks("- a\n\n---"), ["- a", "---"]);
         assert_eq!(blocks(""), Vec::<&str>::new());
         assert_eq!(blocks("\n\n"), Vec::<&str>::new());
     }

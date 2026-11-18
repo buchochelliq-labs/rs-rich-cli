@@ -1,0 +1,24 @@
+                           Moving the config
+
+Three steps, in order:
+
+
+ 1 Read the old file from ~/.app.toml.
+   Keep its comments: the new reader keeps them too.
+ 2 Write it to the new place.
+ 3 Remove the old one, once the app has started with the new.
+
+The new place is in [the config guide][guide]. In code:
+
+
+ let old = read("~/.app.toml")?;
+
+
+
+
+
+
+
+
+
+5 of 7 fragments · Space for the next

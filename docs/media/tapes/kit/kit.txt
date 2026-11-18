@@ -1,0 +1,24 @@
+▸ ⚠ Changed on disk notes.md changed since you opened it…  Reload  Keep mine  ×
+
+Wizard
+✓ Account ─ ▸ Plan ─ ○ Payment ─ ○ Done
+
+Plan                      Buttons
+✓ Fetch
+✓ Build
+▸ Test                     Save   Retry   Delete
+○ Deploy
+
+Tags                     beta                          rust ×   tui ×
+
+▾ General
+Name: Memo
+▸ Display
+▸ Keys
+
+
+
+
+
+
+Results                ‹ 1 of 5 ›   Price               ─────●━━━━━━━━━━━━●─────

@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>kit · notices, steps, chips, toasts on intuiTUIve</title>
+<style>
+:root { color-scheme: light dark; --screen-bg: #292929; --screen-fg: #c5c8c6; }
+body { margin: 0 auto; max-width: 72rem; padding: 1.5rem 1rem 3rem; font: 16px/1.5 system-ui, sans-serif; }
+h1 { font-size: 1.5rem; }
+h2 { font-size: 1.15rem; margin-top: 2.5rem; }
+figure { margin: 1.5rem 0; }
+figcaption { margin-top: .5rem; text-align: center; opacity: .85; }
+.screen { position: relative; overflow-x: auto; border-radius: 8px; background: var(--screen-bg); box-shadow: 0 4px 18px rgba(0, 0, 0, .3); }
+.screen pre { margin: 0; padding: 12px 14px; color: var(--screen-fg); background: var(--screen-bg); font: 14px/1.25 "Fira Code", "DejaVu Sans Mono", Menlo, Consolas, monospace; }
+.key { position: absolute; right: 12px; bottom: 12px; padding: 2px 10px; border-radius: 6px; background: #141414; color: #f0f0f0; border: 1px solid #787878; font: bold 14px/1.6 system-ui, sans-serif; }
+.key[hidden] { display: none; }
+.controls { display: flex; gap: .75rem; align-items: center; margin-top: .5rem; }
+.controls input { flex: 1; }
+.controls output { min-width: 4.5rem; font-variant-numeric: tabular-nums; text-align: right; }
+button { font: inherit; padding: .25rem .9rem; }
+</style>
+</head>
+<body>
+<main>
+<h1>kit · notices, steps, chips, toasts on intuiTUIve</h1>
+<figure class="player" aria-label="Recording">
+<div class="screen"><pre id="tape-screen"></pre><div class="key" id="tape-key" hidden></div></div>
+<div class="controls">
+<button type="button" id="tape-play" aria-pressed="false">Play</button>
+<input type="range" id="tape-position" min="0" max="0" value="0" aria-label="Position in the recording">
+<output id="tape-time" for="tape-position">0.0 s</output>
+</div>
+</figure>
+<h2>Screenshots</h2>
+<figure id="shot-kit">
+<div class="screen"><pre><span style="color: #292929; text-decoration-color: #292929; background-color: #c5c8c6; font-weight: bold; text-decoration: underline">▸ </span><span style="color: #292929; text-decoration-color: #292929; background-color: #d08442; font-weight: bold; text-decoration: underline">⚠ </span><span style="color: #292929; text-decoration-color: #292929; background-color: #c5c8c6; font-weight: bold; text-decoration: underline">Changed on disk notes.md changed since you opened it…</span><span style="color: #292929; text-decoration-color: #292929; background-color: #c5c8c6">  Reload  Keep mine  × </span>
+                                                                                
+<span style="font-weight: bold">Wizard</span>                                                                          
+<span style="color: #98a84b; text-decoration-color: #98a84b">✓ </span>Account<span style="color: #777877; text-decoration-color: #777877"> ─ </span><span style="font-weight: bold">▸ Plan</span><span style="color: #777877; text-decoration-color: #777877"> ─ ○ Payment ─ ○ Done</span>                                         
+                                                                                
+<span style="font-weight: bold">Plan</span>                      <span style="font-weight: bold">Buttons</span>                                               
+<span style="color: #98a84b; text-decoration-color: #98a84b">✓ </span>Fetch                                                                         
+<span style="color: #98a84b; text-decoration-color: #98a84b">✓ </span>Build                   <span style="color: #4b4e55; text-decoration-color: #4b4e55; background-color: #00d700">      </span> <span style="color: #4b4e55; text-decoration-color: #4b4e55; background-color: #d0b344">       </span> <span style="background-color: #d70000">        </span>                               
+<span style="font-weight: bold">▸ Test</span>                    <span style="color: #4b4e55; text-decoration-color: #4b4e55; background-color: #00d700"> Save </span> <span style="color: #4b4e55; text-decoration-color: #4b4e55; background-color: #d0b344"> Retry </span> <span style="background-color: #d70000"> Delete </span>                               
+<span style="color: #777877; text-decoration-color: #777877">○ Deploy</span>                  <span style="color: #4b4e55; text-decoration-color: #4b4e55; background-color: #00d700">      </span> <span style="color: #4b4e55; text-decoration-color: #4b4e55; background-color: #d0b344">       </span> <span style="background-color: #d70000">        </span>                               
+                                                                                
+<span style="font-weight: bold">Tags</span>                    <span style="color: #4b4e55; text-decoration-color: #4b4e55; background-color: #c5c8c6"> beta </span>                        <span style="color: #4b4e55; text-decoration-color: #4b4e55; background-color: #c5c8c6"> rust × </span> <span style="color: #4b4e55; text-decoration-color: #4b4e55; background-color: #c5c8c6"> tui × </span>          
+                                                                                
+<span style="font-weight: bold">▾</span> <span style="font-weight: bold">General</span>                                                                       
+Name: Memo                                                                      
+<span style="font-weight: bold">▸</span> <span style="font-weight: bold">Display</span>                                                                       
+<span style="font-weight: bold">▸</span> <span style="font-weight: bold">Keys</span>                                                                          
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+<span style="font-weight: bold">Results</span>                <span style="color: #777877; text-decoration-color: #777877">‹</span><span style="font-weight: bold"> 1 of 5 </span>›   <span style="font-weight: bold">Price</span>               <span style="color: #777877; text-decoration-color: #777877">─────</span><span style="color: #398280; text-decoration-color: #398280">●━━━━━━━━━━━━●</span><span style="color: #777877; text-decoration-color: #777877">─────</span></pre></div>
+<figcaption>kit</figcaption>
+</figure>
+<figure id="shot-notice">
+<div class="screen"><pre><span style="color: #292929; text-decoration-color: #292929; background-color: #c5c8c6; font-weight: bold; text-decoration: underline">▾ </span><span style="color: #292929; text-decoration-color: #292929; background-color: #d08442; font-weight: bold; text-decoration: underline">⚠ </span><span style="color: #292929; text-decoration-color: #292929; background-color: #c5c8c6; font-weight: bold; text-decoration: underline">Changed on disk</span><span style="color: #292929; text-decoration-color: #292929; background-color: #c5c8c6">                                        Reload  Keep mine  × </span>
+<span style="color: #292929; text-decoration-color: #292929; background-color: #c5c8c6">  notes.md changed since you opened it; reload it, or keep your edits</span>           
+                                                                                
+<span style="font-weight: bold">Wizard</span>                                                                          
+<span style="color: #98a84b; text-decoration-color: #98a84b">✓ </span>Account<span style="color: #777877; text-decoration-color: #777877"> ─ </span><span style="font-weight: bold">▸ Plan</span><span style="color: #777877; text-decoration-color: #777877"> ─ ○ Payment ─ ○ Done</span>                                         
+                                                                                
+<span style="font-weight: bold">Plan</span>                      <span style="font-weight: bold">Buttons</span>                                               
+<span style="color: #98a84b; text-decoration-color: #98a84b">✓ </span>Fetch                                                                         
+<span style="color: #98a84b; text-decoration-color: #98a84b">✓ </span>Build                   <span style="color: #4b4e55; text-decoration-color: #4b4e55; background-color: #00d700">      </span> <span style="color: #4b4e55; text-decoration-color: #4b4e55; background-color: #d0b344">       </span> <span style="background-color: #d70000">        </span>                               
+<span style="font-weight: bold">▸ Test</span>                    <span style="color: #4b4e55; text-decoration-color: #4b4e55; background-color: #00d700"> Save </span> <span style="color: #4b4e55; text-decoration-color: #4b4e55; background-color: #d0b344"> Retry </span> <span style="background-color: #d70000"> Delete </span>                               
+<span style="color: #777877; text-decoration-color: #777877">○ Deploy</span>                  <span style="color: #4b4e55; text-decoration-color: #4b4e55; background-color: #00d700">      </span> <span style="color: #4b4e55; text-decoration-color: #4b4e55; background-color: #d0b344">       </span> <span style="background-color: #d70000">        </span>                               
+                                                                                
+<span style="font-weight: bold">Tags</span>                    <span style="color: #4b4e55; text-decoration-color: #4b4e55; background-color: #c5c8c6"> beta </span>                        <span style="color: #4b4e55; text-decoration-color: #4b4e55; background-color: #c5c8c6"> rust × </span> <span style="color: #4b4e55; text-decoration-color: #4b4e55; background-color: #c5c8c6"> tui × </span>          
+                                                                                
+<span style="font-weight: bold">▾</span> <span style="font-weight: bold">General</span>                                                                       
+Name: Memo                                                                      
+<span style="font-weight: bold">▸</span> <span style="font-weight: bold">Display</span>                                                                       
+<span style="font-weight: bold">▸</span> <span style="font-weight: bold">Keys</span>                                                                          
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+<span style="font-weight: bold">Results</span>                <span style="color: #777877; text-decoration-color: #777877">‹</span><span style="font-weight: bold"> 1 of 5 </span>›   <span style="font-weight: bold">Price</span>               <span style="color: #777877; text-decoration-color: #777877">─────</span><span style="color: #398280; text-decoration-color: #398280">●━━━━━━━━━━━━●</span><span style="color: #777877; text-decoration-color: #777877">─────</span></pre></div>
+<figcaption>notice</figcaption>
+</figure>
+<figure id="shot-steps">
+<div class="screen"><pre><span style="color: #292929; text-decoration-color: #292929; background-color: #c5c8c6">▾ </span><span style="color: #292929; text-decoration-color: #292929; background-color: #d0b344">⚠ </span><span style="color: #292929; text-decoration-color: #292929; background-color: #c5c8c6; font-weight: bold">Changed on disk</span><span style="color: #292929; text-decoration-color: #292929; background-color: #c5c8c6">                                        Reload  Keep mine  × </span>
+<span style="color: #292929; text-decoration-color: #292929; background-color: #c5c8c6">  notes.md changed since you opened it; reload it, or keep your edits</span>           
+                                                                                
+<span style="font-weight: bold">Wizard</span>                                                                          
+<span style="color: #98a84b; text-decoration-color: #98a84b">✓ </span>Account<span style="color: #777877; text-decoration-color: #777877"> ─ </span><span style="color: #98a84b; text-decoration-color: #98a84b">✓ </span>Plan<span style="color: #777877; text-decoration-color: #777877"> ─ </span><span style="font-weight: bold">▸ Payment</span><span style="color: #777877; text-decoration-color: #777877"> ─ ○ Done</span>                                         
+                                                                                
+<span style="font-weight: bold">Plan</span>                      <span style="font-weight: bold">Buttons</span>                                               
+<span style="color: #98a84b; text-decoration-color: #98a84b">✓ </span>Fetch                                                                         
+<span style="color: #98a84b; text-decoration-color: #98a84b">✓ </span>Build                   <span style="color: #4b4e55; text-decoration-color: #4b4e55; background-color: #00d700">      </span> <span style="color: #4b4e55; text-decoration-color: #4b4e55; background-color: #d0b344">       </span> <span style="background-color: #d70000">        </span>                               
+<span style="font-weight: bold">▸ Test</span>                    <span style="color: #4b4e55; text-decoration-color: #4b4e55; background-color: #00d700"> Save </span> <span style="color: #4b4e55; text-decoration-color: #4b4e55; background-color: #d0b344"> Retry </span> <span style="background-color: #d70000"> Delete </span>                               
+<span style="color: #777877; text-decoration-color: #777877">○ Deploy</span>                  <span style="color: #4b4e55; text-decoration-color: #4b4e55; background-color: #00d700">      </span> <span style="color: #4b4e55; text-decoration-color: #4b4e55; background-color: #d0b344">       </span> <span style="background-color: #d70000">        </span>                               
+                                                                                
+<span style="font-weight: bold">Tags</span>                    <span style="color: #4b4e55; text-decoration-color: #4b4e55; background-color: #c5c8c6"> beta </span>                        <span style="color: #4b4e55; text-decoration-color: #4b4e55; background-color: #c5c8c6"> rust × </span> <span style="color: #4b4e55; text-decoration-color: #4b4e55; background-color: #c5c8c6"> tui × </span>          
+                                                                                
+<span style="font-weight: bold">▸</span> <span style="font-weight: bold">General</span>                                                                       
+<span style="color: #292929; text-decoration-color: #292929; background-color: #c5c8c6; font-weight: bold">▾</span><span style="color: #292929; text-decoration-color: #292929; background-color: #c5c8c6"> </span><span style="color: #292929; text-decoration-color: #292929; background-color: #c5c8c6; font-weight: bold">Display</span>                                                                       
+Theme: dark                                                                     
+<span style="font-weight: bold">▸</span> <span style="font-weight: bold">Keys</span>                                                                          
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+<span style="font-weight: bold">Results</span>                <span style="color: #777877; text-decoration-color: #777877">‹</span><span style="font-weight: bold"> 1 of 5 </span>›   <span style="font-weight: bold">Price</span>               <span style="color: #777877; text-decoration-color: #777877">─────</span><span style="color: #398280; text-decoration-color: #398280">●━━━━━━━━━━━━●</span><span style="color: #777877; text-decoration-color: #777877">─────</span></pre></div>
+<figcaption>steps</figcaption>
+</figure>
+<figure id="shot-toast">
+<div class="screen"><pre><span style="color: #292929; text-decoration-color: #292929; background-color: #c5c8c6">▾ </span><span style="color: #292929; text-decoration-color: #292929; background-color: #d0b344">⚠ </span><span style="color: #292929; text-decoration-color: #292929; background-color: #c5c8c6; font-weight: bold">Changed on disk</span><span style="color: #292929; text-decoration-color: #292929; background-color: #c5c8c6">                                        Reload  Keep mine  × </span>
+<span style="color: #292929; text-decoration-color: #292929; background-color: #c5c8c6">  notes.md changed since you opened it; reload it, or keep your edits</span>           
+                                                                                
+<span style="font-weight: bold">Wizard</span>                                                                          
+<span style="color: #98a84b; text-decoration-color: #98a84b">✓ </span>Account<span style="color: #777877; text-decoration-color: #777877"> ─ </span><span style="color: #98a84b; text-decoration-color: #98a84b">✓ </span>Plan<span style="color: #777877; text-decoration-color: #777877"> ─ </span><span style="font-weight: bold">▸ Payment</span><span style="color: #777877; text-decoration-color: #777877"> ─ ○ Done</span>                                         
+                                                                                
+<span style="font-weight: bold">Plan</span>                      <span style="font-weight: bold">Buttons</span>                                               
+<span style="color: #98a84b; text-decoration-color: #98a84b">✓ </span>Fetch                                                                         
+<span style="color: #98a84b; text-decoration-color: #98a84b">✓ </span>Build                   <span style="color: #4b4e55; text-decoration-color: #4b4e55; background-color: #00d700">      </span> <span style="color: #4b4e55; text-decoration-color: #4b4e55; background-color: #d0b344">       </span> <span style="background-color: #d70000">        </span>                               
+<span style="font-weight: bold">▸ Test</span>                    <span style="color: #4b4e55; text-decoration-color: #4b4e55; background-color: #00d700"> Save </span> <span style="color: #4b4e55; text-decoration-color: #4b4e55; background-color: #d0b344"> Retry </span> <span style="background-color: #d70000"> Delete </span>                               
+<span style="color: #777877; text-decoration-color: #777877">○ Deploy</span>                  <span style="color: #4b4e55; text-decoration-color: #4b4e55; background-color: #00d700">      </span> <span style="color: #4b4e55; text-decoration-color: #4b4e55; background-color: #d0b344">       </span> <span style="background-color: #d70000">        </span>                               
+                                                                                
+<span style="font-weight: bold">Tags</span>                    <span style="color: #4b4e55; text-decoration-color: #4b4e55; background-color: #c5c8c6"> beta </span>                        <span style="color: #4b4e55; text-decoration-color: #4b4e55; background-color: #c5c8c6"> rust × </span> <span style="color: #4b4e55; text-decoration-color: #4b4e55; background-color: #c5c8c6"> tui × </span>          
+                                                                                
+<span style="font-weight: bold">▸</span> <span style="font-weight: bold">General</span>                                                                       
+<span style="color: #292929; text-decoration-color: #292929; background-color: #c5c8c6; font-weight: bold">▾</span><span style="color: #292929; text-decoration-color: #292929; background-color: #c5c8c6"> </span><span style="color: #292929; text-decoration-color: #292929; background-color: #c5c8c6; font-weight: bold">Display</span>                                                                       
+Theme: dark                                                                     
+<span style="font-weight: bold">▸</span> <span style="font-weight: bold">Keys</span>                                                                          
+                                                                                
+                                                                                
+                                                          <span style="color: #98a84b; text-decoration-color: #98a84b">╭─</span><span style="color: #00823d; text-decoration-color: #00823d; font-weight: bold"> Saved </span><span style="color: #98a84b; text-decoration-color: #98a84b">───────────╮</span> 
+                                                          <span style="color: #98a84b; text-decoration-color: #98a84b">│</span> notes.md is saved <span style="color: #98a84b; text-decoration-color: #98a84b">│</span> 
+                                                          <span style="color: #98a84b; text-decoration-color: #98a84b">│</span> <span style="background-color: #4e4e4e"> Undo </span>            <span style="color: #98a84b; text-decoration-color: #98a84b">│</span> 
+<span style="font-weight: bold">Results</span>                <span style="color: #777877; text-decoration-color: #777877">‹</span><span style="font-weight: bold"> 1 of 5 </span>›   <span style="font-weight: bold">Price</span>               <span style="color: #777877; text-decoration-color: #777877">──</span><span style="color: #98a84b; text-decoration-color: #98a84b">╰───────────────────╯</span><span style="color: #777877; text-decoration-color: #777877">─</span></pre></div>
+<figcaption>toast</figcaption>
+</figure>
+<figure id="shot-tags">
+<div class="screen"><pre><span style="color: #292929; text-decoration-color: #292929; background-color: #c5c8c6">▾ </span><span style="color: #292929; text-decoration-color: #292929; background-color: #d0b344">⚠ </span><span style="color: #292929; text-decoration-color: #292929; background-color: #c5c8c6; font-weight: bold">Changed on disk</span><span style="color: #292929; text-decoration-color: #292929; background-color: #c5c8c6">                                        Reload  Keep mine  × </span>
+<span style="color: #292929; text-decoration-color: #292929; background-color: #c5c8c6">  notes.md changed since you opened it; reload it, or keep your edits</span>           
+                                                                                
+<span style="font-weight: bold">Wizard</span>                                                                          
+<span style="color: #98a84b; text-decoration-color: #98a84b">✓ </span>Account<span style="color: #777877; text-decoration-color: #777877"> ─ </span><span style="color: #98a84b; text-decoration-color: #98a84b">✓ </span>Plan<span style="color: #777877; text-decoration-color: #777877"> ─ </span><span style="font-weight: bold">▸ Payment</span><span style="color: #777877; text-decoration-color: #777877"> ─ ○ Done</span>                                         
+                                                                                
+<span style="font-weight: bold">Plan</span>                      <span style="font-weight: bold">Buttons</span>                                               
+<span style="color: #98a84b; text-decoration-color: #98a84b">✓ </span>Fetch                                                                         
+<span style="color: #98a84b; text-decoration-color: #98a84b">✓ </span>Build                   <span style="color: #4b4e55; text-decoration-color: #4b4e55; background-color: #00d700">      </span> <span style="color: #4b4e55; text-decoration-color: #4b4e55; background-color: #d0b344">       </span> <span style="background-color: #d70000">        </span>                               
+<span style="font-weight: bold">▸ Test</span>                    <span style="color: #4b4e55; text-decoration-color: #4b4e55; background-color: #00d700"> Save </span> <span style="color: #4b4e55; text-decoration-color: #4b4e55; background-color: #d0b344"> Retry </span> <span style="background-color: #d70000"> Delete </span>                               
+<span style="color: #777877; text-decoration-color: #777877">○ Deploy</span>                  <span style="color: #4b4e55; text-decoration-color: #4b4e55; background-color: #00d700">      </span> <span style="color: #4b4e55; text-decoration-color: #4b4e55; background-color: #d0b344">       </span> <span style="background-color: #d70000">        </span>                               
+                                                                                
+<span style="font-weight: bold">Tags</span>                    <span style="color: #4b4e55; text-decoration-color: #4b4e55; background-color: #c5c8c6"> beta </span>                        <span style="color: #4b4e55; text-decoration-color: #4b4e55; background-color: #c5c8c6"> rust × </span> <span style="color: #4b4e55; text-decoration-color: #4b4e55; background-color: #c5c8c6"> tui × </span> <span style="color: #4b4e55; text-decoration-color: #4b4e55; background-color: #c5c8c6"> docs × </span> 
+                                                                                
+<span style="font-weight: bold">▸</span> <span style="font-weight: bold">General</span>                                                                       
+<span style="font-weight: bold">▾</span> <span style="font-weight: bold">Display</span>                                                                       
+Theme: dark                                                                     
+<span style="font-weight: bold">▸</span> <span style="font-weight: bold">Keys</span>                                                                          
+                                                                                
+                                                                                
+                                                          <span style="color: #98a84b; text-decoration-color: #98a84b">╭─</span><span style="color: #00823d; text-decoration-color: #00823d; font-weight: bold"> Saved </span><span style="color: #98a84b; text-decoration-color: #98a84b">───────────╮</span> 
+                                                          <span style="color: #98a84b; text-decoration-color: #98a84b">│</span> notes.md is saved <span style="color: #98a84b; text-decoration-color: #98a84b">│</span> 
+                                                          <span style="color: #98a84b; text-decoration-color: #98a84b">│</span> <span style="background-color: #4e4e4e"> Undo </span>            <span style="color: #98a84b; text-decoration-color: #98a84b">│</span> 
+<span style="font-weight: bold">Results</span>                <span style="color: #777877; text-decoration-color: #777877">‹</span><span style="font-weight: bold"> 1 of 5 </span>›   <span style="font-weight: bold">Price</span>               <span style="color: #777877; text-decoration-color: #777877">──</span><span style="color: #98a84b; text-decoration-color: #98a84b">╰───────────────────╯</span><span style="color: #777877; text-decoration-color: #777877">─</span></pre></div>
+<figcaption>tags</figcaption>
+</figure>
+</main>
+<script type="application/json" id="tape-data">{"rows":["\u003cspan style=\"color: #ff2c7a; text-decoration-color: #ff2c7a; font-weight: bold\">❯\u003c/span>                                                                               ","                                                                                ","\u003cspan style=\"color: #ff2c7a; text-decoration-color: #ff2c7a; font-weight: bold\">❯\u003c/span> ki                                                                            ","\u003cspan style=\"color: #292929; text-decoration-color: #292929; background-color: #c5c8c6; font-weight: bold; text-decoration: underline\">▸ \u003c/span>\u003cspan style=\"color: #292929; text-decoration-color: #292929; background-color: #d08442; font-weight: bold; text-decoration: underline\">⚠ \u003c/span>\u003cspan style=\"color: #292929; text-decoration-color: #292929; background-color: #c5c8c6; font-weight: bold; text-decoration: underline\">Changed on disk notes.md changed since you opened it…\u003c/span>\u003cspan style=\"color: #292929; text-decoration-color: #292929; background-color: #c5c8c6\">  Reload  Keep mine  × \u003c/span>","\u003cspan style=\"font-weight: bold\">Wizard\u003c/span>                                                                          ","\u003cspan style=\"color: #98a84b; text-decoration-color: #98a84b\">✓ \u003c/span>Account\u003cspan style=\"color: #777877; text-decoration-color: #777877\"> ─ \u003c/span>\u003cspan style=\"font-weight: bold\">▸ Plan\u003c/span>\u003cspan style=\"color: #777877; text-decoration-color: #777877\"> ─ ○ Payment ─ ○ Done\u003c/span>                                         ","\u003cspan style=\"font-weight: bold\">Plan\u003c/span>                      \u003cspan style=\"font-weight: bold\">Buttons\u003c/span>                                               ","\u003cspan style=\"color: #98a84b; text-decoration-color: #98a84b\">✓ \u003c/span>Fetch                                                                         ","\u003cspan style=\"color: #98a84b; text-decoration-color: #98a84b\">✓ \u003c/span>Build                   \u003cspan style=\"color: #4b4e55; text-decoration-color: #4b4e55; background-color: #00d700\">      \u003c/span> \u003cspan style=\"color: #4b4e55; text-decoration-color: #4b4e55; background-color: #d0b344\">       \u003c/span> \u003cspan style=\"background-color: #d70000\">        \u003c/span>                               ","\u003cspan style=\"font-weight: bold\">▸ Test\u003c/span>                    \u003cspan style=\"color: #4b4e55; text-decoration-color: #4b4e55; background-color: #00d700\"> Save \u003c/span> \u003cspan style=\"color: #4b4e55; text-decoration-color: #4b4e55; background-color: #d0b344\"> Retry \u003c/span> \u003cspan style=\"background-color: #d70000\"> Delete \u003c/span>                               ","\u003cspan style=\"color: #777877; text-decoration-color: #777877\">○ Deploy\u003c/span>                  \u003cspan style=\"color: #4b4e55; text-decoration-color: #4b4e55; background-color: #00d700\">      \u003c/span> \u003cspan style=\"color: #4b4e55; text-decoration-color: #4b4e55; background-color: #d0b344\">       \u003c/span> \u003cspan style=\"background-color: #d70000\">        \u003c/span>                               ","\u003cspan style=\"font-weight: bold\">Tags\u003c/span>                    \u003cspan style=\"color: #4b4e55; text-decoration-color: #4b4e55; background-color: #c5c8c6\"> beta \u003c/span>                        \u003cspan style=\"color: #4b4e55; text-decoration-color: #4b4e55; background-color: #c5c8c6\"> rust × \u003c/span> \u003cspan style=\"color: #4b4e55; text-decoration-color: #4b4e55; background-color: #c5c8c6\"> tui × \u003c/span>          ","\u003cspan style=\"font-weight: bold\">▾\u003c/span> \u003cspan style=\"font-weight: bold\">General\u003c/span>                                                                       ","Name: Memo                                                                      ","\u003cspan style=\"font-weight: bold\">▸\u003c/span> \u003cspan style=\"font-weight: bold\">Display\u003c/span>                                                                       ","\u003cspan style=\"font-weight: bold\">▸\u003c/span> \u003cspan style=\"font-weight: bold\">Keys\u003c/span>                                                                          ","\u003cspan style=\"font-weight: bold\">Results\u003c/span>                \u003cspan style=\"color: #777877; text-decoration-color: #777877\">‹\u003c/span>\u003cspan style=\"font-weight: bold\"> 1 of 5 \u003c/span>›   \u003cspan style=\"font-weight: bold\">Price\u003c/span>               \u003cspan style=\"color: #777877; text-decoration-color: #777877\">─────\u003c/span>\u003cspan style=\"color: #398280; text-decoration-color: #398280\">●━━━━━━━━━━━━●\u003c/span>\u003cspan style=\"color: #777877; text-decoration-color: #777877\">─────\u003c/span>","\u003cspan style=\"color: #292929; text-decoration-color: #292929; background-color: #c5c8c6; font-weight: bold; text-decoration: underline\">▾ \u003c/span>\u003cspan style=\"color: #292929; text-decoration-color: #292929; background-color: #d08442; font-weight: bold; text-decoration: underline\">⚠ \u003c/span>\u003cspan style=\"color: #292929; text-decoration-color: #292929; background-color: #c5c8c6; font-weight: bold; text-decoration: underline\">Changed on disk\u003c/span>\u003cspan style=\"color: #292929; text-decoration-color: #292929; background-color: #c5c8c6\">                                        Reload  Keep mine  × \u003c/span>","\u003cspan style=\"color: #292929; text-decoration-color: #292929; background-color: #c5c8c6\">  notes.md changed since you opened it; reload it, or keep your edits\u003c/span>           ","\u003cspan style=\"color: #292929; text-decoration-color: #292929; background-color: #c5c8c6\">▾ \u003c/span>\u003cspan style=\"color: #292929; text-decoration-color: #292929; background-color: #d0b344\">⚠ \u003c/span>\u003cspan style=\"color: #292929; text-decoration-color: #292929; background-color: #c5c8c6; font-weight: bold\">Changed on disk\u003c/span>\u003cspan style=\"color: #292929; text-decoration-color: #292929; background-color: #c5c8c6\">                                        Reload  Keep mine  × \u003c/span>","\u003cspan style=\"color: #98a84b; text-decoration-color: #98a84b\">✓ \u003c/span>Account\u003cspan style=\"color: #777877; text-decoration-color: #777877\"> ─ \u003c/span>\u003cspan style=\"color: #98a84b; text-decoration-color: #98a84b\">✓ \u003c/span>Plan\u003cspan style=\"color: #777877; text-decoration-color: #777877\"> ─ \u003c/span>\u003cspan style=\"color: #292929; text-decoration-color: #292929; background-color: #c5c8c6; font-weight: bold\">▸ Payment\u003c/span>\u003cspan style=\"color: #777877; text-decoration-color: #777877\"> ─ ○ Done\u003c/span>                                         ","\u003cspan style=\"color: #98a84b; text-decoration-color: #98a84b\">✓ \u003c/span>Account\u003cspan style=\"color: #777877; text-decoration-color: #777877\"> ─ \u003c/span>\u003cspan style=\"color: #98a84b; text-decoration-color: #98a84b\">✓ \u003c/span>Plan\u003cspan style=\"color: #777877; text-decoration-color: #777877\"> ─ \u003c/span>\u003cspan style=\"font-weight: bold\">▸ Payment\u003c/span>\u003cspan style=\"color: #777877; text-decoration-color: #777877\"> ─ ○ Done\u003c/span>                                         ","\u003cspan style=\"font-weight: bold\">▸\u003c/span> \u003cspan style=\"font-weight: bold\">General\u003c/span>                                                                       ","\u003cspan style=\"color: #292929; text-decoration-color: #292929; background-color: #c5c8c6; font-weight: bold\">▾\u003c/span>\u003cspan style=\"color: #292929; text-decoration-color: #292929; background-color: #c5c8c6\"> \u003c/span>\u003cspan style=\"color: #292929; text-decoration-color: #292929; background-color: #c5c8c6; font-weight: bold\">Display\u003c/span>                                                                       ","Theme: dark                                                                     ","                                                          \u003cspan style=\"color: #98a84b; text-decoration-color: #98a84b\">╭─\u003c/span>\u003cspan style=\"color: #00823d; text-decoration-color: #00823d; font-weight: bold\"> Saved \u003c/span>\u003cspan style=\"color: #98a84b; text-decoration-color: #98a84b\">───────────╮\u003c/span> ","                                                          \u003cspan style=\"color: #98a84b; text-decoration-color: #98a84b\">│\u003c/span> notes.md is saved \u003cspan style=\"color: #98a84b; text-decoration-color: #98a84b\">│\u003c/span> ","                                                          \u003cspan style=\"color: #98a84b; text-decoration-color: #98a84b\">│\u003c/span> \u003cspan style=\"background-color: #4e4e4e\"> Undo \u003c/span>            \u003cspan style=\"color: #98a84b; text-decoration-color: #98a84b\">│\u003c/span> ","\u003cspan style=\"font-weight: bold\">Results\u003c/span>                \u003cspan style=\"color: #777877; text-decoration-color: #777877\">‹\u003c/span>\u003cspan style=\"font-weight: bold\"> 1 of 5 \u003c/span>›   \u003cspan style=\"font-weight: bold\">Price\u003c/span>               \u003cspan style=\"color: #777877; text-decoration-color: #777877\">──\u003c/span>\u003cspan style=\"color: #98a84b; text-decoration-color: #98a84b\">╰───────────────────╯\u003c/span>\u003cspan style=\"color: #777877; text-decoration-color: #777877\">─\u003c/span>","\u003cspan style=\"font-weight: bold\">Tags\u003c/span>                    \u003cspan style=\"color: #4b4e55; text-decoration-color: #4b4e55; background-color: #c5c8c6\"> beta \u003c/span>                        \u003cspan style=\"color: #4b4e55; text-decoration-color: #4b4e55; background-color: #c5c8c6\"> rust × \u003c/span> \u003cspan style=\"color: #4b4e55; text-decoration-color: #4b4e55; background-color: #c5c8c6\"> tui × \u003c/span> \u003cspan style=\"color: #292929; text-decoration-color: #292929; background-color: #c5c8c6\"> \u003c/span>    \u003cspan style=\"color: #292929; text-decoration-color: #292929; background-color: #c5c8c6\"> \u003c/span>   ","\u003cspan style=\"font-weight: bold\">▾\u003c/span> \u003cspan style=\"font-weight: bold\">Display\u003c/span>                                                                       ","\u003cspan style=\"font-weight: bold\">Tags\u003c/span>                    \u003cspan style=\"color: #4b4e55; text-decoration-color: #4b4e55; background-color: #c5c8c6\"> beta \u003c/span>                        \u003cspan style=\"color: #4b4e55; text-decoration-color: #4b4e55; background-color: #c5c8c6\"> rust × \u003c/span> \u003cspan style=\"color: #4b4e55; text-decoration-color: #4b4e55; background-color: #c5c8c6\"> tui × \u003c/span> do\u003cspan style=\"color: #292929; text-decoration-color: #292929; background-color: #c5c8c6\"> \u003c/span>      ","\u003cspan style=\"font-weight: bold\">Tags\u003c/span>                    \u003cspan style=\"color: #4b4e55; text-decoration-color: #4b4e55; background-color: #c5c8c6\"> beta \u003c/span>                        \u003cspan style=\"color: #4b4e55; text-decoration-color: #4b4e55; background-color: #c5c8c6\"> rust × \u003c/span> \u003cspan style=\"color: #4b4e55; text-decoration-color: #4b4e55; background-color: #c5c8c6\"> tui × \u003c/span> docs\u003cspan style=\"color: #292929; text-decoration-color: #292929; background-color: #c5c8c6\"> \u003c/span>    ","\u003cspan style=\"font-weight: bold\">Tags\u003c/span>                    \u003cspan style=\"color: #4b4e55; text-decoration-color: #4b4e55; background-color: #c5c8c6\"> beta \u003c/span>                        \u003cspan style=\"color: #4b4e55; text-decoration-color: #4b4e55; background-color: #c5c8c6\"> rust × \u003c/span> \u003cspan style=\"color: #4b4e55; text-decoration-color: #4b4e55; background-color: #c5c8c6\"> tui × \u003c/span> \u003cspan style=\"color: #4b4e55; text-decoration-color: #4b4e55; background-color: #c5c8c6\"> docs × \u003c/span> "],"frames":[[0.0,[0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]],[0.047,[2,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]],[0.136,[3,1,4,5,1,6,7,8,9,10,1,11,1,12,13,14,15,1,1,1,1,1,1,16]],[1.207,[17,18,1,4,5,1,6,7,8,9,10,1,11,1,12,13,14,15,1,1,1,1,1,16]],[1.778,[19,18,1,4,20,1,6,7,8,9,10,1,11,1,12,13,14,15,1,1,1,1,1,16]],[1.959,[19,18,1,4,21,1,6,7,8,9,10,1,11,1,22,23,24,15,1,1,1,1,1,16]],[2.69,[19,18,1,4,21,1,6,7,8,9,10,1,11,1,22,23,24,15,1,1,25,26,27,28]],[3.183,[19,18,1,4,21,1,6,7,8,9,10,1,29,1,22,30,24,15,1,1,25,26,27,28]],[3.403,[19,18,1,4,21,1,6,7,8,9,10,1,31,1,22,30,24,15,1,1,25,26,27,28]],[3.485,[19,18,1,4,21,1,6,7,8,9,10,1,32,1,22,30,24,15,1,1,25,26,27,28]],[3.526,[19,18,1,4,21,1,6,7,8,9,10,1,33,1,22,30,24,15,1,1,25,26,27,28]]],"keys":[[0.129,"⏎"],[1.202,"⏎"],[1.774,"🖱 Click"],[1.955,"🖱 Click"],[3.179,"🖱 Click"],[4.116,"Ctrl+Q"]],"keyShown":0.8,"idle":2.0}</script>
+<script>(() => {
+  const data = JSON.parse(document.getElementById("tape-data").textContent);
+  const screen = document.getElementById("tape-screen");
+  const key = document.getElementById("tape-key");
+  const play = document.getElementById("tape-play");
+  const position = document.getElementById("tape-position");
+  const time = document.getElementById("tape-time");
+  const last = data.frames.length - 1;
+  let index = 0, timer = null;
+  position.max = String(last);
+  function show(i) {
+    index = i;
+    const [t, rows] = data.frames[i];
+    screen.innerHTML = rows.map((r) => data.rows[r]).join("\n");
+    position.value = String(i);
+    time.value = t.toFixed(1) + " s";
+    const pressed = data.keys.filter(([k]) => k <= t && t - k <= data.keyShown).pop();
+    key.hidden = !pressed;
+    key.textContent = pressed ? pressed[1] : "";
+  }
+  function stop() {
+    clearTimeout(timer);
+    timer = null;
+    play.textContent = "Play";
+    play.setAttribute("aria-pressed", "false");
+  }
+  function step() {
+    if (index >= last) { stop(); return; }
+    const wait = Math.min(data.frames[index + 1][0] - data.frames[index][0], data.idle);
+    timer = setTimeout(() => { show(index + 1); step(); }, Math.max(wait, 0) * 1000);
+  }
+  play.addEventListener("click", () => {
+    if (timer) { stop(); return; }
+    if (index >= last) show(0);
+    play.textContent = "Pause";
+    play.setAttribute("aria-pressed", "true");
+    step();
+  });
+  position.addEventListener("input", () => { stop(); show(Number(position.value)); });
+  show(last);
+})();</script>
+</body>
+</html>

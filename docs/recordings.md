@@ -598,6 +598,26 @@ the sample data are ours. See
 
 [Tape](tapes/layout.tape) · [Cast](media/tapes/layout/layout.cast) · [GIF](media/tapes/layout/layout.gif) · [Page](media/tapes/layout/layout.html)
 
+<div class="tape-player" data-cast="../media/tapes/kit/kit.cast" data-poster="npt:0:3">
+  <img src="media/tapes/kit/kit.gif" alt="intuiTUIve's notice bar, stepper, checklist, buttons, chips, accordion, pager and range slider">
+</div>
+
+| Notice bar | Steps | Toast | Tags |
+|---|---|---|---|
+| ![A notice bar opened: a warning with Reload and Keep mine](media/tapes/kit/notice.png) | ![A wizard's stepper on Payment and a plan's checklist](media/tapes/kit/steps.png) | ![A notification with an Undo button](media/tapes/kit/toast.png) | ![A tag input with a newly typed tag](media/tapes/kit/tags.png) |
+
+[Tape](tapes/kit.tape) · [Cast](media/tapes/kit/kit.cast) · [GIF](media/tapes/kit/kit.gif) · [Page](media/tapes/kit/kit.html)
+
+<div class="tape-player" data-cast="../media/tapes/answer/answer.cast" data-poster="npt:0:3">
+  <img src="media/tapes/answer/answer.gif" alt="A Markdown answer streaming in a fragment a key press">
+</div>
+
+| A loose list | Open code | Done | A reference link |
+|---|---|---|---|
+| ![The first item and its indented paragraph](media/tapes/answer/list.png) | ![A code fence still open, drawn as code](media/tapes/answer/code.png) | ![The whole answer](media/tapes/answer/done.png) | ![The reference link followed](media/tapes/answer/link.png) |
+
+[Tape](tapes/answer.tape) · [Cast](media/tapes/answer/answer.cast) · [GIF](media/tapes/answer/answer.gif) · [Page](media/tapes/answer/answer.html)
+
 ### Apps
 
 <div class="tape-player" data-cast="../media/tapes/apps/apps.cast" data-poster="npt:0:3">

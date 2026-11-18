@@ -125,6 +125,8 @@ placeholder("sidebar")                            // a coloured block for a prot
 
 ### Notice bars
 
+![A notice bar opened over the kit example: a warning that notes.md changed on disk, with Reload, Keep mine and a close mark](../../media/tapes/kit/notice.png)
+
 ```rust
 use intuituive::{notice_bar, Level};
 
@@ -149,6 +151,8 @@ notice_bar(shown, || "Changed".into(), move || format!("{name} changed on disk")
 
 ### Steps
 
+![The kit example: a wizard's stepper on Payment above a plan's checklist, button variants and an accordion with Display open](../../media/tapes/kit/steps.png)
+
 ```rust
 use intuituive::{steps, StepState};
 
@@ -171,6 +175,8 @@ steps(move || pages(), move |i| StepState::at(i, page.get())).steps_across(" ─
   set the same signal.
 
 ### Chips and a tag input
+
+![A tag input with rust, tui and a newly typed docs, each with a × to remove it](../../media/tapes/kit/tags.png)
 
 ```rust
 use intuituive::{chip, chip_of, tag_input};
