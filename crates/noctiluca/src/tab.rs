@@ -1986,6 +1986,18 @@ impl Worker<'_> {
         };
         self.set_area(area);
         if let Some(on) = plan.screencast {
+            if crate::trace::on() {
+                // Why the screencast starts or stops: each video region's
+                // state (#890: frames that never start on a busy page).
+                let why: Vec<_> = regions
+                    .iter()
+                    .map(|r| {
+                        serde_json::json!({"node": r.node, "playing": r.playing,
+                            "on_screen": r.on_screen, "empty": r.rect.is_empty()})
+                    })
+                    .collect();
+                crate::trace::event("cast_on", serde_json::json!({"on": on, "regions": why}));
+            }
             let _ = self.engine.set_screencast(TabId(0), on);
             self.last_frame = on.then_some(now);
         } else if stalled {
@@ -2318,6 +2330,11 @@ impl Worker<'_> {
                 scale,
             } => {
                 self.on_screen = on_screen.into_iter().collect();
+                if crate::trace::on() {
+                    let mut nodes: Vec<_> = self.on_screen.iter().copied().collect();
+                    nodes.sort_unstable();
+                    crate::trace::event("on_screen", serde_json::json!({"nodes": nodes}));
+                }
                 self.intervals = intervals.into_iter().collect();
                 self.scale = scale;
                 Ok(())

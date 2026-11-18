@@ -683,6 +683,75 @@ fn a_box_painted_above_covers_what_it_holds_and_a_badge_lies_over_its_picture() 
 }
 
 #[test]
+fn a_players_overlay_frame_lies_over_its_video_and_hides_nothing() {
+    // A live stream's player (#890): its poster image, the video painted
+    // over the poster, and an extensions frame as big as the video (to
+    // its rounding) painted over both. The frame's document is
+    // transparent: it covers nothing, lies over the video, not the
+    // poster the video hides, and takes no rows; the video keeps its
+    // place, and its frames go on.
+    use noctiluca::engine::Rect;
+    use noctiluca::layout::Marks;
+    use noctiluca::model::MediaKind;
+    use noctiluca::testing::PageBuilder;
+    let mut p = PageBuilder::new("https://fixture.example/live.html", "Live", 800.0, 600.0);
+    let body = p.body();
+    p.paint(body, 1);
+    let player = p.element(
+        body,
+        "DIV",
+        &[],
+        &[("position", "relative")],
+        Some(Rect::new(50.0, 50.0, 570.0, 320.625)),
+    );
+    p.paint(player, 2);
+    let poster = p.image(
+        player,
+        "poster.jpg",
+        "",
+        Rect::new(50.0, 50.0, 570.0, 320.625),
+    );
+    p.paint(poster, 3);
+    let video = p.element(
+        player,
+        "VIDEO",
+        &[("src", "blob:live")],
+        &[("position", "absolute")],
+        Some(Rect::new(50.0, 50.0, 570.0, 320.625)),
+    );
+    p.paint(video, 4);
+    let frame = p.element(
+        player,
+        "IFRAME",
+        &[("src", "https://extensions.example/overlay.html")],
+        &[("position", "absolute")],
+        Some(Rect::new(50.0, 49.3125, 570.0, 321.0)),
+    );
+    p.paint(frame, 5);
+    let page = build(&p.snapshot(), &mut Revisions::new());
+    let index = |kind: MediaKind| {
+        page.media
+            .iter()
+            .position(|m| m.kind == kind)
+            .unwrap_or_else(|| panic!("{kind:?}: {:#?}", page.media))
+    };
+    let (video, frame) = (index(MediaKind::Video), index(MediaKind::Frame));
+    let stack = |m: usize| {
+        page.blocks
+            .iter()
+            .find(|b| b.kind == BlockKind::Media(m))
+            .unwrap_or_else(|| panic!("media {m}: {:#?}", page.blocks))
+            .stack
+    };
+    assert!(!stack(video).covered, "the frame hides the video");
+    assert!(!stack(frame).covered);
+    assert_eq!(stack(frame).over, Some(video));
+    let projection = noctiluca::layout::project(&page, 100, (8.0, 18.0), &Marks::default());
+    let placed: Vec<usize> = projection.regions.iter().map(|r| r.media).collect();
+    assert_eq!(placed, [video], "{:#?}", projection.regions);
+}
+
+#[test]
 fn an_app_shells_bars_above_and_under_its_scrolling_main_box_are_layers() {
     // The page does not scroll; its main box does (a streaming site's
     // directory): the top bar above it is pinned, the sign-up bar under it
