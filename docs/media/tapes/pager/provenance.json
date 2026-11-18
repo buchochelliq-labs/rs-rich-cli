@@ -1,9 +1,9 @@
 {
   "tape": "docs/tapes/pager.tape",
   "tape_fnv1a64": "f83fdb1def7235fd",
-  "recorder": "rs-rich-record 0.0.1",
+  "recorder": "rs-rich-record 0.0.15",
   "rich": null,
-  "commit": "21795ba3bc9777bf53c918b152d2d34cad27b39d",
+  "commit": "0a17e549dca220724a2b85aed3f04b95706bb4a8",
   "screenshots": [
     "top",
     "scrolled",

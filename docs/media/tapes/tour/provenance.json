@@ -1,9 +1,9 @@
 {
   "tape": "docs/tapes/tour.tape",
   "tape_fnv1a64": "d6f63afcd1ed05d0",
-  "recorder": "rs-rich-record 0.0.11",
+  "recorder": "rs-rich-record 0.0.15",
   "rich": null,
-  "commit": "c034d327c1ffa17a8ecf53e25ac0d6acafb45058",
+  "commit": "0a17e549dca220724a2b85aed3f04b95706bb4a8",
   "screenshots": [
     "log",
     "record",

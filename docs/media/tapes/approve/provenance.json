@@ -1,9 +1,9 @@
 {
   "tape": "docs/tapes/approve.tape",
   "tape_fnv1a64": "0d7b98ab6d2b8baa",
-  "recorder": "rs-rich-record 0.0.7",
+  "recorder": "rs-rich-record 0.0.15",
   "rich": null,
-  "commit": "ea42bea72df7ac2b01b609d134682f9ecc7c59ef",
+  "commit": "0a17e549dca220724a2b85aed3f04b95706bb4a8",
   "screenshots": [
     "queue",
     "reason",

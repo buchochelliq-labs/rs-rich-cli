@@ -1,9 +1,9 @@
 {
   "tape": "docs/tapes/stylesheet.tape",
   "tape_fnv1a64": "b27bbd12667c5440",
-  "recorder": "rs-rich-record 0.0.6",
+  "recorder": "rs-rich-record 0.0.15",
   "rich": null,
-  "commit": "e48551e4e00c942f39fe7ef70d6e63f23709478f",
+  "commit": "0a17e549dca220724a2b85aed3f04b95706bb4a8",
   "screenshots": [
     "styled",
     "states",

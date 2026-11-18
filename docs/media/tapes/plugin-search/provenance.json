@@ -1,9 +1,9 @@
 {
   "tape": "docs/tapes/plugin-search.tape",
   "tape_fnv1a64": "262b1a6a198d2bf1",
-  "recorder": "rs-rich-record 0.0.11",
+  "recorder": "rs-rich-record 0.0.15",
   "rich": null,
-  "commit": "91406f268e33091f3149d430137520dd31dddf72",
+  "commit": "0a17e549dca220724a2b85aed3f04b95706bb4a8",
   "screenshots": [
     "themes",
     "recommended",
