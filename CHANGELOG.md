@@ -15,8 +15,9 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   and without trailing dots and spaces. An agent creating `.CLAUDE/settings.json`
   or `.claude./settings.json` in a workspace that has no `.claude/` yet now gets
   Cornacai's "this file controls what runs" warning on its write review, as
-  `.claude/settings.json` does. Writes were reviewed either way; only the
-  warning was missing.
+  `.claude/settings.json` does, and so does a name with an NTFS stream
+  (`.mcp.json::$DATA`, which is `.mcp.json`'s contents). Writes were
+  reviewed either way; only the warning was missing.
 
 ## 0.0.27 cohort — to be published
 

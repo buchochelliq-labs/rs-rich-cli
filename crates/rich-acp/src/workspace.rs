@@ -117,7 +117,9 @@ fn resolve(path: &Path) -> Option<PathBuf> {
 /// Files whose change can run code or change what the user is asked: version
 /// control hooks and settings, editor and agent settings, MCP configuration,
 /// environment loaders. A client should ask the user before the agent
-/// writes one, even with writes allowed.
+/// writes one, even with writes allowed. Names match as a case-insensitive
+/// file system opens them: in any case, without the trailing dots and
+/// spaces Windows drops, and without an NTFS stream name (`name:stream`).
 pub fn controls_execution(path: &Path) -> bool {
     const DIRS: &[&str] = &[
         ".git", ".hg", ".svn", ".vscode", ".idea", ".zed", ".cursor", ".claude", ".gemini",
@@ -145,6 +147,9 @@ pub fn controls_execution(path: &Path) -> bool {
         // Compared as a case-insensitive file system would open it, and
         // with the trailing dots and spaces Windows drops: a directory the
         // agent creates as `.Claude.` is `.claude` to everything that reads it.
+        // What follows a `:` names an NTFS stream of the file or directory
+        // before it (`.mcp.json::$DATA` is `.mcp.json`'s own contents).
+        let name = name.split(':').next().unwrap_or(name);
         let name = name.trim_end_matches(['.', ' ']);
         let listed = |names: &[&str]| names.iter().any(|n| n.eq_ignore_ascii_case(name));
         if components.peek().is_some() {
@@ -230,6 +235,11 @@ mod tests {
         assert!(controls_execution(Path::new("/w/.MCP.json")));
         assert!(controls_execution(Path::new("/w/.claude./settings.json")));
         assert!(controls_execution(Path::new("/w/.mcp.json ")));
+        assert!(controls_execution(Path::new("/w/.mcp.json::$DATA")));
+        assert!(controls_execution(Path::new("/w/CLAUDE.md:x")));
+        assert!(controls_execution(Path::new(
+            "/w/.claude::$INDEX_ALLOCATION/settings.json"
+        )));
         assert!(!controls_execution(Path::new("/w/claude.md.bak")));
         assert!(!controls_execution(Path::new("/w/.gitx/config")));
     }
