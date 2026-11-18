@@ -9,6 +9,29 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Cornacai: signing in from a terminal (claude-agent-acp)
+
+- **Claude's adapter can be signed in to from Cornacai.**
+  `claude-agent-acp` offers its sign-in methods only to a client that says
+  it runs terminal sign-ins (`clientCapabilities.auth.terminal`), and
+  Cornacai did not, so it offered none and Cornacai said only "Sign in
+  with the agent's own command". Cornacai now says it does when it starts
+  the agent: the sign-in prompt lists the agent's terminal methods
+  (*in this terminal*), and picking one gives the terminal to the agent's
+  own command with the method's arguments (`claude-agent-acp --cli auth
+  login --claudeai`), then sends what failed again. It does not call
+  `authenticate` for them, which the adapter refuses.
+  `Options::sign_in_command` sets the command (the launch command by
+  default; `None` offers none).
+- **An agent offering no usable sign-in is explained:** the notice lists
+  what it offered, with each method's description, and for the agents
+  Cornacai knows says how to sign in by hand (Claude: `claude`, then
+  `/login`, or `ANTHROPIC_API_KEY`; Gemini; Codex: `codex login`), then
+  that Ctrl+N opens a session (`config::sign_in_hint`).
+- rs-rich-acp: `ClientCapabilities::terminal_sign_in` and
+  `AuthCapabilities` (`auth.terminal`); `AuthMethod::args`, the arguments
+  of a `terminal` method, and `AuthMethod::in_terminal`.
+
 ### Versions: 0.1.0 opened
 
 - Every package moves to 0.1.0 after 0.0.27's publication, as the plan to

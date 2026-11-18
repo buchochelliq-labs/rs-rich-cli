@@ -539,7 +539,8 @@ fn signing_in_with_the_agents_method_then_the_failed_step_runs_again() {
     assert!(text.contains("1 Log in with the browser"), "{text}");
     assert!(text.contains("Opens a page to sign in"), "{text}");
     assert!(text.contains("2 Use an API key"), "{text}");
-    // A terminal sign-in is not offered: Cornacai does not advertise it.
+    // A terminal sign-in is not offered when there is no command to run it
+    // with (a replay has none).
     assert!(!text.contains("Log in from a terminal"), "{text}");
     driver.press("2");
     wait_for(&mut driver, "Signed in with Use an API key.", WAIT);
@@ -563,6 +564,58 @@ fn closing_the_sign_in_prompt_signs_in_with_nothing() {
     driver.press("escape");
     wait_for(&mut driver, "Not signed in", WAIT);
     assert!(screen(&driver).contains("waiting for the agent"));
+    finish(&mut driver, &handle);
+}
+
+#[test]
+fn a_terminal_sign_in_runs_the_agents_command_in_the_terminal_then_retries() {
+    let dir = workspace("signin-terminal");
+    let options = replay("signin_terminal.jsonl", &dir)
+        .sign_in_command(Some(vec!["claude-agent-acp".into()]));
+    let (mut driver, handle) = start_with(options);
+    wait_for(&mut driver, "The agent asks you to sign in", WAIT);
+    let text = screen(&driver);
+    assert!(text.contains("1 Claude Subscription"), "{text}");
+    assert!(text.contains("2 Anthropic Console"), "{text}");
+    assert!(text.contains("in this terminal"), "{text}");
+    driver.press("1");
+    // The terminal goes to the agent's own command with the method's
+    // arguments; authenticate is not called.
+    let start = std::time::Instant::now();
+    let handoff = loop {
+        driver.settle();
+        if let Some(handoff) = driver.take_handoff() {
+            break handoff;
+        }
+        assert!(start.elapsed() < WAIT, "no handoff: {}", screen(&driver));
+        std::thread::sleep(std::time::Duration::from_millis(20));
+    };
+    let program = handoff.command.get_program().to_string_lossy().into_owned();
+    assert!(program.contains("claude-agent-acp"), "{program}");
+    let args: Vec<String> = handoff
+        .command
+        .get_args()
+        .map(|a| a.to_string_lossy().into_owned())
+        .collect();
+    assert_eq!(args, ["--cli", "auth", "login", "--claudeai"]);
+    driver.handed_back(handoff, Ok(Some(0)));
+    wait_for(&mut driver, "Signed in with Claude Subscription.", WAIT);
+    wait_for(&mut driver, "Prompt", WAIT);
+    finish(&mut driver, &handle);
+}
+
+#[test]
+fn an_agent_offering_no_sign_in_is_explained() {
+    let dir = workspace("signin-none");
+    let (mut driver, handle) = start("signin_none.jsonl", &dir);
+    wait_for(&mut driver, "needs you to sign in first", WAIT);
+    let text = screen(&driver);
+    assert!(
+        text.contains("offers no way to sign in from here"),
+        "{text}"
+    );
+    assert!(text.contains("Ctrl+N"), "{text}");
+    assert!(!text.contains("The agent asks you to sign in"), "{text}");
     finish(&mut driver, &handle);
 }
 

@@ -489,11 +489,38 @@ impl core::marker::Unpin for rich_acp::AudioContent
 impl core::marker::UnsafeUnpin for rich_acp::AudioContent
 impl core::panic::unwind_safe::RefUnwindSafe for rich_acp::AudioContent
 impl core::panic::unwind_safe::UnwindSafe for rich_acp::AudioContent
+pub struct rich_acp::AuthCapabilities
+pub rich_acp::AuthCapabilities::terminal: bool
+impl core::clone::Clone for rich_acp::AuthCapabilities
+pub fn rich_acp::AuthCapabilities::clone(&self) -> rich_acp::AuthCapabilities
+impl core::cmp::Eq for rich_acp::AuthCapabilities
+impl core::cmp::PartialEq for rich_acp::AuthCapabilities
+pub fn rich_acp::AuthCapabilities::eq(&self, &rich_acp::AuthCapabilities) -> bool
+impl core::default::Default for rich_acp::AuthCapabilities
+pub fn rich_acp::AuthCapabilities::default() -> rich_acp::AuthCapabilities
+impl core::fmt::Debug for rich_acp::AuthCapabilities
+pub fn rich_acp::AuthCapabilities::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Copy for rich_acp::AuthCapabilities
+impl core::marker::StructuralPartialEq for rich_acp::AuthCapabilities
+impl serde_core::ser::Serialize for rich_acp::AuthCapabilities
+pub fn rich_acp::AuthCapabilities::serialize<__S>(&self, __S) -> core::result::Result<<__S as serde_core::ser::Serializer>::Ok, <__S as serde_core::ser::Serializer>::Error> where __S: serde_core::ser::Serializer
+impl<'de> serde_core::de::Deserialize<'de> for rich_acp::AuthCapabilities
+pub fn rich_acp::AuthCapabilities::deserialize<__D>(__D) -> core::result::Result<Self, <__D as serde_core::de::Deserializer>::Error> where __D: serde_core::de::Deserializer<'de>
+impl core::marker::Freeze for rich_acp::AuthCapabilities
+impl core::marker::Send for rich_acp::AuthCapabilities
+impl core::marker::Sync for rich_acp::AuthCapabilities
+impl core::marker::Unpin for rich_acp::AuthCapabilities
+impl core::marker::UnsafeUnpin for rich_acp::AuthCapabilities
+impl core::panic::unwind_safe::RefUnwindSafe for rich_acp::AuthCapabilities
+impl core::panic::unwind_safe::UnwindSafe for rich_acp::AuthCapabilities
 pub struct rich_acp::AuthMethod
+pub rich_acp::AuthMethod::args: alloc::vec::Vec<alloc::string::String>
 pub rich_acp::AuthMethod::description: core::option::Option<alloc::string::String>
 pub rich_acp::AuthMethod::id: rich_acp::AuthMethodId
 pub rich_acp::AuthMethod::kind: core::option::Option<alloc::string::String>
 pub rich_acp::AuthMethod::name: alloc::string::String
+impl rich_acp::AuthMethod
+pub fn rich_acp::AuthMethod::in_terminal(&self) -> bool
 impl core::clone::Clone for rich_acp::AuthMethod
 pub fn rich_acp::AuthMethod::clone(&self) -> rich_acp::AuthMethod
 impl core::cmp::PartialEq for rich_acp::AuthMethod
@@ -661,12 +688,14 @@ impl core::marker::UnsafeUnpin for rich_acp::CancelNotification
 impl core::panic::unwind_safe::RefUnwindSafe for rich_acp::CancelNotification
 impl core::panic::unwind_safe::UnwindSafe for rich_acp::CancelNotification
 pub struct rich_acp::ClientCapabilities
+pub rich_acp::ClientCapabilities::auth: rich_acp::AuthCapabilities
 pub rich_acp::ClientCapabilities::fs: rich_acp::FileSystemCapabilities
 pub rich_acp::ClientCapabilities::terminal: bool
 impl rich_acp::ClientCapabilities
 pub fn rich_acp::ClientCapabilities::allows(&self, &str) -> bool
 pub fn rich_acp::ClientCapabilities::none() -> rich_acp::ClientCapabilities
 pub fn rich_acp::ClientCapabilities::read_files(self, bool) -> rich_acp::ClientCapabilities
+pub fn rich_acp::ClientCapabilities::terminal_sign_in(self, bool) -> rich_acp::ClientCapabilities
 pub fn rich_acp::ClientCapabilities::terminals(self, bool) -> rich_acp::ClientCapabilities
 pub fn rich_acp::ClientCapabilities::write_files(self, bool) -> rich_acp::ClientCapabilities
 impl core::clone::Clone for rich_acp::ClientCapabilities

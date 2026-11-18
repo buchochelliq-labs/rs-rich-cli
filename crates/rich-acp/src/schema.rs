@@ -256,6 +256,24 @@ pub struct FileSystemCapabilities {
     pub write_text_file: bool,
 }
 
+/// How a client can help the user sign in.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AuthCapabilities {
+    /// The client runs an agent's `terminal` sign-in methods: the agent's
+    /// own command with the method's [`args`](AuthMethod::args), in a
+    /// terminal the user types in. Agents leave such methods out unless
+    /// it is offered.
+    #[serde(default)]
+    pub terminal: bool,
+}
+
+impl AuthCapabilities {
+    fn is_none(&self) -> bool {
+        *self == AuthCapabilities::default()
+    }
+}
+
 /// What a client offers the agent. The default offers nothing: every
 /// capability is opt-in.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default, Serialize, Deserialize)]
@@ -267,6 +285,10 @@ pub struct ClientCapabilities {
     /// All the `terminal/*` methods.
     #[serde(default)]
     pub terminal: bool,
+    /// Sign-in help ([`AuthCapabilities`]); left out of the message when
+    /// none is offered.
+    #[serde(default, skip_serializing_if = "AuthCapabilities::is_none")]
+    pub auth: AuthCapabilities,
 }
 
 impl ClientCapabilities {
@@ -290,6 +312,13 @@ impl ClientCapabilities {
     /// Offer the `terminal/*` methods.
     pub fn terminals(mut self, on: bool) -> ClientCapabilities {
         self.terminal = on;
+        self
+    }
+
+    /// Offer to run the agent's `terminal` sign-in methods
+    /// ([`AuthCapabilities::terminal`]).
+    pub fn terminal_sign_in(mut self, on: bool) -> ClientCapabilities {
+        self.auth.terminal = on;
         self
     }
 
@@ -391,6 +420,19 @@ pub struct AuthMethod {
     /// `authenticate`) or `terminal`.
     #[serde(rename = "type", default, skip_serializing_if = "Option::is_none")]
     pub kind: Option<String>,
+    /// For a `terminal` method: the arguments to run the agent's own
+    /// command with, in a terminal, for the user to sign in. The client
+    /// then retries what needed it; it does not call `authenticate`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub args: Vec<String>,
+}
+
+impl AuthMethod {
+    /// Whether the client runs it in a terminal (`type` `terminal`),
+    /// rather than the agent through `authenticate`.
+    pub fn in_terminal(&self) -> bool {
+        self.kind.as_deref() == Some("terminal")
+    }
 }
 
 /// `initialize`'s result.

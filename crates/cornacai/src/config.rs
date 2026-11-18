@@ -198,6 +198,23 @@ pub const KNOWN_AGENTS: &[KnownAgent] = &[
     },
 ];
 
+/// How a known agent's user signs in by themselves, outside Cornacai, for
+/// an agent that offers no sign-in Cornacai can run: by the program's
+/// file name (with or without a path or an extension such as `.cmd`).
+pub fn sign_in_hint(program: &str) -> Option<&'static str> {
+    // Either separator: a Windows path is read on any system.
+    let file = program.rsplit(['/', '\\']).next().unwrap_or(program);
+    let name = file.split_once('.').map_or(file, |(stem, _)| stem);
+    match name {
+        "claude-agent-acp" | "claude-code-acp" => {
+            Some("run `claude` in a terminal and type `/login` (or set ANTHROPIC_API_KEY)")
+        }
+        "gemini" => Some("run `gemini` in a terminal and choose how to sign in"),
+        "codex-acp" | "codex" => Some("run `codex login` in a terminal"),
+        _ => None,
+    }
+}
+
 /// rs-rich-cli's plugin install directory, where `rich plugin install`
 /// records the marketplace's agents: `RICH_PLUGIN_DIR`, else
 /// `%LOCALAPPDATA%\\rich\\plugins` on Windows, else
@@ -388,6 +405,18 @@ mod tests {
             |p: &Path| files.iter().any(|f| Path::new(f) == p),
         )
         .map(|p| p.display().to_string())
+    }
+
+    #[test]
+    fn known_agents_say_how_to_sign_in() {
+        assert!(sign_in_hint("claude-agent-acp").unwrap().contains("/login"));
+        assert!(
+            sign_in_hint("C:\\npm\\claude-agent-acp.cmd")
+                .unwrap()
+                .contains("/login")
+        );
+        assert!(sign_in_hint("/usr/bin/gemini").is_some());
+        assert_eq!(sign_in_hint("my-agent"), None);
     }
 
     #[test]
