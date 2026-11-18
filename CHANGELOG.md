@@ -9,6 +9,32 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## 0.0.27 cohort — to be published
+
+To be published from `main` by one `release.yml` run on rab v2.1.2 (tag
+`release-0.0.27`): core 0.0.17 / macros 0.0.11 / plugin API 0.0.11 /
+art 0.0.20 / diagram 0.0.10 / mermaid 0.0.13 / lumis 0.0.11 / ext 0.0.24 /
+micro 0.0.13 / record 0.0.15 / interact 0.0.15 / ratatui 0.0.12 /
+intuituive 0.0.12 / embed 0.0.10 / web 0.0.10 / data 0.0.11 /
+marketplace 0.0.6 / acp 0.0.4 / noctiluca 0.0.6 / cornacai 0.0.4 /
+CLI 0.0.27, and `rs-rich` 0.0.15 on PyPI. The last point release before
+0.1.0's API review: Noctiluca's video is smooth with a release build
+(Kitty's frame intervals p95 44.9 ms, no frame blanks its region), the
+browser recovers when Chrome exits or a page crashes, shop and chat pages
+read better, and 0.0.26's real-site faults #889, #891 and #892 and #884's
+overlay redraws are fixed; intuiTUIve gains widgets for clicks, notices,
+steps and toasts. See [the release notes](docs/releases/0.0.27.md).
+
+### Dependencies: security fixes in the lockfiles
+
+- `rustls-webpki` 0.103.17 (RUSTSEC-2026-0382, distrusted intermediates
+  accepted) and `webpki-roots` 1.0.12 (RUSTSEC-2026-0381) in the
+  workspace and rs-rich-py; `pulldown-cmark` 0.13.6 (RUSTSEC-2026-0414 and
+  -0433, wikilink parsing) and `rustix` 1.1.6 (RUSTSEC-2026-0486) in
+  rs-rich-py, the fuzz targets and the playground. Patch updates only;
+  `cargo audit` reports none of them now. `chrono` is flagged unmaintained
+  (RUSTSEC-2026-0543), with no replacement release yet.
+
 ### Releases: the old release path is retired
 
 - 0.0.26 was the first release rab published in full, crates and PyPI in
@@ -68,6 +94,12 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   (`PageState::crashed`) and fails the calls waiting on it at once, where
   each waited 30 seconds and froze the tab; Noctiluca says "The page
   crashed" with the key that reloads it, and the reload brings it back.
+- **Video frames come through after the browser is restarted.**
+  `ChromeEngine::restart` kept the count of screencast restarts the app
+  had asked for, while the new browser numbered its own from one again,
+  so after the first change of the screencast's area or scale every frame
+  was dropped as painted before it, and a playing video fell back to
+  screenshots. Both counts start again with the new browser.
 - **Only the page's own detach ends the engine.** A
   `Target.detachedFromTarget` for another target (a worker, another page)
   no longer ends the session of a live browser.
@@ -83,14 +115,30 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   falling back to screenshots at 4 to 5 frames a second for seconds. Tested
   on a new watch-page fixture (`tests/fixtures/watch.html`, a 30 fps test
   card in a player whose clock the page updates).
-- A live video on a busy page keeps drawing (#890): when a region playing
-  on screen gets no frame for two seconds, the tab starts the screencast
-  again, of the whole viewport, for a few seconds before it tries the
-  region's area again; and the status line says `STALLED` instead of
-  `PLAYING` over a picture whose frames stopped. rs-rich-embed: a restart
-  of the screencast that Chrome refuses no longer drops every frame after
-  it. Tested on a new busy-stream fixture (`tests/fixtures/busy-stream.html`,
-  a playing video beside a chat that never rests and moves it).
+- **A live stream's video no longer freezes after a few seconds (#890).**
+  The cause, found on a busy Twitch channel: a reading that came with the
+  player's overlay frame (the extensions layer, an `<iframe>` as big as
+  the video) counted that frame as a picture that covers what is under
+  it, so the video was dropped from the view, the tab was told it was off
+  screen, and the screencast stopped for good while the status line
+  still said `PLAYING`. A frame (`<iframe>`, `<embed>`, `<object>`) now
+  covers only when its own box is opaque (its document is transparent
+  otherwise); a box over two pictures as big as each other lies over the
+  one painted last (the video, not the poster it hides), so the overlay
+  takes no rows; and a video counts as on screen when the rows it was
+  placed on are in view, where a row of a chat that scrolls on its own
+  could set the view's bottom thousands of pixels up. On xQc's channel
+  frames now run for the whole 80 s check at about 20 a second, where
+  they stopped after 8 to 17 s. `NOCTILUCA_TRACE` writes `on_screen` and
+  `cast_on` lines when the regions or the screencast change.
+- A region playing on screen that gets no frame for two seconds has the
+  screencast started again, of the whole viewport, for a few seconds
+  before the region's area is tried again, and the status line says
+  `STALLED` instead of `PLAYING` over a picture whose frames stopped.
+  rs-rich-embed: a restart of the screencast that Chrome refuses no
+  longer drops every frame after it. Tested on a busy-stream fixture
+  (`tests/fixtures/busy-stream.html`). `NOCTILUCA_TRACE` writes a
+  `read_refused` line when a reading of the page is refused.
 - Video frames are paced by the video's own clock: Chrome's frame stamps
   set the slots, the spacing is a whole number of the video's frames (a
   24 fps video shows at 24 or 12 a second, not on a 30 Hz clock that holds

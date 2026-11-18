@@ -1,9 +1,9 @@
 {
   "tape": "docs/tapes/palette.tape",
   "tape_fnv1a64": "7788be93925c9e9e",
-  "recorder": "rs-rich-record 0.0.1",
+  "recorder": "rs-rich-record 0.0.15",
   "rich": null,
-  "commit": "8a8de8848cdee7e8b31f34696d97a3893954a7bb",
+  "commit": "0a17e549dca220724a2b85aed3f04b95706bb4a8",
   "screenshots": [
     "palette",
     "search",

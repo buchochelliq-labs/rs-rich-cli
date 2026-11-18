@@ -1,9 +1,9 @@
 {
   "tape": "docs/tapes/align.tape",
   "tape_fnv1a64": "659f2f757016c304",
-  "recorder": "rs-rich-record 0.0.7",
+  "recorder": "rs-rich-record 0.0.15",
   "rich": null,
-  "commit": "208d350b1fd49953e8555b5c5323e6d97a7242d3",
+  "commit": "0a17e549dca220724a2b85aed3f04b95706bb4a8",
   "screenshots": [
     "stretch",
     "center",

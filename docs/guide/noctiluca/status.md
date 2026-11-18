@@ -3,9 +3,34 @@
 Noctiluca grows in phases, each unlocked by what people use a browser in a
 terminal for. The phases and their tests are in
 [the design note](../../design/browser.md#phases). This page says what the
-0.0.22 to 0.0.25 releases have, what 0.0.26 adds, and what comes next.
+0.0.22 to 0.0.26 releases have, what 0.0.27 adds, and what comes next.
 
-## Coming in 0.0.26 (Noctiluca 0.0.5): steady video, sound on
+## Coming in 0.0.27 (Noctiluca 0.0.6): smooth video, a browser that recovers
+
+Measured in [the 0.0.27 findings](../../design/noctiluca-0027-findings.md#after-the-fixes-a-release-build-2026-11-18)
+and [the real-site check](../../releases/0.0.27.md#noctiluca-on-real-sites).
+
+| Works | Notes |
+|---|---|
+| Smooth video | Kitty's frame intervals have a p95 of 44.9 ms on the watch page with a release build; no frame blanks its region in any protocol. Done |
+| Live streams | A player's overlay frame no longer hides its video (#890); a busy channel plays for minutes. Done |
+| The browser recovers | Chrome exiting or a page crashing is said once, with the key that restarts or reloads it. Done |
+| Media keys and live chat | Never a source-less `<video>` (#889); the chat log keeps taking lines (#891) and `{` holds it (#892). Done |
+| Shops and chat | Native ratings, grids that push what follows down, and the `badge-text`, `one-row-bars` and `fold-labels` adaptations. Done |
+
+### Known limits in 0.0.27
+
+- **Busy live pages** pause for 1 to 2.5 s now and then; the frames come
+  back by themselves.
+- **Headless Chrome** can leave a video at its first seconds (Commons'
+  *Big Buck Bunny* player, one run in three played); Noctiluca's keys
+  wait on it.
+- **Chat badges** read as their names, which makes a busy chat wordy;
+  `--adapt=-badge-text` draws them as pictures.
+- **Also seen, as in 0.0.26:** CodeMirror examples read as one line; the
+  reader view starts with the page's header.
+
+## In 0.0.26 (Noctiluca 0.0.5): steady video, sound on
 
 Measured in [Noctiluca's video and readings](../../design/noctiluca-youtube-perf.md).
 

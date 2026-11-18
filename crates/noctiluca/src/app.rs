@@ -6,7 +6,7 @@
 //! to the app's thread through a proxy, into signals the nodes read.
 
 use std::cell::RefCell;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
 use std::sync::Arc;
 use std::sync::mpsc;
@@ -1112,28 +1112,57 @@ fn accepts_frame(pacing: &Pacing, shown: Option<&Live>, node: NodeId, live: &Liv
 }
 
 /// The moving regions the view shows (videos, and canvases, which the
-/// tab watches as live regions): those whose box meets the page's rows in
-/// view.
+/// tab watches as live regions): those the projection placed on the rows
+/// in view, or in a pinned or docked strip; one it did not place, when its
+/// box meets the page's rows in view.
+///
+/// The rows' page positions bound the view only roughly: a row from a box
+/// that scrolls on its own (a live chat's lines) has the position of its
+/// line in that box, which can be far above the rows around it. Taken as
+/// the view's bottom, it put a playing video at the top out of view, and
+/// its frames stopped while the status line still said it played (#890).
 fn regions_on_screen(b: Browser) -> Vec<NodeId> {
     let rows = b.viewport.get().1 as usize;
     let first = b.scroll.get() as usize;
-    let (top, bottom) = b.layout.with(|l| {
+    let (top, bottom, placed, shown) = b.layout.with(|l| {
         let top = if first == 0 { 0.0 } else { l.y_of(first) };
         let bottom = if first.saturating_add(rows) >= l.lines.len() {
             f64::MAX
         } else {
             l.y_of(first + rows)
         };
-        (top, bottom)
+        let view = first..first.saturating_add(rows);
+        let strips = [l.pinned.as_deref(), l.docked.as_deref()];
+        let placed: HashSet<usize> = l
+            .regions
+            .iter()
+            .chain(strips.iter().flatten().flat_map(|s| s.regions.iter()))
+            .map(|r| r.media)
+            .collect();
+        let shown: HashSet<usize> = l
+            .regions
+            .iter()
+            .filter(|r| r.row < view.end && r.row + r.rows > view.start)
+            .chain(strips.iter().flatten().flat_map(|s| s.regions.iter()))
+            .map(|r| r.media)
+            .collect();
+        (top, bottom, placed, shown)
     });
     b.page.with(|p| {
         p.as_ref()
             .map(|p| {
                 p.media
                     .iter()
-                    .filter(|m| matches!(m.kind, MediaKind::Video | MediaKind::Canvas))
-                    .filter(|m| m.rect.bottom() > top && m.rect.y < bottom)
-                    .map(|m| m.node)
+                    .enumerate()
+                    .filter(|(_, m)| matches!(m.kind, MediaKind::Video | MediaKind::Canvas))
+                    .filter(|(i, m)| {
+                        if placed.contains(i) {
+                            shown.contains(i)
+                        } else {
+                            m.rect.bottom() > top && m.rect.y < bottom
+                        }
+                    })
+                    .map(|(_, m)| m.node)
                     .collect()
             })
             .unwrap_or_default()

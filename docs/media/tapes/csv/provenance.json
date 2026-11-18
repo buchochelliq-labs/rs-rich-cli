@@ -1,9 +1,9 @@
 {
   "tape": "docs/tapes/csv.tape",
   "tape_fnv1a64": "95ff31648060c6d6",
-  "recorder": "rs-rich-record 0.0.8",
+  "recorder": "rs-rich-record 0.0.15",
   "rich": null,
-  "commit": "ccd07318b9ae711e37ea54124c1655ca77c30bd8",
+  "commit": "0a17e549dca220724a2b85aed3f04b95706bb4a8",
   "screenshots": [
     "table",
     "find",

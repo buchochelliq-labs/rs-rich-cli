@@ -3583,7 +3583,13 @@ fn tidy_origins(runs: &mut Vec<Run>, mut origins: Option<&mut Origins>) {
 /// pixels.
 const TOUCH: f64 = 24.0;
 /// The tags whose box is a picture: one covers what lies wholly under it.
-const PICTURE_TAGS: &[&str] = &["IMG", "VIDEO", "CANVAS", "SVG", "IFRAME", "EMBED", "OBJECT"];
+/// The pictures that cover what is under them. A frame (`IFRAME`, `EMBED`,
+/// `OBJECT`) is not one: its document is transparent unless it paints a
+/// background, so it covers only when its own box is opaque. A player's
+/// overlay frame (a live stream's extensions layer, as big as the video)
+/// covered the video, which was then dropped from the view and its frames
+/// stopped (#890).
+const PICTURE_TAGS: &[&str] = &["IMG", "VIDEO", "CANVAS", "SVG"];
 /// The most covering boxes looked at, the largest first.
 const MAX_COVERS: usize = 1024;
 
@@ -3905,12 +3911,21 @@ fn stack(dom: &Dom, ax: &Ax<'_>, page: &mut Page) {
         block.stack.over = media
             .iter()
             .filter(|(m, by, mo)| {
+                // As big as the picture counts, to holds' pixel (a
+                // player's overlay frame is its video's box, rounded),
+                // but only over one painted strictly before it: two boxes
+                // as big as each other in one paint order would each lie
+                // over the other, and neither would be drawn.
+                let larger = area(by) > area(&rect);
                 page.media[*m].node != block.node
-                    && mo.is_some_and(|mo| mo <= o)
-                    && area(by) > area(&rect)
+                    && mo.is_some_and(|mo| if larger { mo <= o } else { mo < o })
+                    && area(by) >= area(&rect) * 0.99
                     && holds(*by, rect)
             })
-            .min_by(|a, b| area(&a.1).total_cmp(&area(&b.1)))
+            // The smallest; of pictures as big, the one painted last: a
+            // player's video over its poster image, not the poster it
+            // hides (#890).
+            .min_by(|a, b| area(&a.1).total_cmp(&area(&b.1)).then(b.2.cmp(&a.2)))
             .map(|(m, _, _)| *m);
     }
     // Preserve ordinary blocks above a fixed surface that can overlap it

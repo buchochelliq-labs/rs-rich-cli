@@ -27,7 +27,7 @@ jobs:
   live:
     name: install from the live marketplace
     if: github.ref == 'refs/heads/main'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 45
     steps:
       - name: Is the marketplace signed yet?

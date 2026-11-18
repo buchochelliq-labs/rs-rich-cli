@@ -1,9 +1,9 @@
 {
   "tape": "docs/tapes/micro-modes.tape",
   "tape_fnv1a64": "36982c2494ad2a9a",
-  "recorder": "rs-rich-record 0.0.2",
+  "recorder": "rs-rich-record 0.0.15",
   "rich": null,
-  "commit": "61c002edd4924ccd4bb4cf4b82dec44836a5eb36",
+  "commit": "0a17e549dca220724a2b85aed3f04b95706bb4a8",
   "screenshots": [
     "modes"
   ],

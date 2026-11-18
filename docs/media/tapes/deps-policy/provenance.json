@@ -1,9 +1,9 @@
 {
   "tape": "docs/tapes/deps-policy.tape",
   "tape_fnv1a64": "c4151e43061bbe1e",
-  "recorder": "rs-rich-record 0.0.7",
+  "recorder": "rs-rich-record 0.0.15",
   "rich": null,
-  "commit": "5fa8d96bef3ed1883e43b90ea909a863ee4ebdc4",
+  "commit": "0a17e549dca220724a2b85aed3f04b95706bb4a8",
   "screenshots": [
     "sizes",
     "baseline",
