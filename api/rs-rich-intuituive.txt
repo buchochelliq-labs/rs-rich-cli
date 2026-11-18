@@ -3261,6 +3261,8 @@ pub fn intuituive::node::Node::notice_closes(self, bool) -> intuituive::node::No
 pub fn intuituive::node::Node::notice_level(self, intuituive::Level) -> intuituive::node::Node
 pub fn intuituive::node::Node::notice_open(self, intuituive::reactive::Signal<bool>) -> intuituive::node::Node
 impl intuituive::node::Node
+pub fn intuituive::node::Node::on_board_move(self, impl core::ops::function::FnMut(intuituive::BoardMove, &mut intuituive::app::Ctx) + 'static) -> intuituive::node::Node
+impl intuituive::node::Node
 pub fn intuituive::node::Node::on_mixed(self, intuituive::CheckState) -> intuituive::node::Node
 impl intuituive::node::Node
 pub fn intuituive::node::Node::on_remove(self, impl core::ops::function::FnMut(&mut intuituive::app::Ctx) + 'static) -> intuituive::node::Node
@@ -4646,6 +4648,8 @@ pub fn intuituive::node::Node::notice_action(self, &str, impl core::ops::functio
 pub fn intuituive::node::Node::notice_closes(self, bool) -> intuituive::node::Node
 pub fn intuituive::node::Node::notice_level(self, intuituive::Level) -> intuituive::node::Node
 pub fn intuituive::node::Node::notice_open(self, intuituive::reactive::Signal<bool>) -> intuituive::node::Node
+impl intuituive::node::Node
+pub fn intuituive::node::Node::on_board_move(self, impl core::ops::function::FnMut(intuituive::BoardMove, &mut intuituive::app::Ctx) + 'static) -> intuituive::node::Node
 impl intuituive::node::Node
 pub fn intuituive::node::Node::on_mixed(self, intuituive::CheckState) -> intuituive::node::Node
 impl intuituive::node::Node
@@ -8019,6 +8023,27 @@ impl core::marker::Unpin for intuituive::app::App
 impl core::marker::UnsafeUnpin for intuituive::app::App
 impl !core::panic::unwind_safe::RefUnwindSafe for intuituive::app::App
 impl !core::panic::unwind_safe::UnwindSafe for intuituive::app::App
+pub struct intuituive::BoardMove
+pub intuituive::BoardMove::from: (usize, usize)
+pub intuituive::BoardMove::to: (usize, usize)
+impl intuituive::BoardMove
+pub fn intuituive::BoardMove::apply<T>(&self, &mut [alloc::vec::Vec<T>])
+impl core::clone::Clone for intuituive::BoardMove
+pub fn intuituive::BoardMove::clone(&self) -> intuituive::BoardMove
+impl core::cmp::Eq for intuituive::BoardMove
+impl core::cmp::PartialEq for intuituive::BoardMove
+pub fn intuituive::BoardMove::eq(&self, &intuituive::BoardMove) -> bool
+impl core::fmt::Debug for intuituive::BoardMove
+pub fn intuituive::BoardMove::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Copy for intuituive::BoardMove
+impl core::marker::StructuralPartialEq for intuituive::BoardMove
+impl core::marker::Freeze for intuituive::BoardMove
+impl core::marker::Send for intuituive::BoardMove
+impl core::marker::Sync for intuituive::BoardMove
+impl core::marker::Unpin for intuituive::BoardMove
+impl core::marker::UnsafeUnpin for intuituive::BoardMove
+impl core::panic::unwind_safe::RefUnwindSafe for intuituive::BoardMove
+impl core::panic::unwind_safe::UnwindSafe for intuituive::BoardMove
 pub struct intuituive::BorderSet
 pub intuituive::BorderSet::bottom: &'static str
 pub intuituive::BorderSet::bottom_left: &'static str
@@ -9273,6 +9298,8 @@ pub fn intuituive::node::Node::notice_closes(self, bool) -> intuituive::node::No
 pub fn intuituive::node::Node::notice_level(self, intuituive::Level) -> intuituive::node::Node
 pub fn intuituive::node::Node::notice_open(self, intuituive::reactive::Signal<bool>) -> intuituive::node::Node
 impl intuituive::node::Node
+pub fn intuituive::node::Node::on_board_move(self, impl core::ops::function::FnMut(intuituive::BoardMove, &mut intuituive::app::Ctx) + 'static) -> intuituive::node::Node
+impl intuituive::node::Node
 pub fn intuituive::node::Node::on_mixed(self, intuituive::CheckState) -> intuituive::node::Node
 impl intuituive::node::Node
 pub fn intuituive::node::Node::on_remove(self, impl core::ops::function::FnMut(&mut intuituive::app::Ctx) + 'static) -> intuituive::node::Node
@@ -10200,6 +10227,7 @@ pub fn intuituive::bar_chart_with(impl core::ops::function::Fn() -> alloc::vec::
 pub fn intuituive::bar_spectrum(impl core::ops::function::Fn() -> alloc::vec::Vec<f64> + 'static) -> intuituive::node::Node
 pub fn intuituive::bar_spectrum_with(impl core::ops::function::Fn() -> alloc::vec::Vec<f64> + 'static, impl core::ops::function::Fn(rich_ext::chart::bar_spectrum::BarSpectrum) -> rich_ext::chart::bar_spectrum::BarSpectrum + 'static) -> intuituive::node::Node
 pub fn intuituive::big_text(impl core::ops::function::Fn() -> alloc::string::String + 'static) -> intuituive::node::Node
+pub fn intuituive::board(impl core::ops::function::Fn() -> alloc::vec::Vec<alloc::string::String> + 'static, impl core::ops::function::Fn() -> alloc::vec::Vec<alloc::vec::Vec<alloc::string::String>> + 'static) -> intuituive::node::Node
 pub fn intuituive::button(impl core::convert::Into<alloc::string::String>, impl core::ops::function::FnMut(&mut intuituive::app::Ctx) + 'static) -> intuituive::node::Node
 pub fn intuituive::button_of(impl core::ops::function::Fn() -> alloc::string::String + 'static, impl core::ops::function::FnMut(&mut intuituive::app::Ctx) + 'static) -> intuituive::node::Node
 pub fn intuituive::carousel(impl core::ops::function::Fn() -> usize + 'static, intuituive::reactive::Signal<usize>, impl core::ops::function::Fn(usize) -> intuituive::node::Node + 'static) -> intuituive::node::Node

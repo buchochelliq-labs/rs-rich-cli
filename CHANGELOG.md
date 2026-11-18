@@ -9,6 +9,17 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### intuiTUIve: a board (#905)
+
+- **`board(columns, cards)`**: columns side by side, each a stack of
+  boxed markup cards scrolling on its own. Alt+←/→ (or `H`/`L`) move the
+  selected card to the next column and Alt+↑/↓ (`K`/`J`) within its
+  column; Space grabs and the arrows carry, Esc puts it back; a mouse drag
+  carries it. Each move goes to `.on_board_move` as a `BoardMove` for the
+  app to apply (`BoardMove::apply`). A narrow terminal shows fewer columns
+  and pages the rest. A screen reader hears the card's column and place,
+  and each move is announced. The kit example opens one with `b`.
+
 ### intuiTUIve: charts with a cursor (#903)
 
 - **`line_chart`, `bar_chart` and `heatmap`** in the `viz` plugin:

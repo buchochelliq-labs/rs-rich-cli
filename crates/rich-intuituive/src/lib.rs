@@ -99,6 +99,7 @@ mod bars;
 #[cfg(feature = "art")]
 mod big_text;
 mod bindings;
+mod board;
 pub mod border;
 mod builtin;
 mod calendar;
@@ -218,6 +219,7 @@ pub use app::{
 #[cfg(feature = "art")]
 pub use big_text::big_text;
 pub use bindings::{ModePage, Scaled, Stepped};
+pub use board::{BoardMove, board};
 pub use border::{Border, BorderSet, Edge, Shadow, Sides};
 pub use carousel::carousel;
 #[cfg(feature = "viz")]

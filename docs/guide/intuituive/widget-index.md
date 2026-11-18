@@ -74,6 +74,7 @@ from an off-by-default feature name it: `art`, `micro`, `viz`, `files` and
 
 | | Widget | Constructor | What it is |
 |---|---|---|---|
+| ![](../../assets/intuituive/widgets/grid.svg){ .tui-icon width="20" } | [board](widgets.md#a-board) | `board`, `BoardMove` | Columns of cards moved within and between them by keys and the mouse |
 | ![](../../assets/intuituive/widgets/list.svg){ .tui-icon width="20" } | [list](lists.md#lists) | `list`, `list_optional` | Rows with a cursor |
 | ![](../../assets/intuituive/widgets/virtual_list.svg){ .tui-icon width="20" } | [virtual_list](lists.md#trees-split-panes-and-virtual-lists) | `virtual_list`, `list_lazy` | A list that draws only the rows on screen |
 | ![](../../assets/intuituive/widgets/list_search.svg){ .tui-icon width="20" } | [list_search](lists.md#picking-several-items-and-finding-in-a-list) | `list_search` | Finding in a list as you type |

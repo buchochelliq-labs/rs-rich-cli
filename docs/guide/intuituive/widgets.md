@@ -234,6 +234,35 @@ color_picker(accent)              // a Signal<Color>, set as it changes
   it is the hex field alone. A screen reader hears a slider, `Colour`,
   valued `#ff0000 red`. The kit example opens one with `c`.
 
+### A board
+
+```rust
+use intuituive::{board, BoardMove};
+
+let cards = signal(vec![vec!["Write".to_string()], vec![], vec![]]);
+board(|| vec!["Todo".into(), "Doing".into(), "Done".into()], move || cards.get())
+    .on_board_move(move |step: BoardMove, _| cards.update(|c| step.apply(c)))
+```
+
+- **`board(columns, cards)`** lays the columns side by side, each a stack
+  of its cards (markup, each in a box, wrapped to the column), scrolling
+  on its own to keep the selected card in view. Narrower than 18 cells a
+  column, fewer columns show and the rest are paged, with `‹` and `›` on
+  the title row.
+- ← → ↑ ↓ (or `h` `l` `k` `j`) select. Alt+← and Alt+→ (`H`, `L`) move the
+  selected card to the next column, at its place there; Alt+↑ and Alt+↓
+  (`K`, `J`) move it within its column. Space grabs it, the arrows carry
+  it, Space drops it and Esc puts it back. A mouse drag carries it too.
+- Each move goes to **`.on_board_move(|step, cx| ..)`** as a `BoardMove`
+  (`from` and `to`, each a column and an index) for the app to make in
+  its own cards with `step.apply(&mut columns)`; without it the cards do
+  not move.
+- Titles are in `board.title`, boxes in `board.card`, the selected one in
+  `board.selected`, a carried card marked `↕`. A screen reader hears a
+  grid valued by the selected card (`Doing, card 2 of 3: Review`), and
+  each move is announced (`Moved to Done, 1 of 1`). The kit example opens
+  one with `b`.
+
 ### A pager strip
 
 `pager(page, || pages)` shows which page a `Signal<usize>` is on, from 0,
