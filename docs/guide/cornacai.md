@@ -90,7 +90,8 @@ Cornacai are kept inside.
 - **The plan,** when the agent has one, above the prompt: `✓` done, `▸`
   under way, `○` to do. Each plan update replaces it whole.
 - **The prompt,** which grows to six rows, then scrolls; its title says
-  whether the agent is working and the session's mode.
+  whether the agent is working and the session's mode, by the name the
+  agent gives it, with the keys that change it.
 
 ## Keys
 
@@ -101,6 +102,8 @@ Cornacai are kept inside.
 | Up, Down on the prompt's first or last line | Earlier prompts, this session's |
 | `@` | Complete a file or directory of the workspace |
 | Esc | Cancel the running turn |
+| Shift+Tab | The session's next mode |
+| Alt+M | Choose the session's mode from a list |
 | Ctrl+N | A new session |
 | Ctrl+O | Reopen an earlier session of this agent in this workspace |
 | Alt+N, Alt+P, Alt+1 … Alt+9 | The next, the previous, or the numbered session |
@@ -125,11 +128,31 @@ it. Cornacai guards what the agent asks the *client* to do, and shows you
 the rest.
 
 - **Permission prompts.** Every `session/request_permission` opens a
-  prompt: what the agent wants to do (from the tool's kind), its title
-  marked as the agent's own words, the files and the command in full, and
-  one button per option the agent offers, numbered 1 to 9. Esc rejects
-  once. "Always" choices are the agent's to remember; Cornacai keeps no
-  allow-list of its own.
+  prompt. It leads with what will happen, in words: "Edit src/app.rs: 12
+  lines added, 3 removed", "Run `cargo test` in DIR", "Read notes.md",
+  "Fetch URL". Then why, in the agent's own words: the last paragraph or
+  two it wrote in this turn before the tool call (or, when it wrote
+  nothing, a `description` its tool's input carries). Then one button per
+  option the agent offers, numbered 1 to 9, each listed with what it
+  means: once (it asks again next time), always (it stops asking for
+  this; the agent keeps the choice, usually for the session), or refuse.
+  Last, dimmed, the technical detail: the agent's title for the call, the
+  files and the command in full. Esc rejects once. "Always" choices are
+  the agent's to remember; Cornacai keeps no allow-list of its own.
+- **Changes in a permission prompt.** Some agents (Claude's adapter is
+  one) apply their edits themselves, after asking; the request then
+  carries the change as a diff, which the prompt shows, to be taken or
+  left whole: `y` accepts the change (the agent's allow-once option), `x`
+  or Esc rejects it, and the numbers pick any of the agent's options
+  ("allow all edits during this session", say). `n` and `p` move between
+  its hunks. A permission is all or nothing, so `a`, `r`, `A` and `R` only
+  say so; an edit the agent writes through Cornacai (below) is reviewed
+  hunk by hunk.
+- **Changes made without asking.** In a mode that accepts edits, or once
+  you chose an "always" option, the agent asks nothing and its change
+  shows only in the conversation. Its card then says so: "applied
+  without asking, in Accept edits mode", or "applied without asking: you
+  chose “Yes, allow all edits during this session” earlier".
 - **Edits.** Every `fs/write_text_file` opens the file's text and the
   agent's as a diff. `n` and `p` move between hunks, `a` and `r` accept or
   reject the one under the cursor, `A` and `R` all of them; the last
@@ -160,6 +183,21 @@ in command output are neutralised, so it cannot move the cursor or retitle
 the terminal, and characters that hide or reorder text (bidirectional
 controls, zero-width characters, tags) are shown as `<U+202E>` in titles,
 paths, commands and options.
+
+## Modes
+
+Agents that have modes (Claude's adapter: Manual, Accept edits, Plan,
+Auto, Bypass permissions) say which ones when a session opens. The
+prompt's title names the current one; Shift+Tab moves to the next, and
+Alt+M lists them with what each does, to pick one. Cornacai asks the
+agent (`session/set_mode`) and shows the new mode once it agrees; if it
+refuses, a notice says why and the mode stays. The agent can change the
+mode itself, too, and the title follows.
+
+When the agent offers a plan mode, the hints name it. In plan mode the
+agent works out a plan and changes nothing; when it is ready it asks to
+leave plan mode, and that prompt shows the plan, as Markdown, with the
+agent's options (to start in which mode, or to keep planning).
 
 ## The shell pane
 

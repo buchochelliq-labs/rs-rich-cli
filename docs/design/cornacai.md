@@ -112,7 +112,8 @@ anything specific to agents stays in the app.
 | Thoughts and tool calls as folded entries whose title and status change live (a tool call goes pending, in progress, completed or failed) | `collapsible`'s live title, status slot and summary | #804 |
 | The prompt: Enter submits, Shift+Enter or Alt+Enter adds a line, history, grows to a few rows, `@` opens a fuzzy file picker | `text_area` with `complete_at`, `history`, `grow` and the submit key; the `@` file completer from the `files` plugin (`files::miller` and `rich filter`'s fuzzy matcher) | #800 |
 | A diff of each edit, hunk by hunk, with accept and reject | the interactive diff node on rs-rich-ext's `DiffView`, fed by ACP's `diff` tool-call content (`path`, `oldText`, `newText`) | #799 |
-| Permission prompts | intuiTUIve dialogs, one button per `PermissionOption` | exists |
+| Permission prompts | intuiTUIve dialogs, one button per `PermissionOption`; a request carrying a `diff` shows it with the diff node, taken or left whole | exists |
+| Session modes | the prompt's title; Shift+Tab and a `pick` list calling `session/set_mode` | exists |
 | The plan | a list of the entries with their status and priority, replaced whole on each `plan` update, as the spec says | exists |
 | Tool output | `Log` with renderables | #802 |
 | Themes | the theme system and `--theme` | #801 |
@@ -166,9 +167,15 @@ agent asks the *client* to do, and be honest about the rest.
    the session's.
 3. **Permission prompts, no auto-approve by default.** Every
    `session/request_permission` is shown to the user. The prompt describes
-   the operation from the tool call's `kind`, `locations` and content, shows
-   commands and paths in full, and marks the title and option names as the
-   agent's own words. "Always" choices are the agent's to remember, per the
+   the operation in words from the tool call's `kind`, `locations`, content
+   and raw input (the change and its size, the command and its directory),
+   quotes the agent's last message of the turn as its reason, says what
+   each option's kind means, shows commands and paths in full, and marks
+   the title, reason and option names as the agent's own words. A request
+   carrying a diff shows it; a permission is all or nothing, so it is
+   accepted or rejected whole. A change completed with no prompt says in
+   its card that it was applied without asking, and why when Cornacai can
+   tell: the session's mode, or an "always" chosen earlier. "Always" choices are the agent's to remember, per the
    spec; Cornacai keeps no allow-list of its own in phase 3. An auto-approve
    setting, if one is added, is off by default, scoped to a kind and the
    workspace, and never matches on the agent's title or option name alone.
