@@ -79,6 +79,12 @@ what your terminal takes; its `read` lines what a reading of the page
 costs. What the numbers mean, and what was measured, is in
 [the performance audit](../../design/noctiluca-youtube-perf.md).
 
+**Video freezes while the status says PLAYING or STALLED** (#890, seen on
+a busy live stream). Run with `NOCTILUCA_TRACE` as above until it
+freezes, and attach the file to #890. Its `read_refused` lines (`why`:
+`begin` or `not_adopted`) say a reading of the page was refused; while
+one is, no video frame runs, and that is the cause #890 is checking.
+
 **Blocky pictures.** By default Noctiluca picks what your terminal can
 show, and falls back to half blocks. In a terminal with Kitty graphics,
 Sixel or iTerm2 images, name it with `--images` (or `[media] images`).

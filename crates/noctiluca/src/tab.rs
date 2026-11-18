@@ -905,6 +905,10 @@ impl Worker<'_> {
         let Ok(ticket) = self.engine.begin_read(TabId(0)) else {
             self.last_read = Some((now, Duration::ZERO));
             self.refused = true;
+            // While a reading is refused no video frame runs (#890).
+            if crate::trace::on() {
+                crate::trace::media(r#"{"stage":"read_refused","why":"begin"}"#);
+            }
             return true;
         };
         if let Ok(boxes) = self.engine.appended(TabId(0)) {
@@ -1065,6 +1069,9 @@ impl Worker<'_> {
         let Some(read) = adopted else {
             self.refused = true;
             self.dirty = out.dirty.or(Some(out.began));
+            if crate::trace::on() {
+                crate::trace::media(r#"{"stage":"read_refused","why":"not_adopted"}"#);
+            }
             return false;
         };
         self.refused = false;

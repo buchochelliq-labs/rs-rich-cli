@@ -96,7 +96,12 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   `PLAYING` over a picture whose frames stopped. rs-rich-embed: a restart
   of the screencast that Chrome refuses no longer drops every frame after
   it. Tested on a new busy-stream fixture (`tests/fixtures/busy-stream.html`,
-  a playing video beside a chat that never rests and moves it).
+  a playing video beside a chat that never rests and moves it). The root
+  cause is not found yet: the fixture, and harsher variants of it, keep
+  10 to 24 frames a second with the restart turned off. `NOCTILUCA_TRACE`
+  now writes a `read_refused` line when a reading of the page is refused,
+  the remaining suspect (no video frame runs while one is); the
+  troubleshooting page says how to send a trace to #890.
 - Video frames are paced by the video's own clock: Chrome's frame stamps
   set the slots, the spacing is a whole number of the video's frames (a
   24 fps video shows at 24 or 12 a second, not on a 30 Hz clock that holds
