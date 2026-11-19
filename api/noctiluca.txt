@@ -2748,6 +2748,7 @@ pub noctiluca::testing::FakeState::screencast_area: core::option::Option<noctilu
 pub noctiluca::testing::FakeState::screencast_areas: alloc::vec::Vec<core::option::Option<noctiluca::engine::Rect>>
 pub noctiluca::testing::FakeState::screencast_scale: f64
 pub noctiluca::testing::FakeState::scroll_y: f64
+pub noctiluca::testing::FakeState::slow_reads: usize
 pub noctiluca::testing::FakeState::stopped: core::option::Option<alloc::string::String>
 pub noctiluca::testing::FakeState::viewport_height: f64
 pub noctiluca::testing::FakeState::viewport_width: f64

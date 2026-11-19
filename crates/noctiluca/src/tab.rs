@@ -5386,7 +5386,13 @@ mod tests {
         state.lock().unwrap().read_cost = Duration::from_millis(1000);
         let start = Instant::now();
         let mut k = 0u32;
-        while start.elapsed() < Duration::from_secs(3) {
+        // Three seconds, and on until a slow reading has ended: on a loaded
+        // runner the first `Changed` can come late, and a window with no
+        // slow reading in it measures nothing.
+        let read = || state.lock().unwrap().slow_reads > 0;
+        while start.elapsed() < Duration::from_secs(3)
+            || (!read() && start.elapsed() < Duration::from_secs(15))
+        {
             {
                 let mut state = state.lock().unwrap();
                 let (w, h) = (state.viewport_width as u32, state.viewport_height as u32);
@@ -5408,6 +5414,7 @@ mod tests {
             k += 1;
             thread::sleep(Duration::from_millis(33));
         }
+        assert!(read(), "no slow reading ran");
         drop(tab);
         let times: Vec<Instant> = frames.try_iter().filter(|t| *t > start).collect();
         assert!(times.len() > 10, "{} frames", times.len());
