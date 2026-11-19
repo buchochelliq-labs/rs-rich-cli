@@ -423,7 +423,9 @@ impl ChartNode {
                     }
                     None => String::new(),
                 };
-                lines.truncate(rows.max(1) as usize);
+                if height > 0 {
+                    lines.truncate(rows.max(1) as usize);
+                }
                 lines
             }
             Data::Bars {

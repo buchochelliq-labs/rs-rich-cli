@@ -169,3 +169,29 @@ fn a_heatmaps_cursor_reads_a_column_and_the_window_keeps_the_newest() {
         "{rows:#?}"
     );
 }
+
+#[test]
+fn a_line_chart_sized_to_itself_keeps_its_axis_and_legend() {
+    // In a column with its default size, the chart is measured at its own
+    // height, not cut to one plot row and the readout.
+    let app = App::new(|| {
+        column([
+            line_chart(|| vec![Series::from_values("load", [1.0, 3.0, 2.0, 5.0, 4.0])]),
+            label("after"),
+        ])
+    });
+    let mut driver = app.driver(30, 30);
+    driver.settle();
+    let rows: Vec<String> = driver
+        .screen()
+        .plain()
+        .iter()
+        .map(|r| r.trim_end().to_string())
+        .collect();
+    let after = rows.iter().position(|r| r == "after").expect("the label");
+    assert!(after > 4, "{rows:#?}");
+    assert!(
+        rows[..after].iter().any(|r| r.contains("load")),
+        "{rows:#?}"
+    );
+}
