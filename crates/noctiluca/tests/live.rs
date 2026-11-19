@@ -761,3 +761,122 @@ fn a_hung_page_holds_the_tabs_periodic_calls_only_for_the_short_wait() {
     let _ = backend.metrics(TabId(0));
     assert!(asked.elapsed() <= PERIODIC + Duration::from_secs(1));
 }
+
+#[test]
+fn a_video_beside_a_chat_that_brings_new_pictures_keeps_its_frames() {
+    use noctiluca::model::MediaKind;
+    let Some(binary) = chrome() else { return };
+    // Each reading of the page finds pictures with no still yet, as a
+    // busy chat's badges do. Their stills' calls ran on the tab's thread,
+    // eight a turn, and the frames waited for them: 0.5 to 0.9 s gaps
+    // here, 1 to 2.5 s on a busy live channel.
+    let mut live = Live::start(binary);
+    live.open("busy-pictures.html");
+    let video = live
+        .wait("the video", |p| {
+            p.media
+                .iter()
+                .any(|m| m.kind == MediaKind::Video && m.playback.is_some_and(|b| !b.paused))
+        })
+        .media
+        .iter()
+        .find(|m| m.kind == MediaKind::Video)
+        .unwrap()
+        .node;
+    live.tab.send(Command::Regions {
+        on_screen: vec![video],
+        intervals: Vec::new(),
+        scale: 1.0,
+    });
+    let mut frames = Vec::new();
+    let mut stills = 0;
+    let start = Instant::now();
+    while start.elapsed() < Duration::from_secs(14) {
+        match live.updates.recv_timeout(Duration::from_millis(20)) {
+            Ok(Update::Frame(frame)) if frame.node == video => frames.push(Instant::now()),
+            Ok(Update::Page(page)) => {
+                stills = stills.max(
+                    page.media
+                        .iter()
+                        .filter(|m| m.kind != MediaKind::Video && m.still.is_some())
+                        .count(),
+                );
+                live.page = Some(page);
+            }
+            _ => {}
+        }
+    }
+    // The first seconds start the screencast and settle the page.
+    let frames: Vec<_> = frames
+        .into_iter()
+        .filter(|t| t.duration_since(start) >= Duration::from_secs(4))
+        .collect();
+    let gaps: Vec<f64> = frames
+        .windows(2)
+        .map(|w| w[1].duration_since(w[0]).as_secs_f64())
+        .collect();
+    let long = gaps.iter().filter(|g| **g >= 0.5).count();
+    let max = gaps.iter().copied().fold(0.0, f64::max);
+    eprintln!(
+        "busy-pictures: frames={} stills={stills} max_gap={max:.2}s gaps_over_0.5s={long}",
+        frames.len()
+    );
+    assert!(stills > 0, "the chat's pictures got no stills");
+    assert!(frames.len() > 20, "too few frames: {}", frames.len());
+    assert!(
+        max < 0.8 && long <= 2,
+        "the frames waited: longest gap {max:.2} s, {long} over 0.5 s"
+    );
+}
+
+#[test]
+fn rows_blank_beside_a_sticky_sidebar_collapse() {
+    let Some(binary) = chrome() else { return };
+    let mut live = Live::start(binary);
+    let page = live.wait_open("sidebar-gaps.html", "The last paragraph");
+    let lines = projected(&page);
+    let at = |t: &str| {
+        lines
+            .iter()
+            .position(|l| l.contains(t))
+            .unwrap_or_else(|| panic!("{t}: {lines:#?}"))
+    };
+    // The code's five lines take five rows, not their boxes' height: the
+    // paragraph after them follows at most two rows on, beside the
+    // sticky sidebar's picture.
+    assert!(at("After the code") <= at("println!") + 2, "{lines:#?}");
+    assert!(
+        at("The last paragraph") <= at("max_by_key") + 2,
+        "{lines:#?}"
+    );
+    // The sidebar's block links each take a line.
+    assert!(at("Examples") > at("Syntax"), "{lines:#?}");
+}
+
+#[test]
+fn a_buttons_wide_face_moves_the_trail_after_it_along_its_row() {
+    let Some(binary) = chrome() else { return };
+    let mut live = Live::start(binary);
+    let page = live.wait_open("crumbs.html", "after its header");
+    let lines = projected(&page);
+    let at = |t: &str| {
+        lines
+            .iter()
+            .position(|l| l.contains(t))
+            .unwrap_or_else(|| panic!("{t}: {lines:#?}"))
+    };
+    // `[Toggle sidebar]` needs more cells than its 34 px: the trail after
+    // it keeps its row and its order, rather than its first links going
+    // under the button.
+    let row = &lines[at("[Toggle sidebar]")];
+    let order: Vec<usize> = ["[Toggle sidebar]", "Web", "HTML", "Reference", "Elements"]
+        .iter()
+        .map(|t| row.find(t).unwrap_or_else(|| panic!("{t}: {lines:#?}")))
+        .collect();
+    assert!(order.windows(2).all(|w| w[0] < w[1]), "{lines:#?}");
+    // Links laid out as blocks each take a line.
+    assert!(
+        at("Rows") > at("Captions") && at("Cells") > at("Rows"),
+        "{lines:#?}"
+    );
+}

@@ -1698,7 +1698,9 @@ impl Node {
 
     /// For a [`text_area`]: as tall as its rows (wrapped lines counted),
     /// at least `min` and at most `max`, then it scrolls. The rows around
-    /// it lay out again as it grows and shrinks: a chat's prompt.
+    /// it lay out again as it grows and shrinks: a chat's prompt. A
+    /// [`tag_input`](crate::tag_input) grows the same way with its rows of
+    /// chips.
     ///
     /// ```
     /// use intuituive::prelude::*;

@@ -19,6 +19,177 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   (`.mcp.json::$DATA`, which is `.mcp.json`'s contents). Writes were
   reviewed either way; only the warning was missing.
 
+### intuiTUIve: a board (#905)
+
+- **`board(columns, cards)`**: columns side by side, each a stack of
+  boxed markup cards scrolling on its own. Alt+←/→ (or `H`/`L`) move the
+  selected card to the next column and Alt+↑/↓ (`K`/`J`) within its
+  column; Space grabs and the arrows carry, Esc puts it back; a mouse drag
+  carries it. Each move goes to `.on_board_move` as a `BoardMove` for the
+  app to apply (`BoardMove::apply`). A narrow terminal shows fewer columns
+  and pages the rest. A screen reader hears the card's column and place,
+  and each move is announced. The kit example opens one with `b`.
+
+### intuiTUIve: charts with a cursor (#903)
+
+- **`line_chart`, `bar_chart` and `heatmap`** in the `viz` plugin:
+  rs-rich-ext's `LineChart`, `BarChart` and `Heatmap` as nodes over
+  closures that read signals (`_with` forms configure the chart). ← and →
+  (and the pointer) move a cursor along the x axis, drawn in the theme's
+  `chart.cursor` style, with a readout row of the values under it.
+  `.chart_window(Window::Last(n))` or `Window::Span(duration)` keeps the
+  newest of a stream, and the chart draws again only when what is in view
+  changes. A screen reader hears the chart's kind, its series and the
+  readout. `HeatGrid` holds a heatmap's data.
+- rs-rich-ext: `LineChart::plot_columns` (where the plot is, and the x of
+  each column), `Heatmap::column_cells` (where each column is drawn) and
+  `Series::with_points` (a series over other points).
+
+### intuiTUIve: a colour picker (#904)
+
+- **`color_picker(value: Signal<Color>)`**: a saturation and value grid and
+  a hue strip in half blocks, a `#rrggbb` field that takes typing, and a
+  swatch, with the colour's name when it has one. Arrows move in the grid
+  and turn the hue, Tab goes between the grid, the strip and the field,
+  and the mouse clicks or drags in the grid and the strip. On 256 colours
+  or fewer it says the nearest one shown (`≈ color(68)`), the value kept
+  exact; in text mode it is the field alone. Its role is a slider, its
+  value the hex and the name. The kit example opens one with `c`.
+
+### intuiTUIve: tag input, docking and toast buttons (#906)
+
+- **`tag_input` wraps and edits.** Its chips wrap onto more rows when
+  they do not fit its width, and `.grow(min, max)` makes it as tall as
+  its rows, from `min` to `max`, as a `text_area`'s (past its height the
+  rest go on the last row, which starts at a later chip while something
+  is typed, so that it shows). The text being typed has a caret that
+  ←, →, Home and End move; Backspace and Delete take the character before
+  or after it.
+- **`Node::dock(Dock)` docks any node** to the top or bottom of a column,
+  or the left or right of a row, as a stylesheet's `dock` does; code wins
+  over the stylesheet. A notice bar docks with it (`.dock(Dock::Top)`).
+  `Dock` is public.
+- **A notification's buttons from the keyboard.** Alt+1 runs the first
+  button of the newest notification with buttons (to Alt+9 for the
+  ninth), unless a node on the focus path binds the key; a screen reader
+  hears the buttons and their keys with the notification (`… Buttons:
+  Undo, Alt+1; View, Alt+2`).
+
+### Cornacai: intuiTUIve's tabs and key hints (#907)
+
+- **The session tabs are intuiTUIve's `tabs` strip**, drawn as before (each
+  title padded, the selected one reversed); a click on a tab opens its
+  session.
+- **The hints row is a `key_hints` footer** over Cornacai's bindings, which
+  now have descriptions and ids (`session.new`, `session.reopen`,
+  `tab.next`, `tab.previous`, `shell.toggle`, `log.show`, `app.quit`,
+  `turn.cancel`), so it follows a keymap: `cornacai/keys.toml` beside
+  `config.toml` remaps them. It looks the same, except that a hint that
+  does not fit is left out whole rather than cut, and that while a
+  pop-up is open (an edit's review, a permission prompt) the row lists
+  the keys that work in it rather than the screen's, which do not reach
+  the screen then: the review's diff keys, and nothing under a
+  permission prompt, whose keys are on its own line. The `cornacai` tape's
+  review and permission screenshots are re-recorded for that.
+- intuiTUIve: `Node::listed_as(keys)` lists the binding added last under
+  other keys in the help, the palette and `key_hints` (a pair bound apart,
+  shown as one hint).
+
+### Cornacai: clearer permission prompts, changes reviewed as diffs, modes
+
+From the maintainer's first run with Claude's adapter (`claude-agent-acp`).
+
+- **A permission prompt says what will happen and why.** It leads with the
+  operation in words, built from the tool call's kind, locations, content
+  and input: "Edit src/app.rs: 12 lines added, 3 removed", "Create
+  notes.md: 4 lines", "Run `cargo test` in the workspace", "Read …", "Fetch URL",
+  "Switch out of Plan mode and start on this plan". Then the agent's
+  reason, marked as its words: the last paragraph or two of its message in
+  this turn before the tool call (else a `description` in the tool's
+  input). Each option is listed with what its kind means (once, always
+  for this session as the agent keeps it, refuse). The agent's title, the
+  paths and the command in full follow, dimmed.
+- **A change in a permission prompt is shown as a diff, to accept or
+  reject whole.** An agent that applies its edits itself (Claude's
+  adapter does) sends the diff in the permission request; the prompt now
+  draws it with intuiTUIve's diff view, `y` accepts the change (the
+  allow-once option), `x` or Esc rejects it, and the agent's other
+  options keep their numbers. A permission is all or nothing, so the hunk
+  keys (`a`, `r`, `A`, `R`) say so instead of splitting it. Writes through
+  `fs/write_text_file` are still reviewed hunk by hunk.
+- **A change made without asking says why.** In a mode that accepts edits,
+  or after an "always" option, the agent asks nothing and the change
+  appears only in the conversation; its card now says "applied without
+  asking, in Accept edits mode" or "applied without asking: you chose
+  “Yes, allow all edits during this session” earlier". Replayed history
+  (`session/load`) is not marked.
+- **Modes are shown by name and can be changed.** Each session keeps the
+  modes `session/new` or `session/load` gave; the prompt's title names
+  the current one with its keys, Shift+Tab moves to the next (as in
+  Claude Code) and Alt+M lists them with their descriptions. Cornacai
+  asks with `session/set_mode` and shows the mode once the agent agrees;
+  a refusal is a notice. When the agent offers a plan mode, the prompt's
+  title names it (`Shift+Tab, Alt+M · Plan mode too`); the prompt to leave it shows the plan as Markdown.
+- `cornacai::session::Session` has a new field, `modes`, and
+  `Session::set_modes`, `Session::mode_name` and `session::mode_name`.
+  What the user was asked, and whether a loaded session is replaying,
+  are kept inside the crate.
+
+### Noctiluca: busy live pages no longer pause their video
+
+- **A video beside a busy chat no longer stops for 1 to 2.5 s at a
+  time.** On a busy Twitch channel the frames paused 3 to 7 times in 75 s
+  for up to 2 s. The cause, traced: each reading found new pictures (the
+  chat's badges and emotes), and their stills were taken on the tab's
+  thread, up to eight a turn, each with two to four calls to a page busy
+  enough to answer each in 50 to 400 ms. Meanwhile no frame was taken, and
+  Chrome paints no screencast frame until the one it sent is taken. While
+  a video is cast, a turn now spends at most a frame's slot on stills and
+  leaves the rest for the next, and starts none while a reading is out on
+  the reader's thread (the page answers them only after its snapshot). A
+  chat line with buttons in it was read at once on the tab's thread (0.6
+  to 1 s on that channel); it is now read as a page's own change is, on
+  the reader's thread. On the same channel, in Kitty and in half blocks,
+  three runs each: no gap over 0.44 s, at 24 frames a second where it was
+  21. Tested with a fixture page whose chat brings new pictures with every
+  line (`tests/fixtures/busy-pictures.html`).
+- `NOCTILUCA_TRACE` writes `chrome_frame` (each screencast frame Chrome
+  sends, with its paint time), `cdp` (a DevTools call of 50 ms or more,
+  and which thread waited) and `slow_turn` (a turn of the tab's loop that
+  held it 100 ms or more, by part) lines.
+
+### Noctiluca: block links and a button's wide face keep their lines (#880)
+
+- **Links laid out as blocks each take a line.** A sidebar's links set
+  `display: block`, one under another in Chrome, ran together into one
+  word (`SyntaxExamplesNotes`): a link's text is walked into the block it
+  is in, and nothing ended the line. A block-level link now starts and
+  ends a line there; a flex or grid item (a row of tabs, blocks side by
+  side) does not.
+- **A button whose face is wider than its box no longer pushes the row
+  after it under it.** An icon button named in words (`[Toggle sidebar]`
+  in a 34 px box) ran over the breadcrumb trail Chrome put after it on its
+  line, so the trail's first links went to the row below and read after
+  the rest (`Reference Elements <table>` then `Web HTML` on MDN). The
+  one-line boxes after such a face on its line now move right along its
+  row, a cell past it, when the row has room and nothing else is there.
+- Tested with fixture pages (`tests/fixtures/crumbs.html`,
+  `tests/fixtures/sidebar-gaps.html`) and a built page in
+  `tests/model.rs`.
+
+### Noctiluca: rows blank beside a sticky sidebar collapse (#786)
+
+- `collapse-gaps` also collapses rows blank in every column but a sticky
+  sidebar's: a sticky box in the page's flow narrower than half the page
+  (a table of contents, an ad that stays in view as the page scrolls),
+  with its blocks and the pictures in it. It sits beside whatever the
+  page scrolls past, so it no longer holds open the rows a main column
+  leaves blank where its code and paragraphs take fewer rows than their
+  boxes. On MDN's `Array.prototype.map()` at 120x40, runs of 6 to 8 blank
+  rows beside the sidebar came on most screens; one run of 5 is left. A
+  sidebar in the flow keeps its rows beside the main column, as before.
+  Tested with a fixture page (`tests/fixtures/sidebar-gaps.html`).
+
 ### Cornacai: signing in from a terminal (claude-agent-acp)
 
 - **Claude's adapter can be signed in to from Cornacai.**

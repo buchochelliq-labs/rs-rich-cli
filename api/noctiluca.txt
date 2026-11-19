@@ -2737,6 +2737,7 @@ pub noctiluca::testing::FakeState::pages: std::collections::hash::map::HashMap<a
 pub noctiluca::testing::FakeState::paint: core::option::Option<[u8; 3]>
 pub noctiluca::testing::FakeState::read_cost: core::time::Duration
 pub noctiluca::testing::FakeState::recorded: core::option::Option<std::path::PathBuf>
+pub noctiluca::testing::FakeState::resource_cost: core::time::Duration
 pub noctiluca::testing::FakeState::resource_reads: alloc::vec::Vec<alloc::string::String>
 pub noctiluca::testing::FakeState::resource_root: core::option::Option<std::path::PathBuf>
 pub noctiluca::testing::FakeState::resource_steps: std::collections::hash::map::HashMap<alloc::string::String, alloc::collections::vec_deque::VecDeque<core::option::Option<alloc::vec::Vec<u8>>>>
@@ -2747,6 +2748,7 @@ pub noctiluca::testing::FakeState::screencast_area: core::option::Option<noctilu
 pub noctiluca::testing::FakeState::screencast_areas: alloc::vec::Vec<core::option::Option<noctiluca::engine::Rect>>
 pub noctiluca::testing::FakeState::screencast_scale: f64
 pub noctiluca::testing::FakeState::scroll_y: f64
+pub noctiluca::testing::FakeState::slow_reads: usize
 pub noctiluca::testing::FakeState::stopped: core::option::Option<alloc::string::String>
 pub noctiluca::testing::FakeState::viewport_height: f64
 pub noctiluca::testing::FakeState::viewport_width: f64

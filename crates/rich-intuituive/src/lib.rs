@@ -99,13 +99,17 @@ mod bars;
 #[cfg(feature = "art")]
 mod big_text;
 mod bindings;
+mod board;
 pub mod border;
 mod builtin;
 mod calendar;
 mod carousel;
+#[cfg(feature = "viz")]
+mod chart_nodes;
 mod chips;
 mod clock;
 mod collapsible;
+mod color_picker;
 pub mod command_line;
 mod commands;
 pub mod complete;
@@ -215,10 +219,16 @@ pub use app::{
 #[cfg(feature = "art")]
 pub use big_text::big_text;
 pub use bindings::{ModePage, Scaled, Stepped};
+pub use board::{BoardMove, board};
 pub use border::{Border, BorderSet, Edge, Shadow, Sides};
 pub use carousel::carousel;
+#[cfg(feature = "viz")]
+pub use chart_nodes::{
+    HeatGrid, Window, bar_chart, bar_chart_with, heatmap, heatmap_with, line_chart, line_chart_with,
+};
 pub use chips::{chip, chip_of, tag_input};
 pub use collapsible::{Status, accordion, collapsible, collapsible_with};
+pub use color_picker::color_picker;
 pub use command_line::{CommandLine, CommandLineOptions, command_line, command_line_with};
 pub use commands::{Hit, HitSink, Provider, SystemCommands, Themes};
 pub use complete::{
@@ -288,7 +298,7 @@ pub use screen::{PaintStats, PaintStrategy};
 pub use scroll_virtual::{scroll_virtual, scroll_virtual_with};
 pub use select::{ListSearch, Mark, MultiSelect, list_search, multi_select};
 pub use select_field::{SelectOption, select_field, select_field_keyed};
-pub use sheet::{SheetError, Stylesheet};
+pub use sheet::{Dock, SheetError, Stylesheet};
 pub use signals::{Count, History, falling, history, recent, recent_of, recent_timed, smoothed};
 pub use solver::Solver;
 pub use spans::SpanTarget;

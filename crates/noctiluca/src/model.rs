@@ -1915,6 +1915,20 @@ impl Walker<'_> {
         }
     }
 
+    /// End the line being gathered, unless it is empty or ended: a block
+    /// inside text a block cannot break (a link's).
+    fn break_line(&mut self, i: usize) {
+        let open = self
+            .runs
+            .iter()
+            .rev()
+            .find(|r| !r.text.trim_matches(' ').is_empty())
+            .is_some_and(|r| !r.text.trim_end_matches(' ').ends_with('\n'));
+        if open {
+            self.push(Run::plain("\n"), None, i);
+        }
+    }
+
     /// End the block being gathered, as `context` says what it is.
     fn flush(&mut self, context: &Context) {
         let mut runs = std::mem::take(&mut self.runs);
@@ -2142,8 +2156,31 @@ impl Walker<'_> {
                     name_only: !shows_anything(dom, i),
                     ..context.clone()
                 };
+                // A link laid out as a block starts a line of its own and
+                // ends it, as a browser draws it: a sidebar's links one
+                // under another, not run together (`SyntaxExamplesNotes`).
+                // Its text stays in the block it is in. A flex or grid
+                // item is a block too, side by side with the others: not.
+                let display = dom.style(i, 0);
+                let in_row = usize::try_from(dom.parent[i]).is_ok_and(|p| {
+                    matches!(
+                        dom.style(p, 0),
+                        "flex" | "inline-flex" | "grid" | "inline-grid"
+                    )
+                });
+                let block = laid_out
+                    && !in_row
+                    && !display.is_empty()
+                    && !display.starts_with("inline")
+                    && !matches!(display, "contents" | "none");
+                if block {
+                    self.break_line(i);
+                }
                 for &child in &dom.children[i] {
                     self.walk(child, &inner);
+                }
+                if block {
+                    self.break_line(i);
                 }
                 return;
             }

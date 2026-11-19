@@ -142,6 +142,9 @@ notice_bar(shown, || "Changed".into(), move || format!("{name} changed on disk")
   with `…`, its actions and a `×` at the right. Enter or a click on the
   text opens it: the title on the first row, the whole text wrapped
   under it. `×`, or Esc while it has the focus, sets `shown` false.
+  Put it first or last in a column, or dock it there with
+  `.dock(Dock::Top)` or `.dock(Dock::Bottom)` (any node takes `.dock`,
+  as a stylesheet's `dock`, which code wins over).
 - ← and → pick the text, an action or `×`; Enter or Space runs it.
   `.notice_closes(true)` dismisses the bar after an action runs, and
   `.notice_open(signal)` opens it from the app and says whether it is.
@@ -197,7 +200,68 @@ tag_input(tags)                                   // a Signal<Vec<String>>
 - **`tag_input(tags)`** types tags into a row of removable chips: Enter,
   Tab or a comma adds what was typed (once), Backspace with nothing typed
   removes the last tag, a click on a `×` removes that one, and a paste
-  adds a tag at each comma. One row, cut at its width.
+  adds a tag at each comma. ← and →, Home and End move the caret in what
+  is typed; Backspace and Delete take the character before or after it.
+- The chips wrap onto more rows when they do not fit. It is one row
+  unless sized otherwise; **`.grow(min, max)`** makes it as tall as its
+  rows, from `min` to `max`, as a `text_area`'s. Past its height the rest
+  go on the last row, cut at the width, starting at a later chip while
+  something is typed so that it shows.
+
+### A colour picker
+
+```rust
+use intuituive::color_picker;
+use rich::Color;
+
+let accent = signal(Color::from_rgb(0x3a, 0x7b, 0xd5));
+color_picker(accent)              // a Signal<Color>, set as it changes
+```
+
+- **`color_picker(value)`** draws a grid of saturation (across) and value
+  (down) at the colour's hue, with a strip of hues at its right, both in
+  half blocks, and under them a swatch, the `#rrggbb` and the colour's
+  name when it has one (the console's own, `bright_red`, or CSS's basic
+  sixteen and orange). The grid takes the width less the strip and eight
+  rows unless the node is sized taller. The app setting `value` moves it.
+- With the focus ← → ↑ ↓ move in the grid (PageUp, PageDown, Home and End
+  to its edges); Tab goes on to the hue strip (↑ and ↓ turn the hue) and
+  the hex field, where the first digit typed replaces it, six digits (or
+  three, then Enter) set it and Esc puts it back. Shift+Tab goes back. A
+  click or a drag in the grid or the strip picks there.
+- On 256 colours or fewer the console shows the nearest colour it has, and
+  the name says which (`≈ color(68)`); the value stays exact. In text mode
+  it is the hex field alone. A screen reader hears a slider, `Colour`,
+  valued `#ff0000 red`. The kit example opens one with `c`.
+
+### A board
+
+```rust
+use intuituive::{board, BoardMove};
+
+let cards = signal(vec![vec!["Write".to_string()], vec![], vec![]]);
+board(|| vec!["Todo".into(), "Doing".into(), "Done".into()], move || cards.get())
+    .on_board_move(move |step: BoardMove, _| cards.update(|c| step.apply(c)))
+```
+
+- **`board(columns, cards)`** lays the columns side by side, each a stack
+  of its cards (markup, each in a box, wrapped to the column), scrolling
+  on its own to keep the selected card in view. Narrower than 18 cells a
+  column, fewer columns show and the rest are paged, with `‹` and `›` on
+  the title row.
+- ← → ↑ ↓ (or `h` `l` `k` `j`) select. Alt+← and Alt+→ (`H`, `L`) move the
+  selected card to the next column, at its place there; Alt+↑ and Alt+↓
+  (`K`, `J`) move it within its column. Space grabs it, the arrows carry
+  it, Space drops it and Esc puts it back. A mouse drag carries it too.
+- Each move goes to **`.on_board_move(|step, cx| ..)`** as a `BoardMove`
+  (`from` and `to`, each a column and an index) for the app to make in
+  its own cards with `step.apply(&mut columns)`; without it the cards do
+  not move.
+- Titles are in `board.title`, boxes in `board.card`, the selected one in
+  `board.selected`, a carried card marked `↕`. A screen reader hears a
+  grid valued by the selected card (`Doing, card 2 of 3: Review`), and
+  each move is announced (`Moved to Done, 1 of 1`). The kit example opens
+  one with `b`.
 
 ### A pager strip
 

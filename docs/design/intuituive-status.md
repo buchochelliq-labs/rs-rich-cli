@@ -3,7 +3,38 @@
 Status: handoff note, updated when a session ends mid-round. The loop and its
 rules are in [the demo gaps](intuituive-demo-gaps.md).
 
-## Where things stand (2026-11-18)
+## Where things stand (2026-11-19)
+
+- **0.1.0's first work is in one PR** (branch
+  `claude/next-priority-items-3c5p8e`, merging `-wip-integ010`, itself
+  `-wip-components` and `-wip-cornacai-ux`, and `-wip-livepause`):
+  - **Noctiluca:** busy live pages no longer pause their video (no gap
+    over 0.44 s in three runs on a busy Twitch channel, against gaps of
+    1.4 to 2 s; [the readings](noctiluca-youtube-perf.md)); blank rows
+    beside a sticky sidebar collapse (#786, one 5-row run left on MDN);
+    two of #880's reflow defects.
+  - **intuiTUIve:** #906 (tag input wraps and edits, `Node::dock`, toast
+    buttons by Alt+number), #904 `color_picker`, #903 chart nodes (`viz`),
+    #905 `board`.
+  - **Cornacai:** #907 (intuiTUIve's `tabs` and `key_hints`, a keymap in
+    `cornacai/keys.toml`); permission prompts that say what will happen
+    and why; changes accepted or rejected as a diff; modes by name, with
+    Shift+Tab and Alt+M.
+- **Cornacai with a real agent, recorded (2026-11-18):** the maintainer
+  ran it on Windows with `claude-agent-acp`: signed in, chatted (answers
+  streamed), and the agent proposed and began a small change, with its
+  tool calls shown. The run found what the Cornacai items above fix: the
+  prompts described the command, not the change and its reason; an
+  edit's diff showed with nothing to accept or reject; plan mode could
+  not be reached. Those fixes are tested on replays only: they want the
+  same run again. The agent's change became #910 (the write guard reads
+  names as the file system does).
+- **Left for 0.1.0:** the API review itself; #880's other defects (BBC's
+  wrapped time labels, Wikipedia's header, MDN at 80 columns); CodeMirror
+  examples as one line; two Cornacai tests and three clippy 1.95 lints
+  that fail on Windows only (seen on #910).
+
+## Where things stood (2026-11-18)
 
 - **0.0.27 is published** (21 crates and `rs-rich` 0.0.15 on PyPI from
   `main` at `e7fc3d73`, `release-0.0.27`, on 2026-11-18, by one run on rab
@@ -13,8 +44,7 @@ rules are in [the demo gaps](intuituive-demo-gaps.md).
   waited on the run; the run itself published everything.
 - **The 0.1.0 versions are open**: every package at 0.1.0, with `rs-rich`
   0.1.0 on PyPI ([the plan to 1.0.0](../plans/1.0.0.md), stage 3).
-- **Next: 0.1.0's API review.** Also waiting: the Cornacai run with a real
-  agent on Windows (not recorded for 0.0.26 or 0.0.27), CI's move to
+- **Next: 0.1.0's API review.** Also waiting: CI's move to
   Ubuntu 26.04 (Playwright and the Python 3.9 job; CI is pinned to 24.04),
   the 1 to 2.5 s video pauses on busy live pages, and why `release.py tag`'s
   wait failed on Windows.

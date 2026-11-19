@@ -545,6 +545,39 @@ band, the sparkline its range and trend, the spectrogram its range and
 where the newest spectrum peaks, the bar spectrum its loudest band, big
 text and digits their text.
 
+### Charts with a cursor
+
+The `viz` plugin's **`line_chart(series)`**, **`bar_chart(bars)`** and
+**`heatmap(grid)`** are rs-rich-ext's `LineChart`, `BarChart` and
+`Heatmap` as nodes, over closures that read signals, with a row under
+each for a readout:
+
+```rust
+use intuituive::{HeatGrid, Window, bar_chart, heatmap, line_chart};
+use rich_ext::chart::Series;
+
+line_chart(move || vec![Series::from_values("load", load.get()), Series::line("p95", p95.get())])
+    .chart_window(Window::Span(Duration::from_secs(60)))
+bar_chart(move || queues.get())                 // Vec<(String, f64)>
+heatmap(move || HeatGrid::new().columns(days.clone()).row("api", api.get()))
+```
+
+- With the focus, ← and → move a cursor along the x axis (a bar chart's
+  ↑ and ↓ too; Home and End to the ends; Esc takes it away), and the
+  pointer moving over the plot or a column (a click on a bar) puts it
+  there. Its column, or bar, is drawn in the theme's `chart.cursor`
+  style (`reverse`), and the readout says what is under it: `x 3 ·
+  load 5 · cpu 2` (each series' nearest value), `db 7`, `tue · api 4 ·
+  web 6`. Without a cursor it reads the newest.
+- **`.chart_window(window)`** keeps the newest data of a stream:
+  `Window::Last(n)` points of each series, bars or columns, or
+  `Window::Span(duration)` of x (read as seconds) before the newest
+  point. The chart draws again only when what is in view changes.
+- `line_chart_with`, `bar_chart_with` and `heatmap_with` take a closure
+  that configures the chart (`|c| c.y_range(0.0, 100.0)`).
+- A screen reader hears an image named by the chart's kind and its
+  series, bars or rows (`Line chart: load, cpu`), valued by the readout.
+
 For a scope's persistence (older traces fading, as a phosphor's), the
 `viz` plugin's **`persistence(|| frames)`** draws rs-rich-ext's
 `chart::Persistence` of the last frames (`recent(trace, 8)`) on a

@@ -59,7 +59,8 @@ struct NoticeBar {
 /// the picked part in `notice.picked` (`bold underline`). Its role is
 /// [`Status`](crate::a11y::Role::Status), named by the title and text, so
 /// a screen reader is told when it changes. Put it first or last in a
-/// column, or dock it with a stylesheet's `dock: top`.
+/// column, or dock it with [`.dock(Dock::Top)`](Node::dock) (or a
+/// stylesheet's `dock: top`).
 ///
 /// ```
 /// use intuituive::prelude::*;
