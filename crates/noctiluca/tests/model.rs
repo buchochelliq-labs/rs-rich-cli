@@ -1050,3 +1050,61 @@ fn opacity_requires_supported_positive_evidence_and_never_removes_semantic_dialo
         }
     }
 }
+
+#[test]
+fn links_laid_out_as_blocks_each_take_a_line() {
+    use noctiluca::engine::Rect;
+    use noctiluca::testing::PageBuilder;
+    // A sidebar's links, `display: block` one under another, and a row of
+    // links that are a flex box's items (blocks too, side by side).
+    let mut p = PageBuilder::new("https://example.test/", "links", 800.0, 400.0);
+    let body = p.body();
+    let aside = p.element(
+        body,
+        "ASIDE",
+        &[],
+        &[],
+        Some(Rect::new(0.0, 0.0, 200.0, 54.0)),
+    );
+    for (k, name) in ["Syntax", "Examples", "Notes"].iter().enumerate() {
+        let y = 18.0 * k as f64;
+        let href = format!("#{k}");
+        let a = p.element(
+            aside,
+            "A",
+            &[("href", href.as_str())],
+            &[("display", "block")],
+            Some(Rect::new(0.0, y, 80.0, 18.0)),
+        );
+        p.text(a, name, Rect::new(0.0, y, 60.0, 18.0));
+    }
+    let nav = p.element(
+        body,
+        "NAV",
+        &[],
+        &[("display", "flex")],
+        Some(Rect::new(0.0, 100.0, 800.0, 18.0)),
+    );
+    for (k, name) in ["All", "Images", "News"].iter().enumerate() {
+        let x = 80.0 * k as f64;
+        let href = format!("#t{k}");
+        let a = p.element(
+            nav,
+            "A",
+            &[("href", href.as_str())],
+            &[("display", "block")],
+            Some(Rect::new(x, 100.0, 60.0, 18.0)),
+        );
+        p.text(a, name, Rect::new(x, 100.0, 50.0, 18.0));
+    }
+    let page = build(&p.snapshot(), &mut Revisions::new());
+    let texts: Vec<String> = page.blocks.iter().map(|b| b.text()).collect();
+    assert!(
+        texts.iter().any(|t| t == "Syntax\nExamples\nNotes"),
+        "{texts:#?}"
+    );
+    assert!(
+        texts.iter().any(|t| t.contains("All") && !t.contains('\n')),
+        "{texts:#?}"
+    );
+}

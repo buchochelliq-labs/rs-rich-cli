@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<title>Busy pictures</title>
+<!-- A live stream page whose chat brings new pictures all the time, built
+     from ordinary HTML for Noctiluca's tests: a playing video
+     (media/card.webm, looping) beside a role=log panel this page's own
+     script fills many times a second, each line with a small drawing
+     (an inline <svg>, which has no file to fetch: its still is Chrome's
+     pixels) and a picture whose address is new each line. Each reading
+     of the page finds pictures it has no still of yet, as a busy chat's
+     badges and emotes do. Local: no network, no third-party assets. -->
+<style>
+  body { margin: 0; font: 16px sans-serif; background: #0e0e10; color: #efeff1 }
+  h1 { font-size: 18px; margin: 8px }
+  .page { display: flex; gap: 16px; padding: 0 8px }
+  .stage { flex: 1; min-width: 0 }
+  video { width: 100%; max-width: 640px; aspect-ratio: 16 / 9; background: #000; display: block }
+  #chat { width: 330px; flex: none }
+  #chat h2 { font-size: 16px; margin: 0 0 4px }
+  #log { height: 560px; overflow-y: auto }
+  #log > div { padding: 1px 0 }
+  #log svg, #log img { width: 18px; height: 18px; vertical-align: middle; margin-right: 4px }
+  .author { font-weight: bold }
+</style>
+<h1>Harbour lights</h1>
+<div class="page">
+  <section class="stage" aria-label="Stream">
+    <video src="media/card.webm" autoplay muted loop playsinline
+           aria-label="A moving test card"></video>
+    <p>The stream's description, under the video.</p>
+  </section>
+  <section id="chat" aria-label="Chat">
+    <h2>Chat</h2>
+    <div id="log" role="log" aria-label="Chat messages"></div>
+  </section>
+</div>
+<script>
+  const log = document.getElementById('log');
+  const names = ['tern', 'gannet', 'skua', 'petrel', 'puffin', 'shag', 'eider', 'auk'];
+  const colors = ['#f66', '#6cf', '#fc6', '#9f9', '#c9f', '#fff'];
+  const words = 'the bay glows tonight look at the waves so bright wow again yes no maybe later'.split(' ');
+  const svg = 'http://www.w3.org/2000/svg';
+  let n = 0;
+  function badge(k) {
+    const drawing = document.createElementNS(svg, 'svg');
+    drawing.setAttribute('viewBox', '0 0 18 18');
+    drawing.setAttribute('role', 'img');
+    drawing.setAttribute('aria-label', 'badge ' + k);
+    const shape = document.createElementNS(svg, 'circle');
+    shape.setAttribute('cx', '9');
+    shape.setAttribute('cy', '9');
+    shape.setAttribute('r', String(4 + k % 5));
+    shape.setAttribute('fill', colors[k % colors.length]);
+    drawing.append(shape);
+    return drawing;
+  }
+  function post() {
+    n += 1;
+    const row = document.createElement('div');
+    const who = document.createElement('span');
+    who.className = 'author';
+    who.style.color = colors[n % colors.length];
+    who.textContent = names[n % names.length] + (n % 97);
+    const emote = document.createElement('img');
+    emote.src = 'media/emote.png?line=' + n;
+    emote.alt = 'wave';
+    const text = [];
+    for (let k = 0; k < 2 + (n * 7) % 13; k++) text.push(words[(n * 13 + k * 5) % words.length]);
+    row.append(badge(n), who, ': ' + text.join(' ') + ' ', emote);
+    log.append(row);
+    while (log.children.length > 120) log.firstElementChild.remove();
+    log.scrollTop = log.scrollHeight;
+  }
+  setInterval(post, 80);
+</script>
+</html>

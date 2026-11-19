@@ -111,6 +111,9 @@ const ACTION_READ_WAIT: Duration = Duration::from_secs(1);
 const ACTION_READ_RETRY: Duration = Duration::from_millis(25);
 /// At most this many stills are captured per reading.
 const STILLS_PER_READ: usize = 8;
+/// While a video is cast, a turn of the tab starts no still after this
+/// long on stills: about a frame's slot.
+const STILLS_TURN: Duration = Duration::from_millis(40);
 /// How often a playing video's or audio's time is read again.
 const PLAYBACK: Duration = Duration::from_millis(500);
 /// How long without a screencast frame before playing regions are
@@ -1354,8 +1357,11 @@ impl Worker<'_> {
         }
         let mut next = (*page).clone();
         if self.follow_logs(&mut next) {
-            // A log with controls changed: a snapshot binds them.
-            self.read();
+            // A log with controls changed: a snapshot binds them. It is
+            // read as a ping is, on the reader's thread when the engine
+            // has one: read here, a busy chat's buttons held the frames
+            // for its 0.6 to 1 s each time.
+            self.dirty.get_or_insert_with(Instant::now);
             return;
         }
         self.dress_inline(&mut next);
@@ -1484,8 +1490,19 @@ impl Worker<'_> {
         candidates.sort_by(|a, b| (a.rect.y - view).abs().total_cmp(&(b.rect.y - view).abs()));
         self.stills_pending = false;
         let mut admitted = 0;
-        for media in candidates {
+        // While a video is cast, each still's calls hold its frames (and
+        // Chrome paints none until the one it sent is taken): a turn
+        // spends at most a frame's slot on stills, the rest wait for the
+        // next turn. On a busy page each call takes 50 to 400 ms, and
+        // eight stills a turn stopped the frames for 1 to 2.5 s.
+        let began = Instant::now();
+        let budget = self.frames.on.then_some(STILLS_TURN);
+        for (tried, media) in candidates.into_iter().enumerate() {
             if admitted == STILLS_PER_READ || self.outstanding.len() == STILLS_PER_READ {
+                self.stills_pending = true;
+                break;
+            }
+            if tried > 0 && budget.is_some_and(|budget| began.elapsed() >= budget) {
                 self.stills_pending = true;
                 break;
             }
@@ -2635,7 +2652,9 @@ fn run_with_source(
         if stop.load(Ordering::SeqCst) {
             return;
         }
-        match commands.recv_timeout(worker.wait()) {
+        let waited = worker.wait();
+        let mut turn = crate::trace::Turn::start();
+        match commands.recv_timeout(waited) {
             Ok((id, command)) => {
                 let acts = matches!(
                     command,
@@ -2657,6 +2676,7 @@ fn run_with_source(
             Err(RecvTimeoutError::Timeout) => {}
             Err(RecvTimeoutError::Disconnected) => return,
         }
+        turn.lap("command");
         worker.poll_events(&mut read_now, &mut live_due);
         let mut state = worker.engine.state(TabId(0));
         if let Some(address) = worker.error_address(&state.url) {
@@ -2670,10 +2690,12 @@ fn run_with_source(
             update(Update::State(state));
         }
         worker.take_decoded();
+        turn.lap("state");
         if probed.elapsed() >= PLAYBACK {
             probed = Instant::now();
             worker.follow_playback();
         }
+        turn.lap("playback");
         let due = worker.ping_due(Instant::now())
             || worker
                 .settle
@@ -2717,6 +2739,7 @@ fn run_with_source(
             live_due = false;
             worker.read_live();
         }
+        turn.lap("read");
         // Events can arrive during the synchronous model read too. Backends
         // also guard the final frame take atomically against their model scope.
         worker.poll_events(&mut read_now, &mut live_due);
@@ -2731,17 +2754,24 @@ fn run_with_source(
         }
         // Never capture old-model video or still media while a known
         // invalidation or refused snapshot waits.
+        turn.lap("canvases");
         if worker.video_may_run(read_now) {
             worker.video();
         }
-        // Stills wait for a model that no known change outdates.
+        turn.lap("video");
+        // Stills wait for a model that no known change outdates; and,
+        // while a video is cast, for a reading out on the reader's thread
+        // to end: the page answers a still's calls only after the
+        // snapshot, and the tab's frames would wait with them.
         if !read_now
             && worker.dirty.is_none()
             && worker.page.is_some()
+            && !(worker.frames.on && worker.aside.out.is_some())
             && (worker.stills_pending || worker.still_retry_due(Instant::now()))
         {
             worker.capture_stills();
         }
+        turn.lap("stills");
         // A sole fresh frame belongs to the model published for its document.
         // Keep it in the engine while an initial/navigation snapshot is refused.
         if worker.pixels && !read_now && worker.page.is_some() {
@@ -2763,6 +2793,8 @@ fn run_with_source(
                 .flatten();
             let _ = reply.send(bytes);
         }
+        turn.lap("rest");
+        turn.end(waited);
     }
 }
 
@@ -2850,6 +2882,39 @@ mod tests {
             state.current = Some("recovery".into());
         }
         engine
+    }
+
+    #[test]
+    fn stills_wait_for_the_next_turn_while_a_video_is_cast() {
+        // A busy page brings new pictures with each reading, and each
+        // still's calls to a busy browser take 50 to 400 ms on the tab's
+        // thread: eight a turn held a live stream's frames for seconds.
+        let engine = recovery_engine(8);
+        let state = engine.state.clone();
+        {
+            let mut state = state.lock().unwrap();
+            for n in 0..8 {
+                state
+                    .resources
+                    .insert(format!("https://example.test/{n}.png"), recovery_png());
+            }
+            state.resource_cost = Duration::from_millis(50);
+        }
+        let update = |_: Update| {};
+        let (mut worker, _jobs, _done) = recovery_worker(engine, &update);
+        worker.read().unwrap();
+        worker.frames.on = true;
+        let now = Instant::now();
+        worker.capture_stills_at(now);
+        assert_eq!(state.lock().unwrap().resource_reads.len(), 1);
+        assert!(worker.stills_pending, "the rest wait for the next turn");
+        worker.capture_stills_at(now);
+        assert_eq!(state.lock().unwrap().resource_reads.len(), 2);
+        // With no video cast, a turn takes as many as it may.
+        worker.frames.on = false;
+        worker.capture_stills_at(now);
+        assert_eq!(state.lock().unwrap().resource_reads.len(), 8);
+        assert!(!worker.stills_pending);
     }
 
     fn recovery_png() -> Vec<u8> {
@@ -3814,6 +3879,11 @@ mod tests {
             state.snapshots
         };
         worker.read_live();
+        // The snapshot is due, as a ping's is: the loop reads it (on the
+        // reader's thread when the engine has one), not this turn.
+        assert_eq!(state.lock().unwrap().snapshots, before_reads);
+        assert!(worker.dirty.is_some(), "interactive log asks for a reading");
+        worker.read().unwrap();
         assert_eq!(
             state.lock().unwrap().snapshots,
             before_reads + 1,

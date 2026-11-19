@@ -124,6 +124,61 @@ From the maintainer's first run with Claude's adapter (`claude-agent-acp`).
   `replaying`) and `Session::set_modes`, `Session::mode_name` and
   `session::mode_name`; `session::Asks` holds what the user was asked.
 
+### Noctiluca: busy live pages no longer pause their video
+
+- **A video beside a busy chat no longer stops for 1 to 2.5 s at a
+  time.** On a busy Twitch channel the frames paused 3 to 7 times in 75 s
+  for up to 2 s. The cause, traced: each reading found new pictures (the
+  chat's badges and emotes), and their stills were taken on the tab's
+  thread, up to eight a turn, each with two to four calls to a page busy
+  enough to answer each in 50 to 400 ms. Meanwhile no frame was taken, and
+  Chrome paints no screencast frame until the one it sent is taken. While
+  a video is cast, a turn now spends at most a frame's slot on stills and
+  leaves the rest for the next, and starts none while a reading is out on
+  the reader's thread (the page answers them only after its snapshot). A
+  chat line with buttons in it was read at once on the tab's thread (0.6
+  to 1 s on that channel); it is now read as a page's own change is, on
+  the reader's thread. On the same channel, in Kitty and in half blocks,
+  three runs each: no gap over 0.44 s, at 24 frames a second where it was
+  21. Tested with a fixture page whose chat brings new pictures with every
+  line (`tests/fixtures/busy-pictures.html`).
+- `NOCTILUCA_TRACE` writes `chrome_frame` (each screencast frame Chrome
+  sends, with its paint time), `cdp` (a DevTools call of 50 ms or more,
+  and which thread waited) and `slow_turn` (a turn of the tab's loop that
+  held it 100 ms or more, by part) lines.
+
+### Noctiluca: block links and a button's wide face keep their lines (#880)
+
+- **Links laid out as blocks each take a line.** A sidebar's links set
+  `display: block`, one under another in Chrome, ran together into one
+  word (`SyntaxExamplesNotes`): a link's text is walked into the block it
+  is in, and nothing ended the line. A block-level link now starts and
+  ends a line there; a flex or grid item (a row of tabs, blocks side by
+  side) does not.
+- **A button whose face is wider than its box no longer pushes the row
+  after it under it.** An icon button named in words (`[Toggle sidebar]`
+  in a 34 px box) ran over the breadcrumb trail Chrome put after it on its
+  line, so the trail's first links went to the row below and read after
+  the rest (`Reference Elements <table>` then `Web HTML` on MDN). The
+  one-line boxes after such a face on its line now move right along its
+  row, a cell past it, when the row has room and nothing else is there.
+- Tested with fixture pages (`tests/fixtures/crumbs.html`,
+  `tests/fixtures/sidebar-gaps.html`) and a built page in
+  `tests/model.rs`.
+
+### Noctiluca: rows blank beside a sticky sidebar collapse (#786)
+
+- `collapse-gaps` also collapses rows blank in every column but a sticky
+  sidebar's: a sticky box in the page's flow narrower than half the page
+  (a table of contents, an ad that stays in view as the page scrolls),
+  with its blocks and the pictures in it. It sits beside whatever the
+  page scrolls past, so it no longer holds open the rows a main column
+  leaves blank where its code and paragraphs take fewer rows than their
+  boxes. On MDN's `Array.prototype.map()` at 120x40, runs of 6 to 8 blank
+  rows beside the sidebar came on most screens; one run of 5 is left. A
+  sidebar in the flow keeps its rows beside the main column, as before.
+  Tested with a fixture page (`tests/fixtures/sidebar-gaps.html`).
+
 ### Cornacai: signing in from a terminal (claude-agent-acp)
 
 - **Claude's adapter can be signed in to from Cornacai.**

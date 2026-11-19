@@ -2737,6 +2737,7 @@ pub noctiluca::testing::FakeState::pages: std::collections::hash::map::HashMap<a
 pub noctiluca::testing::FakeState::paint: core::option::Option<[u8; 3]>
 pub noctiluca::testing::FakeState::read_cost: core::time::Duration
 pub noctiluca::testing::FakeState::recorded: core::option::Option<std::path::PathBuf>
+pub noctiluca::testing::FakeState::resource_cost: core::time::Duration
 pub noctiluca::testing::FakeState::resource_reads: alloc::vec::Vec<alloc::string::String>
 pub noctiluca::testing::FakeState::resource_root: core::option::Option<std::path::PathBuf>
 pub noctiluca::testing::FakeState::resource_steps: std::collections::hash::map::HashMap<alloc::string::String, alloc::collections::vec_deque::VecDeque<core::option::Option<alloc::vec::Vec<u8>>>>
