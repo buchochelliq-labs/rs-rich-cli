@@ -9,6 +9,16 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### ACP: the write guard matches names as the file system does
+
+- `rs-rich-acp`'s `controls_execution` compares names case-insensitively
+  and without trailing dots and spaces. An agent creating `.CLAUDE/settings.json`
+  or `.claude./settings.json` in a workspace that has no `.claude/` yet now gets
+  Cornacai's "this file controls what runs" warning on its write review, as
+  `.claude/settings.json` does, and so does a name with an NTFS stream
+  (`.mcp.json::$DATA`, which is `.mcp.json`'s contents). Writes were
+  reviewed either way; only the warning was missing.
+
 ### intuiTUIve: a board (#905)
 
 - **`board(columns, cards)`**: columns side by side, each a stack of
