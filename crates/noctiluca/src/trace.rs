@@ -12,6 +12,11 @@
 //! delivery and prepared queues, encoder and inline-resource work) go here
 //! too: there is one trace, and nothing is written to stderr, which the
 //! terminal shows while Noctiluca owns it.
+//!
+//! What held a video's frames: `chrome_frame` (each screencast frame as
+//! the engine's thread reads it, with Chrome's paint time), `cdp` (a
+//! DevTools call of 50 ms or more, and the thread that waited) and
+//! `slow_turn` (a turn of the tab's loop that kept it busy, by part).
 
 use std::fs::File;
 use std::io::{BufWriter, Write};
@@ -93,6 +98,53 @@ pub(crate) fn media(json: &str) {
     }
     let fields = serde_json::from_str(json).unwrap_or_else(|_| Value::from(json));
     event("media", fields);
+}
+
+/// The parts of one turn of the tab's loop, when tracing: a turn that
+/// kept the tab busy 100 ms or more (its wait for a command aside) writes
+/// a `slow_turn` line with each part of 5 ms or more, so a gap in the
+/// frames can be put down to what held the tab.
+pub(crate) struct Turn {
+    start: Option<Instant>,
+    lap: Option<Instant>,
+    parts: Vec<(&'static str, f64)>,
+}
+
+impl Turn {
+    pub(crate) fn start() -> Turn {
+        Turn {
+            start: start(),
+            lap: start(),
+            parts: Vec::new(),
+        }
+    }
+
+    /// The part `name` ends here.
+    pub(crate) fn lap(&mut self, name: &'static str) {
+        if let Some(at) = self.lap.as_mut() {
+            self.parts.push((name, ms(Some(*at))));
+            *at = Instant::now();
+        }
+    }
+
+    /// The turn ends; its first part waited up to `waited` for a command.
+    pub(crate) fn end(self, waited: std::time::Duration) {
+        if self.start.is_none() {
+            return;
+        }
+        let took = ms(self.start);
+        let idle = self.parts.first().map_or(0.0, |p| p.1);
+        if took - idle.min(waited.as_secs_f64() * 1e3) < 100.0 {
+            return;
+        }
+        let parts: serde_json::Map<_, _> = self
+            .parts
+            .iter()
+            .filter(|p| p.1 >= 5.0)
+            .map(|(k, v)| (k.to_string(), Value::from(*v)))
+            .collect();
+        event("slow_turn", serde_json::json!({"ms": took, "parts": parts}));
+    }
 }
 
 #[cfg(test)]

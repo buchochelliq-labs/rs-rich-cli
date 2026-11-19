@@ -102,6 +102,21 @@ impl Series {
         &self.points
     }
 
+    /// The same series (its name, kind, colour and marker) through other
+    /// `points`: a window of a longer history.
+    ///
+    /// ```
+    /// use rich_ext::chart::Series;
+    ///
+    /// let all = Series::from_values("load", [1.0, 2.0, 3.0]).style("red");
+    /// let last = all.clone().with_points(all.points()[1..].to_vec());
+    /// assert_eq!((last.name(), last.points()), ("load", &[(1.0, 2.0), (2.0, 3.0)][..]));
+    /// ```
+    pub fn with_points(mut self, points: impl IntoIterator<Item = (f64, f64)>) -> Self {
+        self.points = points.into_iter().collect();
+        self
+    }
+
     fn finite(&self) -> impl Iterator<Item = (f64, f64)> + '_ {
         self.points
             .iter()
@@ -262,6 +277,58 @@ impl LineChart {
         self
     }
 
+    /// The y labels' width in a chart `width` wide, and whether the labels
+    /// and the axis line are drawn.
+    fn label_room(y_axis: &AxisFit, width: usize) -> (usize, bool, bool) {
+        let label_w = y_axis
+            .labels
+            .iter()
+            .map(|(_, l)| cells(l))
+            .max()
+            .unwrap_or(0);
+        let (labels, axis) = if label_w > 0 && width >= label_w + 2 + MIN_PLOT {
+            (true, true)
+        } else if width >= 2 {
+            (false, true)
+        } else {
+            (false, false)
+        };
+        (label_w, labels, axis)
+    }
+
+    /// Where the plot is in the chart drawn `width` cells wide (or its
+    /// [`width`](Self::width)): the cells before its first column (the y
+    /// labels and axis), and the x value each of its columns stands for,
+    /// left to right; `None` with no data. Its rows are the chart's first
+    /// lines. What a cursor over the chart needs.
+    ///
+    /// ```
+    /// use rich_ext::chart::{LineChart, Series};
+    ///
+    /// let chart = LineChart::new()
+    ///     .series(Series::from_values("load", [1.0, 3.0, 2.0, 5.0, 4.0]))
+    ///     .height(6);
+    /// let (left, xs) = chart.plot_columns(24).unwrap();
+    /// // `6 +`: a label, a space and the axis.
+    /// assert_eq!(left, 3);
+    /// assert_eq!((xs[0], xs[xs.len() - 1]), (0.0, 4.0));
+    /// ```
+    pub fn plot_columns(&self, width: usize) -> Option<(usize, Vec<f64>)> {
+        let width = self.width.map_or(width, |w| w.min(width));
+        if self.series.iter().all(|s| s.finite().next().is_none()) {
+            return None;
+        }
+        let y_axis = self.y_axis();
+        let (label_w, labels, axis) = Self::label_room(&y_axis, width);
+        let prefix = if labels { label_w + 1 } else { 0 } + usize::from(axis);
+        let plot_w = width.saturating_sub(prefix).max(1);
+        let x_axis = self.x_axis(plot_w);
+        let xs = (0..plot_w)
+            .map(|column| super::scale::along(x_axis.lo, column as f64, x_axis.unit))
+            .collect();
+        Some((prefix, xs))
+    }
+
     /// The y axis: how many rows, what each is worth, and its labels.
     fn y_axis(&self) -> AxisFit {
         let ys = self.series.iter().flat_map(|s| s.finite().map(|p| p.1));
@@ -338,19 +405,7 @@ impl LineChart {
         let label_style = colour.then(|| theme_style(console, "chart.label"));
 
         // Y labels and the space they need.
-        let label_w = y_axis
-            .labels
-            .iter()
-            .map(|(_, l)| cells(l))
-            .max()
-            .unwrap_or(0);
-        let (labels, axis) = if label_w > 0 && width >= label_w + 2 + MIN_PLOT {
-            (true, true)
-        } else if width >= 2 {
-            (false, true)
-        } else {
-            (false, false)
-        };
+        let (label_w, labels, axis) = Self::label_room(&y_axis, width);
         let prefix = if labels { label_w + 1 } else { 0 } + usize::from(axis);
         let plot_w = width.saturating_sub(prefix).max(1);
         let x_axis = self.x_axis(plot_w);

@@ -615,6 +615,11 @@ label("scope")
   it in a test. **`bind_hidden(keys, name, handler)`** is both at once
   (Textual's `show=False`). An empty description still hides a binding
   with no name.
+- **`.listed_as(keys)`** lists the binding added last under other keys in
+  the help, the palette, which-key and `key_hints`: a pair bound apart as
+  one hint (`.bind("alt+n", "tab", next).listed_as("alt+n alt+p")`, then
+  the previous tab's binding `.unlisted()`). It still fires on its own
+  keys; once a keymap remaps it, its new keys are listed.
 
 ### User keymaps
 

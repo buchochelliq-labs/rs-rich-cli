@@ -209,12 +209,34 @@ impl core::marker::Unpin for cornacai::session::Entry
 impl core::marker::UnsafeUnpin for cornacai::session::Entry
 impl core::panic::unwind_safe::RefUnwindSafe for cornacai::session::Entry
 impl core::panic::unwind_safe::UnwindSafe for cornacai::session::Entry
+pub struct cornacai::session::Asks
+pub cornacai::session::Asks::always: alloc::vec::Vec<(rich_acp::schema::ToolKind, alloc::string::String)>
+pub cornacai::session::Asks::asked: std::collections::hash::set::HashSet<alloc::string::String>
+pub cornacai::session::Asks::reviewed: std::collections::hash::set::HashSet<std::path::PathBuf>
+pub cornacai::session::Asks::unasked: std::collections::hash::map::HashMap<alloc::string::String, alloc::string::String>
+impl core::clone::Clone for cornacai::session::Asks
+pub fn cornacai::session::Asks::clone(&self) -> cornacai::session::Asks
+impl core::cmp::PartialEq for cornacai::session::Asks
+pub fn cornacai::session::Asks::eq(&self, &cornacai::session::Asks) -> bool
+impl core::default::Default for cornacai::session::Asks
+pub fn cornacai::session::Asks::default() -> cornacai::session::Asks
+impl core::fmt::Debug for cornacai::session::Asks
+pub fn cornacai::session::Asks::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for cornacai::session::Asks
+impl core::marker::Freeze for cornacai::session::Asks
+impl core::marker::Send for cornacai::session::Asks
+impl core::marker::Sync for cornacai::session::Asks
+impl core::marker::Unpin for cornacai::session::Asks
+impl core::marker::UnsafeUnpin for cornacai::session::Asks
+impl core::panic::unwind_safe::RefUnwindSafe for cornacai::session::Asks
+impl core::panic::unwind_safe::UnwindSafe for cornacai::session::Asks
 pub struct cornacai::session::Session
 pub cornacai::session::Session::busy: intuituive::reactive::Signal<bool>
 pub cornacai::session::Session::entries: intuituive::reactive::Signal<alloc::vec::Vec<cornacai::session::Entry>>
 pub cornacai::session::Session::id: intuituive::reactive::Signal<core::option::Option<rich_acp::schema::SessionId>>
 pub cornacai::session::Session::key: u64
 pub cornacai::session::Session::mode: intuituive::reactive::Signal<core::option::Option<alloc::string::String>>
+pub cornacai::session::Session::modes: intuituive::reactive::Signal<alloc::vec::Vec<rich_acp::schema::SessionMode>>
 pub cornacai::session::Session::plan: intuituive::reactive::Signal<alloc::vec::Vec<rich_acp::schema::PlanEntry>>
 pub cornacai::session::Session::prompt: intuituive::reactive::Signal<alloc::string::String>
 pub cornacai::session::Session::terminals: intuituive::reactive::Signal<std::collections::hash::map::HashMap<alloc::string::String, alloc::string::String>>
@@ -222,9 +244,11 @@ pub cornacai::session::Session::title: intuituive::reactive::Signal<alloc::strin
 impl cornacai::session::Session
 pub fn cornacai::session::Session::agent_text(&self) -> alloc::string::String
 pub fn cornacai::session::Session::apply(&self, rich_acp::schema::SessionUpdate)
+pub fn cornacai::session::Session::mode_name(&self) -> core::option::Option<alloc::string::String>
 pub fn cornacai::session::Session::new(u64) -> cornacai::session::Session
 pub fn cornacai::session::Session::notice(&self, impl core::convert::Into<alloc::string::String>)
 pub fn cornacai::session::Session::push(&self, cornacai::session::Entry)
+pub fn cornacai::session::Session::set_modes(&self, rich_acp::schema::SessionModeState)
 pub fn cornacai::session::Session::tool(&self, &str) -> core::option::Option<intuituive::reactive::Signal<rich_acp::schema::ToolCall>>
 pub fn cornacai::session::Session::update_tool(&self, &rich_acp::schema::ToolCallUpdate)
 impl core::clone::Clone for cornacai::session::Session
@@ -238,6 +262,7 @@ impl core::marker::UnsafeUnpin for cornacai::session::Session
 impl core::panic::unwind_safe::RefUnwindSafe for cornacai::session::Session
 impl core::panic::unwind_safe::UnwindSafe for cornacai::session::Session
 pub fn cornacai::session::chunk_text(&rich_acp::schema::ContentBlock) -> alloc::string::String
+pub fn cornacai::session::mode_name(&[rich_acp::schema::SessionMode], &str) -> alloc::string::String
 pub mod cornacai::store
 pub struct cornacai::store::SessionStore
 impl cornacai::store::SessionStore

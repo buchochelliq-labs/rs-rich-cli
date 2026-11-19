@@ -2412,6 +2412,94 @@ fn project_part(
         }
         items[n].x1 = items[n].x1.max(end);
     }
+    // A control's face wider than its box (an icon button named in words,
+    // `[Toggle sidebar]` in four cells) runs over what follows it on its
+    // row in Chrome (a breadcrumb trail): the one-line boxes after it on
+    // that row move right, as a run, a cell past it, when the row has room
+    // and nothing else is there; else they stay (and go under it).
+    let on_a_line = |n: usize, item: &Item| {
+        // A button's box is taller than its face's line.
+        let tall = if one_row.contains(&n) { 2.0 } else { 1.5 };
+        item.row.is_none()
+            && item.media.is_none()
+            && item.log.is_none()
+            && item.bottom - item.top <= tall * ch
+            && (item.one_line || item.wrap.is_some())
+    };
+    let drawn_len = |item: &Item| {
+        item.lines
+            .iter()
+            .map(|l| l.spans.iter().map(|s| cell_len(&s.text)).sum::<usize>())
+            .max()
+            .unwrap_or(0)
+            .max(need_of(item))
+            .max(item.x1 - item.x0)
+    };
+    let mut faces: Vec<usize> = one_row
+        .iter()
+        .copied()
+        .filter(|&n| on_a_line(n, &items[n]))
+        .collect();
+    faces.sort_by_key(|&n| items[n].x0);
+    for face in faces {
+        let (x0, middle) = (items[face].x0, (items[face].top + items[face].bottom) / 2.0);
+        let reach = x0 + drawn_len(&items[face]);
+        // What Chrome put on the face's line after it, in order.
+        let mut row: Vec<usize> = (0..items.len())
+            .filter(|&m| {
+                let it = &items[m];
+                m != face
+                    && on_a_line(m, it)
+                    && it.x0 >= x0
+                    && ((it.top + it.bottom) / 2.0 - middle).abs() < ch / 2.0
+            })
+            .collect();
+        row.sort_by_key(|&m| (items[m].x0, items[m].x1));
+        if row.first().is_none_or(|&m| items[m].x0 >= reach) {
+            continue;
+        }
+        let mut end = reach;
+        let mut moved: Vec<(usize, usize, usize)> = Vec::new();
+        for &m in &row {
+            let it = &items[m];
+            let (mut a, mut b) = (it.x0, it.x1);
+            if a <= end {
+                let shift = end + 1 - a;
+                a += shift;
+                b += shift;
+                moved.push((m, a, b));
+            }
+            end = end.max(if one_row.contains(&m) {
+                a + drawn_len(it)
+            } else {
+                b
+            });
+        }
+        let fits = moved.iter().all(|&(_, _, b)| b <= columns);
+        let clear = moved.iter().all(|&(m, a, b)| {
+            let (top, bottom) = (items[m].top, items[m].bottom);
+            !items.iter().enumerate().any(|(o, it)| {
+                o != face
+                    && !row.contains(&o)
+                    && it.top < bottom - 0.5
+                    && top < it.bottom - 0.5
+                    && it.x0 < b
+                    && a < it.x1
+            })
+        });
+        if fits && clear {
+            // On the face's row, as Chrome has them on its line.
+            let row_top = (items[face].top / ch).round() * ch;
+            for (m, a, b) in moved {
+                let item = &mut items[m];
+                item.x0 = a;
+                item.x1 = b;
+                let height = item.bottom - item.top;
+                item.top = row_top;
+                item.bottom = row_top + height;
+            }
+        }
+    }
     // Terminal glyphs are not Chrome's: a box whose text needs more cells
     // than it has grows to the right, into cells no box beside it (on the
     // rows it spans) claims, before its text wraps.
@@ -2617,7 +2705,53 @@ fn project_part(
     // up by them, so what is beside it keeps its place.
     let collapse = adapt.on(Rule::CollapseGaps);
     let mut lifted = 0usize;
+    // A sticky sidebar (a sticky box in the flow, narrower than half the
+    // page: a table of contents, an ad that stays in view) sits beside
+    // whatever the page scrolls past it, so it holds no gap open: rows
+    // blank in every column but its own collapse too (#786). Its extent
+    // is its box and its blocks' (one that scrolls within itself shows
+    // more than its box); a picture inside it is part of it.
+    let mut sidebars: Vec<(usize, crate::engine::Rect)> = page
+        .layers
+        .iter()
+        .enumerate()
+        .filter(|(_, l)| !l.fixed && l.place == Place::Flow && l.rect.width < page.width / 2.0)
+        .map(|(k, l)| (k, l.rect))
+        .collect();
+    let mut beside = std::collections::HashSet::new();
+    for block in &page.blocks {
+        let Some((_, extent)) = block
+            .stack
+            .layer
+            .and_then(|l| sidebars.iter_mut().find(|(k, _)| *k == l))
+        else {
+            continue;
+        };
+        beside.insert(block.node);
+        let (top, bottom) = (
+            extent.y.min(block.rect.y),
+            extent.bottom().max(block.rect.bottom()),
+        );
+        extent.y = top;
+        extent.height = bottom - top;
+    }
+    let in_sidebar = |node: crate::engine::NodeId, media: Option<(usize, usize, usize)>| {
+        beside.contains(&node)
+            || media
+                .and_then(|(index, _, _)| page.media.get(index))
+                .is_some_and(|m| {
+                    sidebars.iter().any(|(_, r)| {
+                        m.rect.x >= r.x - 1.0
+                            && m.rect.right() <= r.right() + 1.0
+                            && m.rect.y >= r.y - 1.0
+                            && m.rect.bottom() <= r.bottom() + 1.0
+                    })
+                })
+    };
+    // The rows the boxes outside sticky sidebars take.
+    let mut flow_rows = 0usize;
     for (top, anchor, _, x0, x1, lines, node, media, table_row) in boxes {
+        let sidebar = collapse && !sidebars.is_empty() && in_sidebar(node, media);
         // A page can place a block millions of pixels down: blank rows
         // past a few screens tell the reader nothing, so the gap is capped
         // and the grid grows with the content, not the coordinates.
@@ -2627,8 +2761,13 @@ fn project_part(
         // Rows blank in every column (no box drew on them: the place of
         // an empty slot, a hidden menu, a spacer) collapse to one, none at
         // the top of the page.
-        let keep = grid.len() + usize::from(!grid.is_empty());
-        if collapse && y0 > keep {
+        let below = if sidebars.is_empty() {
+            grid.len()
+        } else {
+            flow_rows
+        };
+        let keep = below + usize::from(below > 0);
+        if collapse && !sidebar && y0 > keep {
             lifted += y0 - keep;
             y0 = keep;
         }
@@ -2655,6 +2794,9 @@ fn project_part(
             media: usize::MAX,
         };
         occupied.push((node, rectangle));
+        if !sidebar {
+            flow_rows = flow_rows.max(y + lines.len());
+        }
         if let Some(at) = logs.iter().position(|(log, _)| *log == node) {
             slots.push(LogSlot {
                 node,

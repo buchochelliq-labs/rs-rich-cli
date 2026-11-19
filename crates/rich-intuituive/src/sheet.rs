@@ -197,9 +197,10 @@ enum Paint {
 }
 
 /// Which edge a node keeps to in a [`column`](crate::column) (`top`,
-/// `bottom`) or [`row`](crate::row) (`left`, `right`).
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum Dock {
+/// `bottom`) or [`row`](crate::row) (`left`, `right`):
+/// [`Node::dock`](crate::Node::dock), or a stylesheet's `dock`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum Dock {
     Top,
     Bottom,
     Left,

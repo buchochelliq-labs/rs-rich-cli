@@ -26,12 +26,15 @@ use rich_acp::{
 use rich_embed::TerminalPane;
 use rich_intuituive::files::path_completer;
 use rich_intuituive::prelude::*;
-use rich_intuituive::widgets::{Decision, DiffOptions, accepted_text, diff_view_with};
+use rich_intuituive::widgets::{
+    Decision, DiffOptions, KeyHintsOptions, accepted_text, diff_view_with, key_hints_with, tabs,
+};
 use rich_intuituive::{
     Driver, Origin, Status, StepState, button, collapsible_with, history_session, markdown, steps,
     switch,
 };
 
+use crate::ask;
 use crate::bridge::{Bridge, Review, display};
 use crate::clean::{clean, markup, reveal};
 use crate::mention::prompt_request;
@@ -412,7 +415,7 @@ impl Ui {
         let id = response.session_id;
         session.id.set(Some(id.clone()));
         if let Some(modes) = response.modes {
-            session.mode.set(Some(modes.current_mode_id.0));
+            session.set_modes(modes);
         }
         let mine: Vec<SessionNotification> = self
             .orphans
@@ -425,7 +428,13 @@ impl Ui {
         }
     }
 
-    /// A permission prompt: one button per option the agent offers.
+    /// A permission prompt. It leads with what will happen, in words (the
+    /// change and its size, the command and where it runs), then why, in
+    /// the agent's own last words, then one button per option with what
+    /// it means; the technical detail (the title, paths, the command in
+    /// full) comes last, dimmed. A request carrying a diff shows it, to be
+    /// accepted or rejected whole; a mode switch carrying a plan shows the
+    /// plan.
     pub fn ask_permission(
         &self,
         cx: &mut Ctx,
@@ -435,6 +444,10 @@ impl Ui {
         let session = self.session(&request.session_id);
         if let Some(session) = session {
             session.update_tool(&request.tool_call);
+            let id = request.tool_call.tool_call_id.0.clone();
+            session.asks.update(|a| {
+                a.asked.insert(id);
+            });
         }
         let call = session
             .and_then(|s| s.tool(&request.tool_call.tool_call_id.0))
@@ -451,12 +464,59 @@ impl Ui {
             .find(|o| o.kind == PermissionOptionKind::RejectOnce)
             .or_else(|| options.iter().find(|o| !o.kind.allows()))
             .map(|o| o.option_id.clone());
+        let accept = options
+            .iter()
+            .find(|o| o.kind == PermissionOptionKind::AllowOnce)
+            .or_else(|| options.iter().find(|o| o.kind.allows()))
+            .map(|o| o.option_id.clone());
         let cwd = self.cwd_of();
         let title = session.map(|s| s.title.get_untracked()).unwrap_or_default();
-        cx.modal(Size::Percent(80), Size::Auto, move || {
+        let mode = session.and_then(|s| {
+            s.mode.get_untracked().map(|id| {
+                s.modes
+                    .with_untracked(|m| crate::session::mode_name(m, &id))
+            })
+        });
+        let intent = ask::intent(&call, &cwd, mode.as_deref());
+        let reason = ask::reason(session, &call);
+        let changes: Vec<rich_acp::Diff> = call
+            .content
+            .iter()
+            .filter_map(|c| match c {
+                ToolCallContent::Diff(diff) => Some(diff.clone()),
+                _ => None,
+            })
+            .collect();
+        let plan = match call.kind {
+            ToolKind::SwitchMode => ask::plan_text(&call),
+            _ => None,
+        };
+        let change = !changes.is_empty();
+        let height = if change || plan.is_some() {
+            Size::Percent(85)
+        } else {
+            Size::Auto
+        };
+        let width = if change {
+            Size::Percent(90)
+        } else {
+            Size::Percent(80)
+        };
+        cx.modal(width, height, move || {
             let pick = {
                 let answer = answer.clone();
+                let options = options.clone();
+                let kind = call.kind.clone();
                 move |cx: &mut Ctx, response: RequestPermissionResponse| {
+                    if let Some(session) = session
+                        && let rich_acp::RequestPermissionOutcome::Selected { option_id } =
+                            &response.outcome
+                        && let Some(option) = options.iter().find(|o| &o.option_id == option_id)
+                        && option.kind == PermissionOptionKind::AllowAlways
+                    {
+                        let chosen = (kind.clone(), option.name.clone());
+                        session.asks.update(|a| a.always.push(chosen));
+                    }
                     if let Some(tx) = answer.borrow_mut().take() {
                         let _ = tx.send(response);
                     }
@@ -481,26 +541,96 @@ impl Ui {
                     }
                 })
                 .collect();
-            let mut root = column([
+            let meanings: Vec<String> = options
+                .iter()
+                .enumerate()
+                .map(|(i, option)| {
+                    format!(
+                        "[b]{}[/] {} [dim]· {}[/]",
+                        i + 1,
+                        markup(&option.name),
+                        ask::meaning(&option.kind, change)
+                    )
+                })
+                .collect();
+            let mut parts = vec![label(format!("[b]{intent}[/]")).auto()];
+            if let Some(reason) = &reason {
+                let quoted: Vec<String> = reason
+                    .lines()
+                    .map(|l| format!("[dim]│[/] [i]{}[/]", markup(l)))
+                    .collect();
+                parts.push(
+                    label(format!(
+                        "[dim]Why, in the agent's words:[/]\n{}",
+                        quoted.join("\n")
+                    ))
+                    .auto(),
+                );
+            }
+            // Shown for keys a diff would take hunk by hunk.
+            let whole = signal(String::new());
+            for diff in &changes {
+                let old = diff.old_text.clone().unwrap_or_default();
+                parts.push(label(format!("[b]{}[/]", markup(&display(&diff.path, &cwd)))).auto());
+                parts.push(
+                    diff_view_with(
+                        signal(old),
+                        signal(diff.new_text.clone()),
+                        DiffOptions::new().context(3),
+                    )
+                    .autofocus()
+                    .flex(1),
+                );
+            }
+            if let Some(plan) = &plan {
+                parts.push(label("[b]The plan[/] [dim](the agent's words)[/]").auto());
+                parts.push(
+                    scroll(markdown(signal(plan.clone())).auto())
+                        .autofocus()
+                        .flex(1),
+                );
+            }
+            parts.push(label(meanings.join("\n")).auto());
+            parts.push(row(buttons).fixed(3));
+            // The technical detail, last and dimmed.
+            let mut detail = vec![
                 label(format!(
-                    "[b]The agent asks to {}[/] [dim]· {}[/]",
-                    kind_word(&call.kind),
-                    markup(&title)
-                ))
-                .auto(),
-                label(format!(
-                    "“{}” [dim](the agent's words)[/]",
+                    "\u{201c}{}\u{201d} (the agent's words)",
                     markup(&call.title)
                 ))
                 .auto(),
-                describe(&call, &cwd).auto(),
-                row(buttons).fixed(3),
-                label("[dim]1–9 choose · Esc rejects once[/]").fixed(1),
-            ])
-            .auto()
-            .padding(0, 1)
-            .panel("Permission")
-            .on_key("escape", {
+            ];
+            detail.extend(describe(&call, &cwd).map(Node::auto));
+            parts.push(column(detail).auto().style("dim"));
+            if change {
+                parts.push(
+                    text(move || whole.get())
+                        .auto()
+                        .shown_when(move || !whole.with(String::is_empty)),
+                );
+                parts.push(
+                    label(
+                        "[dim]y accept the change · x or Esc reject it · 1–9 choose · \
+                         n/p next or previous hunk[/]",
+                    )
+                    .fixed(1),
+                );
+            } else {
+                parts.push(label("[dim]1–9 choose · Esc rejects once[/]").fixed(1));
+            }
+            let panel = format!(
+                "{}The agent asks to {} · {}",
+                if change { "Review the change · " } else { "" },
+                kind_word(&call.kind),
+                markup(&title)
+            );
+            let column = column(parts).padding(0, 1);
+            let column = if change || plan.is_some() {
+                column
+            } else {
+                column.auto()
+            };
+            let mut root = column.panel(&panel).on_key("escape", {
                 let pick = pick.clone();
                 let reject = reject.clone();
                 move |cx| {
@@ -511,6 +641,28 @@ impl Ui {
                     pick(cx, response)
                 }
             });
+            if change {
+                if let Some(id) = accept.clone() {
+                    let pick = pick.clone();
+                    root = root.bind("y", "Accept the change", move |cx| {
+                        pick(cx, RequestPermissionResponse::selected(id.clone()))
+                    });
+                }
+                if let Some(id) = reject.clone() {
+                    let pick = pick.clone();
+                    root = root.bind("x", "Reject the change", move |cx| {
+                        pick(cx, RequestPermissionResponse::selected(id.clone()))
+                    });
+                }
+                root = root.on_key("a r A R", move |_| {
+                    whole.set(
+                        "[yellow]This change is taken or left whole:[/] the agent applies it \
+                         itself once allowed, so it cannot be split by hunk. y accepts it, x \
+                         rejects it."
+                            .to_string(),
+                    )
+                });
+            }
             for (i, option) in options.iter().enumerate().take(9) {
                 let id = option.option_id.clone();
                 let pick = pick.clone();
@@ -539,6 +691,12 @@ impl Ui {
             .session(session)
             .map(|s| s.title.get_untracked())
             .unwrap_or_default();
+        if let Some(s) = self.session(session) {
+            let path = path.to_path_buf();
+            s.asks.update(|a| {
+                a.reviewed.insert(path);
+            });
+        }
         let shown = markup(&display(path, &self.cwd_of()));
         let fresh = old.is_none();
         let old = old.unwrap_or_default();
@@ -696,8 +854,8 @@ fn kind_word(kind: &ToolKind) -> &str {
 }
 
 /// What a tool call touches, for a prompt: its paths and command in full,
-/// hidden characters revealed, and a diff's size.
-fn describe(call: &ToolCall, cwd: &Path) -> Node {
+/// hidden characters revealed, and a diff's size; nothing when it names none.
+fn describe(call: &ToolCall, cwd: &Path) -> Option<Node> {
     let mut lines = Vec::new();
     for location in &call.locations {
         let mut line = format!("[dim]file[/] {}", markup(&display(&location.path, cwd)));
@@ -726,7 +884,7 @@ fn describe(call: &ToolCall, cwd: &Path) -> Node {
             ));
         }
     }
-    label(lines.join("\n"))
+    (!lines.is_empty()).then(|| label(lines.join("\n")))
 }
 
 /// Builds Cornacai: the app to run (or drive), and a handle on its
@@ -1027,6 +1185,7 @@ fn open_session(hub: &Arc<Hub>, proxy: &Proxy, ui: Ui, session: Session, open: O
             on_app(proxy, move || {
                 session.id.set(Some(shown));
                 session.busy.set(true);
+                session.replaying.set(true);
                 if let Some(title) = title {
                     session.title.set(title);
                 }
@@ -1038,15 +1197,19 @@ fn open_session(hub: &Arc<Hub>, proxy: &Proxy, ui: Ui, session: Session, open: O
             };
             match connection.load_session(request) {
                 Err(e) if auth_required(&e) => {
-                    on_app(proxy, move || session.id.set(None));
+                    on_app(proxy, move || {
+                        session.id.set(None);
+                        session.replaying.set(false);
+                    });
                     sign_in(hub, proxy, Retry::Open(ui, session, Open::Load(id)));
                 }
                 Ok(response) => {
                     hub.touch(&id, None);
                     proxy.run(move || {
                         session.busy.set(false);
+                        session.replaying.set(false);
                         if let Some(modes) = response.modes {
-                            session.mode.set(Some(modes.current_mode_id.0));
+                            session.set_modes(modes);
                         }
                         session.notice(
                             "[dim]Reopened: the conversation so far, as the agent kept it.[/]",
@@ -1057,6 +1220,7 @@ fn open_session(hub: &Arc<Hub>, proxy: &Proxy, ui: Ui, session: Session, open: O
                     let message = markup(&e.to_string());
                     proxy.run(move || {
                         session.busy.set(false);
+                        session.replaying.set(false);
                         session.id.set(None);
                         session.notice(format!(
                             "[red]The session did not reopen:[/] {message}. Ctrl+N opens a new one."
@@ -1271,22 +1435,49 @@ fn ask_sign_in(cx: &mut Ctx, methods: Vec<AuthMethod>, tx: Sender<Option<AuthMet
 fn view(ui: Ui, hub: Arc<Hub>, shell: Option<ShellPane>) -> Node {
     let prompts: Rc<RefCell<HashMap<u64, u64>>> = Rc::default();
     let shell_id = Rc::new(RefCell::new(None::<u64>));
-    let tabs = text(move || {
-        let active = ui.active.get();
-        let sessions = ui.sessions.get();
-        let mut line = String::new();
-        for (i, session) in sessions.iter().enumerate() {
-            let busy = if session.busy.get() { " …" } else { "" };
-            let title = markup(&session.title.get());
-            if i == active {
-                line.push_str(&format!("[reverse] {} {title}{busy} [/]", i + 1));
-            } else {
-                line.push_str(&format!(" {} {title}{busy} ", i + 1));
+    let focus_prompt = {
+        let prompts = prompts.clone();
+        move |cx: &mut Ctx| {
+            let key = ui.current().key;
+            if let Some(id) = prompts.borrow().get(&key) {
+                cx.focus(*id);
             }
         }
-        format!("{line}  [dim]·[/] [b]{}[/]", markup(&ui.agent.get()))
+    };
+    // intuiTUIve's tab strip, drawn as the line was by hand: each title
+    // padded, no divider, the selected one reversed; clicks select, and
+    // the keys stay the screen's (the prompt keeps the focus).
+    let strip = tabs(
+        move || {
+            ui.sessions.with(|sessions| {
+                sessions
+                    .iter()
+                    .enumerate()
+                    .map(|(i, session)| {
+                        let busy = if session.busy.get() { " …" } else { "" };
+                        format!("{} {}{busy}", i + 1, markup(&session.title.get()))
+                    })
+                    .collect()
+            })
+        },
+        ui.active,
+    )
+    .divider("")
+    .theme_styles([
+        ("tabs.selected", "reverse"),
+        ("tabs.selected.blur", "reverse"),
+    ])
+    .no_focus()
+    .on_select({
+        let focus_prompt = focus_prompt.clone();
+        move |i, cx| {
+            ui.active.set(i);
+            let _ = cx.after(Duration::ZERO, focus_prompt.clone());
+        }
     })
-    .fixed(1);
+    .auto();
+    let agent = text(move || format!("  [dim]·[/] [b]{}[/]", markup(&ui.agent.get()))).flex(1);
+    let tabs = row([strip, agent]).fixed(1);
     let views = {
         let (hub, prompts) = (hub.clone(), prompts.clone());
         switch(
@@ -1304,15 +1495,12 @@ fn view(ui: Ui, hub: Arc<Hub>, shell: Option<ShellPane>) -> Node {
         )
         .flex(1)
     };
-    let hints = text(move || {
-        let busy = ui.current_tracked().busy.get();
-        let esc = if busy { "Esc cancel · " } else { "" };
-        format!(
-            "[dim]Enter send · Alt+Enter line · {esc}Ctrl+N new · Ctrl+O reopen · \
-             Alt+N/P tab · Ctrl+T shell · F2 log · Ctrl+Q quit[/]"
-        )
-    })
-    .fixed(1);
+    // The keys that work now, from the bindings' descriptions: they follow
+    // a user's keymap (`keys.toml`).
+    let hints = key_hints_with(
+        KeyHintsOptions::new().format(|keys, what| format!("{} {what}", say_keys(keys))),
+    )
+    .theme_styles([("key_hints.hint", "dim")]);
     let main = column([tabs, views, hints]).flex(2);
     let has_shell = shell.is_some();
     let screen = match shell {
@@ -1326,15 +1514,6 @@ fn view(ui: Ui, hub: Arc<Hub>, shell: Option<ShellPane>) -> Node {
         }
         None => row([main]),
     };
-    let focus_prompt = {
-        let prompts = prompts.clone();
-        move |cx: &mut Ctx| {
-            let key = ui.current().key;
-            if let Some(id) = prompts.borrow().get(&key) {
-                cx.focus(*id);
-            }
-        }
-    };
     let mut screen = screen;
     for n in 1..=9usize {
         let focus_prompt = focus_prompt.clone();
@@ -1346,8 +1525,7 @@ fn view(ui: Ui, hub: Arc<Hub>, shell: Option<ShellPane>) -> Node {
         });
     }
     screen
-        .on_key("ctrl+q", |cx| cx.quit())
-        .on_key("ctrl+n", {
+        .bind_id("session.new", "ctrl+n", "new", {
             let hub = hub.clone();
             let focus_prompt = focus_prompt.clone();
             move |cx| {
@@ -1364,7 +1542,7 @@ fn view(ui: Ui, hub: Arc<Hub>, shell: Option<ShellPane>) -> Node {
                 let _ = cx.after(Duration::ZERO, focus_prompt.clone());
             }
         })
-        .on_key("ctrl+o", {
+        .bind_id("session.reopen", "ctrl+o", "reopen", {
             let hub = hub.clone();
             let focus_prompt = focus_prompt.clone();
             move |cx| {
@@ -1373,7 +1551,7 @@ fn view(ui: Ui, hub: Arc<Hub>, shell: Option<ShellPane>) -> Node {
                 }
             }
         })
-        .on_key("alt+n", {
+        .bind_id("tab.next", "alt+n", "tab", {
             let focus_prompt = focus_prompt.clone();
             move |cx| {
                 let n = ui.sessions.with_untracked(Vec::len);
@@ -1381,7 +1559,9 @@ fn view(ui: Ui, hub: Arc<Hub>, shell: Option<ShellPane>) -> Node {
                 let _ = cx.after(Duration::ZERO, focus_prompt.clone());
             }
         })
-        .on_key("alt+p", {
+        // One hint for the pair, `Alt+N/P tab`.
+        .listed_as("alt+n alt+p")
+        .bind_id("tab.previous", "alt+p", "previous tab", {
             let focus_prompt = focus_prompt.clone();
             move |cx| {
                 let n = ui.sessions.with_untracked(Vec::len);
@@ -1389,7 +1569,8 @@ fn view(ui: Ui, hub: Arc<Hub>, shell: Option<ShellPane>) -> Node {
                 let _ = cx.after(Duration::ZERO, focus_prompt.clone());
             }
         })
-        .on_key("ctrl+t", {
+        .unlisted()
+        .bind_id("shell.toggle", "ctrl+t", "shell", {
             let focus_prompt = focus_prompt.clone();
             move |cx| {
                 if !has_shell {
@@ -1407,7 +1588,7 @@ fn view(ui: Ui, hub: Arc<Hub>, shell: Option<ShellPane>) -> Node {
                 }
             }
         })
-        .on_key("f2", move |cx| {
+        .bind_id("log.show", "f2", "log", move |cx| {
             cx.modal(Size::Percent(90), Size::Percent(80), move || {
                 scroll(text(move || {
                     let logs = ui.logs.get();
@@ -1422,14 +1603,50 @@ fn view(ui: Ui, hub: Arc<Hub>, shell: Option<ShellPane>) -> Node {
                 .on_key("escape f2 q", |cx| cx.pop())
             })
         })
+        .bind_id("app.quit", "ctrl+q", "quit", |cx| cx.quit())
 }
 
-impl Ui {
-    /// The active session, subscribing to which it is.
-    fn current_tracked(&self) -> Session {
-        let at = self.active.get();
-        self.sessions.with(|s| s[at.min(s.len() - 1)])
+/// Keys as the hints row says them: `Ctrl+N`, `Enter`, `F2`, and a pair
+/// with the same modifiers as `Alt+N/P`. A letter alone stays as it is
+/// (`n` is not `N`).
+fn say_keys(keys: &str) -> String {
+    let word = |part: &str| -> String {
+        let mut chars = part.chars();
+        match chars.next() {
+            Some(first) => first.to_uppercase().chain(chars).collect(),
+            None => String::new(),
+        }
+    };
+    let mut out = String::new();
+    let mut first_held = None;
+    for (i, key) in keys.split('/').enumerate() {
+        let (held, base) = match key.strip_suffix("++") {
+            Some(held) => (held, "+"),
+            None => key.rsplit_once('+').unwrap_or(("", key)),
+        };
+        let held: Vec<String> = held
+            .split('+')
+            .filter(|p| !p.is_empty())
+            .map(word)
+            .collect();
+        let held = held.join("+");
+        if i > 0 {
+            out.push('/');
+        }
+        // A key after the first, held with the same modifiers: `/P`.
+        let same = i > 0 && first_held.as_deref() == Some(held.as_str());
+        if held.is_empty() && base.chars().count() == 1 {
+            out.push_str(base);
+        } else if held.is_empty() || same {
+            out.push_str(&word(base));
+        } else {
+            out.push_str(&format!("{held}+{}", word(base)));
+        }
+        if i == 0 {
+            first_held = Some(held);
+        }
     }
+    out
 }
 
 /// One session's conversation, plan and prompt.
@@ -1475,7 +1692,13 @@ fn session_view(hub: Arc<Hub>, session: Session, prompts: Rc<RefCell<HashMap<u64
         .placeholder("Ask the agent…  @ names a file")
         .complete_at('@', path_completer(walk))
         .history(history_session())
+        // Shift+Tab is the mode's key, as in other agents' prompts.
+        .rebind_key("outdent", "")
         .on_submit(move |text, cx| send(&send_hub, s, text, cx))
+        // The text area's own keys, listed for the hints row: it takes
+        // them before these bindings would run.
+        .bind("enter", "send", |_| {})
+        .bind("alt+enter", "line", |_| {})
         .autofocus();
     prompts.borrow_mut().insert(s.key, prompt.id());
     let prompt = prompt.panel_with(move || {
@@ -1484,20 +1707,50 @@ fn session_view(hub: Arc<Hub>, session: Session, prompts: Rc<RefCell<HashMap<u64
             (Some(_), true) => "[yellow]the agent is working[/] [dim](Esc cancels)[/]".to_string(),
             (Some(_), false) => "Prompt".to_string(),
         };
-        match s.mode.get() {
-            Some(mode) => format!("{status} [dim]· mode {}[/]", markup(&mode)),
+        match s.mode_name() {
+            Some(mode) if s.modes.with(|m| m.len() > 1) => format!(
+                "{status} [dim]· mode[/] {} [dim]({})[/]",
+                markup(&mode),
+                mode_hint(s)
+            ),
+            Some(mode) => format!("{status} [dim]· mode[/] {}", markup(&mode)),
             None => status,
         }
     });
-    column([transcript, plan, prompt.auto()]).on_key("escape", move |_| {
-        if !s.busy.get_untracked() {
-            return;
-        }
-        if let (Some(connection), Some(id)) = (hub.connection.get(), s.id.get_untracked()) {
-            let _ = connection.cancel(&id);
-            s.notice("[dim]Cancelling…[/]");
-        }
-    })
+    let mode_hub = hub.clone();
+    column([transcript, plan, prompt.auto()])
+        // One hint for the pair, `Shift+Tab/Alt+M mode`, when the agent
+        // has modes to change between.
+        .bind_when(
+            move || s.modes.with(|m| m.len() > 1),
+            "shift+tab",
+            "mode",
+            move |cx| next_mode(&mode_hub, s, cx),
+        )
+        .binding_id("mode.next")
+        .listed_as("shift+tab alt+m")
+        .bind_when(
+            move || s.modes.with(|m| m.len() > 1),
+            "alt+m",
+            "choose a mode",
+            {
+                let hub = hub.clone();
+                move |cx| choose_mode(&hub, s, cx)
+            },
+        )
+        .binding_id("mode.choose")
+        .bind_when(
+            move || s.busy.get_untracked(),
+            "escape",
+            "cancel",
+            move |_| {
+                if let (Some(connection), Some(id)) = (hub.connection.get(), s.id.get_untracked()) {
+                    let _ = connection.cancel(&id);
+                    s.notice("[dim]Cancelling…[/]");
+                }
+            },
+        )
+        .binding_id("turn.cancel")
 }
 
 /// Send `text` as a prompt turn of `s`.
@@ -1529,6 +1782,7 @@ fn send(hub: &Arc<Hub>, s: Session, text: &str, cx: &mut Ctx) {
     });
     s.prompt.set(String::new());
     s.busy.set(true);
+    s.asks.update(|a| a.reviewed.clear());
     let (hub, proxy) = (hub.clone(), cx.proxy());
     thread::spawn(move || {
         hub.touch(&request.session_id, Some(&text));
@@ -1564,6 +1818,116 @@ fn run_prompt(hub: &Arc<Hub>, proxy: &Proxy, s: Session, request: PromptRequest)
                 markup(&e.to_string())
             )),
         }
+    });
+}
+
+/// Whether `mode` is a planning mode: its id or name is "plan".
+fn is_plan(mode: &rich_acp::SessionMode) -> bool {
+    mode.id.0.eq_ignore_ascii_case("plan") || mode.name.trim().eq_ignore_ascii_case("plan")
+}
+
+/// The title's word on modes: the keys, and plan mode's name when the
+/// agent offers one and it is not the current mode.
+fn mode_hint(s: Session) -> String {
+    let current = s.mode.get();
+    s.modes.with(|modes| {
+        let plan = modes
+            .iter()
+            .find(|m| is_plan(m) && current.as_deref() != Some(m.id.0.as_str()));
+        match plan {
+            Some(plan) => format!(
+                "Shift+Tab, Alt+M · {} mode too",
+                markup(&crate::session::mode_name(modes, &plan.id.0))
+            ),
+            None => "Shift+Tab, Alt+M".to_string(),
+        }
+    })
+}
+
+/// Shift+Tab: the next of the session's modes, round to the first.
+fn next_mode(hub: &Arc<Hub>, s: Session, cx: &mut Ctx) {
+    let modes = s.modes.get_untracked();
+    if modes.len() < 2 {
+        s.notice("[dim]This agent offers no modes to switch between.[/]");
+        return;
+    }
+    let current = s.mode.get_untracked();
+    let at = modes
+        .iter()
+        .position(|m| Some(&m.id.0) == current.as_ref())
+        .map_or(0, |i| (i + 1) % modes.len());
+    set_mode(hub, s, modes[at].id.clone(), cx);
+}
+
+/// Alt+M: the session's modes, with what each does; the one picked is
+/// asked for.
+fn choose_mode(hub: &Arc<Hub>, s: Session, cx: &mut Ctx) {
+    let modes = s.modes.get_untracked();
+    if modes.is_empty() {
+        s.notice("[dim]This agent offers no modes.[/]");
+        return;
+    }
+    let current = s.mode.get_untracked();
+    let items: Vec<String> = modes
+        .iter()
+        .map(|m| {
+            let mark = if Some(&m.id.0) == current.as_ref() {
+                "●"
+            } else {
+                " "
+            };
+            let mut item = format!(
+                "{mark} {}",
+                markup(&crate::session::mode_name(&modes, &m.id.0))
+            );
+            if let Some(about) = m.description.as_deref().filter(|d| !d.trim().is_empty()) {
+                item.push_str(&format!(
+                    " [dim]· {}[/]",
+                    markup(&clean(about).replace('\n', " "))
+                ));
+            }
+            item
+        })
+        .collect();
+    let hub = hub.clone();
+    cx.pick("Mode", Origin::Center, items, move |i, cx| {
+        set_mode(&hub, s, modes[i].id.clone(), cx)
+    });
+}
+
+/// Asks the agent to put `s` in mode `id` (`session/set_mode`), and shows
+/// it once the agent agrees; a refusal is a notice.
+fn set_mode(hub: &Arc<Hub>, s: Session, id: rich_acp::SessionModeId, cx: &mut Ctx) {
+    let Some(session_id) = s.id.get_untracked() else {
+        s.notice("[yellow]The session has not opened yet.[/]");
+        return;
+    };
+    if s.mode.get_untracked().as_ref() == Some(&id.0) {
+        return;
+    }
+    let name = markup(
+        &s.modes
+            .with_untracked(|m| crate::session::mode_name(m, &id.0)),
+    );
+    let (hub, proxy) = (hub.clone(), cx.proxy());
+    thread::spawn(move || {
+        let Some(connection) = hub.connection.get() else {
+            return;
+        };
+        let result = connection.set_session_mode(rich_acp::SetSessionModeRequest {
+            session_id,
+            mode_id: id.clone(),
+        });
+        proxy.run(move || match result {
+            Ok(()) => {
+                s.mode.set(Some(id.0));
+                s.notice(format!("[dim]Now in {name} mode.[/]"));
+            }
+            Err(e) => s.notice(format!(
+                "[red]The mode did not change to {name}:[/] {}",
+                markup(&e.to_string())
+            )),
+        });
     });
 }
 
@@ -1720,7 +2084,15 @@ fn tool_view(s: Session, call: Signal<ToolCall>, open: Signal<bool>) -> Node {
         ToolCallStatus::Failed => Status::Markup("[red]✗ failed[/]".into()),
         _ => Status::None,
     })
-    .summary(move || call.with(summary))
+    .summary(move || {
+        let line = call.with(summary);
+        let id = call.with(|c| c.tool_call_id.0.clone());
+        match s.asks.with(|a| a.unasked.get(&id).cloned()) {
+            Some(why) if line.is_empty() => why,
+            Some(why) => format!("{line} · {why}"),
+            None => line,
+        }
+    })
 }
 
 /// A closed tool call's one line (plain text): its file, or its output's
@@ -1746,6 +2118,15 @@ fn summary(call: &ToolCall) -> String {
     }
 }
 
+/// `text` with its first letter in capitals.
+fn capitalised(text: &str) -> String {
+    let mut chars = text.chars();
+    match chars.next() {
+        Some(first) => first.to_uppercase().chain(chars).collect(),
+        None => String::new(),
+    }
+}
+
 /// The most lines of a tool's output shown.
 const OUTPUT_LINES: usize = 40;
 
@@ -1754,6 +2135,18 @@ fn tool_body(s: Session, call: Signal<ToolCall>) -> Node {
     let cwd = CWD.with(|c| c.borrow().clone());
     let content = call.with_untracked(|c| c.content.clone());
     let mut nodes = Vec::new();
+    let id = call.with_untracked(|c| c.tool_call_id.0.clone());
+    let note = move || s.asks.with(|a| a.unasked.get(&id).cloned());
+    let shown = note.clone();
+    nodes.push(
+        text(move || {
+            note()
+                .map(|why| format!("[yellow]{}[/]", markup(&capitalised(&why))))
+                .unwrap_or_default()
+        })
+        .auto()
+        .shown_when(move || shown().is_some()),
+    );
     if let Some(command) = call.with_untracked(|c| {
         c.raw_input
             .as_ref()
@@ -1798,7 +2191,7 @@ fn tool_body(s: Session, call: Signal<ToolCall>) -> Node {
             other => nodes.push(label(format!("[dim][{}][/]", markup(other.kind()))).auto()),
         }
     }
-    if nodes.is_empty() {
+    if nodes.len() == 1 {
         nodes.push(label("[dim](nothing yet)[/]").auto());
     }
     column(nodes).auto().padding(0, 2)
@@ -1840,6 +2233,18 @@ pub fn wait_for(driver: &mut Driver, text: &str, timeout: Duration) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn hints_say_keys_as_the_row_did() {
+        assert_eq!(say_keys("ctrl+n"), "Ctrl+N");
+        assert_eq!(say_keys("alt+enter"), "Alt+Enter");
+        assert_eq!(say_keys("alt+n/alt+p"), "Alt+N/P");
+        assert_eq!(say_keys("f2"), "F2");
+        assert_eq!(say_keys("esc"), "Esc");
+        assert_eq!(say_keys("]/n"), "]/n");
+        assert_eq!(say_keys("A"), "A");
+        assert_eq!(say_keys("ctrl++"), "Ctrl++");
+    }
 
     #[test]
     fn a_failure_quotes_the_agents_error_not_its_stack_dump() {

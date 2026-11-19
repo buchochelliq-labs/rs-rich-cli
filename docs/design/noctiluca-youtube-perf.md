@@ -264,6 +264,56 @@ first audit's eleven defects:
 | L8 | A crowded right-edge menu button wrapped (`[Action` / `menu]`) | **Fixed in 0.0.27** on the fixture's crowded row (the button had gone to a row of its own): a text box the right-edge run overlaps ends before it and wraps (`result-rows.html`). The `[Action` / `menu]` wrap itself was not reproduced on a fixture |
 | L3, L4, L7, L9, L11 | Combobox as select, icon glyphs, avatar over text, button faces, thumbnail size | Not looked at again |
 
+## Busy live pages (0.1.0)
+
+0.0.27's real-site check left a busy Twitch channel (xQc) pausing its
+video for 1 to 2.5 s several times a minute. Measured on 2026-11-18 with
+the same harness, a release build, 120x40, 80 s a run (the first 15 s
+left out), `--images kitty` and `--images ansi`. Gaps are between video
+frames reaching the terminal: Kitty `a=T` transmissions, in half blocks
+the painter's writes of 8 kB or more.
+
+The trace gained three lines to tell the stages apart: `chrome_frame`
+(each screencast frame as the engine's thread reads it, with Chrome's
+paint time), `cdp` (a DevTools call of 50 ms or more, and whether the tab
+or the reader's thread waited) and `slow_turn` (a turn of the tab's loop
+busy 100 ms or more, by part). Every pause lined up the same way: a
+`slow_turn` of 1 to 2.5 s in its stills part, made of four to eight
+stills' calls (`Page.captureScreenshot`, `Page.getResourceContent`, the
+image-ready check) of 150 to 450 ms each, with `chrome_frame` silent for
+the whole turn. Not Chrome: it paints no screencast frame until the one
+it sent is taken, and the tab, busy with stills, took none. The encoder
+and the terminal kept up (their gaps were the frames' gaps). Each reading
+of the chat found new badges and emotes with no still, so this came back
+after every second or third reading. Two smaller causes showed once that
+was fixed: a still started while a reading was out on the reader's thread
+waited for its snapshot (0.35 to 0.65 s), and a chat line with buttons
+was read at once on the tab's thread (0.6 to 1 s).
+
+Fixed: while a video is cast, a turn starts no still after 40 ms on stills
+(the rest wait for the next turn, so a frame is taken between any two),
+starts none while a reading is out, and a log line with controls asks for
+a reading as a ping does, which goes to the reader's thread.
+
+| Run (frames/s to the terminal, gaps over 1 s / over 0.5 s, longest) | Before | After |
+|---|---|---|
+| xQc, Kitty 1 | 20.9, 6 / 9, 1.97 s | 24.0, 0 / 0, 0.29 s |
+| xQc, Kitty 2 | 20.6, 7 / 11, 1.59 s | 24.1, 0 / 0, 0.35 s |
+| xQc, Kitty 3 | 22.0, 3 / 9, 1.48 s | 24.3, 0 / 0, 0.44 s |
+| xQc, half blocks 1 | 22.3, 5 / 9, 1.69 s | 24.4, 0 / 0, 0.35 s |
+| xQc, half blocks 2 | 21.5, 4 / 10, 1.39 s | 23.7, 0 / 0, 0.32 s |
+| xQc, half blocks 3 | 21.8, 7 / 14, 1.87 s | 23.8, 0 / 0, 0.34 s |
+| A quiet channel (relaxbeats), Kitty | 26.7, 0 / 2, 0.95 s | 26.4, 0 / 0, 0.25 s |
+| A quiet channel, half blocks | 22.5, 1 / 2, 1.16 s | 22.8, 0 / 0, 0.31 s |
+| `busy-pictures.html` fixture, Kitty (40 s) | 5.0, 0 / 33, 0.86 s | 14.5, 0 / 0, 0.29 s |
+
+CPU (Noctiluca / Chrome, % of a core) stayed where it was: 33 to 36 / 84
+to 98 before, 39 to 42 / 86 to 100 after in Kitty on xQc. The live test
+`a_video_beside_a_chat_that_brings_new_pictures_keeps_its_frames` asserts
+a longest gap under 0.8 s and at most two over 0.5 s on the fixture
+(without the fix: 0.93 s and ten); the unit test
+`stills_wait_for_the_next_turn_while_a_video_is_cast` checks the budget.
+
 ## What is left
 
 1. **A reader thread.** A reading (155 ms on the fixture, 250 to 350 ms on

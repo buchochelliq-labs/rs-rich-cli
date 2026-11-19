@@ -141,6 +141,10 @@ impl Notification {
 
     /// A button labelled `label` (plain text) under the body that runs
     /// `run` and dismisses the notification, after those added before it.
+    /// A click runs it, and so does Alt+1 for the first button (to Alt+9
+    /// for the ninth) while this is the newest notification with buttons,
+    /// unless a node on the focus path binds the key; a screen reader is
+    /// told the buttons and their keys with the notification.
     pub fn action(
         mut self,
         label: impl Into<String>,
@@ -206,8 +210,24 @@ impl Note {
         }
     }
 
-    /// What a screen reader is told.
+    /// What a screen reader is told: its text, then its buttons with the
+    /// keys that run them (Alt+1 for the first).
     pub(crate) fn spoken(&self) -> String {
+        let text = self.spoken_text();
+        if self.actions.is_empty() {
+            return text;
+        }
+        let keys: Vec<String> = self
+            .actions
+            .iter()
+            .take(9)
+            .enumerate()
+            .map(|(i, (label, _))| format!("{label}, Alt+{}", i + 1))
+            .collect();
+        format!("{text}. Buttons: {}", keys.join("; "))
+    }
+
+    fn spoken_text(&self) -> String {
         let text = |markup: &str| {
             rich::Text::from_markup(markup)
                 .map(|text| text.plain().to_string())

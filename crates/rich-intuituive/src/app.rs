@@ -5485,20 +5485,47 @@ impl App {
         if !up {
             return Some(false);
         }
+        Some(self.run_toast(at, action))
+    }
+
+    /// Dismiss the toast at `at` in the stack, running its button `action`
+    /// first, if any. Whether to quit.
+    fn run_toast(&mut self, at: usize, action: Option<usize>) -> bool {
         let (note, _) = self.toasts.remove(at);
-        self.toast_hits.retain(|drawn| drawn.id != id);
+        self.toast_hits.retain(|drawn| drawn.id != note.id);
         self.restack = true;
         self.poke = true;
         let Some(run) = action
             .and_then(|i| note.actions.get(i))
             .map(|(_, run)| run.clone())
         else {
-            return Some(false);
+            return false;
         };
         let mut cx = self.ctx();
         let runtime = self.runtime.clone();
         runtime.enter(|| (run.borrow_mut())(&mut cx));
-        Some(self.apply(cx))
+        self.apply(cx)
+    }
+
+    /// Alt+1 to Alt+9: the newest toast with buttons runs that button,
+    /// unless a node on the focus path binds the key. `None` when the key
+    /// is not one of them; else whether to quit.
+    fn toast_key(&mut self, key: Key) -> Option<bool> {
+        let KeyCode::Char(c @ '1'..='9') = key.code else {
+            return None;
+        };
+        if !key.modifiers.alt || key.modifiers.ctrl || key.modifiers.shift {
+            return None;
+        }
+        let i = c as usize - '1' as usize;
+        let at = self
+            .toasts
+            .iter()
+            .rposition(|(note, _)| !note.actions.is_empty())?;
+        if i >= self.toasts[at].0.actions.len() || self.binds(key) {
+            return None;
+        }
+        Some(self.run_toast(at, Some(i)))
     }
 
     /// Run the action `name` ([`Ctx::run_action`]): a binding on the focus
@@ -6642,6 +6669,10 @@ impl App {
         }
         // A focused node disabled since the last frame (nothing need have
         // drawn since) gives the focus up before the key is routed.
+        // Alt+number: a button of the newest toast that has them.
+        if let Some(quit) = self.toast_key(key) {
+            return quit;
+        }
         if let Some(id) = self.focus() {
             let mut disabled = false;
             with_node(&self.top().root, id, &mut |node| disabled = node.disabled());

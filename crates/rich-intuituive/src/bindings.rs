@@ -478,6 +478,39 @@ impl Node {
         self.last_binding("unlisted", |binding| binding.hidden = true)
     }
 
+    /// List the binding added last under `keys` (names separated by
+    /// spaces, as [`bind`](Self::bind) takes them) in the help, the
+    /// which-key pop-up, the command palette and a
+    /// [`key_hints`](crate::widgets::key_hints) footer, in place of its own
+    /// keys: a pair bound apart, shown as one hint (`alt+n/alt+p tab`),
+    /// the other one [`unlisted`](Self::unlisted). The binding still fires
+    /// on its own keys only. Once a keymap remaps it, its new keys are
+    /// listed.
+    ///
+    /// ```
+    /// use intuituive::prelude::*;
+    /// use intuituive::widgets::key_hints;
+    ///
+    /// let app = App::new(|| {
+    ///     let tab = signal(0);
+    ///     column([text!("{tab}"), key_hints()])
+    ///         .bind("alt+n", "tab", move |_| tab.update(|t| *t += 1))
+    ///         .listed_as("alt+n alt+p")
+    ///         .bind_hidden("alt+p", "previous tab", move |_| tab.update(|t| *t -= 1))
+    /// });
+    /// let mut driver = app.driver(30, 2);
+    /// driver.press("alt+n alt+n alt+p");
+    /// assert_eq!(driver.screen().plain()[0].trim_end(), "1");
+    /// assert_eq!(driver.screen().plain()[1].trim_end(), "alt+n/alt+p tab");
+    /// ```
+    ///
+    /// # Panics
+    /// On a name that is not a key.
+    pub fn listed_as(self, keys: &str) -> Node {
+        let keys = crate::node::parse_keys(keys);
+        self.last_binding("listed_as", |binding| binding.shown = Some(keys))
+    }
+
     /// [`bind`](Self::bind), [`unlisted`](Self::unlisted): bound under
     /// `name` (for the palette and tests), not listed.
     ///

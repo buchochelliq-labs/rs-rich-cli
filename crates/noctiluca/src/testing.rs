@@ -47,6 +47,12 @@ pub struct FakeState {
     pub screencast_areas: Vec<Option<Rect>>,
     /// How long a snapshot takes, as a large page's does in a browser.
     pub read_cost: std::time::Duration,
+    /// Snapshots taken that cost [`read_cost`](Self::read_cost), counted
+    /// as each ends: a test waits on it to know a slow reading happened.
+    pub slow_reads: usize,
+    /// How long fetching a resource takes, as each call to a busy
+    /// browser's page does.
+    pub resource_cost: std::time::Duration,
     /// Whether the engine lends a [reader](crate::engine::Engine::reader)
     /// for readings off the tab's thread, as Chrome's does (on unless a
     /// test turns it off).
@@ -591,7 +597,10 @@ fn read_snapshot(state: &Mutex<FakeState>) -> io::Result<PageSnapshot> {
     if !cost.is_zero() {
         std::thread::sleep(cost);
     }
-    let state = state.lock().unwrap_or_else(|e| e.into_inner());
+    let mut state = state.lock().unwrap_or_else(|e| e.into_inner());
+    if !cost.is_zero() {
+        state.slow_reads += 1;
+    }
     state.answers()?;
     state
         .current
@@ -1020,6 +1029,8 @@ impl Engine for FakeEngine {
     }
 
     fn resource(&mut self, _tab: TabId, url: &str) -> io::Result<Vec<u8>> {
+        let cost = self.lock().resource_cost;
+        std::thread::sleep(cost);
         let mut state = self.lock();
         state.resource_reads.push(url.to_string());
         let bytes = match state

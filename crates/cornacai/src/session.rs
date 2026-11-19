@@ -8,10 +8,12 @@
 //! block renders again), a `tool_call` adds an entry, a `tool_call_update`
 //! patches it (`ToolCall::apply`), a `plan` replaces the plan whole.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
+use std::path::PathBuf;
 
 use rich_acp::{
-    ContentBlock, ContentChunk, PlanEntry, SessionId, SessionUpdate, ToolCall, ToolCallUpdate,
+    ContentBlock, ContentChunk, PlanEntry, SessionId, SessionMode, SessionUpdate, ToolCall,
+    ToolCallContent, ToolCallStatus, ToolCallUpdate, ToolKind,
 };
 use rich_intuituive::prelude::*;
 
@@ -71,12 +73,36 @@ pub struct Session {
     pub plan: Signal<Vec<PlanEntry>>,
     /// The current mode's id.
     pub mode: Signal<Option<String>>,
+    /// The modes the agent offers for it, from `session/new` or
+    /// `session/load`.
+    pub modes: Signal<Vec<SessionMode>>,
+    /// What the user was asked this session, so a change the agent made
+    /// without asking can say so.
+    pub(crate) asks: Signal<Asks>,
+    /// Whether `session/load` is replaying its history: what arrives then
+    /// was decided before.
+    pub(crate) replaying: Signal<bool>,
     /// Whether a turn is running.
     pub busy: Signal<bool>,
     /// The prompt being written.
     pub prompt: Signal<String>,
     /// Terminal output by terminal id, as the agent last read it.
     pub terminals: Signal<HashMap<String, String>>,
+}
+
+/// What the user was asked in a session, and what they chose.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Asks {
+    /// The tool calls a permission prompt was shown for.
+    pub asked: HashSet<String>,
+    /// The files whose write was reviewed (`fs/write_text_file`) since
+    /// the user's last prompt.
+    pub reviewed: HashSet<PathBuf>,
+    /// The "always" options chosen: the tool's kind and the option's name.
+    pub always: Vec<(ToolKind, String)>,
+    /// For each change made without the user being asked, by tool call id:
+    /// why, in words (plain text).
+    pub unasked: HashMap<String, String>,
 }
 
 impl Session {
@@ -90,6 +116,9 @@ impl Session {
             entries: signal(Vec::new()),
             plan: signal(Vec::new()),
             mode: signal(None),
+            modes: signal(Vec::new()),
+            asks: signal(Asks::default()),
+            replaying: signal(false),
             busy: signal(false),
             prompt: signal(String::new()),
             terminals: signal(HashMap::new()),
@@ -144,7 +173,8 @@ impl Session {
                 }
             }
             SessionUpdate::ToolCall(call) => {
-                if let Some(slot) = self.tool(&call.tool_call_id.0) {
+                let id = call.tool_call_id.0.clone();
+                if let Some(slot) = self.tool(&id) {
                     slot.set(call);
                 } else {
                     self.push(Entry::Tool {
@@ -152,8 +182,12 @@ impl Session {
                         open: signal(false),
                     });
                 }
+                self.note_unasked(&id);
             }
-            SessionUpdate::ToolCallUpdate(update) => self.update_tool(&update),
+            SessionUpdate::ToolCallUpdate(update) => {
+                self.update_tool(&update);
+                self.note_unasked(&update.tool_call_id.0);
+            }
             SessionUpdate::Plan(plan) => self.plan.set(plan.entries),
             SessionUpdate::CurrentModeUpdate(mode) => {
                 self.mode.set(Some(mode.current_mode_id.0));
@@ -183,6 +217,75 @@ impl Session {
                 });
             }
         }
+    }
+
+    /// The modes `session/new` or `session/load` gave: the current one,
+    /// and the list, kept unless the answer has none.
+    pub fn set_modes(&self, modes: rich_acp::SessionModeState) {
+        self.mode.set(Some(modes.current_mode_id.0));
+        if !modes.available_modes.is_empty() {
+            self.modes.set(modes.available_modes);
+        }
+    }
+
+    /// The current mode, as the agent names it (its id when it gave no
+    /// name), subscribing to it.
+    pub fn mode_name(&self) -> Option<String> {
+        let id = self.mode.get()?;
+        Some(self.modes.with(|modes| mode_name(modes, &id)))
+    }
+
+    /// When tool call `id` has just finished changing files (it carries a
+    /// diff) and the user was not asked about it, note why: the session's
+    /// mode, or an "always" chosen earlier. Not for a replayed history.
+    fn note_unasked(&self, id: &str) {
+        let Some(call) = self.tool(id) else {
+            return;
+        };
+        let (done, paths, kind) = call.with_untracked(|c| {
+            let paths: Vec<PathBuf> = c
+                .content
+                .iter()
+                .filter_map(|content| match content {
+                    ToolCallContent::Diff(diff) => Some(diff.path.clone()),
+                    _ => None,
+                })
+                .collect();
+            (c.status == ToolCallStatus::Completed, paths, c.kind.clone())
+        });
+        if !done || paths.is_empty() || self.replaying.get_untracked() {
+            return;
+        }
+        let known = self.asks.with_untracked(|a| {
+            a.asked.contains(id)
+                || a.unasked.contains_key(id)
+                || paths.iter().any(|p| a.reviewed.contains(p))
+        });
+        if known {
+            return;
+        }
+        let always = self.asks.with_untracked(|a| {
+            a.always
+                .iter()
+                .rev()
+                .find(|(k, _)| *k == kind)
+                .map(|(_, name)| name.clone())
+        });
+        let why = match (
+            always,
+            self.mode
+                .get_untracked()
+                .map(|id| self.modes.with_untracked(|m| mode_name(m, &id))),
+        ) {
+            (Some(name), _) => format!(
+                "applied without asking: you chose \u{201c}{}\u{201d} earlier",
+                clean(&name).replace('\n', " ")
+            ),
+            (None, Some(mode)) => format!("applied without asking, in {mode} mode"),
+            (None, None) => "applied without asking".to_string(),
+        };
+        self.asks
+            .update(|a| drop(a.unasked.insert(id.to_string(), why)));
     }
 
     /// The tool call with id `id`.
@@ -220,6 +323,17 @@ impl Session {
             }),
         }
     }
+}
+
+/// Mode `id`'s name among `modes`, cleaned: its id when it has none.
+pub fn mode_name(modes: &[SessionMode], id: &str) -> String {
+    let name = modes
+        .iter()
+        .find(|m| m.id.0 == id)
+        .map(|m| m.name.as_str())
+        .filter(|n| !n.trim().is_empty())
+        .unwrap_or(id);
+    clean(name).replace('\n', " ")
 }
 
 /// A content block as text for the conversation: text cleaned of control

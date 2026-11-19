@@ -3,9 +3,30 @@
 Noctiluca grows in phases, each unlocked by what people use a browser in a
 terminal for. The phases and their tests are in
 [the design note](../../design/browser.md#phases). This page says what the
-0.0.22 to 0.0.26 releases have, what 0.0.27 adds, and what comes next.
+0.0.22 to 0.0.27 releases have, what 0.1.0 adds, and what comes next.
 
-## Coming in 0.0.27 (Noctiluca 0.0.6): smooth video, a browser that recovers
+## In 0.1.0 (Noctiluca 0.1.0): busy pages
+
+Measured in [Noctiluca's video and readings](../../design/noctiluca-youtube-perf.md#busy-live-pages-010).
+
+| Works | Notes |
+|---|---|
+| Video beside a busy chat | No pause over half a second on a busy Twitch channel, in Kitty and half blocks, at 24 frames a second (pauses of 1 to 2 s, 3 to 7 times in 75 s, before): stills of the chat's new pictures wait for the frames. Done |
+| Reference pages | Rows a main column leaves blank beside a sticky sidebar (a table of contents, an ad) collapse to one, as rows blank in every column did (#786): MDN at 120 columns no longer has runs of 6 to 8 blank rows on most screens. Done |
+| Reflow across sites | Links laid out as blocks each take a line, and a button whose face is wider than its box moves the trail after it along its row instead of pushing it under (#880: MDN's breadcrumbs at 120 columns). Done for these two; #880's other cases are open |
+
+### Known limits in 0.1.0
+
+- **#880's other cases:** BBC News's narrow time labels wrap (`7 hrs` /
+  `ago`), Wikipedia's header links split a word over two rows (`Create` /
+  `account`), and at 80 columns MDN's breadcrumbs still go under the
+  sidebar button when its row's other buttons take the room.
+- **CodeMirror examples** still read as one line (MDN's *Try it*); its
+  cause is not the gaps' and is left for later.
+- **Also seen, as in 0.0.27:** the reader view starts with the page's
+  header.
+
+## In 0.0.27 (Noctiluca 0.0.6): smooth video, a browser that recovers
 
 Measured in [the 0.0.27 findings](../../design/noctiluca-0027-findings.md#after-the-fixes-a-release-build-2026-11-18)
 and [the real-site check](../../releases/0.0.27.md#noctiluca-on-real-sites).
