@@ -120,9 +120,10 @@ From the maintainer's first run with Claude's adapter (`claude-agent-acp`).
   asks with `session/set_mode` and shows the mode once the agent agrees;
   a refusal is a notice. When the agent offers a plan mode, the prompt's
   title names it (`Shift+Tab, Alt+M · Plan mode too`); the prompt to leave it shows the plan as Markdown.
-- `cornacai::session::Session` has new fields (`modes`, `asks`,
-  `replaying`) and `Session::set_modes`, `Session::mode_name` and
-  `session::mode_name`; `session::Asks` holds what the user was asked.
+- `cornacai::session::Session` has a new field, `modes`, and
+  `Session::set_modes`, `Session::mode_name` and `session::mode_name`.
+  What the user was asked, and whether a loaded session is replaying,
+  are kept inside the crate.
 
 ### Noctiluca: busy live pages no longer pause their video
 

@@ -231,7 +231,6 @@ impl core::marker::UnsafeUnpin for cornacai::session::Asks
 impl core::panic::unwind_safe::RefUnwindSafe for cornacai::session::Asks
 impl core::panic::unwind_safe::UnwindSafe for cornacai::session::Asks
 pub struct cornacai::session::Session
-pub cornacai::session::Session::asks: intuituive::reactive::Signal<cornacai::session::Asks>
 pub cornacai::session::Session::busy: intuituive::reactive::Signal<bool>
 pub cornacai::session::Session::entries: intuituive::reactive::Signal<alloc::vec::Vec<cornacai::session::Entry>>
 pub cornacai::session::Session::id: intuituive::reactive::Signal<core::option::Option<rich_acp::schema::SessionId>>
@@ -240,7 +239,6 @@ pub cornacai::session::Session::mode: intuituive::reactive::Signal<core::option:
 pub cornacai::session::Session::modes: intuituive::reactive::Signal<alloc::vec::Vec<rich_acp::schema::SessionMode>>
 pub cornacai::session::Session::plan: intuituive::reactive::Signal<alloc::vec::Vec<rich_acp::schema::PlanEntry>>
 pub cornacai::session::Session::prompt: intuituive::reactive::Signal<alloc::string::String>
-pub cornacai::session::Session::replaying: intuituive::reactive::Signal<bool>
 pub cornacai::session::Session::terminals: intuituive::reactive::Signal<std::collections::hash::map::HashMap<alloc::string::String, alloc::string::String>>
 pub cornacai::session::Session::title: intuituive::reactive::Signal<alloc::string::String>
 impl cornacai::session::Session

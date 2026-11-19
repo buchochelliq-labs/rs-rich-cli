@@ -78,10 +78,10 @@ pub struct Session {
     pub modes: Signal<Vec<SessionMode>>,
     /// What the user was asked this session, so a change the agent made
     /// without asking can say so.
-    pub asks: Signal<Asks>,
+    pub(crate) asks: Signal<Asks>,
     /// Whether `session/load` is replaying its history: what arrives then
     /// was decided before.
-    pub replaying: Signal<bool>,
+    pub(crate) replaying: Signal<bool>,
     /// Whether a turn is running.
     pub busy: Signal<bool>,
     /// The prompt being written.
