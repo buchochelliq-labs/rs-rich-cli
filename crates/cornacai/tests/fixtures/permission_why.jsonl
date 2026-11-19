@@ -1,0 +1,19 @@
+{"note": "Permission prompts in words: a command, after the agent says why; then a fetch with no message before it, whose input says what it fetches."}
+{"client": {"id": 0, "method": "initialize"}}
+{"agent": {"jsonrpc": "2.0", "id": 0, "result": {"protocolVersion": 1, "agentInfo": {"name": "replay-agent", "version": "0.1"}}}}
+{"client": {"id": 1, "method": "session/new"}}
+{"agent": {"jsonrpc": "2.0", "id": 1, "result": {"sessionId": "sess_w"}}}
+{"client": {"id": 2, "method": "session/prompt", "params": {"sessionId": "sess_w", "prompt": [{"type": "text", "text": "Is the fix right?"}]}}}
+{"agent": {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "sess_w", "update": {"sessionUpdate": "agent_message_chunk", "content": {"type": "text", "text": "First I read the parser.\n\nThe parser looked fine.\n\nI will run the whole test suite, "}}}}}
+{"agent": {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "sess_w", "update": {"sessionUpdate": "agent_message_chunk", "content": {"type": "text", "text": "to see that nothing else broke."}}}}}
+{"agent": {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "sess_w", "update": {"sessionUpdate": "tool_call", "toolCallId": "call_run", "title": "cargo test --all", "kind": "execute", "status": "pending", "rawInput": {"command": "cargo test --all"}}}}}
+{"agent": {"jsonrpc": "2.0", "id": "perm-1", "method": "session/request_permission", "params": {"sessionId": "sess_w", "toolCall": {"toolCallId": "call_run"}, "options": [{"optionId": "once", "name": "Yes", "kind": "allow_once"}, {"optionId": "always", "name": "Yes, and don't ask again for cargo test", "kind": "allow_always"}, {"optionId": "no", "name": "No", "kind": "reject_once"}]}}}
+{"client": {"jsonrpc": "2.0", "id": "perm-1", "result": {"outcome": {"outcome": "selected", "optionId": "once"}}}}
+{"agent": {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "sess_w", "update": {"sessionUpdate": "tool_call_update", "toolCallId": "call_run", "status": "completed"}}}}
+{"agent": {"jsonrpc": "2.0", "id": 2, "result": {"stopReason": "end_turn"}}}
+{"client": {"id": 3, "method": "session/prompt", "params": {"sessionId": "sess_w", "prompt": [{"type": "text", "text": "Read the docs"}]}}}
+{"agent": {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "sess_w", "update": {"sessionUpdate": "tool_call", "toolCallId": "call_get", "title": "Fetch", "kind": "fetch", "status": "pending", "rawInput": {"url": "https://example.com/guide", "description": "The guide names the setting"}}}}}
+{"agent": {"jsonrpc": "2.0", "id": "perm-2", "method": "session/request_permission", "params": {"sessionId": "sess_w", "toolCall": {"toolCallId": "call_get"}, "options": [{"optionId": "once", "name": "Yes", "kind": "allow_once"}, {"optionId": "no", "name": "No", "kind": "reject_once"}]}}}
+{"client": {"jsonrpc": "2.0", "id": "perm-2", "result": {"outcome": {"outcome": "selected", "optionId": "no"}}}}
+{"agent": {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "sess_w", "update": {"sessionUpdate": "agent_message_chunk", "content": {"type": "text", "text": "I will not fetch it."}}}}}
+{"agent": {"jsonrpc": "2.0", "id": 3, "result": {"stopReason": "end_turn"}}}

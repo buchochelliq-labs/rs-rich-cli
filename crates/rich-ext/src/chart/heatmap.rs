@@ -168,6 +168,33 @@ impl Heatmap {
             .any(|(_, v)| v.len() < n || v.iter().any(|x| !x.is_finite()))
     }
 
+    /// Where each column of the grid is drawn in a heatmap `width` cells
+    /// wide: the cells it takes in its rows, and the data columns it stands
+    /// for (more than one where narrow columns are merged), left to right.
+    /// What a cursor over the grid needs.
+    ///
+    /// ```
+    /// use rich_ext::chart::Heatmap;
+    ///
+    /// let map = Heatmap::new().row("api", [1.0, 4.0]).cell_width(3);
+    /// assert_eq!(map.column_cells(20), [(4..7, 0..1), (7..10, 1..2)]);
+    /// ```
+    pub fn column_cells(
+        &self,
+        width: usize,
+    ) -> Vec<(std::ops::Range<usize>, std::ops::Range<usize>)> {
+        let grid = self.layout(width);
+        let lead = if grid.label > 0 { grid.label + 1 } else { 0 };
+        grid.buckets
+            .iter()
+            .enumerate()
+            .map(|(i, &(start, end))| {
+                let at = lead + i * grid.cell;
+                (at..at + grid.cell, start..end)
+            })
+            .collect()
+    }
+
     fn layout(&self, width: usize) -> Grid {
         let n = self.column_count();
         let l = self.label_width();

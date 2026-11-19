@@ -2,7 +2,7 @@
 //! and `docs/design/cornacai.md`.
 
 use std::io::{BufRead, Write};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
 use cornacai::app::{Launch, Options, app};
@@ -220,6 +220,11 @@ fn start(args: Args) -> Result<(), String> {
     options.write = config.write && !args.no_write;
     options.terminal = config.terminal && !args.no_terminal;
     let (app, _handle) = app(options);
+    // A keys file beside the configuration remaps the bindings by id.
+    let app = match path.as_deref().and_then(Path::parent) {
+        Some(dir) => app.keymap_file(dir.join("keys.toml")),
+        None => app,
+    };
     app.title("Cornacai").run().map_err(|e| e.to_string())
 }
 

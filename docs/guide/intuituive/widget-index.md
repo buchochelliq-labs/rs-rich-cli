@@ -42,6 +42,7 @@ from an off-by-default feature name it: `art`, `micro`, `viz`, `files` and
 | ![](../../assets/intuituive/widgets/input.svg){ .tui-icon width="20" } | [input](components.md#inputs-bound-to-signals) | `input` | A one-line input bound to a String signal |
 | ![](../../assets/intuituive/widgets/number_input.svg){ .tui-icon width="20" } | [number_input](components.md#inputs-bound-to-signals) | `number_input` | A number in a range, stepped with keys |
 | ![](../../assets/intuituive/widgets/input.svg){ .tui-icon width="20" } | [tag_input](widgets.md#chips-and-a-tag-input) | `tag_input` | Tags typed into a row of removable chips |
+| ![](../../assets/intuituive/widgets/slider.svg){ .tui-icon width="20" } | [color_picker](widgets.md#a-colour-picker) | `color_picker` | A colour from a saturation and value grid, a hue strip or typed hex |
 | ![](../../assets/intuituive/widgets/text_area.svg){ .tui-icon width="20" } | [text_area](components.md#text-areas) | `text_area` | Multi-line text editing; a prompt editor (`grow`, `submit_on`, `complete_at`, `history`) |
 | ![](../../assets/intuituive/widgets/search_bar.svg){ .tui-icon width="20" } | [search_bar](text-editing.md#search-and-the-find-bar) | `search_bar` | A find bar over a text area's search: the pattern, where it is, regex and case flags |
 | ![](../../assets/intuituive/widgets/command_line.svg){ .tui-icon width="20" } | [command_line](components.md#completion-history-and-a-command-line) | `command_line` | A vim-style command line, with completion and history |
@@ -73,6 +74,7 @@ from an off-by-default feature name it: `art`, `micro`, `viz`, `files` and
 
 | | Widget | Constructor | What it is |
 |---|---|---|---|
+| ![](../../assets/intuituive/widgets/grid.svg){ .tui-icon width="20" } | [board](widgets.md#a-board) | `board`, `BoardMove` | Columns of cards moved within and between them by keys and the mouse |
 | ![](../../assets/intuituive/widgets/list.svg){ .tui-icon width="20" } | [list](lists.md#lists) | `list`, `list_optional` | Rows with a cursor |
 | ![](../../assets/intuituive/widgets/virtual_list.svg){ .tui-icon width="20" } | [virtual_list](lists.md#trees-split-panes-and-virtual-lists) | `virtual_list`, `list_lazy` | A list that draws only the rows on screen |
 | ![](../../assets/intuituive/widgets/list_search.svg){ .tui-icon width="20" } | [list_search](lists.md#picking-several-items-and-finding-in-a-list) | `list_search` | Finding in a list as you type |
@@ -144,6 +146,7 @@ from an off-by-default feature name it: `art`, `micro`, `viz`, `files` and
 | ![](../../assets/intuituive/widgets/image.svg){ .tui-icon width="20" } | [image](plugins.md#images-art) | `image`, `image_with`, `image_of` | An image, as half blocks or terminal graphics (`art` feature) |
 | ![](../../assets/intuituive/widgets/sprite_sheet.svg){ .tui-icon width="20" } | [sprite_sheet](timers.md#sprites-stages-and-pixel-buffers) | `sprite_sheet` | Frames cut from one image, for animation (`art` feature) |
 | ![](../../assets/intuituive/widgets/micro_sprite.svg){ .tui-icon width="20" } | [micro_sprite](timers.md#sprites-stages-and-pixel-buffers) | `micro_sprite` | A micro asset as a sprite (`micro` feature) |
+| ![](../../assets/intuituive/widgets/sparkline.svg){ .tui-icon width="20" } | [line_chart](plugins.md#charts-with-a-cursor) | `line_chart`, `bar_chart`, `heatmap`, `Window`, `HeatGrid` | Charts over signals with a cursor, a readout and a rolling window (`viz` feature) |
 | ![](../../assets/intuituive/widgets/sparkline.svg){ .tui-icon width="20" } | [sparkline](plugins.md#levels-sparklines-and-big-text) | `sparkline` | Values as a line of bars (`viz` feature) |
 | ![](../../assets/intuituive/widgets/meter.svg){ .tui-icon width="20" } | [meter](plugins.md#levels-sparklines-and-big-text) | `meter` | A level with a peak hold (`viz` feature) |
 | ![](../../assets/intuituive/widgets/bar_spectrum.svg){ .tui-icon width="20" } | [bar_spectrum](plugins.md#levels-sparklines-and-big-text) | `bar_spectrum` | Bands as vertical bars (`viz` feature) |

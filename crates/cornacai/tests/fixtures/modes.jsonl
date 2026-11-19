@@ -1,0 +1,20 @@
+{"note": "Modes: Shift+Tab moves to the next, Alt+M picks one (a refusal, then plan mode); in plan mode the agent asks to leave it with its plan."}
+{"client": {"id": 0, "method": "initialize"}}
+{"agent": {"jsonrpc": "2.0", "id": 0, "result": {"protocolVersion": 1, "agentInfo": {"name": "replay-agent", "version": "0.1"}}}}
+{"client": {"id": 1, "method": "session/new"}}
+{"agent": {"jsonrpc": "2.0", "id": 1, "result": {"sessionId": "sess_m", "modes": {"currentModeId": "default", "availableModes": [{"id": "default", "name": "Manual", "description": "Always ask before making changes"}, {"id": "acceptEdits", "name": "Accept edits", "description": "Automatically accept all file edits"}, {"id": "plan", "name": "Plan", "description": "Create a plan before making changes"}]}}}}
+{"client": {"id": 2, "method": "session/set_mode", "params": {"sessionId": "sess_m", "modeId": "acceptEdits"}}}
+{"agent": {"jsonrpc": "2.0", "id": 2, "result": {}}}
+{"client": {"id": 3, "method": "session/set_mode", "params": {"sessionId": "sess_m", "modeId": "plan"}}}
+{"agent": {"jsonrpc": "2.0", "id": 3, "error": {"code": -32603, "message": "Plan mode is busy"}}}
+{"client": {"id": 4, "method": "session/set_mode", "params": {"sessionId": "sess_m", "modeId": "plan"}}}
+{"agent": {"jsonrpc": "2.0", "id": 4, "result": {}}}
+{"client": {"id": 5, "method": "session/prompt", "params": {"sessionId": "sess_m", "prompt": [{"type": "text", "text": "Plan the fix"}]}}}
+{"agent": {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "sess_m", "update": {"sessionUpdate": "agent_message_chunk", "content": {"type": "text", "text": "I have read enough to plan it."}}}}}
+{"agent": {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "sess_m", "update": {"sessionUpdate": "tool_call", "toolCallId": "call_plan", "title": "Approve Plan", "kind": "switch_mode", "status": "pending", "rawInput": {"plan": "## Steps\n\n1. Read the parser\n2. Fix the off-by-one\n3. Run the tests"}, "content": [{"type": "content", "content": {"type": "text", "text": "## Steps\n\n1. Read the parser\n2. Fix the off-by-one\n3. Run the tests"}}]}}}}
+{"agent": {"jsonrpc": "2.0", "id": "perm-p", "method": "session/request_permission", "params": {"sessionId": "sess_m", "toolCall": {"toolCallId": "call_plan"}, "options": [{"optionId": "auto", "name": "Yes, and auto-accept edits", "kind": "allow_always"}, {"optionId": "manual", "name": "Yes, and manually approve edits", "kind": "allow_once"}, {"optionId": "keep", "name": "No, keep planning", "kind": "reject_once"}]}}}
+{"client": {"jsonrpc": "2.0", "id": "perm-p", "result": {"outcome": {"outcome": "selected", "optionId": "manual"}}}}
+{"agent": {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "sess_m", "update": {"sessionUpdate": "current_mode_update", "currentModeId": "default"}}}}
+{"agent": {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "sess_m", "update": {"sessionUpdate": "tool_call_update", "toolCallId": "call_plan", "status": "completed", "title": "Exited Plan Mode"}}}}
+{"agent": {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "sess_m", "update": {"sessionUpdate": "agent_message_chunk", "messageId": "m2", "content": {"type": "text", "text": "Starting on step one."}}}}}
+{"agent": {"jsonrpc": "2.0", "id": 5, "result": {"stopReason": "end_turn"}}}

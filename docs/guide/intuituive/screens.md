@@ -299,7 +299,11 @@ the room and the answers at the bottom) and styles its title.
 - **`cx.notify_with(Notification::new(level, title, body).action("Undo",
   |cx| ..))`** adds buttons on a row under the body, in the theme's
   `button` style; `.timeout(duration)` sets how long it shows. A click on
-  a button runs its action and dismisses the notification.
+  a button runs its action and dismisses the notification, and so does
+  **Alt+1** for the first button (to Alt+9) of the newest notification
+  with buttons, unless a node on the focus path binds that key. A screen
+  reader hears the buttons and their keys with it: `Warning: Trash: 3
+  files moved. Buttons: Undo, Alt+1; View, Alt+2`.
   ![A "Saved" notification at the bottom right of the kit example, with an Undo button](../../media/tapes/kit/toast.png)
 - **A click on any toast dismisses it**, and `cx.dismiss_toasts()`
   dismisses all of them: bind it to a key (`.on_key("ctrl+x", |cx|
